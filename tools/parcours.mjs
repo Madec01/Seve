@@ -79,6 +79,10 @@ for (let i = 0; i < 5; i++) { await pc.keyboard.press('Space'); await pc.waitFor
 const semis = await pc.evaluate(() => window.SEVE.run.stats.seedsSown);
 step('des graines ont été semées', semis > 0, `${semis} semis`);
 
+await pc.waitForTimeout(1500);
+const fps = await pc.evaluate(() => window.SEVE.loop.fps);
+step('fluidité en jeu', fps >= 45, `${fps} i/s`);
+
 await pc.keyboard.press('KeyT');
 await pc.waitForTimeout(300);
 step('Mode Test accessible', await pc.locator('.testmode:not(.hidden)').count() === 1);
@@ -103,8 +107,6 @@ await pc.keyboard.press('Escape');
 await pc.waitForTimeout(300);
 step('pause', await pc.evaluate(() => window.SEVE.state) === 'pause');
 
-const fps = await pc.evaluate(() => window.SEVE.loop.fps);
-step('fluidité', fps >= 45, `${fps} i/s`);
 
 console.log('\nTéléphone en paysage — 844×390');
 const mob = await page({ width: 844, height: 390 }, { isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
