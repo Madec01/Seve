@@ -43,6 +43,12 @@ html, body {
   padding: calc(10px + env(safe-area-inset-top, 0px)) 12px calc(10px + var(--safe));
 }
 #overlay > * { pointer-events: auto; }
+/* Le HUD couvre l'écran mais ne doit jamais avaler les touches destinées au
+   champ : seuls ses enfants (boutons, graines) sont cliquables. */
+#overlay > .hud { pointer-events: none; }
+#overlay > .hud > * { pointer-events: auto; }
+#overlay > .hud > .touch-controls, #overlay > .hud > .context-hint { pointer-events: none; }
+#overlay > .hud > .touch-controls .touch-buttons { pointer-events: auto; }
 
 .hidden { display: none !important; }
 
@@ -69,6 +75,13 @@ html, body {
 .btn.tiny { font-size: 12px; padding: 5px 9px; border-radius: 9px; box-shadow: none; }
 .btn.disabled { opacity: .45; filter: grayscale(.6); }
 
+.hud-menu-btn {
+  height: 38px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgba(243,231,207,.35); background: rgba(20,16,12,.6);
+  color: var(--paper); font-family: var(--font-ui); font-weight: 700; font-size: 14px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.hud-menu-btn:hover { background: rgba(243,231,207,.18); }
 .icon-btn {
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -79,6 +92,7 @@ html, body {
   cursor: pointer;
 }
 .icon-btn:hover { background: rgba(243,231,207,.18); }
+.hud-right .icon-btn { width: 38px; height: 38px; font-size: 17px; }
 
 /* ------------------------------------------------------------- animations */
 
@@ -149,6 +163,13 @@ html, body {
 }
 .panel.in { opacity: 1; transform: none; }
 .panel.wide { width: min(1120px, 97vw); }
+.panel-head {
+  position: sticky; top: -22px; z-index: 3; margin: -22px -24px 10px; padding: 12px 16px 8px;
+  background: linear-gradient(180deg, rgba(38,32,25,1) 70%, rgba(38,32,25,0));
+  display: flex; align-items: center; gap: 12px;
+}
+.panel-head .btn { flex: 0 0 auto; }
+.panel-head .panel-title { margin: 0; flex: 1; }
 .panel-title { font-family: var(--font-title); font-size: clamp(26px, 5vw, 40px); margin: 0 0 4px; letter-spacing: .05em; }
 .panel-sub { margin: 0 0 18px; color: #b9ac93; font-style: italic; font-size: 14px; }
 .panel-body { display: flex; flex-direction: column; gap: 14px; }
@@ -296,6 +317,7 @@ body.gaucher .touch-buttons { right: auto; left: calc(16px + env(safe-area-inset
   background: #12181a; z-index: 60; font-family: var(--font-title);
 }
 body.portrait .orientation-notice { display: flex; }
+body.in-game .fullscreen-btn { display: none; }
 .orientation-notice b { font-size: 24px; letter-spacing: .1em; }
 .orientation-notice p { color: #a2977f; }
 
@@ -544,6 +566,10 @@ body.portrait .orientation-notice { display: flex; }
 
 @media (max-height: 480px) {
   .seed .seed-name { display: none; }
+  .seed-bar { left: 12px; transform: none; justify-content: flex-start; max-width: calc(100vw - 150px); }
+  body.gaucher .seed-bar { left: auto; right: 12px; }
+  .touch-buttons { bottom: calc(12px + var(--safe)); }
+  .panel-head { top: -12px; margin: -12px -14px 8px; }
   .seed .seed-icon { width: 30px; height: 30px; }
   .seed { padding: 5px 9px; }
   .dialogue .portrait { width: 78px; height: 78px; }
@@ -555,6 +581,7 @@ body.portrait .orientation-notice { display: flex; }
 
 @media (max-width: 640px) {
   .hud-center { display: none; }
+  .hud-menu-btn span { display: none; }
   .toasts { max-width: 60vw; }
   .panel { padding: 16px 14px 20px; }
 }

@@ -25,12 +25,16 @@ export class Screens {
   panel(titleText, subtitleText = '') {
     clear(this.el);
     this.el.classList.remove('hidden');
+    // Un panneau ouvert depuis le Verger ou la pause passe devant : le hub se
+    // retire, goBack() le reconstruira.
+    if (this.app.hub) this.app.hub.hide();
     const wrap = el('div', 'panel');
-    if (titleText) {
-      const h = el('h2', 'panel-title');
-      waveTitle(h, titleText, { delay: 0.03, amplitude: 4 });
-      wrap.appendChild(h);
-    }
+    const head = el('div', 'panel-head');
+    head.appendChild(button('← Retour', () => this.app.goBack(), 'btn small'));
+    const h = el('h2', 'panel-title');
+    waveTitle(h, titleText || '', { delay: 0.03, amplitude: 4 });
+    head.appendChild(h);
+    wrap.appendChild(head);
     if (subtitleText) wrap.appendChild(el('p', 'panel-sub', subtitleText));
     const body = el('div', 'panel-body');
     wrap.appendChild(body);
@@ -116,7 +120,6 @@ export class Screens {
       list.appendChild(card);
     }
     body.appendChild(list);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Réglages ---------------------------------------------------------------
@@ -164,7 +167,6 @@ export class Screens {
       <tr><td>T</td><td>Mode Test</td></tr>`));
     body.appendChild(help);
 
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Succès -----------------------------------------------------------------
@@ -183,7 +185,6 @@ export class Screens {
       grid.appendChild(card);
     });
     body.appendChild(grid);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Journal (échos + défi du jour) -----------------------------------------
@@ -217,7 +218,6 @@ export class Screens {
       list.appendChild(card);
     });
     body.appendChild(list);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 }
 

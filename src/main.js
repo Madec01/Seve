@@ -256,6 +256,15 @@ class App {
     this.screens.title();
   }
 
+  // Retour contextuel : là d'où l'on vient, jamais le titre par défaut.
+  goBack() {
+    this.screens.hide();
+    if (this.run && this.state === STATE.PAUSED) { this.hub.pause(this.run); return; }
+    if (this.save && (this.state === STATE.HUB || this.state === STATE.OVER)) { this.hub.verger(); return; }
+    this.state = STATE.TITLE;
+    this.screens.title();
+  }
+
   openTestMode() {
     this.testMode.show();
   }
@@ -498,6 +507,7 @@ class App {
 
     if (Input.pressed('pause')) {
       if (this.state === STATE.PLAYING) this.pauseRun();
+      else if (this.screens.current && this.screens.current !== 'titre') this.goBack();
       else if (this.state === STATE.PAUSED && this.run) this.resumeRun();
     }
 

@@ -38,7 +38,7 @@ export class Hud {
           <div class="sap-box"><span class="sap-icon">❍</span><span class="sap-value">0</span></div>
           <div class="chain-box"><span class="chain-mult">×1</span><span class="chain-count"></span></div>
           <button class="icon-btn help-btn" title="Comment jouer" aria-label="Comment jouer">?</button>
-          <button class="icon-btn pause-btn" title="Pause (Échap)" aria-label="Pause">‖</button>
+          <button class="hud-menu-btn pause-btn" title="Menu (Échap)" aria-label="Menu">☰ <span>Menu</span></button>
         </div>
       </div>
 
@@ -127,11 +127,12 @@ export class Hud {
 
   show(run) {
     this.el.classList.remove('hidden');
+    document.body.classList.add('in-game');
     this.buildSeedBar(run);
     this.biomeName.textContent = run.biome.name;
   }
 
-  hide() { this.el.classList.add('hidden'); }
+  hide() { this.el.classList.add('hidden'); document.body.classList.remove('in-game'); }
 
   setTouch(visible) {
     this.touchWrap.classList.toggle('hidden', !visible);

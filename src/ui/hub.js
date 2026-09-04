@@ -1,7 +1,7 @@
 // Le Verger : le hub entre deux Cycles. Boutique, biomes, bilan, pause.
 // Bourdon tient le comptoir ; l'écran reverdit à mesure que le monde guérit.
 
-import { el, button, clear } from './dom.js';
+import { el, button, clear, isFullscreen, toggleFullscreen } from './dom.js';
 import { waveTitle, fadeIn, countTo, formatSap } from './text.js';
 import {
   UPGRADES, UPGRADE_ORDER, upgradeLevel, upgradeCost, buyUpgrade,
@@ -25,13 +25,16 @@ export class Hub {
 
   hide() { this.el.classList.add('hidden'); clear(this.el); }
 
-  frame(titleText, subtitleText) {
+  frame(titleText, subtitleText, back = null) {
     clear(this.el);
     this.el.classList.remove('hidden');
     const wrap = el('div', 'panel wide');
+    const head = el('div', 'panel-head');
+    if (back) head.appendChild(button(back.label || '← Retour', back.fn, 'btn small'));
     const h = el('h2', 'panel-title');
     waveTitle(h, titleText, { delay: 0.03, amplitude: 4 });
-    wrap.appendChild(h);
+    head.appendChild(h);
+    wrap.appendChild(head);
     if (subtitleText) wrap.appendChild(el('p', 'panel-sub', subtitleText));
     const body = el('div', 'panel-body');
     wrap.appendChild(body);
@@ -48,7 +51,7 @@ export class Hub {
     const heal = healingProgress(save);
     this.el.style.setProperty('--heal', heal.toFixed(2));
 
-    const body = this.frame('Le Verger', act.line);
+    const body = this.frame('Le Verger', act.line, { label: '← Menu', fn: () => this.app.toTitle() });
 
     const header = el('div', 'hub-header');
     header.innerHTML = `
@@ -154,7 +157,6 @@ export class Hub {
     actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn ghost'));
     actions.appendChild(button('Journal', () => this.app.screens.journal(), 'btn ghost'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn ghost'));
-    actions.appendChild(button('Menu principal', () => this.app.toTitle(), 'btn ghost'));
     body.appendChild(actions);
   }
 
@@ -162,7 +164,7 @@ export class Hub {
 
   biomeSelect() {
     const save = this.app.save;
-    const body = this.frame('Où vas-tu semer ?', 'Chaque terre a son pouls et sa règle.');
+    const body = this.frame('Où vas-tu semer ?', 'Chaque terre a son pouls et sa règle.', { fn: () => this.verger() });
     const list = el('div', 'biome-list');
     save.unlockedBiomes.forEach((id, i) => {
       const b = BIOMES[id];
@@ -177,7 +179,6 @@ export class Hub {
       list.appendChild(card);
     });
     body.appendChild(list);
-    body.appendChild(button('← Le Verger', () => this.verger(), 'btn ghost'));
   }
 
   // --- Interlude entre deux saisons -------------------------------------------
@@ -252,10 +253,13 @@ export class Hub {
   // --- Pause -------------------------------------------------------------------
 
   pause(run) {
-    const body = this.frame('Pause', run ? run.biome.name : '');
+    const body = this.frame('Pause', run ? run.biome.name : '', { label: '▶ Reprendre', fn: () => this.app.resumeRun() });
     const actions = el('div', 'hub-actions column');
     actions.appendChild(button('Reprendre', () => this.app.resumeRun(), 'btn primary'));
     actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn'));
+    actions.appendChild(button(isFullscreen() ? 'Quitter le plein écran' : 'Plein écran', () => {
+      toggleFullscreen(); setTimeout(() => this.pause(run), 250);
+    }, 'btn'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn'));
     actions.appendChild(button('Mode Test', () => this.app.openTestMode(), 'btn ghost'));
     actions.appendChild(button('Abandonner le Cycle', () => {

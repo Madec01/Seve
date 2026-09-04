@@ -52,6 +52,12 @@ html, body {
   padding: calc(10px + env(safe-area-inset-top, 0px)) 12px calc(10px + var(--safe));
 }
 #overlay > * { pointer-events: auto; }
+/* Le HUD couvre l'écran mais ne doit jamais avaler les touches destinées au
+   champ : seuls ses enfants (boutons, graines) sont cliquables. */
+#overlay > .hud { pointer-events: none; }
+#overlay > .hud > * { pointer-events: auto; }
+#overlay > .hud > .touch-controls, #overlay > .hud > .context-hint { pointer-events: none; }
+#overlay > .hud > .touch-controls .touch-buttons { pointer-events: auto; }
 
 .hidden { display: none !important; }
 
@@ -78,6 +84,13 @@ html, body {
 .btn.tiny { font-size: 12px; padding: 5px 9px; border-radius: 9px; box-shadow: none; }
 .btn.disabled { opacity: .45; filter: grayscale(.6); }
 
+.hud-menu-btn {
+  height: 38px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid rgba(243,231,207,.35); background: rgba(20,16,12,.6);
+  color: var(--paper); font-family: var(--font-ui); font-weight: 700; font-size: 14px;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.hud-menu-btn:hover { background: rgba(243,231,207,.18); }
 .icon-btn {
   width: 34px; height: 34px;
   border-radius: 50%;
@@ -88,6 +101,7 @@ html, body {
   cursor: pointer;
 }
 .icon-btn:hover { background: rgba(243,231,207,.18); }
+.hud-right .icon-btn { width: 38px; height: 38px; font-size: 17px; }
 
 /* ------------------------------------------------------------- animations */
 
@@ -158,6 +172,13 @@ html, body {
 }
 .panel.in { opacity: 1; transform: none; }
 .panel.wide { width: min(1120px, 97vw); }
+.panel-head {
+  position: sticky; top: -22px; z-index: 3; margin: -22px -24px 10px; padding: 12px 16px 8px;
+  background: linear-gradient(180deg, rgba(38,32,25,1) 70%, rgba(38,32,25,0));
+  display: flex; align-items: center; gap: 12px;
+}
+.panel-head .btn { flex: 0 0 auto; }
+.panel-head .panel-title { margin: 0; flex: 1; }
 .panel-title { font-family: var(--font-title); font-size: clamp(26px, 5vw, 40px); margin: 0 0 4px; letter-spacing: .05em; }
 .panel-sub { margin: 0 0 18px; color: #b9ac93; font-style: italic; font-size: 14px; }
 .panel-body { display: flex; flex-direction: column; gap: 14px; }
@@ -305,6 +326,7 @@ body.gaucher .touch-buttons { right: auto; left: calc(16px + env(safe-area-inset
   background: #12181a; z-index: 60; font-family: var(--font-title);
 }
 body.portrait .orientation-notice { display: flex; }
+body.in-game .fullscreen-btn { display: none; }
 .orientation-notice b { font-size: 24px; letter-spacing: .1em; }
 .orientation-notice p { color: #a2977f; }
 
@@ -553,6 +575,10 @@ body.portrait .orientation-notice { display: flex; }
 
 @media (max-height: 480px) {
   .seed .seed-name { display: none; }
+  .seed-bar { left: 12px; transform: none; justify-content: flex-start; max-width: calc(100vw - 150px); }
+  body.gaucher .seed-bar { left: auto; right: 12px; }
+  .touch-buttons { bottom: calc(12px + var(--safe)); }
+  .panel-head { top: -12px; margin: -12px -14px 8px; }
   .seed .seed-icon { width: 30px; height: 30px; }
   .seed { padding: 5px 9px; }
   .dialogue .portrait { width: 78px; height: 78px; }
@@ -564,6 +590,7 @@ body.portrait .orientation-notice { display: flex; }
 
 @media (max-width: 640px) {
   .hud-center { display: none; }
+  .hud-menu-btn span { display: none; }
   .toasts { max-width: 60vw; }
   .panel { padding: 16px 14px 20px; }
 }
@@ -5437,7 +5464,7 @@ class Hud {
           <div class="sap-box"><span class="sap-icon">❍</span><span class="sap-value">0</span></div>
           <div class="chain-box"><span class="chain-mult">×1</span><span class="chain-count"></span></div>
           <button class="icon-btn help-btn" title="Comment jouer" aria-label="Comment jouer">?</button>
-          <button class="icon-btn pause-btn" title="Pause (Échap)" aria-label="Pause">‖</button>
+          <button class="hud-menu-btn pause-btn" title="Menu (Échap)" aria-label="Menu">☰ <span>Menu</span></button>
         </div>
       </div>
 
@@ -5526,11 +5553,12 @@ class Hud {
 
   show(run) {
     this.el.classList.remove('hidden');
+    document.body.classList.add('in-game');
     this.buildSeedBar(run);
     this.biomeName.textContent = run.biome.name;
   }
 
-  hide() { this.el.classList.add('hidden'); }
+  hide() { this.el.classList.add('hidden'); document.body.classList.remove('in-game'); }
 
   setTouch(visible) {
     this.touchWrap.classList.toggle('hidden', !visible);
@@ -5728,12 +5756,16 @@ class Screens {
   panel(titleText, subtitleText = '') {
     clear(this.el);
     this.el.classList.remove('hidden');
+    // Un panneau ouvert depuis le Verger ou la pause passe devant : le hub se
+    // retire, goBack() le reconstruira.
+    if (this.app.hub) this.app.hub.hide();
     const wrap = el('div', 'panel');
-    if (titleText) {
-      const h = el('h2', 'panel-title');
-      waveTitle(h, titleText, { delay: 0.03, amplitude: 4 });
-      wrap.appendChild(h);
-    }
+    const head = el('div', 'panel-head');
+    head.appendChild(button('← Retour', () => this.app.goBack(), 'btn small'));
+    const h = el('h2', 'panel-title');
+    waveTitle(h, titleText || '', { delay: 0.03, amplitude: 4 });
+    head.appendChild(h);
+    wrap.appendChild(head);
     if (subtitleText) wrap.appendChild(el('p', 'panel-sub', subtitleText));
     const body = el('div', 'panel-body');
     wrap.appendChild(body);
@@ -5819,7 +5851,6 @@ class Screens {
       list.appendChild(card);
     }
     body.appendChild(list);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Réglages ---------------------------------------------------------------
@@ -5867,7 +5898,6 @@ class Screens {
       <tr><td>T</td><td>Mode Test</td></tr>`));
     body.appendChild(help);
 
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Succès -----------------------------------------------------------------
@@ -5886,7 +5916,6 @@ class Screens {
       grid.appendChild(card);
     });
     body.appendChild(grid);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 
   // --- Journal (échos + défi du jour) -----------------------------------------
@@ -5920,7 +5949,6 @@ class Screens {
       list.appendChild(card);
     });
     body.appendChild(list);
-    body.appendChild(button('← Retour', () => this.title(), 'btn ghost'));
   }
 }
 
@@ -5938,7 +5966,7 @@ __mods["src/ui/hub.js"] = function (__x) {
 // Le Verger : le hub entre deux Cycles. Boutique, biomes, bilan, pause.
 // Bourdon tient le comptoir ; l'écran reverdit à mesure que le monde guérit.
 
-const { el, button, clear } = __req("src/ui/dom.js");
+const { el, button, clear, isFullscreen, toggleFullscreen } = __req("src/ui/dom.js");
 const { waveTitle, fadeIn, countTo, formatSap } = __req("src/ui/text.js");
 const { UPGRADES, UPGRADE_ORDER, upgradeLevel, upgradeCost, buyUpgrade, SEED_UNLOCKS, buySeed, buyBiome, healingProgress } = __req("src/game/progression.js");
 const { BIOMES, BIOME_ORDER } = __req("src/game/biomes.js");
@@ -5958,13 +5986,16 @@ class Hub {
 
   hide() { this.el.classList.add('hidden'); clear(this.el); }
 
-  frame(titleText, subtitleText) {
+  frame(titleText, subtitleText, back = null) {
     clear(this.el);
     this.el.classList.remove('hidden');
     const wrap = el('div', 'panel wide');
+    const head = el('div', 'panel-head');
+    if (back) head.appendChild(button(back.label || '← Retour', back.fn, 'btn small'));
     const h = el('h2', 'panel-title');
     waveTitle(h, titleText, { delay: 0.03, amplitude: 4 });
-    wrap.appendChild(h);
+    head.appendChild(h);
+    wrap.appendChild(head);
     if (subtitleText) wrap.appendChild(el('p', 'panel-sub', subtitleText));
     const body = el('div', 'panel-body');
     wrap.appendChild(body);
@@ -5981,7 +6012,7 @@ class Hub {
     const heal = healingProgress(save);
     this.el.style.setProperty('--heal', heal.toFixed(2));
 
-    const body = this.frame('Le Verger', act.line);
+    const body = this.frame('Le Verger', act.line, { label: '← Menu', fn: () => this.app.toTitle() });
 
     const header = el('div', 'hub-header');
     header.innerHTML = `
@@ -6087,7 +6118,6 @@ class Hub {
     actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn ghost'));
     actions.appendChild(button('Journal', () => this.app.screens.journal(), 'btn ghost'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn ghost'));
-    actions.appendChild(button('Menu principal', () => this.app.toTitle(), 'btn ghost'));
     body.appendChild(actions);
   }
 
@@ -6095,7 +6125,7 @@ class Hub {
 
   biomeSelect() {
     const save = this.app.save;
-    const body = this.frame('Où vas-tu semer ?', 'Chaque terre a son pouls et sa règle.');
+    const body = this.frame('Où vas-tu semer ?', 'Chaque terre a son pouls et sa règle.', { fn: () => this.verger() });
     const list = el('div', 'biome-list');
     save.unlockedBiomes.forEach((id, i) => {
       const b = BIOMES[id];
@@ -6110,7 +6140,6 @@ class Hub {
       list.appendChild(card);
     });
     body.appendChild(list);
-    body.appendChild(button('← Le Verger', () => this.verger(), 'btn ghost'));
   }
 
   // --- Interlude entre deux saisons -------------------------------------------
@@ -6185,10 +6214,13 @@ class Hub {
   // --- Pause -------------------------------------------------------------------
 
   pause(run) {
-    const body = this.frame('Pause', run ? run.biome.name : '');
+    const body = this.frame('Pause', run ? run.biome.name : '', { label: '▶ Reprendre', fn: () => this.app.resumeRun() });
     const actions = el('div', 'hub-actions column');
     actions.appendChild(button('Reprendre', () => this.app.resumeRun(), 'btn primary'));
     actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn'));
+    actions.appendChild(button(isFullscreen() ? 'Quitter le plein écran' : 'Plein écran', () => {
+      toggleFullscreen(); setTimeout(() => this.pause(run), 250);
+    }, 'btn'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn'));
     actions.appendChild(button('Mode Test', () => this.app.openTestMode(), 'btn ghost'));
     actions.appendChild(button('Abandonner le Cycle', () => {
@@ -7438,6 +7470,15 @@ class App {
     this.screens.title();
   }
 
+  // Retour contextuel : là d'où l'on vient, jamais le titre par défaut.
+  goBack() {
+    this.screens.hide();
+    if (this.run && this.state === STATE.PAUSED) { this.hub.pause(this.run); return; }
+    if (this.save && (this.state === STATE.HUB || this.state === STATE.OVER)) { this.hub.verger(); return; }
+    this.state = STATE.TITLE;
+    this.screens.title();
+  }
+
   openTestMode() {
     this.testMode.show();
   }
@@ -7680,6 +7721,7 @@ class App {
 
     if (Input.pressed('pause')) {
       if (this.state === STATE.PLAYING) this.pauseRun();
+      else if (this.screens.current && this.screens.current !== 'titre') this.goBack();
       else if (this.state === STATE.PAUSED && this.run) this.resumeRun();
     }
 
