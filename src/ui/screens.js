@@ -57,6 +57,8 @@ export class Screens {
     const menu = el('nav', 'main-menu');
     const items = [
       ['Jouer', () => this.app.openSlots()],
+      ['Comment jouer', () => this.app.openGuide()],
+      ['Refaire le tutoriel', () => this.app.replayTutorial()],
       ['Défi du jour', () => this.app.startDaily()],
       ['Succès', () => this.achievements()],
       ['Journal', () => this.journal()],

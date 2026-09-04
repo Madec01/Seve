@@ -10,7 +10,7 @@ import {
 import { initAudio, resumeAudio, applySettings, audioReady } from './audio/audio.js';
 import { wood, breath, pluck, rustle, earth } from './audio/synth.js';
 import { Run, RUN_STATE } from './game/run.js';
-import { Tutorial } from './game/tutorial.js';
+import { Tutorial, STEPS as TUTORIAL_STEPS } from './game/tutorial.js';
 import { derivedBonuses } from './game/progression.js';
 import { checkAchievements } from './game/achievements.js';
 import { todayChallenge, recordDaily } from './game/challenges.js';
@@ -26,6 +26,7 @@ import { Screens } from './ui/screens.js';
 import { Hub } from './ui/hub.js';
 import { Dialogue, Toasts } from './ui/dialogue.js';
 import { TestMode } from './debug/testmode.js';
+import { Guide, drawIllustration } from './ui/guide.js';
 import { el, isTouchDevice, isLandscape, toggleFullscreen } from './ui/dom.js';
 
 const STATE = { TITLE: 'titre', MENU: 'menu', HUB: 'verger', PLAYING: 'jeu', PAUSED: 'pause', OVER: 'bilan' };
@@ -54,10 +55,14 @@ class App {
     this.dialogue = new Dialogue(this.overlay);
     this.toasts = new Toasts(this.overlay);
     this.testMode = new TestMode(this.overlay, this);
+    this.guide = new Guide(this.overlay);
     this.buildTutorialBanner();
+    this.buildTutorialCard();
     this.buildOrientationNotice();
 
     Input.init(this.canvas);
+    this.hud.pauseBtn.addEventListener('click', () => this.pauseRun());
+    this.hud.helpBtn.addEventListener('click', () => this.openGuide());
     this.loop = new Loop((dt) => this.update(dt), (alpha, frame) => this.render(frame));
 
     this.bindEvents();
@@ -100,8 +105,88 @@ class App {
 
   buildTutorialBanner() {
     this.tutorialBanner = el('div', 'tutorial-banner hidden');
-    this.tutorialBanner.innerHTML = '<strong></strong><span></span>';
+    this.tutorialBanner.innerHTML = '<strong></strong><span></span><div class="tut-bar"><i></i></div>';
     this.overlay.appendChild(this.tutorialBanner);
+  }
+
+  // Carte d'étape : le jeu est en pause, on lit, on clique « Compris ».
+  buildTutorialCard() {
+    this.tutorialCard = el('div', 'tutorial-card hidden');
+    this.tutorialCard.innerHTML = `
+      <div class="tc-inner">
+        <div class="tc-step"></div>
+        <h2 class="panel-title"></h2>
+        <canvas class="tc-illus" width="720" height="240"></canvas>
+        <div class="tc-text"></div>
+        <div class="tc-actions"></div>
+      </div>`;
+    this.overlay.appendChild(this.tutorialCard);
+    this.tutorialCardOpen = false;
+  }
+
+  showTutorialCard(step) {
+    if (!this.run) return;
+    this.run.pause();
+    this.tutorialCardOpen = true;
+    this.hud.hide();
+    const card = this.tutorialCard;
+    card.classList.remove('hidden');
+    card.querySelector('.tc-step').textContent = `Tutoriel · étape ${this.tutorial.index + 1} / ${TUTORIAL_STEPS.length}`;
+    card.querySelector('.panel-title').textContent = step.title;
+    const illus = card.querySelector('.tc-illus');
+    illus.classList.toggle('hidden', !step.illus);
+    this.tutorialIllus = step.illus;
+    const text = card.querySelector('.tc-text');
+    text.innerHTML = '';
+    for (const line of step.explain) text.appendChild(el('p', '', line));
+    const actions = card.querySelector('.tc-actions');
+    actions.innerHTML = '';
+    const b = el('button', 'btn primary', step.objective ? 'Compris, j’essaie' : 'C’est parti');
+    b.addEventListener('click', () => this.closeTutorialCard());
+    actions.appendChild(b);
+    const skip = el('button', 'btn ghost small', 'Passer le tutoriel');
+    skip.addEventListener('click', () => { this.tutorial.finish(); this.closeTutorialCard(); });
+    actions.appendChild(skip);
+    const inner = card.querySelector('.tc-inner');
+    inner.classList.remove('in');
+    requestAnimationFrame(() => inner.classList.add('in'));
+    wood({ freq: 520, gain: 0.2, decay: 0.1 });
+  }
+
+  closeTutorialCard() {
+    this.tutorialCard.classList.add('hidden');
+    this.tutorialCardOpen = false;
+    if (this.tutorial && !this.tutorial.done) this.tutorial.cardRead();
+    if (this.tutorial && this.tutorial.done) this.finishTutorial();
+    if (this.run && this.state === STATE.PLAYING) { this.run.resume(); this.hud.show(this.run); }
+    this.showTutorialStep();
+  }
+
+  finishTutorial() {
+    if (!this.tutorial) return;
+    this.tutorial.dispose();
+    this.tutorial = null;
+    this.tutorialBanner.classList.add('hidden');
+    if (this.save) { this.save.tutorialDone = true; this.persist(); }
+    if (this.run) { this.run.tutorialMode = false; this.run.seasonBeats = 0; }
+    this.toast('Tutoriel terminé', 'La Cendre se réveille. Bonne récolte.', '#8fce6a');
+  }
+
+  openGuide() {
+    const wasPlaying = this.state === STATE.PLAYING && this.run;
+    if (wasPlaying) { this.run.pause(); this.hud.hide(); }
+    this.guide.show(() => {
+      if (wasPlaying && this.run && this.state === STATE.PLAYING) { this.run.resume(); this.hud.show(this.run); }
+    });
+  }
+
+  replayTutorial() {
+    this.ensureSave();
+    this.save.tutorialDone = false;
+    this.persist();
+    this.screens.hide();
+    this.state = STATE.HUB;
+    this.startRun('clairiere');
   }
 
   buildOrientationNotice() {
@@ -216,28 +301,20 @@ class App {
   }
 
   startTutorial() {
-    this.tutorial = new Tutorial(this.run, (step) => {
-      if (step.bark) this.dialogue.show('pepin', [step.bark]);
-      wood({ freq: 620, gain: 0.2, decay: 0.1 });
-    });
-    this.showTutorialStep();
+    this.tutorial = new Tutorial(this.run);
     this.dialogue.show('pepin', [
       'Tu es là ! Tu es VRAIMENT là !',
-      'Bon. Moi je sais rien faire pousser. Mais je sais regarder.',
-      'Commence par marcher. Après on verra.',
-    ]);
+      'Moi je sais rien faire pousser. Mais je sais regarder. Je t’explique.',
+    ], () => this.showTutorialCard(this.tutorial.current()));
   }
 
   showTutorialStep() {
-    if (!this.tutorial) return;
+    if (!this.tutorial || this.tutorial.done) { this.tutorialBanner.classList.add('hidden'); return; }
     const step = this.tutorial.current();
-    if (!step) {
-      this.tutorialBanner.classList.add('hidden');
-      return;
-    }
+    if (!step || !step.objective) { this.tutorialBanner.classList.add('hidden'); return; }
     this.tutorialBanner.classList.remove('hidden');
     this.tutorialBanner.querySelector('strong').textContent = step.title;
-    this.tutorialBanner.querySelector('span').textContent = step.hint;
+    this.tutorialBanner.querySelector('span').textContent = this.tutorial.progressText();
   }
 
   pauseRun() {
@@ -268,6 +345,8 @@ class App {
   endRun(silent = false) {
     if (this.tutorial) { this.tutorial.dispose(); this.tutorial = null; }
     this.tutorialBanner.classList.add('hidden');
+    this.tutorialCard.classList.add('hidden');
+    this.tutorialCardOpen = false;
     this.run = null;
     this.hud.hide();
     this.hud.hideEvent();
@@ -397,7 +476,16 @@ class App {
     this.lastInputKind = Input.kind();
     this.renderer.t += dt;
     this.dialogue.update(dt);
+    this.guide.update(dt);
     this.testMode.update();
+    if (this.tutorialCardOpen && this.tutorialIllus) {
+      drawIllustration(this.tutorialCard.querySelector('.tc-illus'), this.tutorialIllus, this.renderer.t);
+    }
+    if (this.guide.isOpen() || this.tutorialCardOpen) {
+      if (Input.pressed('pause') && this.guide.isOpen()) this.guide.close();
+      Input.endFrame();
+      return;
+    }
 
     if (Input.pressed('debug')) this.testMode.toggle();
 
@@ -425,14 +513,19 @@ class App {
       this.run.update(dt, input);
       this.hud.update(this.run);
       if (this.tutorial) {
-        const before = this.tutorial.index;
-        this.tutorial.update(dt);
-        if (this.tutorial.index !== before) this.showTutorialStep();
-        if (this.tutorial.done) {
-          this.tutorialBanner.classList.add('hidden');
-          this.save.tutorialDone = true;
-          this.persist();
-          this.tutorial = null;
+        const advanced = this.tutorial.update(dt);
+        if (advanced) {
+          wood({ freq: 700, gain: 0.22, decay: 0.12 });
+          pluck(440, { dur: 1.2, gain: 0.18 });
+          if (this.tutorial.done) this.finishTutorial();
+          else this.showTutorialCard(this.tutorial.current());
+        } else {
+          const step = this.tutorial.current();
+          if (step && step.objective) {
+            const [cur, tot] = [step.progress(this.tutorial.t), step.target];
+            this.tutorialBanner.querySelector('span').textContent = this.tutorial.progressText();
+            this.tutorialBanner.querySelector('.tut-bar i').style.transform = `scaleX(${Math.min(1, cur / tot)})`;
+          }
         }
       }
       if (this.settings.particles === 'plein') {

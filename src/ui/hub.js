@@ -151,6 +151,7 @@ export class Hub {
 
     const actions = el('div', 'hub-actions');
     actions.appendChild(button('Partir en Cycle →', () => this.biomeSelect(), 'btn primary'));
+    actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn ghost'));
     actions.appendChild(button('Journal', () => this.app.screens.journal(), 'btn ghost'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn ghost'));
     actions.appendChild(button('Menu principal', () => this.app.toTitle(), 'btn ghost'));
@@ -254,6 +255,7 @@ export class Hub {
     const body = this.frame('Pause', run ? run.biome.name : '');
     const actions = el('div', 'hub-actions column');
     actions.appendChild(button('Reprendre', () => this.app.resumeRun(), 'btn primary'));
+    actions.appendChild(button('Comment jouer', () => this.app.openGuide(), 'btn'));
     actions.appendChild(button('Réglages', () => this.app.screens.settings(), 'btn'));
     actions.appendChild(button('Mode Test', () => this.app.openTestMode(), 'btn ghost'));
     actions.appendChild(button('Abandonner le Cycle', () => {

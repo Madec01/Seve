@@ -277,7 +277,7 @@ export class Field {
       }
 
       // Les fissures suintent en permanence.
-      if (t.fissure) t.blight = Math.min(1, t.blight + dt * 0.06 * (this.biome.blightMult || 1));
+      if (t.fissure && !(ctx && ctx.frozenBlight)) t.blight = Math.min(1, t.blight + dt * 0.06 * (this.biome.blightMult || 1));
     }
 
     for (let i = this.waves.length - 1; i >= 0; i--) {

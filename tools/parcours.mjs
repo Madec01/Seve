@@ -50,7 +50,7 @@ console.log('\nPC — 1280×720');
 const pc = await page({ width: 1280, height: 720 });
 step('le jeu démarre', await pc.evaluate(() => !!window.SEVE));
 
-await pc.getByRole('button', { name: 'Jouer' }).click();
+await pc.getByRole('button', { name: 'Jouer', exact: true }).click();
 await pc.waitForTimeout(400);
 step('écran des sauvegardes', await pc.locator('.slot-card').count() === 3);
 
@@ -68,6 +68,9 @@ await pc.getByRole('button', { name: 'Semer ici' }).first().click();
 await pc.waitForTimeout(900);
 for (let i = 0; i < 8; i++) { await pc.keyboard.press('Space'); await pc.waitForTimeout(140); }
 step('partie lancée', await pc.evaluate(() => window.SEVE.state) === 'jeu');
+step('le tutoriel s’ouvre sur une carte explicative', await pc.locator('.tutorial-card:not(.hidden)').count() === 1);
+await pc.getByRole('button', { name: 'Passer le tutoriel' }).click();
+await pc.waitForTimeout(300);
 
 for (const key of ['KeyD', 'KeyS', 'KeyA', 'KeyW']) {
   await pc.keyboard.down(key); await pc.waitForTimeout(200); await pc.keyboard.up(key);
@@ -87,6 +90,14 @@ await pc.keyboard.press('Space');
 await pc.waitForTimeout(600);
 const apres = await pc.evaluate(() => ({ c: window.SEVE.run.stats.chords, s: window.SEVE.run.sap }));
 step('un accord se forme et rapporte', apres.c > 0 && apres.s > 0, `${apres.c} accord, ${apres.s} sève`);
+
+await pc.locator('.help-btn').click();
+await pc.waitForTimeout(300);
+step('guide « Comment jouer » en jeu', await pc.locator('.guide:not(.hidden)').count() === 1
+  && await pc.evaluate(() => window.SEVE.run.paused));
+await pc.keyboard.press('Escape');
+await pc.waitForTimeout(200);
+step('le guide se ferme et la partie reprend', await pc.evaluate(() => !window.SEVE.run.paused));
 
 await pc.keyboard.press('Escape');
 await pc.waitForTimeout(300);

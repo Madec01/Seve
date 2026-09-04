@@ -37,6 +37,7 @@ export class Hud {
         <div class="hud-right">
           <div class="sap-box"><span class="sap-icon">❍</span><span class="sap-value">0</span></div>
           <div class="chain-box"><span class="chain-mult">×1</span><span class="chain-count"></span></div>
+          <button class="icon-btn help-btn" title="Comment jouer" aria-label="Comment jouer">?</button>
           <button class="icon-btn pause-btn" title="Pause (Échap)" aria-label="Pause">‖</button>
         </div>
       </div>
@@ -74,6 +75,7 @@ export class Hud {
     this.touchWrap = this.el.querySelector('.touch-controls');
     this.touchButtons = this.el.querySelector('.touch-buttons');
     this.pauseBtn = this.el.querySelector('.pause-btn');
+    this.helpBtn = this.el.querySelector('.help-btn');
 
     this.buildTouchButtons();
     this.lastSap = 0;

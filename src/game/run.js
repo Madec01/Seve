@@ -63,6 +63,7 @@ export class Run {
     this.tuneCooldown = 0;
     this.paused = false;
     this.godMode = false;
+    this.tutorialMode = false;
 
     this.stats = {
       harvests: 0, chords: 0, purified: 0, perfectBeats: 0, seedsSown: 0,
@@ -125,7 +126,7 @@ export class Run {
     this.tuneCooldown = Math.max(0, this.tuneCooldown - dt);
     this.shake = Math.max(0, this.shake - dt * 3.5);
     this.score.update(dt);
-    this.director.update(dt);
+    if (!this.tutorialMode) this.director.update(dt);
 
     const beats = this.conductor.poll();
     for (let i = 0; i < beats; i++) this.onBeat();
@@ -135,6 +136,7 @@ export class Run {
     this.player.update(dt, input ? input.move : { x: 0, y: 0 });
     this.field.update(dt, {
       chainMult: this.chainMult,
+      frozenBlight: this.tutorialMode,
       growthBonus: (this.bonuses.growthMult || 1) * this.director.growthBonus()
         * ((this.challenge && this.challenge.config.growthMult) || 1),
     });
@@ -154,12 +156,14 @@ export class Run {
     this.score.onBeat(b);
     if (b % 4 === 0) beatTick(true); else beatTick(false);
 
-    const blightMult = this.director.blightBonus()
-      * ((this.challenge && this.challenge.config.blightMult) || 1);
-    if (this.rng.chance(Math.min(1, 0.85 * blightMult))) this.field.spreadBlight();
+    if (!this.tutorialMode) {
+      const blightMult = this.director.blightBonus()
+        * ((this.challenge && this.challenge.config.blightMult) || 1);
+      if (this.rng.chance(Math.min(1, 0.85 * blightMult))) this.field.spreadBlight();
 
-    this.seasonBeats++;
-    if (this.seasonBeats >= this.beatsThisSeason) this.endSeason();
+      this.seasonBeats++;
+      if (this.seasonBeats >= this.beatsThisSeason) this.endSeason();
+    }
 
     // Retombée de la chaîne : trois pulsations sans Justesse.
     this.chainMissed++;

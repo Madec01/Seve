@@ -564,3 +564,55 @@ body.portrait .orientation-notice { display: flex; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .06s !important; }
 }
+
+/* ---------------------------------------------------- guide & tutoriel */
+
+.guide, .tutorial-card {
+  position: fixed; inset: 0; z-index: 55;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(6,10,8,.72); backdrop-filter: blur(3px);
+  padding: 14px; overflow-y: auto;
+}
+.guide-card, .tc-inner {
+  position: relative;
+  width: min(760px, 96vw); max-height: 94vh; overflow-y: auto;
+  background: linear-gradient(180deg, rgba(38,32,25,.98), rgba(26,22,17,.98));
+  border: 2px solid rgba(243,231,207,.18); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); padding: 18px 22px 20px;
+  opacity: 0; transform: translateY(16px) scale(.985);
+  transition: opacity .3s, transform .3s cubic-bezier(.22,1,.36,1);
+}
+.guide-card.in, .tc-inner.in { opacity: 1; transform: none; }
+.guide-card .panel-title, .tc-inner .panel-title { margin-bottom: 8px; }
+.guide-pager, .tc-step { position: absolute; top: 20px; right: 56px; font-size: 12px; color: #a2977f; letter-spacing: .1em; }
+.tc-step { right: 22px; }
+.guide-illus, .tc-illus {
+  width: 100%; height: auto; display: block;
+  background: rgba(0,0,0,.28); border-radius: var(--radius); margin: 4px 0 10px;
+}
+.guide-text p, .tc-text p { margin: 0 0 9px; font-size: 15px; line-height: 1.5; color: #e2d6bf; }
+.guide-text b, .tc-text b { color: var(--sap); }
+.guide-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+.guide-dots { display: flex; gap: 6px; }
+.guide-dots .dot { width: 10px; height: 10px; border-radius: 50%; border: 0; background: rgba(243,231,207,.25); cursor: pointer; padding: 0; }
+.guide-dots .dot.on { background: var(--sap); }
+.guide-close { position: absolute; top: 14px; right: 14px; }
+.guide-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 6px 0 12px; font-size: 13px; color: #cfc4ab; }
+.guide-legend div { display: flex; align-items: center; gap: 10px; }
+.guide-legend i { display: inline-block; width: 46px; height: 10px; border-radius: 6px; flex: 0 0 auto; }
+.lg-goal { background: linear-gradient(90deg, #f0a24a, var(--sap)); }
+.lg-time { background: #cfc4ab; height: 5px !important; }
+.lg-ash { background: linear-gradient(90deg, #6f6a63, #b9b1a4); }
+.lg-ring { width: 18px !important; height: 18px !important; border-radius: 50% !important; border: 2px solid #ffe9b0; background: transparent !important; }
+.tc-actions { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+
+.tutorial-banner { min-width: 280px; }
+.tutorial-banner span { display: block; }
+.tut-bar { height: 5px; border-radius: 3px; background: rgba(0,0,0,.45); margin-top: 6px; overflow: hidden; }
+.tut-bar i { display: block; height: 100%; background: var(--moss); transform-origin: left; transform: scaleX(0); transition: transform .25s; }
+
+@media (max-height: 560px) {
+  .guide-illus, .tc-illus { max-height: 34vh; object-fit: contain; }
+  .guide-text p, .tc-text p { font-size: 13px; margin-bottom: 6px; }
+  .guide-card, .tc-inner { padding: 12px 16px 14px; }
+}
