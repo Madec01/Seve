@@ -342,6 +342,7 @@ export class Run {
     this.player.tuneAnim = 1;
     this.stats.actions++;
     const just = this.judge();
+    emit('run:tune', { just, run: this });
     const radius = this.reach + 0.4 + (just ? 0.6 : 0);
     const pc = this.player.col, pr = this.player.row;
     const deg = this.selectedSeed;

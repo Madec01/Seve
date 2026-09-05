@@ -3396,6 +3396,7 @@ class Run {
     this.player.tuneAnim = 1;
     this.stats.actions++;
     const just = this.judge();
+    emit('run:tune', { just, run: this });
     const radius = this.reach + 0.4 + (just ? 0.6 : 0);
     const pc = this.player.col, pr = this.player.row;
     const deg = this.selectedSeed;
@@ -3611,21 +3612,26 @@ const STEPS = [
     objective: 'Récolte un accord',
     target: 1, progress: (t) => t.chords,
     onEnter(run) {
-      // Si le joueur n'a pas semé I et III côte à côte, on l'aide discrètement.
+      // Tout ce qui est planté mûrit. S'il n'existe aucune paire voisine de
+      // degrés différents, on en pose une près du joueur, où qu'il soit.
       const f = run.field;
       const ripe = f.tiles.filter((x) => x.plant && !x.plant.wilted);
       for (const x of ripe) { x.plant.growth = 1; x.plant.ripe = true; x.plant.pop = 1; }
-      const hasI = ripe.some((x) => x.plant.degree === 'I');
-      const hasIII = ripe.some((x) => x.plant.degree === 'III');
-      if (!(hasI && hasIII) || !hasNeighbourPair(f, ripe)) {
-        const c = run.player.col, r = run.player.row;
-        for (const [dc, deg] of [[-1, 'I'], [0, 'III']]) {
-          const t = f.at(c + dc, r + 1) || f.at(c + dc, r - 1) || f.at(c + dc, r);
-          if (!t) continue;
+      if (hasNeighbourPair(f, ripe)) return;
+      const pc = run.player.col, pr = run.player.row;
+      const usable = (t) => t && t.terrain !== 'void' && t.terrain !== 'water' && !t.fissure
+        && !(t.c === pc && t.r === pr);
+      const candidates = f.tilesInRadius(pc, pr, 2.5).filter(usable)
+        .sort((a, b) => Math.hypot(a.c - pc, a.r - pr) - Math.hypot(b.c - pc, b.r - pr));
+      for (const t1 of candidates) {
+        const t2 = f.neighbors(t1.c, t1.r).find((n) => usable(n) && !n.plant);
+        if (!t2) continue;
+        for (const [t, deg] of [[t1, 'I'], [t2, 'III']]) {
           t.terrain = 'soil'; t.blight = 0; t.plant = null;
           const p = f.sow(t, deg);
           if (p) { p.growth = 1; p.ripe = true; p.pop = 1; }
         }
+        return;
       }
     },
   },
@@ -3700,13 +3706,13 @@ class Tutorial {
     this.lastY = run.player.y;
     this.disposers = [
       on('field:sow', () => { this.t.sown++; }),
+      on('run:tune', () => { this.t.tuned++; }),
       on('run:just', () => { this.t.just++; }),
       on('run:chord', () => { this.t.chords++; }),
       on('player:dash', () => { this.t.dashed++; }),
       on('resonance:harvest', (r) => { this.t.harvested += r.count; }),
       on('field:purify', (p) => { this.t.purified += p.amount; }),
     ];
-    this.tunedWatcher = 0;
     run.tutorialMode = true;
   }
 
@@ -3735,9 +3741,6 @@ class Tutorial {
     const p = this.run.player;
     this.t.moved += Math.hypot(p.x - this.lastX, p.y - this.lastY);
     this.lastX = p.x; this.lastY = p.y;
-    if (p.tuneAnim > 0.98) this.tunedWatcher = 1;
-    if (this.tunedWatcher && p.tuneAnim < 0.5) { this.t.tuned++; this.tunedWatcher = 0; }
-
     const step = STEPS[this.index];
     if (step && step.objective && step.progress(this.t) >= step.target) {
       this.index++;

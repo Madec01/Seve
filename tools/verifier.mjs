@@ -59,6 +59,7 @@ const ach = await import(pathToFileURL(join(ROOT, 'src/game/achievements.js')).h
 const chal = await import(pathToFileURL(join(ROOT, 'src/game/challenges.js')).href);
 const store = await import(pathToFileURL(join(ROOT, 'src/core/storage.js')).href);
 const { Run } = await import(pathToFileURL(join(ROOT, 'src/game/run.js')).href);
+const tutorialMod = await import(pathToFileURL(join(ROOT, 'src/game/tutorial.js')).href);
 
 console.log('\nDonnées');
 test('chaque degré a une espèce et une couleur', () => {
@@ -195,6 +196,69 @@ test('les saisons s’enchaînent jusqu’à la floraison', () => {
   run.seasonSap = 99999;
   run.endSeason();
   eq(run.state, 'floraison');
+});
+
+console.log('\nTutoriel');
+test('l’aide de l’étape « accord » fonctionne même collé au bord du champ', () => {
+  const { STEPS } = tutorialMod;
+  const step = STEPS.find((s) => s.id === 'accord');
+  for (const [x, y] of [[0.5, 0.5], [0.5, 6.5], [8.5, 0.5], [8.5, 6.5]]) {
+    const run = new Run({ biomeId: 'clairiere', seed: 8, seeds: ['I', 'II', 'III'] });
+    run.player.x = x * 72; run.player.y = y * 72;
+    step.onEnter(run);
+    const ok = run.field.tiles.some((t) => { const g = reson.groupAt(run.field, t); return g && g.chord; });
+    assert(ok, `aucun accord posé pour un joueur en (${run.player.col},${run.player.row})`);
+  }
+});
+test('chaque étape du tutoriel peut être validée par les gestes du jeu', () => {
+  const { Tutorial, STEPS } = tutorialMod;
+  const run = new Run({ biomeId: 'clairiere', seed: 21, seeds: ['I', 'II', 'III'] });
+  run.start();
+  const tut = new Tutorial(run);
+  const idle = { move: { x: 0, y: 0 }, act: false, tune: false, dash: false, seedRequest: -1, cycleSeed: false };
+  const frames = (n, input = idle) => { for (let i = 0; i < n; i++) { run.update(1 / 60, input); tut.update(1 / 60); } };
+  const gestures = {
+    bouger: () => frames(120, Object.assign({}, idle, { move: { x: 1, y: 0 } })),
+    semer: () => {
+      run.player.x = (Math.floor(run.field.cols / 2) + 0.5) * 72;
+      run.player.y = (Math.floor(run.field.rows / 2) + 0.5) * 72;
+      for (const [dc, seed] of [[0, 0], [1, 2]]) {
+        run.seedIndex = seed;
+        run.player.x = (run.player.col + dc + 0.5) * 72;
+        const t = run.player.targetTile();
+        t.terrain = 'soil'; t.blight = 0; t.plant = null;
+        run.actCooldown = 0;
+        frames(1, Object.assign({}, idle, { act: true }));
+        run.player.x -= dc * 72;
+      }
+    },
+    accorder: () => { for (let i = 0; i < 3; i++) { run.tuneCooldown = 0; frames(1, Object.assign({}, idle, { tune: true })); frames(5); } },
+    accord: () => {
+      const ripe = run.field.tiles.find((t) => { const g = reson.groupAt(run.field, t); return g && g.chord; });
+      assert(ripe, 'aucun accord disponible sur le champ après l’aide de l’étape');
+      run.player.x = (ripe.c + 0.5) * 72; run.player.y = (ripe.r + 0.5) * 72;
+      run.actCooldown = 0;
+      frames(1, Object.assign({}, idle, { act: true }));
+    },
+    juste: () => { for (let i = 0; i < 3; i++) { run.judge = () => true; run.tuneCooldown = 0; frames(1, Object.assign({}, idle, { tune: true })); } },
+    purifier: () => {
+      const grey = run.field.tiles.find((t) => t.blight > 0.5);
+      run.player.x = (grey.c + 0.5) * 72; run.player.y = (grey.r + 0.5) * 72;
+      for (let i = 0; i < 3; i++) { run.actCooldown = 0; frames(1, Object.assign({}, idle, { act: true })); }
+    },
+    souffle: () => { run.player.dashCd = 0; frames(1, Object.assign({}, idle, { dash: true })); frames(20); },
+  };
+  for (const step of STEPS) {
+    if (!step.objective) break;
+    eq(tut.current().id, step.id, 'étape attendue :');
+    tut.cardRead();
+    gestures[step.id]();
+    frames(2);
+    assert(tut.index > STEPS.indexOf(step), `l'étape « ${step.title} » ne se valide pas (${tut.progressText()})`);
+  }
+  tut.cardRead();
+  assert(tut.done, 'le tutoriel devrait être terminé');
+  assert(!run.tutorialMode, 'le mode tutoriel devrait être levé');
 });
 
 console.log('\nProgression');
