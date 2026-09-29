@@ -6,9 +6,12 @@ Journal tenu à jour à chaque travail : modifications, idées, bugs, sauvegarde
 
 ## Sauvegardes
 
+Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche de travail. Les branches de sauvegarde sont donc créées sur GitHub via l'API ; le tag du même nom reste local.
+
+
 | Date | Nom (branche + tag) | Contenu |
 |---|---|---|
-| 2026-09-29 | `backup/ancien-projet-2026-09-29` | Ancien projet « SÈVE — Le Chant des Racines » avant sa suppression complète |
+| 2026-09-29 | `backup/ancien-projet-2026-09-29` | Ancien projet « SÈVE — Le Chant des Racines » avant sa suppression complète (branche créée sur GitHub via l'API, commit `19aa16c` ; tag seulement en local) |
 
 ---
 
