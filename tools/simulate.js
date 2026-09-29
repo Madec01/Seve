@@ -375,7 +375,7 @@ const STRATEGIES = {
       const daily = (x) =>
         (x.income - x.upkeep + (x.effects.shearing ? x.effects.shearing / 7 : 0) + (x.effects.chargeReduction || 0) + 3) / x.nextCost;
       invs.sort((a, b) => daily(b) - daily(a));
-      if (!invs.some((inv) => tryBuy(game, inv.id, 0, false))) break;
+      if (!invs.some((inv) => tryBuy(game, inv.id, 0, true, 0.3))) break;
     }
     waterAll(game, budget);
     plantAll(game, budget, 'best', true);
