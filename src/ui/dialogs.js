@@ -176,6 +176,7 @@ export function createDialogs(layer, app) {
     }
     buttons.push(btn('Nouvelle partie', () => levelSelect(), saved ? 'btn--big' : 'btn--red.btn--big', { id: 'menu-new', ...(saved ? {} : { 'data-autofocus': '' }) }));
     buttons.push(btn('Options', () => options(), 'btn--big', { id: 'menu-options' }));
+    if (app.canInstall()) buttons.push(btn('Installer le jeu', () => app.installApp(), 'btn--big', { id: 'menu-install' }));
     buttons.push(btn('Crédits', () => credits(), 'btn--big', { id: 'menu-credits' }));
 
     const deco = el('div.menu-deco', ['carrot', 'turnip', 'wheat', 'cabbage', 'tomato', 'corn', 'sunflower'].map((id) => cropIcon(id, 'sprite--deco')));
@@ -302,7 +303,7 @@ export function createDialogs(layer, app) {
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
       el('h3.opt-section', 'Téléphone et affichage'),
       'vibrate' in navigator ? toggle('vibration', 'Vibrer au toucher', (v) => { app.updateSettings({ vibration: v }); if (v) app.vibrate(20); }) : null,
-      'wakeLock' in navigator ? toggle('keepAwake', 'Garder l\'écran allumé pendant la partie', (v) => app.updateSettings({ keepAwake: v })) : null,
+      app.wakeLockSupported() ? toggle('keepAwake', 'Garder l\'écran allumé pendant la partie', (v) => app.updateSettings({ keepAwake: v })) : null,
       toggle('reducedMotion', 'Réduire les animations', (v) => app.updateSettings({ reducedMotion: v })),
       document.fullscreenEnabled && !app.isStandalone() ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
       app.canInstall() ? btn([icon('star', 'sm'), 'Installer le jeu sur l\'appareil'], () => app.installApp(), 'btn--wide', { id: 'opt-install' }) : null,

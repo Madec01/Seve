@@ -26,7 +26,9 @@ export function createHud(root, app) {
   const moneyValue = el('span.money-value', '0');
   const moneyPops = el('span.money-pops');
   const seasonIcon = icon('spring', 'sm');
-  const dateMain = el('span.date-main', '');
+  const dateSeason = el('span.date-season', '');
+  const dateDay = el('span.date-day', '');
+  const dateMain = el('span.date-main', dateSeason, el('span.date-word', 'Jour'), dateDay);
   const money = el(
     'button.hud-cell.hud-money.has-tip',
     { type: 'button', id: 'hud-money', 'data-tip-side': 'bottom', 'aria-label': 'Argent et saison', onclick: () => openInfo('money') },
@@ -231,7 +233,8 @@ export function createHud(root, app) {
     targetMoney = game.state.money;
 
     setIcon(seasonIcon, c.seasonId);
-    setText(dateMain, `${c.seasonName} ${c.dayOfSeason}/${c.seasonLength}`);
+    setText(dateSeason, c.seasonName);
+    setText(dateDay, ` ${c.dayOfSeason}/${c.seasonLength}`);
     money.dataset.season = c.seasonId;
 
     setIcon(wToday, w.today);

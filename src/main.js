@@ -3,6 +3,11 @@
 // Déroulé : écran de chargement (images, police, sons) → bouton « Commencer » (déverrouille l'audio)
 // → menu principal (une ferme de démonstration tourne en fond) → partie.
 //
+// Mise en page (docs/MOBILE.md) : la scène occupe tout l'écran ; la barre du haut et la barre
+// d'onglets se posent par-dessus et la scène en est prévenue (scene.setInsets). Téléphone en
+// portrait d'abord ; grand écran en paysage (body.layout-wide) : onglets dans la barre du haut,
+// feuilles « Acheter » et « Bilan » rangées à droite.
+//
 // Débogage (seulement avec ?debug=1 dans l'adresse) : window.__game (partie en cours),
 // window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId) }.
 
@@ -17,9 +22,13 @@ import { getCrop } from './data/crops.js';
 import { AUDIO } from './audio/manifest.js';
 import { ambienceFor, createAudio } from './audio/audio.js';
 import * as storage from './storage.js';
+import * as pwa from './pwa.js';
 import { $, el, fmt, plural } from './ui/dom.js';
-import { initSprites, investmentIcon, cropIcon } from './ui/icons.js';
+import { initSprites, investmentIcon, cropIcon, icon } from './ui/icons.js';
 import { createTooltip } from './ui/tooltip.js';
+import { createSheets } from './ui/sheets.js';
+import { createTabbar } from './ui/tabbar.js';
+import { createSceneInput } from './ui/gestures.js';
 import { createToasts } from './ui/toasts.js';
 import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
@@ -43,7 +52,7 @@ const app = {
   audio,
   settings,
   inMenu: true,
-  isTouch: matchMedia('(pointer: coarse)').matches,
+  isTouch: matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !matchMedia('(pointer: fine)').matches),
   keyboardMode: false, // le joueur navigue au clavier : focus automatique des boutons
 };
 
@@ -63,16 +72,18 @@ const pauseReasons = new Set();
 let resumeSpeed = 1;
 let lastPlaySpeed = settings.speed || 1;
 let hover = { hit: null, x: 0, y: 0 };
-let drag = null; // { action, done: Set }
 
 // ── Interface ─────────────────────────────────────────────────────────────────────
 app.tooltip = createTooltip($('#tooltip'));
 app.toasts = createToasts($('#toasts'), $('#banner'));
+app.sheets = createSheets($('#sheet-layer'), app);
 app.hud = createHud($('#hud'), app);
-app.panel = createPanel($('#panel'), app);
-app.field = createField($('#popup'), app);
+app.tabbar = createTabbar($('#tabbar'), app);
+app.panel = createPanel(app);
+app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
 app.tutorial = createTutorial($('#tutorial'), app);
+app.input = createSceneInput(canvas, app);
 
 applyDisplaySettings();
 
@@ -90,7 +101,47 @@ app.updateSettings = (patch) => {
   applyDisplaySettings();
   app.hud.refreshMute();
   app.saveSettings();
+  if ('keepAwake' in patch) updateWakeLock();
 };
+
+app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
+
+/** Petite vibration (téléphone), si l'option est active. */
+app.vibrate = (pattern = 10) => {
+  if (!settings.vibration || !navigator.vibrate) return;
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    /* refusé par le navigateur (pas encore de geste) */
+  }
+};
+
+// ── Application installée (PWA : src/pwa.js) ──────────────────────────────────────
+app.isStandalone = () => pwa.isStandalone();
+app.canInstall = () => pwa.canInstall() && !pwa.isStandalone();
+app.installApp = async () => {
+  const res = await pwa.promptInstall();
+  if (res === 'accepted') app.dialogs.closeTop();
+};
+pwa.onInstallChange(() => {
+  // Le bouton « Installer le jeu » du menu principal apparaît ou disparaît.
+  if (app.inMenu && app.dialogs.top() === 'main-menu') app.dialogs.mainMenu();
+});
+pwa.onInstalled(() => app.toasts?.show({ kind: 'success', icon: 'star', text: 'Le jeu est installé : retrouvez-le sur l\'écran d\'accueil.' }));
+pwa.onOfflineReady(() => app.toasts?.show({ kind: 'info', icon: 'info', text: 'Jeu disponible hors ligne.' }));
+pwa.onUpdateAvailable(() => {
+  app.toasts?.show({
+    kind: 'info',
+    icon: 'star',
+    title: 'Nouvelle version disponible',
+    text: 'Touchez ici pour recharger (la partie est sauvegardée).',
+    duration: 60000,
+    onClick: () => {
+      save();
+      pwa.applyUpdate();
+    },
+  });
+});
 
 app.toggleMute = () => {
   app.updateSettings({ muted: !settings.muted });
@@ -110,6 +161,13 @@ app.resetProgress = () => {
   storage.resetProgress();
   if (app.inMenu) app.dialogs.mainMenu();
 };
+
+// ── Écran allumé pendant la partie (Wake Lock, option) ─────────────────────────────
+function updateWakeLock() {
+  const want = !!(settings.keepAwake && !document.hidden && app.game && !app.inMenu && app.game.state.status === 'playing');
+  pwa.setWakeLock(want).catch?.(() => {});
+}
+app.wakeLockSupported = () => pwa.isWakeLockSupported();
 
 // ── Pause (fenêtres, tutoriel, onglet caché) ──────────────────────────────────────
 app.pushPause = (reason) => {
@@ -166,8 +224,60 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
 app.openPauseMenu = () => {
   if (!app.game || app.inMenu || app.game.state.status !== 'playing') return;
   if (app.dialogs.top() === 'pause') return;
-  app.field.close(false);
+  app.sheets.close('silent');
   app.dialogs.pauseMenu();
+};
+
+// ── Onglets et feuilles ───────────────────────────────────────────────────────────
+/** Onglet du bas : 'farm' | 'shop' | 'stats' | 'menu'. */
+app.openTab = (id, { fromUser = false } = {}) => {
+  if (!app.game || app.inMenu) return;
+  if (id === 'menu') {
+    app.openPauseMenu();
+    return;
+  }
+  if (id === 'farm') {
+    if (app.sheets.isOpen()) app.sheets.close();
+    else if (fromUser) audio.play('click', { volume: 0.5 });
+    if (typeof app.scene?.focusField === 'function') app.scene.focusField();
+    app.tabbar.refresh();
+    return;
+  }
+  if (fromUser && app.sheets.isOpen(id)) {
+    app.sheets.close();
+    return;
+  }
+  const lvl = app.game.level;
+  if (id === 'shop') {
+    app.sheets.open({ id: 'shop', kind: 'panel', tall: true, icon: icon('coin', 'md'), title: 'Acheter', content: app.panel.shopNode });
+    app.panel.flush();
+  } else if (id === 'stats') {
+    app.sheets.open({ id: 'stats', kind: 'panel', tall: true, icon: icon('bill', 'md'), title: `Bilan · Niveau ${lvl.id}`, content: app.panel.statsNode });
+    app.panel.showStats();
+  }
+};
+
+app.onSheetChange = () => {
+  app.tabbar?.refresh();
+  updateInsets();
+};
+app.onDialogChange = () => {
+  app.tabbar?.refresh();
+  updateWakeLock();
+};
+
+/** Fait défiler la scène pour qu'une parcelle ne soit pas cachée par la feuille ouverte. */
+app.revealPlot = (index) => {
+  const s = app.scene;
+  if (!s || typeof s.scrollBy !== 'function') return;
+  requestAnimationFrame(() => {
+    const r = app.plotPageRect(index);
+    if (!r) return;
+    const bottom = app.safeBottom() - 12;
+    const top = app.safeTop() + 12;
+    if (r.bottom > bottom) s.scrollBy(r.bottom - bottom);
+    else if (r.top < top) s.scrollBy(r.top - top);
+  });
 };
 
 // ── Actions du joueur ─────────────────────────────────────────────────────────────
@@ -205,48 +315,25 @@ app.plantAll = (cropId, firstIndex) => {
   return n;
 };
 
-function plotClick(index, e) {
-  const g = app.game;
-  const p = g.query.plot(index);
-  if (!p) return;
-  switch (p.action) {
-    case 'plant':
-      app.field.openSeedPicker(index);
-      break;
-    case 'water':
-      if (app.water(index)?.ok) drag = { action: 'water', done: new Set([index]) };
-      break;
-    case 'harvest':
-      if (app.harvest(index)?.ok) drag = { action: 'harvest', done: new Set([index]) };
-      break;
-    case 'unlock':
-      app.field.openUnlock(index);
-      break;
-    default:
-      if (g.state.status !== 'playing') return;
-      if (p.cropId && p.watered && !p.mature) {
-        audio.play('click', { volume: 0.5 });
-        app.toasts.show({ kind: 'info', icon: 'water', text: `Déjà arrosée aujourd'hui. Mûre dans ${plural(p.daysLeft, 'jour')}.`, duration: 2200 });
-      } else if (!p.unlocked) {
-        audio.play('error');
-        app.toasts.show({ kind: 'error', text: 'Le champ ne peut plus s\'agrandir.' });
-      }
-  }
-  if (e) e.preventDefault();
-}
-
-// Glisser : arroser ou récolter plusieurs parcelles d'un seul geste.
-function dragOver(index) {
-  if (!drag || drag.done.has(index)) return;
-  drag.done.add(index);
-  const p = app.game?.query.plot(index);
-  if (!p || p.action !== drag.action) return;
-  if (drag.action === 'water') app.game.actions.water(index);
-  else if (drag.action === 'harvest') app.game.actions.harvest(index);
-}
-
 // ── Géométrie de la scène ─────────────────────────────────────────────────────────
-app.stageRect = () => canvas.getBoundingClientRect();
+/** Partie de la scène vraiment visible (sous la barre du haut, au-dessus des onglets). */
+app.stageRect = () => {
+  const c = canvas.getBoundingClientRect();
+  const top = app.safeTop();
+  const bottom = app.safeBottom();
+  return { left: c.left, right: c.right - insets.right, top, bottom, width: c.width - insets.right, height: bottom - top };
+};
+app.isWide = () => document.body.classList.contains('layout-wide');
+/** Bas de la barre du haut (px de la page). */
+app.safeTop = () => (app.inMenu ? 0 : insets.top);
+/** Haut des onglets ou de la feuille ouverte (px de la page). */
+app.safeBottom = () => {
+  const vh = viewportHeight();
+  let b = vh - (app.inMenu ? 0 : insets.bottom);
+  if (app.sheets.isOpen() && !app.isWide()) b = Math.min(b, app.sheets.box.getBoundingClientRect().top);
+  return b;
+};
+app.safeLeft = () => 0;
 
 /** Rectangle d'une parcelle en pixels de la page. */
 app.plotPageRect = (index) => {
@@ -283,6 +370,32 @@ function wantedMinZoom(w, h, dpr) {
   return w * dpr >= 768 && h * dpr >= 480 ? 2 : 1;
 }
 
+function viewportHeight() {
+  return Math.round(window.visualViewport?.height || window.innerHeight);
+}
+
+// Zones de l'écran couvertes par l'interface (px CSS), transmises à la scène.
+const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+let insetsKey = '';
+function updateInsets() {
+  const inGame = !!app.game && !app.inMenu;
+  const hud = $('#hud').getBoundingClientRect();
+  const tab = $('#tabbar').getBoundingClientRect();
+  const vh = viewportHeight();
+  insets.top = inGame ? Math.max(0, Math.round(hud.bottom)) : 0;
+  insets.bottom = inGame && !app.isWide() ? Math.max(0, Math.round(vh - tab.top)) : 0;
+  insets.left = 0;
+  // Grand écran : le panneau rangé à droite (achats, bilan) réduit la scène visible.
+  insets.right = inGame && app.isWide() && app.sheets.isOpen() ? Math.round(app.sheets.box.getBoundingClientRect().width) : 0;
+  const key = `${insets.top},${insets.bottom},${insets.left},${insets.right}`;
+  if (key === insetsKey) return;
+  insetsKey = key;
+  document.documentElement.style.setProperty('--inset-top', `${insets.top}px`);
+  document.documentElement.style.setProperty('--inset-bottom', `${insets.bottom}px`);
+  if (typeof app.scene?.setInsets === 'function') app.scene.setInsets({ ...insets });
+  app.tutorial.relayout();
+}
+
 function resizeScene() {
   if (!images) return;
   const r = stage.getBoundingClientRect();
@@ -294,23 +407,52 @@ function resizeScene() {
     currentMinZoom = mz;
     const level = (app.game && !app.inMenu ? app.game : attract)?.level || getLevel(1);
     app.scene = createScene(canvas, images, level, { minZoom: mz });
+    insetsKey = '';
   }
   app.scene.resize(w, h, dpr);
-  app.field.reposition();
+  updateInsets();
   app.tutorial.relayout();
 }
 
-app.onLayoutChange = () => {
-  // Le panneau glisse : on redimensionne à la fin de la transition (et tout de suite).
-  resizeScene();
-  setTimeout(resizeScene, 260);
-};
+// Taille réelle de l'écran : Chrome Android affiche ou cache sa barre d'adresse, le clavier…
+function applyViewport() {
+  const vv = window.visualViewport;
+  const h = viewportHeight();
+  document.documentElement.style.setProperty('--app-h', `${h}px`);
+  // Téléphone tenu à l'horizontale : invitation à le tourner (pas sur ordinateur ni tablette).
+  const w = window.innerWidth;
+  const landscapePhone = app.isTouch && w > h && h < 520;
+  document.body.classList.toggle('is-rotated', landscapePhone);
+  if (landscapePhone) app.pushPause('rotate');
+  else app.popPause('rotate');
+  const wide = !landscapePhone && w >= 900 && w > h * 1.1;
+  if (wide !== document.body.classList.contains('layout-wide')) {
+    document.body.classList.toggle('layout-wide', wide);
+    // Grand écran : les onglets rejoignent la barre du haut ; sinon, ils restent en bas.
+    const tabbar = $('#tabbar');
+    if (wide) $('.hud-row')?.append(tabbar);
+    else document.body.insertBefore(tabbar, $('#sheet-layer'));
+    app.sheets?.refit();
+  }
+  if (vv && (vv.offsetTop || vv.offsetLeft) && vv.scale <= 1.01) window.scrollTo(0, 0);
+}
 
 new ResizeObserver(() => resizeScene()).observe(stage);
+new ResizeObserver(() => updateInsets()).observe($('#hud'));
+new ResizeObserver(() => updateInsets()).observe($('#tabbar'));
 window.addEventListener('resize', () => {
-  applyPanelMode();
+  applyViewport();
   resizeScene();
 });
+window.visualViewport?.addEventListener('resize', () => {
+  applyViewport();
+  resizeScene();
+});
+window.addEventListener('orientationchange', () => setTimeout(() => {
+  applyViewport();
+  resizeScene();
+}, 150));
+applyViewport();
 
 // Changement de densité de pixels sans changement de taille (fenêtre glissée sur un autre écran,
 // zoom du navigateur sur certains systèmes) : la requête média est réinstallée à chaque fois.
@@ -325,23 +467,8 @@ function watchDpr() {
 }
 watchDpr();
 
-function applyPanelMode() {
-  const narrow = window.innerWidth < 1100;
-  document.body.classList.toggle('is-narrow', narrow);
-}
-
-// ── Souris / toucher sur la scène ─────────────────────────────────────────────────
-function localPoint(e) {
-  const r = canvas.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
-}
-
-function hitAt(e) {
-  if (!app.scene || !app.game || app.inMenu) return null;
-  const p = localPoint(e);
-  return app.scene.hitTest(p.x, p.y);
-}
-
+// ── Survol à la souris (infobulles de la scène) ───────────────────────────────────
+// Les gestes (toucher, glisser, appui long, molette) sont dans src/ui/gestures.js.
 function sameHit(a, b) {
   if (!a || !b) return a === b;
   return a.type === b.type && a.index === b.index && a.id === b.id;
@@ -358,74 +485,32 @@ function updateHoverTip() {
   else app.tooltip.hide('scene');
 }
 
-function setHover(hit, e) {
+app.onSceneHover = (hit, e) => {
   const changed = !sameHit(hit, hover.hit);
   hover = { hit, x: e.clientX, y: e.clientY };
   if (changed) {
-    app.scene.setHover(hit);
+    app.scene?.setHover(hit);
     let pointer = false;
-    if (hit?.type === 'plot') pointer = !!app.game.query.plot(hit.index)?.action;
+    if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
-  if (e.pointerType !== 'touch') updateHoverTip();
-}
+  updateHoverTip();
+};
 
-canvas.addEventListener('pointermove', (e) => {
-  if (app.inMenu || !app.game) return;
-  const hit = hitAt(e);
-  setHover(hit, e);
-  if (drag && e.buttons & 1 && hit?.type === 'plot') dragOver(hit.index);
+// Pas de menu contextuel ni de sélection sur appui long dans le jeu (sauf champs de saisie).
+document.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest?.('input, textarea, a')) e.preventDefault();
 });
-
-canvas.addEventListener('pointerleave', () => {
-  hover.hit = null;
-  app.scene?.setHover(null);
-  app.tooltip.hide('scene');
-  canvas.style.cursor = '';
-});
-
-canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || app.inMenu || !app.game) return;
-  if (app.field.isOpen()) {
-    app.field.close();
-    return;
-  }
-  const hit = hitAt(e);
-  setHover(hit, e);
-  if (!hit) return;
-  if (hit.type === 'plot') {
-    try {
-      canvas.setPointerCapture(e.pointerId);
-    } catch {
-      /* rien */
-    }
-    plotClick(hit.index, e);
-  } else if (hit.type === 'investment') {
-    audio.play('page');
-    app.panel.focusInvestment(hit.id);
-  }
-  app.tooltip.hide('scene');
-});
-
-window.addEventListener('pointerup', () => {
-  drag = null;
-});
-canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-
-// Clic hors de la fenêtre des graines : elle se ferme.
-document.addEventListener('pointerdown', (e) => {
-  if (!app.field.isOpen()) return;
-  if (e.target.closest('#popup') || e.target === canvas) return;
-  if (e.target.closest('#toasts, #tooltip')) return;
-  app.field.close();
-});
+// Pincement / double toucher : pas de zoom de la page (Safari ignore user-scalable=no).
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
 
 // Sons de survol des boutons (discrets).
 let lastHoverBtn = null;
 document.addEventListener('pointerover', (e) => {
   if (e.pointerType === 'touch') return;
-  const b = e.target.closest?.('.btn, .hud-btn, .level-card, .tab, .seed-row, .opt-toggle, .panel-handle');
+  const b = e.target.closest?.('.btn, .hud-cell, .hud-speed, .level-card, .tabbar-btn, .seed-row, .opt-toggle');
   if (b === lastHoverBtn) return;
   lastHoverBtn = b;
   if (b && !b.classList.contains('is-disabled')) audio.play('hover', { volume: 0.6 });
@@ -440,11 +525,11 @@ window.addEventListener('keydown', (e) => {
 
   if (e.key === 'Escape') {
     e.preventDefault();
-    if (app.field.isOpen()) return app.field.close();
     if (app.dialogs.isOpen()) {
       app.dialogs.closeTop();
       return;
     }
+    if (app.sheets.isOpen()) return app.sheets.close('escape');
     if (!app.inMenu && app.game) app.openPauseMenu();
     return;
   }
@@ -461,7 +546,9 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '2') app.setSpeed(2, { fromUser: true });
   else if (e.key === '3') app.setSpeed(4, { fromUser: true });
   else if (e.key === 'm' || e.key === 'M') app.toggleMute();
-  else if (e.key === 'b' || e.key === 'B') app.panel.toggle(undefined, true);
+  else if (e.key === 'b' || e.key === 'B') app.openTab('shop', { fromUser: true });
+  else if (e.key === 'n' || e.key === 'N') app.openTab('stats', { fromUser: true });
+  else if (e.key === 'f' || e.key === 'F') app.openTab('farm', { fromUser: true });
 });
 
 // ── Événements du jeu ─────────────────────────────────────────────────────────────
@@ -641,9 +728,10 @@ function processPending() {
     const ev = pending.end;
     pending = { billPaid: null, frost: null, end: null };
     queuedBanner = null;
-    app.field.close(false);
+    app.sheets.close('silent');
     app.tooltip.hide();
     pauseReasons.clear();
+    updateWakeLock();
     if (ev.type === 'victory') {
       const rec = storage.recordVictory(g.level.id, ev.stars, ev.money);
       storage.clearRun();
@@ -718,12 +806,23 @@ app.savedRunInfo = () => {
 };
 
 window.addEventListener('beforeunload', () => save());
+// Appli en arrière-plan (téléphone : bouton accueil, écran verrouillé) : sauvegarde, pause,
+// son coupé (audio.js suspend le contexte) ; au retour, le menu de pause attend le joueur.
+function onBackground() {
+  save();
+  app.input.cancel();
+  if (app.game && !app.inMenu && app.game.state.status === 'playing' && !app.dialogs.isOpen()) app.openPauseMenu();
+  updateWakeLock();
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    save();
-    if (app.game && !app.inMenu && app.game.state.status === 'playing' && !app.dialogs.isOpen()) app.openPauseMenu();
+  if (document.hidden) onBackground();
+  else {
+    lastT = null;
+    updateWakeLock();
   }
 });
+window.addEventListener('pagehide', () => save());
+document.addEventListener('freeze', () => save());
 
 // ── Parties ───────────────────────────────────────────────────────────────────────
 function startRun(game, { resumed = false } = {}) {
@@ -734,7 +833,8 @@ function startRun(game, { resumed = false } = {}) {
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
-  app.field.close(false);
+  app.sheets.close('silent');
+  app.input.cancel();
   app.tooltip.hide();
 
   app.game = game;
@@ -742,13 +842,12 @@ function startRun(game, { resumed = false } = {}) {
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
   document.body.classList.add('in-game');
-  const collapsed = settings.panelCollapsed ?? window.innerWidth < 1100;
-  app.panel.toggle(!collapsed);
 
   app.hud.bind(game);
   app.panel.bind(game);
   unwire = wire(game);
   resizeScene();
+  if (typeof app.scene?.focusField === 'function') app.scene.focusField();
 
   if (!resumed) game.actions.setSpeed(1);
   else if (game.state.speed > 0) lastPlaySpeed = game.state.speed;
@@ -769,6 +868,9 @@ function startRun(game, { resumed = false } = {}) {
 
   save();
   scheduleRefresh();
+  updateWakeLock();
+  if (pwa.isStandalone()) pwa.lockPortrait();
+  app.tabbar.refresh();
 }
 
 app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
@@ -828,9 +930,11 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.inMenu = true;
   if (DEBUG) window.__game = null;
   app.toasts.clearAll();
-  app.field.close(false);
+  app.sheets.close('silent');
+  app.input.cancel();
   app.tooltip.hide();
   hover.hit = null;
+  updateWakeLock();
   document.body.classList.remove('in-game');
   document.body.classList.add('in-menu');
   attract = createAttractGame();
@@ -957,7 +1061,7 @@ async function boot() {
   }
 
   initSprites(images);
-  applyPanelMode();
+  applyViewport();
   attract = createAttractGame();
   resizeScene();
   document.body.classList.add('in-menu');
@@ -983,11 +1087,15 @@ async function boot() {
     if (DEBUG && params.get('level')) app.startLevel(Number(params.get('level')), { skipConfirm: true });
   };
   startBtn.addEventListener('click', go, { once: true });
+  if (DEBUG && params.has('autostart')) go();
 }
 
-// Tout geste du joueur (re)déverrouille l'audio si le navigateur l'a suspendu.
-for (const type of ['pointerdown', 'keydown', 'touchend']) {
-  window.addEventListener(type, () => audio.isUnlocked() && audio.unlock(), { passive: true });
+// Tout geste du joueur (re)déverrouille l'audio si le navigateur l'a suspendu (Chrome Android :
+// seuls touchend / pointerup / click comptent comme « activation » au doigt, pas pointerdown).
+for (const type of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) {
+  window.addEventListener(type, () => {
+    if (!document.body.classList.contains('is-loading')) audio.unlock();
+  }, { passive: true, capture: true });
 }
 
 // ── Débogage (?debug=1) ───────────────────────────────────────────────────────────
@@ -1023,6 +1131,7 @@ if (DEBUG) {
     start(levelId) {
       return app.startLevel(levelId, { skipConfirm: true });
     },
+    insets: () => ({ ...insets }),
     levels: LEVELS.map((l) => l.id),
   };
 }

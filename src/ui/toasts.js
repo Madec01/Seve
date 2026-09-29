@@ -16,7 +16,7 @@ export function createToasts(stack, bannerNode) {
   }
 
   /**
-   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200 }
+   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick? }
    */
   function show(opts) {
     const o = typeof opts === 'string' ? { text: opts } : opts;
@@ -37,7 +37,11 @@ export function createToasts(stack, bannerNode) {
       o.sprite || icon(o.icon || KIND_ICON[kind] || 'info', 'md'),
       el('div.toast-body', o.title ? el('strong.toast-title', o.title) : null, el('span.toast-text', o.text)),
     );
-    node.addEventListener('click', () => dismiss(node));
+    node.addEventListener('click', () => {
+      dismiss(node);
+      o.onClick?.();
+    });
+    if (o.onClick) node.classList.add('is-action');
     stack.prepend(node);
     // Pas plus de 4 messages à la fois.
     const items = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
