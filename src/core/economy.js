@@ -88,10 +88,24 @@ export function dailyCharges(state, level) {
   return Math.max(0, upkeep - effectTotal(state, 'chargeReduction'));
 }
 
+/** Jour de la première mensualité (par défaut : l'aube qui suit les `every` premiers jours). */
+export function loanFirstDay(loan) {
+  return loan.first ?? loan.every + 1;
+}
+
 /** true si une mensualité de prêt tombe à l'aube du jour `day`. */
 export function loanDueOn(level, day) {
   const loan = level.modifiers.loan;
-  return !!loan && day > 1 && (day - 1) % loan.every === 0;
+  if (!loan) return false;
+  const first = loanFirstDay(loan);
+  return day >= first && day > 1 && (day - first) % loan.every === 0;
+}
+
+/** Mensualités restant à payer après le jour `day` (jusqu'à la fin de l'année). */
+export function loanPaymentsLeft(level, day, totalDays) {
+  let n = 0;
+  for (let d = day + 1; d <= totalDays; d++) if (loanDueOn(level, d)) n++;
+  return n;
 }
 
 /** Prochain jour (> day) de mensualité, ou null s'il tombe après la fin de l'année. */

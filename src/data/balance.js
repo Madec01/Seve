@@ -53,9 +53,9 @@ export const MARKET = {
   min: 0.5,
   max: 1.8,
   /** Rappel vers 1 à chaque aube (0 = marche aléatoire pure, 1 = tirage indépendant). */
-  meanReversion: 0.5,
+  meanReversion: 0.8,
   /** Amplitude du pas aléatoire quotidien (tirage uniforme dans ±amplitude/2). */
-  amplitude: 0.9,
+  amplitude: 1.2,
 };
 
 /** Rendement d'une culture replantée sur la même parcelle (fatigue du sol, par défaut). */

@@ -25,6 +25,15 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 - Mise en place des règles de travail (`.claude/REGLES.md`, relues à chaque message via un hook), de `CLAUDE.md` et de ce journal.
 - Rédaction du game design (`docs/GAME_DESIGN.md`) et de l'architecture (`docs/ARCHITECTURE.md`).
 
+### 2026-09-29 — Logique du jeu, données, tests et équilibrage
+
+- Données pures dans `src/data/` : constantes (`balance.js`), 7 cultures, 8 investissements, 8 niveaux (ajouter une culture = ajouter une entrée).
+- Cœur du jeu dans `src/core/` (sans DOM) : `game.js` suit le contrat de `docs/ARCHITECTURE.md` ; découpage en `calendar`, `farm`, `economy`, `weather`, `market`, `stats`, `events`, `rng` (mulberry32 à graine, trois flux indépendants : météo, marché, maladie).
+- Ordre de l'aube documenté (pousse → gel → météo → maladie → pluie → marché → arrosage automatique → revenus → charges → prêt).
+- 77 tests (`node --test tests/`, via `tests/index.js`, ou `node --test`).
+- Simulation `tools/simulate.js` : 4 joueurs-robots (insouciant, équilibré, investisseur, optimisé) × 200 graines par niveau ; option `--trace` pour suivre une partie jour par jour.
+- Équilibrage : investissements rentabilisés en 9 à 15 jours, cultures d'hiver peu rentables, fermage d'hiver élevé ; prêt du niveau 7 porté à 150 pièces tous les 7 jours (jours 4, 11, 18, 25), la mensualité de 40 pièces du premier jet ne pesait rien. Tableaux chiffrés mis à jour dans `docs/GAME_DESIGN.md`.
+
 ---
 
 ## Idées (à étudier plus tard)
@@ -42,4 +51,4 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 
 | Date | Description | Statut |
 |---|---|---|
-| — | Aucun bug connu pour l'instant | — |
+| 2026-09-29 | Logique : l'arrosage gratuit était refusé quand l'argent était négatif (comparaison `argent < 0`) | Corrigé avant intégration |

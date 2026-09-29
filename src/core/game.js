@@ -24,7 +24,7 @@
 //   8. revenus des investissements (valeurs de la saison du jour ; orage : pas de revenu de l'étal ;
 //      tonte des moutons à l'aube du dernier jour de printemps, d'été et d'automne) ;
 //   9. charges quotidiennes (ferme + entretien − panneaux solaires, minimum 0) ;
-//  10. mensualité du prêt (aube des jours 1 + k × every) ;
+//  10. mensualité du prêt (aube du jour loan.first, puis tous les loan.every jours) ;
 //  11. événements : weather, dawn, moneyChanged, puis seasonWarning (2 jours avant un changement).
 //
 // L'argent peut devenir négatif uniquement par les charges de l'aube (charges, arrosage
@@ -51,6 +51,7 @@ import {
   dawnIncomes,
   levelInvestments,
   loanDueOn,
+  loanPaymentsLeft,
   maxOf,
   nextCost,
   nextLoanDay,
@@ -153,6 +154,7 @@ function wrap(state) {
     const rent = rentFor(level, state.time.seasonIndex);
     if (state.money < rent) {
       state.status = 'bankrupt';
+      state.time.elapsed = DAY_SECONDS; // la partie s'arrête le soir du dernier jour
       state.result = { outcome: 'bankrupt', amountDue: rent, money: state.money, seasonId: sid, day: state.time.day };
       push('bankrupt', { amountDue: rent, money: state.money, seasonId: sid, summary: buildSummary(state, sid, { amountDue: rent }) });
       return;
@@ -164,6 +166,7 @@ function wrap(state) {
       const [t2, t3] = level.starThresholds;
       const stars = 1 + (state.money >= t2 ? 1 : 0) + (state.money >= t3 ? 1 : 0);
       state.status = 'victory';
+      state.time.elapsed = DAY_SECONDS;
       state.result = { outcome: 'victory', stars, money: state.money, day: state.time.day };
       push('victory', { money: state.money, stars, summary: buildSummary(state, sid, { stars }) });
     }
@@ -263,7 +266,6 @@ function wrap(state) {
       if (playing()) dawn();
       flush();
     }
-    if (!playing()) state.time.elapsed = Math.min(state.time.elapsed, DAY_SECONDS);
     flush();
   }
 
@@ -502,7 +504,13 @@ function wrap(state) {
         net: dailyIncome - charges,
         nextBill: { amount: rentFor(level, si), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si] },
         loan: loan
-          ? { payment: loan.payment, every: loan.every, nextInDays: nextLoan === null ? null : nextLoan - state.time.day }
+          ? {
+              payment: loan.payment,
+              every: loan.every,
+              nextInDays: nextLoan === null ? null : nextLoan - state.time.day,
+              paymentsLeft: loanPaymentsLeft(level, state.time.day, total),
+              remaining: loanPaymentsLeft(level, state.time.day, total) * loan.payment,
+            }
           : null,
         priceBonus: priceBonus(state),
         waterCost: level.modifiers.waterCost,

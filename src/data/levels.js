@@ -19,7 +19,8 @@
 //     waterCost        prix de chaque arrosage (manuel ou automatique)
 //     rotChance        chance, à chaque aube pluvieuse, qu'une culture non récoltée pourrisse
 //     priceVolatility  true : prix de vente variables chaque jour (×0,5 à ×1,8)
-//     loan             null ou { payment, every } : mensualité payée à l'aube tous les `every` jours
+//     loan             null ou { payment, every, first } : mensualité payée à l'aube du jour `first`,
+//                      puis tous les `every` jours (first vaut every + 1 par défaut)
 //     soilFatigue      0, ou perte de rendement quand on replante la culture récoltée juste avant
 //     noSprinkler      true : pas d'arrosage automatique
 
@@ -90,7 +91,7 @@ export const LEVELS = [
     description: 'La pluie se fait rare et les canicules s\'enchaînent. Chaque arrosage coûte 1 pièce, même automatique.',
     startMoney: 120,
     rents: [60, 110, 150, 220],
-    starThresholds: [500, 900],
+    starThresholds: [250, 430],
     weather: DROUGHT_WEATHER,
     modifiers: { waterCost: 1 },
   }),
@@ -99,8 +100,8 @@ export const LEVELS = [
     name: 'L\'année pluvieuse',
     description: 'Il pleut souvent, l\'arrosage se fait tout seul… mais chaque jour de pluie, une culture peut pourrir sur pied.',
     startMoney: 100,
-    rents: [70, 130, 190, 260],
-    starThresholds: [500, 900],
+    rents: [70, 90, 190, 300],
+    starThresholds: [280, 480],
     weather: RAINY_WEATHER,
     modifiers: { rotChance: 0.05 },
   }),
@@ -115,7 +116,7 @@ export const LEVELS = [
     unlockedPlots: 6,
     maxPlots: 6,
     rents: [60, 110, 160, 220],
-    starThresholds: [400, 800],
+    starThresholds: [220, 370],
   }),
   level({
     id: 5,
@@ -123,34 +124,34 @@ export const LEVELS = [
     description: 'L\'hiver dure deux semaines et le fermage d\'hiver est salé. Tout se joue dans les réserves d\'automne.',
     startMoney: 100,
     seasonLengths: [7, 7, 7, 14],
-    rents: [60, 120, 170, 520],
-    starThresholds: [500, 900],
+    rents: [80, 150, 250, 900],
+    starThresholds: [160, 260],
   }),
   level({
     id: 6,
     name: 'Le marché fou',
     description: 'Le prix de chaque légume change tous les jours, de la moitié au presque double. Vendez au bon moment !',
     startMoney: 100,
-    rents: [70, 130, 200, 290],
-    starThresholds: [500, 900],
+    rents: [70, 130, 230, 540],
+    starThresholds: [280, 500],
     modifiers: { priceVolatility: true },
   }),
   level({
     id: 7,
     name: 'Le crédit',
-    description: 'La banque vous prête 600 pièces pour bien démarrer, mais il faut rembourser 40 pièces tous les 7 jours en plus du fermage.',
+    description: 'La banque vous prête 600 pièces pour bien démarrer, mais il faut rembourser 150 pièces tous les 7 jours (au milieu de chaque saison), en plus du fermage.',
     startMoney: 600,
-    rents: [150, 250, 330, 420],
-    starThresholds: [500, 900],
-    modifiers: { loan: { payment: 40, every: 7 } },
+    rents: [150, 300, 420, 650],
+    starThresholds: [300, 520],
+    modifiers: { loan: { payment: 150, every: 7, first: 4 } },
   }),
   level({
     id: 8,
     name: 'L\'année bio',
     description: 'Pas d\'arrosage automatique, et replanter la même culture sur une parcelle réduit sa récolte de 30 % : pensez à la rotation.',
     startMoney: 100,
-    rents: [70, 130, 180, 250],
-    starThresholds: [500, 900],
+    rents: [80, 160, 240, 440],
+    starThresholds: [180, 295],
     availableInvestments: ALL_INVESTMENTS.filter((id) => id !== 'sprinkler'),
     modifiers: { soilFatigue: 0.3, noSprinkler: true },
   }),

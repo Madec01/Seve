@@ -23,8 +23,9 @@
 //               rentabilité attendue jusqu'à la fin de l'année, garde une réserve pour le fermage,
 //               gère la rotation (niveau bio) et vend au bon moment sur le marché fou.
 
+import { loanDueOn } from '../src/core/economy.js';
 import { createGame } from '../src/core/game.js';
-import { DAY_SECONDS, EPSILON, SEASONS } from '../src/data/balance.js';
+import { DAY_SECONDS, EPSILON, MARKET, SEASONS } from '../src/data/balance.js';
 import { CROPS, getCrop } from '../src/data/crops.js';
 import { getInvestment } from '../src/data/investments.js';
 import { LEVELS, yearLength } from '../src/data/levels.js';
@@ -50,7 +51,7 @@ const OPT_CAPITAL = Number(arg('opt-capital', 0.6));
 const OPT_RATIO = Number(arg('opt-ratio', 0.15));
 const OPT_PLANT_FIRST = !!arg('opt-plant-first', false);
 const OPT_MARKET = !arg('opt-no-market', false);
-const OPT_HOLD = Number(arg('opt-hold', 0.8));
+const OPT_HOLD = Number(arg('opt-hold', 0.9));
 
 // ── Modèle économique utilisé par les robots pour évaluer leurs achats ───────────────────
 
@@ -180,12 +181,13 @@ function reserve(c, margin = 5) {
       continue;
     }
     water += level.modifiers.waterCost * Math.min(p.daysLeft, d + 1);
-    if (p.daysLeft <= d && !p.willFreeze) harvest += expectedPrice(c, getCrop(p.cropId), p.fatigue);
+    // Marché fou : on compte prudemment sur un cours bas.
+    const prudence = level.modifiers.priceVolatility ? 0.7 : 1;
+    if (p.daysLeft <= d && !p.willFreeze) harvest += prudence * expectedPrice(c, getCrop(p.cropId), p.fatigue);
   }
+  // Mensualités jusqu'à l'aube qui suit le fermage comprise (elle tombe avant la première récolte).
   let loans = 0;
-  if (level.modifiers.loan) {
-    for (let k = 1; k <= d; k++) if ((cal.day + k - 1) % level.modifiers.loan.every === 0) loans += level.modifiers.loan.payment;
-  }
+  for (let k = 1; k <= d + 1; k++) if (loanDueOn(level, cal.day + k)) loans += level.modifiers.loan.payment;
   const season = SEASONS[cal.seasonIndex];
   const sheep = state.investments.sheep || 0;
   const shear = getInvestment('sheep').effects;
@@ -244,7 +246,11 @@ function harvestAll(game, budget, smartMarket) {
         cal.day >= cal.totalDays || (!crop.frostHardy && SEASONS[cal.seasonIndex] === 'autumn' && cal.daysLeftInSeason === 0);
       // Le jour du fermage (et la veille), on vend tout pour être sûr de payer.
       const billSoon = cal.daysLeftInSeason <= 1;
-      if (mult < OPT_HOLD && !lastChance && !billSoon) continue;
+      // Garder un jour de plus rapporte en moyenne prix × (1 − cours) × rappel vers 1 ; cela coûte
+      // un jour de parcelle occupée (profit quotidien de la meilleure culture du moment).
+      const expectedGain = crop.sellPrice * (1 + c.fin.priceBonus) * (1 - mult) * MARKET.meanReversion;
+      const plotDay = seasonCropModel(level, SEASONS[cal.seasonIndex], { priceBonus: c.fin.priceBonus }).perDay;
+      if (mult < OPT_HOLD && expectedGain > plotDay && !lastChance && !billSoon) continue;
     }
     if (!click(budget)) return;
     game.actions.harvest(i);

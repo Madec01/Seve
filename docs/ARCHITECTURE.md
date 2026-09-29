@@ -15,9 +15,15 @@ src/
     levels.js              niveaux (contraintes, fermages, météo, seuils d'étoiles)
     balance.js             constantes globales (durée d'un jour, charges de base…)
   core/                    logique pure, sans DOM, testée sous Node
-    rng.js                 générateur pseudo-aléatoire à graine (sérialisable)
-    game.js                createGame() : état, update(dt), actions, événements
-    …                      (découpage libre : time.js, farm.js, economy.js, weather.js, save.js…)
+    rng.js                 générateur pseudo-aléatoire à graine (mulberry32, flux météo / marché / maladie)
+    game.js                createGame() / loadGame() : état, update(dt), actions, requêtes, événements
+    calendar.js            jours, saisons, fin d'année
+    farm.js                parcelles, pousse, arrosage, gel, maladie, arrosage automatique, prix de récolte
+    economy.js             investissements, revenus, charges, prêt, fermage
+    weather.js             tirage de la météo
+    market.js              cours du « marché fou »
+    stats.js               statistiques et bilans (summary)
+    events.js              émetteur d'événements
   render/                  dessin canvas
     assets.js              chargement des images/sons (promesses)
     atlas.js               sprites nommés → {image, x, y, w, h}
@@ -35,7 +41,7 @@ assets/
   audio/sfx/               Kenney + Freesound
   audio/ambience/          Freesound (oiseaux, pluie, vent)
   fonts/                   Pixelify Sans (OFL)
-tests/                     tests Node (node --test)
+tests/                     tests Node : `node --test tests/` (tests/index.js charge les *.test.js) ou `node --test`
 tools/simulate.js          simulation d'équilibrage (joueurs-robots par niveau)
 ```
 
@@ -88,6 +94,23 @@ game.query.calendar();             // { day, dayOfSeason, seasonIndex, seasonId,
 | `moneyChanged` | `{ money, delta }` | HUD |
 
 `status` dans l'état : `'playing' | 'bankrupt' | 'victory'`. `update()` ne fait plus rien hors de `'playing'`.
+
+### Précisions sur le contrat
+
+- **Déroulé d'une journée** (détaillé en tête de `src/core/game.js`) : quand un jour s'achève, le fermage est payé s'il s'agit du dernier jour de la saison (sinon faillite), puis vient l'aube du jour suivant : pousse (d'après l'arrosage et la météo de la veille) → remise à zéro de l'arrosage → nouveau jour (`seasonStart`, `frost` au 1er jour d'hiver) → météo → maladie (`rot`) → la pluie arrose → marché → arrosage automatique → revenus → charges → prêt → `weather`, `dawn`, `moneyChanged`, puis `seasonWarning`. Un grand `dt` enchaîne plusieurs journées dans l'ordre ; tous les événements sont émis de façon synchrone, une fois l'état cohérent (un gestionnaire peut appeler des actions).
+- Après le fermage d'hiver, `billPaid` est émis **puis** `victory`. En fin de partie, `state.time.elapsed` vaut `DAY_SECONDS` (soir du dernier jour) et `state.result` résume l'issue.
+- `on('*', handler)` reçoit tous les événements, sous la forme `{ type, ...données }`.
+- Champs en plus du contrat (compatibles) :
+  - `dawn` : `chargesDetail: [{source: 'farm'|'water'|'loan', amount}]`, `sprinkled: [index]`, `net` ; chaque revenu a aussi `owned` et `kind: 'daily'|'shearing'` (tonte). `state.lastDawn` garde la dernière aube.
+  - `planted` : `fatigue`, `watered` (semé sous la pluie) ; `watered` : `amount` = coût de l'arrosage ; `harvested` : `fatigue` ; `purchased` / `plotUnlocked` : `cost` ; `frost` : `lost: [{plotIndex, cropId}]` ; `bankrupt` : `seasonId`.
+  - `summary` (billPaid / bankrupt / victory) : totaux de l'année `harvestIncome, investmentIncome, charges, waterSpent, loanPaid, rentsPaid, seedsSpent, investmentsSpent, plotsSpent, cropsPlanted, cropsHarvested {cropId: n}, cropsLost {frost, rot}, totalHarvested, net`, plus `season` (mêmes totaux pour la saison qui s'achève), `seasonId, day, startMoney, money, investments`, et `amount` / `amountDue` / `stars` selon l'événement.
+  - `query.plot(i)` : aussi `index, col, row, cropName, willFreeze` (gèlera avant maturité), `harvestValue` (si mûre), `action: 'plant'|'water'|'harvest'|'unlock'|null` (effet d'un clic). `query.plots()` renvoie toutes les parcelles.
+  - `query.plantableCrops(plotIndex?)` : `[{ id, name, seedCost, basePrice, marketMultiplier, sellPrice, profit, growDays, daysToMature, frostHardy, fatigue, willFreeze, canAfford }]` ; `sellPrice` = prix de récolte actuel (cours × étal, × fatigue du sol si `plotIndex` est donné).
+  - `query.investments()` : aussi `name, description, kind ('unit'|'upgrade'), income` (saison en cours), `incomeBySeason, upkeep, effects` (`waterPlots` : `null` = toutes les parcelles).
+  - `query.finance()` : `nextBill` a aussi `seasonId` (`daysLeft` = jours restant après aujourd'hui, 0 = ce soir) ; `loan` = `{ payment, every, nextInDays, paymentsLeft, remaining }` ou `null` ; aussi `priceBonus, waterCost`.
+  - `query.calendar()` : aussi `seasonName, daysLeftInSeason`. `query.forecast()` renvoie des identifiants (`'sunny'`, `'rain'`…, noms dans `WEATHER_TYPES` de `balance.js`).
+  - `query.level()` (données du niveau) et `query.summary()` (bilan à l'instant) ; `game.level` = données du niveau.
+- `loadGame()` lève une erreur si l'objet est invalide, d'une autre version (`STATE_VERSION`) ou d'un niveau inconnu. Les données de niveau ne sont pas copiées dans la sauvegarde : elles sont relues dans `src/data/` au chargement.
 
 ## Règles de code
 
