@@ -101,3 +101,44 @@ test('une partie terminée se recharge terminée', () => {
   h.update(DAY_SECONDS * 10);
   assert.deepEqual(h.state, g.state);
 });
+
+test('loadGame refuse une sauvegarde abîmée au lieu de planter plus tard', () => {
+  const g = createGame({ levelId: 1, seed: 7 });
+  g.update(DAY_SECONDS * 2.5);
+  const good = g.serialize();
+  const broken = (patch) => {
+    const s = JSON.parse(JSON.stringify(good));
+    patch(s);
+    return s;
+  };
+  const cases = {
+    'état minimal': () => ({ version: STATE_VERSION, levelId: 1, status: 'playing' }),
+    'calendrier absent': () => broken((s) => delete s.time),
+    'jour hors saison': () => broken((s) => (s.time.dayOfSeason = 9)),
+    'heure NaN (null en JSON)': () => broken((s) => (s.time.elapsed = null)),
+    'argent absent': () => broken((s) => (s.money = null)),
+    'vitesse inconnue': () => broken((s) => (s.speed = 3)),
+    'météo inconnue': () => broken((s) => (s.weather.today = 'grêle')),
+    'culture inconnue': () => broken((s) => { s.plots[0].unlocked = true; s.plots[0].cropId = 'banane'; }),
+    'grille d\'un autre niveau': () => broken((s) => (s.levelId = 4)),
+    'investissement au-delà du maximum': () => broken((s) => (s.investments.chickenCoop = 9)),
+    'investissement inconnu': () => broken((s) => (s.investments.dragon = 1)),
+    'flux aléatoire absent': () => broken((s) => delete s.rng.weather),
+    'statistiques absentes': () => broken((s) => delete s.stats),
+  };
+  for (const [name, make] of Object.entries(cases)) {
+    assert.throws(() => loadGame(make()), /Sauvegarde invalide/, name);
+  }
+  // L'identifiant de niveau en texte (« 1 ») reste accepté et normalisé.
+  const h = loadGame({ ...good, levelId: '1' });
+  assert.equal(h.state.levelId, 1);
+  assert.deepEqual({ ...h.state, levelId: 1 }, { ...good, levelId: 1 });
+});
+
+test('update ignore un dt infini ou invalide', () => {
+  const g = createGame({ levelId: 1, seed: 7 });
+  for (const dt of [Infinity, -Infinity, NaN, -5, 0, undefined]) g.update(dt);
+  assert.equal(g.state.time.day, 1);
+  assert.equal(g.state.time.elapsed, 0);
+  assert.equal(g.state.status, 'playing');
+});

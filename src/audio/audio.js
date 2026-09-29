@@ -137,7 +137,8 @@ export function createAudio(manifest, initialSettings = {}) {
   // ── Déverrouillage ───────────────────────────────────────────────────────────────
   function unlock() {
     if (ctx) {
-      if (ctx.state === 'suspended' && !document.hidden) ctx.resume().catch(() => {});
+      // 'suspended' (onglet revenu, politique d'autoplay) ou 'interrupted' (Safari iOS : appel, verrouillage).
+      if (ctx.state !== 'running' && ctx.state !== 'closed' && !document.hidden) ctx.resume().catch(() => {});
       return;
     }
     const AC = window.AudioContext || window.webkitAudioContext;

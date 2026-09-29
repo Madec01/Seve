@@ -334,27 +334,50 @@ export function spriteSize(name) {
  * @param dx, dy  coin haut-gauche de destination (pixels écran)
  * @param opts    { scale = 1, flipX = false }
  */
-export function drawSprite(ctx, images, name, dx, dy, opts = {}) {
+const NO_OPTS = Object.freeze({});
+
+/** Couches d'un sprite (calculées une fois : pas d'allocation à chaque image). */
+function layersOf(s) {
+  if (!s._layers) {
+    Object.defineProperty(s, '_layers', {
+      value: (s.layers || [{ sheet: s.sheet, col: s.col, row: s.row, dx: 0, dy: 0, w: s.w || 1, h: s.h || 1 }]).map((l) => ({
+        sheet: l.sheet,
+        sx: l.col * TILE,
+        sy: l.row * TILE,
+        dx: (l.dx || 0) * TILE,
+        dy: (l.dy || 0) * TILE,
+        w: (l.w || 1) * TILE,
+        h: (l.h || 1) * TILE,
+      })),
+    });
+  }
+  return s._layers;
+}
+
+export function drawSprite(ctx, images, name, dx, dy, opts = NO_OPTS) {
   const s = SPRITES[name];
   if (!s) throw new Error(`Sprite inconnu : ${name}`);
   const scale = opts.scale || 1;
-  const w = (s.w || 1) * TILE;
-  const h = (s.h || 1) * TILE;
-  const layers = s.layers || [{ sheet: s.sheet, col: s.col, row: s.row, dx: 0, dy: 0, w: s.w || 1, h: s.h || 1 }];
-  ctx.save();
-  ctx.translate(Math.round(dx), Math.round(dy));
-  if (opts.flipX) {
-    ctx.translate(w * scale, 0);
-    ctx.scale(-1, 1);
+  const layers = layersOf(s);
+  const x = Math.round(dx);
+  const y = Math.round(dy);
+  if (!opts.flipX) {
+    // Cas courant : pas de transformation du contexte.
+    for (let i = 0; i < layers.length; i++) {
+      const l = layers[i];
+      ctx.drawImage(images[l.sheet], l.sx, l.sy, l.w, l.h, x + l.dx * scale, y + l.dy * scale, l.w * scale, l.h * scale);
+    }
+    return;
   }
-  for (const l of layers) {
-    const lw = (l.w || 1) * TILE;
-    const lh = (l.h || 1) * TILE;
-    ctx.drawImage(images[l.sheet], l.col * TILE, l.row * TILE, lw, lh,
-      l.dx * TILE * scale, l.dy * TILE * scale, lw * scale, lh * scale);
+  const w = (s.w || 1) * TILE;
+  ctx.save();
+  ctx.translate(x + w * scale, y);
+  ctx.scale(-1, 1);
+  for (let i = 0; i < layers.length; i++) {
+    const l = layers[i];
+    ctx.drawImage(images[l.sheet], l.sx, l.sy, l.w, l.h, l.dx * scale, l.dy * scale, l.w * scale, l.h * scale);
   }
   ctx.restore();
-  return { w: w * scale, h: h * scale };
 }
 
 // ---------------------------------------------------------------------------

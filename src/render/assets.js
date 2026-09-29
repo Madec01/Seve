@@ -187,7 +187,11 @@ function snowRoofs(canvas, sheet, tile = 16) {
  * À utiliser pour le décor (sol, forêt, arbres, clôtures, bâtiments) ; les cultures, animaux et
  * objets se dessinent avec les planches d'origine.
  */
+const seasonCache = new WeakMap();
+
+/** Planches recolorées par saison (calculées une fois par jeu d'images : la scène peut être recréée). */
 export function buildSeasonSheets(images) {
+  if (seasonCache.has(images)) return seasonCache.get(images);
   const out = {};
   for (const season of Object.keys(SEASON_GRASS)) {
     const set = {};
@@ -200,5 +204,6 @@ export function buildSeasonSheets(images) {
     }
     out[season] = set;
   }
+  seasonCache.set(images, out);
   return out;
 }

@@ -153,7 +153,10 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
   if (res.ok) {
     if (speed > 0) {
       lastPlaySpeed = speed;
-      settings.speed = speed;
+      if (fromUser && settings.speed !== speed) {
+        settings.speed = speed;
+        app.saveSettings();
+      }
     }
     app.tutorial.onSpeed(speed);
     scheduleRefresh();
@@ -308,6 +311,19 @@ window.addEventListener('resize', () => {
   applyPanelMode();
   resizeScene();
 });
+
+// Changement de densité de pixels sans changement de taille (fenêtre glissée sur un autre écran,
+// zoom du navigateur sur certains systèmes) : la requête média est réinstallée à chaque fois.
+function watchDpr() {
+  const mq = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  const onChange = () => {
+    mq.removeEventListener?.('change', onChange);
+    resizeScene();
+    watchDpr();
+  };
+  mq.addEventListener?.('change', onChange);
+}
+watchDpr();
 
 function applyPanelMode() {
   const narrow = window.innerWidth < 1100;
@@ -778,7 +794,15 @@ app.continueRun = () => {
     app.dialogs.mainMenu();
     return;
   }
-  startRun(game, { resumed: true });
+  try {
+    startRun(game, { resumed: true });
+  } catch (err) {
+    // Sauvegarde cohérente pour le cœur mais inutilisable par l'interface : on repart du menu.
+    console.warn('Reprise impossible :', err);
+    storage.clearRun();
+    app.quitToMenu({ ended: true });
+    app.toasts.show({ kind: 'error', text: 'La sauvegarde est illisible : elle a été effacée.' });
+  }
 };
 
 app.restartLevel = () => {

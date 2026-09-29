@@ -164,19 +164,19 @@ export function createEffects(images) {
   const S = buildSprites();
 
   // Réserves
-  const rain = makePool(320, { x: 0, y: 0, vy: 0, groundY: 0, heavy: false });
+  const rain = makePool(480, { x: 0, y: 0, vy: 0, groundY: 0, heavy: false });
   const splashes = makePool(80, { x: 0, y: 0, t: 0 });
-  const flakes = makePool(260, { x: 0, y: 0, vy: 0, phase: 0, size: 1, drift: 0 });
+  const flakes = makePool(400, { x: 0, y: 0, vy: 0, phase: 0, size: 1, drift: 0 });
   const leaves = makePool(40, { x: 0, y: 0, vy: 0, vx: 0, phase: 0, color: '', shape: 0 });
   const petals = makePool(40, { x: 0, y: 0, vy: 0, vx: 0, phase: 0, color: '' });
-  const butterflies = makePool(6, { x: 0, y: 0, tx: 0, ty: 0, phase: 0, color: '', t: 0 });
-  const fireflies = makePool(16, { x: 0, y: 0, phase: 0, speed: 0 });
+  const butterflies = makePool(10, { x: 0, y: 0, tx: 0, ty: 0, phase: 0, color: '', t: 0 });
+  const fireflies = makePool(32, { x: 0, y: 0, phase: 0, speed: 0 });
   const parts = makePool(400, {
     kind: '', x: 0, y: 0, vx: 0, vy: 0, g: 0, t: 0, life: 1, delay: 0, color: '', floor: 0, frame: 0,
   });
   const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false });
   const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '' });
-  const clouds = makePool(6, { x: 0, y: 0, vx: 0 });
+  const clouds = makePool(10, { x: 0, y: 0, vx: 0 });
 
   const env = { season: 'spring', weather: 'sunny', dayProgress: 0.4, view: { x: 0, y: 0, w: 512, h: 320 } };
   let time = 0;
@@ -356,6 +356,12 @@ export function createEffects(images) {
     return Math.max(target, cur - dt * speed);
   }
 
+  // Nombre voulu de particules, borné par la taille de la réserve : au-delà, spawn() recyclerait
+  // chaque image des particules vivantes (pluie qui « saute », boucle coûteuse sur grand écran).
+  function cap(pool, n) {
+    return Math.min(pool.items.length, Math.round(n));
+  }
+
   function countAlive(pool) {
     let n = 0;
     for (const p of pool.items) if (p.alive) n++;
@@ -385,7 +391,7 @@ export function createEffects(images) {
     intensity.clouds = approach(intensity.clouds, wantClouds, dt, 0.3);
 
     // Pluie
-    const rainTarget = Math.round(intensity.rain * 170 * area);
+    const rainTarget = cap(rain, intensity.rain * 170 * area);
     let alive = countAlive(rain);
     const heavy = weather === 'storm';
     for (; alive < rainTarget; alive++) {
@@ -426,7 +432,7 @@ export function createEffects(images) {
     }
 
     // Neige
-    const snowTarget = Math.round(intensity.snow * 170 * area);
+    const snowTarget = cap(flakes, intensity.snow * 170 * area);
     alive = countAlive(flakes);
     for (; alive < snowTarget; alive++) {
       const p = flakes.spawn();
@@ -449,7 +455,7 @@ export function createEffects(images) {
     }
 
     // Feuilles d'automne
-    const leafTarget = Math.round(intensity.leaves * 16 * area);
+    const leafTarget = cap(leaves, intensity.leaves * 16 * area);
     alive = countAlive(leaves);
     for (; alive < leafTarget; alive++) {
       const p = leaves.spawn();
@@ -474,7 +480,7 @@ export function createEffects(images) {
     }
 
     // Pétales de printemps
-    const petalTarget = Math.round(intensity.petals * 14 * area);
+    const petalTarget = cap(petals, intensity.petals * 14 * area);
     alive = countAlive(petals);
     for (; alive < petalTarget; alive++) {
       const p = petals.spawn();
@@ -497,7 +503,7 @@ export function createEffects(images) {
     }
 
     // Papillons (printemps, été, beau temps, en journée)
-    const bfTarget = (season === 'spring' || season === 'summer') && (weather === 'sunny' || weather === 'cloudy' || weather === 'heatwave') && env.dayProgress < 0.85 ? Math.round(4 * area) : 0;
+    const bfTarget = (season === 'spring' || season === 'summer') && (weather === 'sunny' || weather === 'cloudy' || weather === 'heatwave') && env.dayProgress < 0.85 ? cap(butterflies, 4 * area) : 0;
     alive = countAlive(butterflies);
     for (; alive < bfTarget; alive++) {
       const p = butterflies.spawn();
@@ -527,7 +533,7 @@ export function createEffects(images) {
     }
 
     // Lucioles (fin de journée, été / fin de printemps, sans pluie)
-    const ffTarget = (season === 'summer' || season === 'spring') && env.dayProgress > 0.78 && !(weather === 'rain' || weather === 'storm') ? Math.round(10 * area) : 0;
+    const ffTarget = (season === 'summer' || season === 'spring') && env.dayProgress > 0.78 && !(weather === 'rain' || weather === 'storm') ? cap(fireflies, 10 * area) : 0;
     alive = countAlive(fireflies);
     for (; alive < ffTarget; alive++) {
       const p = fireflies.spawn();
@@ -546,7 +552,7 @@ export function createEffects(images) {
     }
 
     // Ombres de nuages
-    const cloudTarget = Math.round(intensity.clouds * 4 * area + 0.3);
+    const cloudTarget = cap(clouds, intensity.clouds * 4 * area + 0.3);
     alive = countAlive(clouds);
     for (; alive < cloudTarget; alive++) {
       const p = clouds.spawn();
@@ -890,6 +896,14 @@ export function createEffects(images) {
     clear,
     get env() {
       return env;
+    },
+    /** Particules vivantes par réserve (débogage, mesures de performance). */
+    stats() {
+      const out = {};
+      for (const [k, pool] of Object.entries({ rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds })) {
+        out[k] = countAlive(pool);
+      }
+      return out;
     },
     /** Émet quelques gouttes (arroseurs automatiques). */
     spray(wx, wy) {

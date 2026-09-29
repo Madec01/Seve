@@ -68,7 +68,16 @@ export function clearRun() {
 /** { levels: { [id]: { stars, bestMoney, completed } } } */
 export function loadProgress() {
   const data = read(KEYS.progress);
-  const levels = data && typeof data.levels === 'object' && data.levels ? data.levels : {};
+  const levels = {};
+  const raw = data && typeof data.levels === 'object' && data.levels && !Array.isArray(data.levels) ? data.levels : {};
+  for (const [id, v] of Object.entries(raw)) {
+    if (!v || typeof v !== 'object') continue;
+    levels[id] = {
+      stars: Math.max(0, Math.min(3, Math.floor(Number(v.stars) || 0))),
+      bestMoney: Number.isFinite(v.bestMoney) ? v.bestMoney : null,
+      completed: v.completed === true,
+    };
+  }
   return { levels };
 }
 
@@ -116,6 +125,7 @@ export function loadSettings() {
     }
   }
   for (const k of ['musicVolume', 'sfxVolume', 'ambienceVolume']) out[k] = Math.min(1, Math.max(0, Number(out[k]) || 0));
+  if (![1, 2, 4].includes(out.speed)) out.speed = DEFAULT_SETTINGS.speed;
   return out;
 }
 

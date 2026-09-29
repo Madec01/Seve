@@ -30,7 +30,8 @@
 // L'argent peut devenir négatif uniquement par les charges de l'aube (charges, arrosage
 // automatique, prêt). Les achats et plantations exigent d'avoir la somme.
 
-import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS } from '../data/balance.js';
+import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEATHER_TYPES } from '../data/balance.js';
+import { getInvestment } from '../data/investments.js';
 import { CROPS, getCrop } from '../data/crops.js';
 import { getLevel, yearLength } from '../data/levels.js';
 import { createRngState, stream } from './rng.js';
@@ -116,8 +117,51 @@ export function createGame({ levelId = 1, seed = Date.now() } = {}) {
 export function loadGame(saved) {
   if (!saved || typeof saved !== 'object') throw new Error('Sauvegarde invalide');
   if (saved.version !== STATE_VERSION) throw new Error(`Version de sauvegarde incompatible : ${saved.version}`);
-  if (!getLevel(saved.levelId)) throw new Error(`Niveau inconnu : ${saved.levelId}`);
-  return wrap(JSON.parse(JSON.stringify(saved)));
+  const level = getLevel(saved.levelId);
+  if (!level) throw new Error(`Niveau inconnu : ${saved.levelId}`);
+  const state = JSON.parse(JSON.stringify(saved));
+  state.levelId = level.id; // « 2 » (texte) → 2
+  const problem = checkState(state, level);
+  if (problem) throw new Error(`Sauvegarde invalide : ${problem}`);
+  return wrap(state);
+}
+
+/**
+ * Vérifie la structure d'un état chargé (sauvegarde abîmée, ancienne version des données…).
+ * Renvoie un message décrivant le premier problème trouvé, ou null si l'état est utilisable.
+ */
+function checkState(s, level) {
+  const num = (v) => typeof v === 'number' && Number.isFinite(v);
+  const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  if (!['playing', 'bankrupt', 'victory'].includes(s.status)) return 'statut';
+  if (!SPEEDS.includes(s.speed)) return 'vitesse';
+  if (!num(s.money) || !num(s.startMoney)) return 'argent';
+  const t = s.time;
+  if (!t || typeof t !== 'object') return 'calendrier';
+  if (!int(t.seasonIndex, 0, SEASONS.length - 1)) return 'saison';
+  if (!int(t.dayOfSeason, 1, level.seasonLengths[t.seasonIndex])) return 'jour de la saison';
+  if (!int(t.day, 1, yearLength(level))) return 'jour';
+  if (!num(t.elapsed) || t.elapsed < 0 || t.elapsed > DAY_SECONDS) return 'heure';
+  if (!s.weather || !WEATHER_TYPES[s.weather.today] || !WEATHER_TYPES[s.weather.tomorrow]) return 'météo';
+  if (!Array.isArray(s.plots) || s.plots.length !== level.gridCols * level.gridRows) return 'parcelles';
+  for (const p of s.plots) {
+    if (!p || typeof p !== 'object' || typeof p.unlocked !== 'boolean') return 'parcelle';
+    if (p.cropId !== null && !getCrop(p.cropId)) return `culture inconnue (${p.cropId})`;
+    if (p.cropId && !p.unlocked) return 'culture sur une parcelle fermée';
+    if (!num(p.growth) || p.growth < 0) return 'pousse';
+    if (p.lastHarvested != null && !getCrop(p.lastHarvested)) return 'culture précédente';
+  }
+  if (!int(s.plotsBought, 0, s.plots.length)) return 'parcelles achetées';
+  if (!s.investments || typeof s.investments !== 'object') return 'investissements';
+  for (const [id, n] of Object.entries(s.investments)) {
+    const inv = getInvestment(id);
+    if (!inv || !int(n, 0, inv.costs.length)) return `investissement ${id}`;
+  }
+  if (!s.market || typeof s.market !== 'object' || Object.values(s.market).some((m) => !num(m))) return 'marché';
+  if (!s.rng || !['weather', 'market', 'rot'].every((k) => Number.isInteger(s.rng[k]))) return 'aléatoire';
+  const statsOk = (st) => st && typeof st === 'object' && st.cropsHarvested && st.cropsLost && num(st.harvestIncome);
+  if (!s.stats || !statsOk(s.stats.year) || !statsOk(s.stats.season)) return 'statistiques';
+  return null;
 }
 
 function wrap(state) {
@@ -258,7 +302,7 @@ function wrap(state) {
 
   // ── Temps ────────────────────────────────────────────────────────────────────────────
   function update(dt) {
-    if (!playing() || !(dt > 0) || state.speed === 0) return;
+    if (!playing() || !(dt > 0) || !Number.isFinite(dt) || state.speed === 0) return;
     state.time.elapsed += dt * state.speed;
     while (playing() && state.time.elapsed >= DAY_SECONDS) {
       state.time.elapsed -= DAY_SECONDS;
