@@ -1,0 +1,160 @@
+// Le potager : parcelles, plantation, arrosage, pousse, récolte, gel, maladie, arrosage automatique.
+//
+// Une parcelle (dans state.plots) :
+//   { unlocked, cropId, growth, watered, lastHarvested, fatigued }
+//   growth        jours de pousse accumulés (0 → growDays)
+//   watered       arrosée aujourd'hui (remis à false à chaque aube, après la pousse)
+//   lastHarvested dernière culture récoltée sur cette parcelle (fatigue du sol)
+//   fatigued      la culture en place a été replantée juste après la même (rendement réduit)
+
+import { EPSILON, GROWTH, PLOT_COST, WEATHER_TYPES } from '../data/balance.js';
+import { getCrop } from '../data/crops.js';
+import { growthBonus, priceBonus } from './economy.js';
+import { marketMultiplier } from './market.js';
+
+/** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
+export function initialUnlockedIndices(level) {
+  const { gridCols, gridRows } = level;
+  const area = level.startArea || { cols: gridCols, rows: gridRows };
+  const cols = Math.min(area.cols, gridCols);
+  const rows = Math.min(area.rows, gridRows);
+  const offsetCol = Math.floor((gridCols - cols) / 2);
+  const set = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) set.push(r * gridCols + offsetCol + c);
+  }
+  // Si unlockedPlots diffère du bloc, on complète (ou tronque) dans l'ordre des index.
+  const target = Math.min(level.unlockedPlots, gridCols * gridRows);
+  for (let i = 0; set.length < target && i < gridCols * gridRows; i++) {
+    if (!set.includes(i)) set.push(i);
+  }
+  return set.slice(0, target).sort((a, b) => a - b);
+}
+
+export function createPlots(level) {
+  const open = new Set(initialUnlockedIndices(level));
+  const plots = [];
+  for (let i = 0; i < level.gridCols * level.gridRows; i++) {
+    plots.push({ unlocked: open.has(i), cropId: null, growth: 0, watered: false, lastHarvested: null, fatigued: false });
+  }
+  return plots;
+}
+
+export function unlockedCount(state) {
+  return state.plots.reduce((n, p) => n + (p.unlocked ? 1 : 0), 0);
+}
+
+/** Prix de la prochaine parcelle achetée, ou null si le champ ne peut plus s'agrandir. */
+export function plotUnlockCost(state, level) {
+  if (unlockedCount(state) >= level.maxPlots) return null;
+  const pc = level.plotCost || PLOT_COST;
+  return pc.base + pc.step * state.plotsBought;
+}
+
+export function isMature(plot) {
+  const crop = plot.cropId && getCrop(plot.cropId);
+  return !!crop && plot.growth >= crop.growDays - EPSILON;
+}
+
+/** Vitesse de pousse d'une parcelle arrosée (1 + bonus des ruches). */
+export function wateredRate(state, seasonIndex) {
+  return GROWTH.watered * (1 + growthBonus(state, seasonIndex));
+}
+
+/** Étape visuelle 0..4 : 0 = vient d'être plantée, 4 = mûre. */
+export function stageOf(growth, growDays) {
+  if (growth >= growDays - EPSILON) return 4;
+  return Math.min(3, Math.floor((growth / growDays) * 4 + EPSILON));
+}
+
+/**
+ * Pousse de l'aube, d'après l'arrosage et la météo de la veille, puis remise à zéro de l'arrosage.
+ * @param {number} seasonIndex saison du jour écoulé (bonus des ruches)
+ * @param {string} weatherId   météo du jour écoulé (canicule)
+ */
+export function growPlots(state, seasonIndex, weatherId) {
+  const bonus = 1 + growthBonus(state, seasonIndex);
+  const heatwave = !!WEATHER_TYPES[weatherId]?.noDryGrowth;
+  for (const p of state.plots) {
+    if (p.cropId && !isMature(p)) {
+      const crop = getCrop(p.cropId);
+      const base = p.watered ? GROWTH.watered : heatwave ? GROWTH.dryHeatwave : GROWTH.dry;
+      p.growth = Math.min(crop.growDays, p.growth + base * bonus);
+    }
+    p.watered = false;
+  }
+}
+
+/** Gel du premier jour d'hiver : vide les parcelles des cultures non résistantes. */
+export function applyFrost(state) {
+  const lost = [];
+  state.plots.forEach((p, i) => {
+    if (p.cropId && !getCrop(p.cropId).frostHardy) {
+      lost.push({ plotIndex: i, cropId: p.cropId });
+      clearPlot(p);
+    }
+  });
+  return lost;
+}
+
+/** Maladie (aube pluvieuse) : chaque culture non récoltée pourrit avec la probabilité rotChance. */
+export function applyRot(state, rotChance, rng) {
+  const lost = [];
+  if (!(rotChance > 0)) return lost;
+  state.plots.forEach((p, i) => {
+    if (p.cropId && rng.chance(rotChance)) {
+      lost.push({ plotIndex: i, cropId: p.cropId });
+      clearPlot(p);
+    }
+  });
+  return lost;
+}
+
+/** La pluie arrose toutes les parcelles plantées. */
+export function rainWater(state) {
+  for (const p of state.plots) if (p.cropId) p.watered = true;
+}
+
+/**
+ * Arrosage automatique : arrose jusqu'à `capacity` parcelles plantées, non mûres et non arrosées,
+ * dans l'ordre des index. Renvoie la liste des index arrosés.
+ */
+export function sprinklerWater(state, capacity) {
+  const done = [];
+  for (let i = 0; i < state.plots.length && done.length < capacity; i++) {
+    const p = state.plots[i];
+    if (p.cropId && !p.watered && !isMature(p)) {
+      p.watered = true;
+      done.push(i);
+    }
+  }
+  return done;
+}
+
+export function clearPlot(p) {
+  p.cropId = null;
+  p.growth = 0;
+  p.watered = false;
+  p.fatigued = false;
+}
+
+/** Facteur de rendement de la fatigue du sol pour une parcelle. */
+export function fatigueFactor(level, plot) {
+  return plot.fatigued ? 1 - level.modifiers.soilFatigue : 1;
+}
+
+/** true si planter cette culture sur cette parcelle serait « fatigué » (même culture que la dernière récolte). */
+export function wouldFatigue(level, plot, cropId) {
+  return level.modifiers.soilFatigue > 0 && plot.lastHarvested === cropId;
+}
+
+/** Prix de vente courant d'une culture (marché × étal), sans fatigue. */
+export function currentUnitPrice(state, crop) {
+  return crop.sellPrice * marketMultiplier(state, crop.id) * (1 + priceBonus(state));
+}
+
+/** Somme gagnée en récoltant la parcelle maintenant. */
+export function harvestValue(state, level, plot) {
+  const crop = getCrop(plot.cropId);
+  return Math.round(currentUnitPrice(state, crop) * fatigueFactor(level, plot));
+}
