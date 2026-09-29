@@ -16,6 +16,8 @@
 //   pwa.lockPortrait()                      tente de verrouiller l'orientation (appli installée) ; sans erreur
 //   pwa.getVersion()                        Promise<string|null> : version du cache hors ligne
 //   pwa.onOfflineReady(() => …)             le jeu est entièrement en cache (1re installation)
+//   pwa.repairApp()                         « Réparer le jeu » : désinscrit le service worker du jeu,
+//                                           vide ses caches (ferme-*) et recharge ; localStorage gardé
 //
 // Tout est protégé : sur un navigateur sans service worker, sans Wake Lock, etc., les fonctions
 // ne font rien et renvoient des valeurs neutres.
@@ -152,6 +154,30 @@ export function getVersion() {
     channel.port1.onmessage = (e) => { clearTimeout(timer); resolve((e.data && e.data.version) || null); };
     ctrl.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
   });
+}
+
+/**
+ * Réparation (bouton des options, ou du garde-fou de démarrage dans index.html) : désinscrit le
+ * service worker du jeu, supprime ses caches puis recharge depuis le réseau. La progression et
+ * la partie (localStorage) ne sont pas touchées. Renvoie une promesse (la page se recharge).
+ */
+export async function repairApp() {
+  if (typeof window.__repairGame === 'function') return window.__repairGame();
+  const base = new URL('./', location.href).href;
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.filter((r) => r.scope.startsWith(base)).map((r) => r.unregister()));
+    }
+    if (window.caches) {
+      const names = await caches.keys();
+      await Promise.all(names.filter((n) => n.startsWith('ferme-')).map((n) => caches.delete(n)));
+    }
+  } catch {
+    /* on recharge quand même */
+  }
+  location.reload();
+  return undefined;
 }
 
 // -----------------------------------------------------------------------------------------------

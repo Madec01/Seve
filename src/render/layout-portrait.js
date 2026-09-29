@@ -7,9 +7,11 @@
 //
 // Les parcelles font 2 × 2 tuiles (32 px) : cultures et terre sont dessinées à l'échelle ×2.
 // Quand la grille du niveau est plus large que haute (6 × 4 par exemple), elle est affichée
-// transposée (4 colonnes × 6 lignes à l'écran) pour tenir dans la largeur du téléphone ; les
-// index restent ceux du cœur de jeu (index = ligne × gridCols + colonne), seule la position à
-// l'écran change.
+// tournée (4 colonnes × 6 lignes à l'écran) pour tenir dans la largeur du téléphone. Les index
+// restent ceux du cœur de jeu (index = ligne × gridCols + colonne) ; seule la position à l'écran
+// change : les parcelles ouvertes au départ forment un bloc compact, centré dans le champ (4 × 3
+// au niveau 1, dans l'ordre de lecture du cœur), et les parcelles à acheter l'entourent
+// (placeVisualCells).
 //
 // Plan (x → droite, y → bas, en tuiles ; grille 6 × 4, tous les investissements) :
 //
@@ -29,6 +31,7 @@
 
 import { TILE } from './atlas.js';
 import { seededRandom, px, sprinklerHeads, makeQueries } from './layout-common.js';
+import { initialUnlockedIndices } from '../core/farm.js';
 
 export const PORTRAIT_COLS = 14;
 const COLS = PORTRAIT_COLS;
@@ -36,6 +39,63 @@ const PLOT_TILES = 2; // côté d'une parcelle, en tuiles
 const MAIN_PATH_X = 7;
 const USABLE_X0 = 1; // première / dernière colonne utilisable (hors forêt)
 const USABLE_X1 = COLS - 2;
+
+/**
+ * Place chaque parcelle du cœur (index) dans une case de la grille affichée (vCols × vRows).
+ * Les parcelles ouvertes au départ occupent un rectangle centré (le plus large et le mieux centré
+ * possible), rempli dans l'ordre de lecture du cœur (ligne, puis colonne) ; les autres remplissent
+ * les cases restantes, de haut en bas. Sans rectangle exact, les cases les plus proches du centre.
+ * @returns {Array<{vcol, vrow}>} indexé par index de parcelle
+ */
+export function placeVisualCells(level, vCols, vRows) {
+  const cols = level.gridCols;
+  const rows = level.gridRows;
+  const n = cols * rows;
+  let open = [];
+  try {
+    open = initialUnlockedIndices(level).filter((i) => i >= 0 && i < n);
+  } catch {
+    open = [];
+  }
+  const readOrder = (a, b) => Math.floor(a / cols) - Math.floor(b / cols) || (a % cols) - (b % cols);
+  open.sort(readOrder);
+  const openSet = new Set(open);
+  const rest = [];
+  for (let i = 0; i < n; i++) if (!openSet.has(i)) rest.push(i);
+
+  // Rectangle du bloc ouvert : centrage exact en largeur d'abord, puis en hauteur, puis carré.
+  let best = null;
+  for (let w = 1; w <= vCols; w++) {
+    if (open.length % w) continue;
+    const h = open.length / w;
+    if (h > vRows) continue;
+    const score = ((vCols - w) % 2) * 4 + ((vRows - h) % 2) + Math.abs(Math.log(w / h)) * 2;
+    if (!best || score < best.score) best = { w, h, score };
+  }
+  const cells = [];
+  for (let r = 0; r < vRows; r++) for (let c = 0; c < vCols; c++) cells.push({ vcol: c, vrow: r });
+  const key = (c) => c.vrow * vCols + c.vcol;
+  let openCells;
+  if (open.length && best) {
+    const x0 = Math.floor((vCols - best.w) / 2);
+    const y0 = Math.ceil((vRows - best.h) / 2); // plutôt vers le portail (en bas)
+    openCells = [];
+    for (let r = 0; r < best.h; r++) for (let c = 0; c < best.w; c++) openCells.push({ vcol: x0 + c, vrow: y0 + r });
+  } else {
+    const cx = (vCols - 1) / 2;
+    const cy = (vRows - 1) / 2;
+    openCells = [...cells]
+      .sort((a, b) => Math.hypot(a.vcol - cx, a.vrow - cy) - Math.hypot(b.vcol - cx, b.vrow - cy) || key(a) - key(b))
+      .slice(0, open.length)
+      .sort((a, b) => key(a) - key(b));
+  }
+  const used = new Set(openCells.map(key));
+  const freeCells = cells.filter((c) => !used.has(key(c)));
+  const out = new Array(n);
+  open.forEach((i, k) => { out[i] = openCells[k]; });
+  rest.forEach((i, k) => { out[i] = freeCells[k]; });
+  return out;
+}
 
 /**
  * @param level  objet niveau (src/data/levels.js) : gridCols, gridRows, availableInvestments,
@@ -103,10 +163,10 @@ export function createPortraitLayout(level) {
   y += fh;
 
   const plots = [];
+  const place = placeVisualCells({ ...level, gridCols: cols, gridRows: rows }, vCols, vRows);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const vc = transposed ? r : c;
-      const vr = transposed ? c : r;
+      const { vcol: vc, vrow: vr } = place[r * cols + c];
       plots.push({
         index: r * cols + c, col: c, row: r, vcol: vc, vrow: vr,
         x: (gx + vc * PLOT_TILES) * T, y: (gy + vr * PLOT_TILES) * T, w: PLOT_TILES * T, h: PLOT_TILES * T,

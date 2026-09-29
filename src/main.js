@@ -143,6 +143,12 @@ pwa.onUpdateAvailable(() => {
   });
 });
 
+/** Options → « Réparer le jeu » : service worker désinscrit, caches vidés, rechargement. */
+app.repairGame = () => {
+  save();
+  return pwa.repairApp();
+};
+
 app.toggleMute = () => {
   app.updateSettings({ muted: !settings.muted });
   if (!settings.muted) audio.play('toggle');
@@ -260,24 +266,38 @@ app.openTab = (id, { fromUser = false } = {}) => {
 app.onSheetChange = () => {
   app.tabbar?.refresh();
   updateInsets();
+  updateSheetOverlay();
 };
 app.onDialogChange = () => {
   app.tabbar?.refresh();
   updateWakeLock();
 };
 
-/** Fait défiler la scène pour qu'une parcelle ne soit pas cachée par la feuille ouverte. */
+/**
+ * Feuille ouverte en portrait : la scène sait quelle hauteur est couverte en bas (elle peut alors
+ * défiler au-delà du bas du monde) ; la parcelle visée par la feuille reste visible au-dessus.
+ */
+let revealIndex = null;
+function updateSheetOverlay() {
+  const s = app.scene;
+  if (!s || typeof s.setOverlay !== 'function') return;
+  const open = app.sheets.isOpen() && !app.isWide() && !app.inMenu;
+  s.setOverlay(open ? app.sheets.box.offsetHeight : 0);
+  if (!open) {
+    revealIndex = null;
+    return;
+  }
+  const i = app.field.current?.index;
+  if (revealIndex !== null && i === revealIndex) s.focusPlot(i, { margin: 14, animate: true });
+}
+
+/** Fait défiler la scène (en douceur) pour que la parcelle reste visible au-dessus de la feuille. */
 app.revealPlot = (index) => {
   const s = app.scene;
-  if (!s || typeof s.scrollBy !== 'function') return;
-  requestAnimationFrame(() => {
-    const r = app.plotPageRect(index);
-    if (!r) return;
-    const bottom = app.safeBottom() - 12;
-    const top = app.safeTop() + 12;
-    if (r.bottom > bottom) s.scrollBy(r.bottom - bottom);
-    else if (r.top < top) s.scrollBy(r.top - top);
-  });
+  if (!s || typeof s.focusPlot !== 'function') return;
+  revealIndex = index;
+  updateSheetOverlay();
+  s.focusPlot(index, { margin: 14, animate: true });
 };
 
 // ── Actions du joueur ─────────────────────────────────────────────────────────────
@@ -1057,6 +1077,7 @@ async function boot() {
     text.textContent = 'Impossible de charger le jeu.';
     errBox.hidden = false;
     errBox.textContent = String(err.message || err);
+    window.__bootFail?.(err); // garde-fou de index.html : nouvelle version ou bouton « Réparer »
     return;
   }
 
@@ -1075,6 +1096,7 @@ async function boot() {
 
   text.textContent = 'Prêt !';
   startBtn.hidden = false;
+  window.__bootOk?.(); // le jeu a démarré : le garde-fou de index.html s'arrête
   if (!app.isTouch) startBtn.focus();
   const go = () => {
     audio.unlock();

@@ -292,6 +292,7 @@ export function createTutorial(layer, app) {
       pill.style.left = `${Math.round(left)}px`;
       pill.style.top = `${Math.round(top + 8)}px`;
       pill.classList.toggle('is-static', hidden === 'popup' && !minimized);
+      app.toasts?.hideBanner?.(); // le rappel se place là où s'affiche le bandeau
     }
     pill.classList.toggle('is-visible', show);
   }
@@ -299,7 +300,7 @@ export function createTutorial(layer, app) {
   /** Montre la parcelle visée (la scène défile si elle dépasse l'écran). */
   function focusTarget() {
     const h = getHighlight();
-    if (h?.type === 'plot' && typeof app.scene?.focusPlot === 'function') app.scene.focusPlot(h.index);
+    if (h?.type === 'plot' && typeof app.scene?.focusPlot === 'function') app.scene.focusPlot(h.index, { animate: true });
   }
 
   function render() {
@@ -436,6 +437,8 @@ export function createTutorial(layer, app) {
     }
     bubble.style.left = `${x}px`;
     bubble.style.top = `${Math.round(y)}px`;
+    // Bulle en haut de l'écran : le bandeau (titre du niveau, saison) lui laisse la place.
+    if (y < top + 80) app.toasts?.hideBanner?.();
     if (rect && side !== 'none') {
       const cx = rect.left + rect.width / 2 - x;
       bubble.style.setProperty('--ax', `${Math.round(Math.max(22, Math.min(w - 22, cx)))}px`);

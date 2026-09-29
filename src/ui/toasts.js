@@ -76,6 +76,12 @@ export function createToasts(stack, bannerNode) {
     bannerNode.onclick = () => bannerNode.classList.remove('is-visible');
   }
 
+  /** Cache le bandeau tout de suite (ex. une bulle du tutoriel prend sa place en haut). */
+  function hideBanner() {
+    clearTimeout(bannerTimer);
+    bannerNode.classList.remove('is-visible');
+  }
+
   function clearAll() {
     for (const n of [...stack.children]) n.remove();
     recent.clear();
@@ -83,5 +89,5 @@ export function createToasts(stack, bannerNode) {
     bannerNode.classList.remove('is-visible');
   }
 
-  return { show, banner, clearAll };
+  return { show, banner, hideBanner, clearAll };
 }

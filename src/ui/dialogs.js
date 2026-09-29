@@ -307,6 +307,19 @@ export function createDialogs(layer, app) {
       toggle('reducedMotion', 'Réduire les animations', (v) => app.updateSettings({ reducedMotion: v })),
       document.fullscreenEnabled && !app.isStandalone() ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
       app.canInstall() ? btn([icon('star', 'sm'), 'Installer le jeu sur l\'appareil'], () => app.installApp(), 'btn--wide', { id: 'opt-install' }) : null,
+      el('h3.opt-section', 'En cas de problème'),
+      el(
+        'div.opt-repair',
+        el('p', 'Le jeu s\'affiche mal ou ne se met pas à jour ? Vide le cache hors ligne et recharge le jeu. Votre progression et votre partie sont conservées.'),
+        btn('Réparer le jeu (vider le cache)', async () => {
+          const ok = await confirm({
+            title: 'Réparer le jeu ?',
+            text: 'Le cache hors ligne sera vidé et le jeu rechargé depuis Internet (connexion nécessaire). La progression et la partie en cours sont gardées.',
+            ok: 'Réparer',
+          });
+          if (ok) app.repairGame();
+        }, 'btn--wide', { id: 'opt-repair' }),
+      ),
       el('h3.opt-section', 'Progression'),
       el(
         'div.opt-danger',
@@ -386,8 +399,8 @@ export function createDialogs(layer, app) {
       el(
         'section.credit-block',
         el('h3', icon('info', 'sm'), 'Police'),
-        el('p', el('strong', 'Pixelify Sans'), ' — Stefie Justprince, SIL Open Font License 1.1 (', link('https://github.com/eifetx/Pixelify-Sans', 'github.com/eifetx/Pixelify-Sans'), ').'),
-        el('p.credit-small', 'Version modifiée pour le jeu : chiffres 2, 5 et 7 redessinés pour être plus lisibles, ligatures retirées (même licence).'),
+        el('p', el('strong', 'Jersey 15'), ' — Sarah Cadigan-Fried (The Soft Type Project), SIL Open Font License 1.1 (', link('https://github.com/scfried/soft-type-jersey', 'github.com/scfried/soft-type-jersey'), ').'),
+        el('p.credit-small', 'Version modifiée pour le jeu : « I » à empattements, flèches et symboles ajoutés, lettres agrandies, graisse grasse ajoutée (même licence).'),
       ),
       el('p.credit-small', 'La liste détaillée de chaque fichier se trouve dans CREDITS.md.'),
     );

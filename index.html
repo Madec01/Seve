@@ -21,6 +21,107 @@
   <link rel="preload" href="assets/fonts/PixelifySansFerme-Regular.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/PixelifySansFerme-SemiBold.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="assets/fonts/PixelifySansFerme-Bold.woff2" as="font" type="font/woff2" crossorigin>
+  <!-- Garde-fou de démarrage (script classique, indépendant des modules du jeu) : si le jeu ne
+       démarre pas (erreur pendant le chargement, ou rien au bout de 12 s) alors qu'une version
+       plus récente du service worker existe, on l'active et on recharge une seule fois (repère
+       dans sessionStorage : jamais de boucle). Sinon, un bouton « Réparer le jeu » apparaît :
+       il désinscrit le service worker du jeu et vide ses caches ; la progression (localStorage)
+       est conservée. main.js appelle window.__bootOk() quand le jeu est prêt, __bootFail(err)
+       si le chargement échoue ; window.__repairGame() sert aussi au bouton des options. -->
+  <script>
+  (function () {
+    var KEY = 'ferme.bootRecovery';
+    var BASE = new URL('./', location.href).href;
+    var ok = false;
+    var busy = false;
+    var shown = false;
+    function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) { /* stockage bloqué */ } }
+    function tried() { try { return !!sessionStorage.getItem(KEY); } catch (e) { return true; } }
+    function reload() { if (!ok) location.reload(); }
+
+    window.__repairGame = function () {
+      var jobs = [];
+      if ('serviceWorker' in navigator) {
+        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.filter(function (r) { return r.scope.indexOf(BASE) === 0; }).map(function (r) { return r.unregister(); }));
+        }).catch(function () {}));
+      }
+      if (window.caches) {
+        jobs.push(caches.keys().then(function (names) {
+          return Promise.all(names.filter(function (n) { return n.indexOf('ferme-') === 0; }).map(function (n) { return caches.delete(n); }));
+        }).catch(function () {}));
+      }
+      store(null);
+      return Promise.all(jobs).then(function () {
+        // Adresse sans « ?… » ni « #… » : vraie page du réseau (le service worker est parti).
+        location.replace(location.pathname + location.search);
+      });
+    };
+
+    function showRepair() {
+      if (ok || shown) return;
+      shown = true;
+      var box = document.querySelector('#loading .loading-box') || document.body;
+      var p = document.createElement('p');
+      p.className = 'loading-error boot-help';
+      p.textContent = 'Le jeu ne démarre pas ? Réparer le jeu vide le cache hors ligne et recharge la page (votre progression est conservée).';
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.id = 'boot-repair';
+      b.className = 'btn btn--small boot-repair';
+      b.textContent = 'Réparer le jeu';
+      b.onclick = function () { b.disabled = true; b.textContent = 'Réparation…'; window.__repairGame(); };
+      box.appendChild(p);
+      box.appendChild(b);
+    }
+
+    // Une version plus récente attend (ou s'installe) : on l'active, puis on recharge une fois.
+    function recover() {
+      if (ok || busy) return;
+      busy = true;
+      if (tried() || !('serviceWorker' in navigator)) { showRepair(); return; }
+      navigator.serviceWorker.getRegistration(BASE).then(function (reg) {
+        if (!reg || ok) { showRepair(); return; }
+        return reg.update().catch(function () {}).then(function () {
+          var w = reg.waiting || reg.installing;
+          if (!w) { showRepair(); return; }
+          var activate = function (worker) {
+            if (ok) return;
+            store(String(Date.now()));
+            navigator.serviceWorker.addEventListener('controllerchange', reload);
+            worker.postMessage({ type: 'SKIP_WAITING' });
+            setTimeout(reload, 5000);
+          };
+          if (w.state === 'installed') { activate(w); return; }
+          // En cours d'installation : on attend qu'elle se termine (au plus 60 s).
+          var done = false;
+          var t = setTimeout(function () { if (!done) { done = true; showRepair(); } }, 60000);
+          w.addEventListener('statechange', function () {
+            if (done) return;
+            if (w.state === 'installed' || w.state === 'activated') { done = true; clearTimeout(t); activate(w); }
+            else if (w.state === 'redundant') { done = true; clearTimeout(t); showRepair(); }
+          });
+        });
+      }).catch(showRepair);
+    }
+
+    window.__bootOk = function () {
+      ok = true;
+      store(null);
+      clearTimeout(timer);
+      var nodes = document.querySelectorAll('.boot-help, .boot-repair');
+      for (var i = 0; i < nodes.length; i++) nodes[i].remove();
+    };
+    window.__bootFail = function () { if (!ok) recover(); };
+    window.addEventListener('error', function (e) {
+      if (ok) return;
+      var t = e.target;
+      // Erreur de script (ErrorEvent) ou script du jeu introuvable ; pas les images ni les sons.
+      if (e instanceof ErrorEvent || (t && t.tagName === 'SCRIPT')) recover();
+    }, true);
+    var timer = setTimeout(function () { if (!ok) recover(); }, 12000);
+  })();
+  </script>
   <link rel="stylesheet" href="css/fonts.css">
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -78,6 +179,6 @@
     <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
   </noscript>
 
-  <script type="module" src="src/main.js"></script>
+  <script type="module" src="src/main.js" onerror="window.__bootFail && window.__bootFail('script')"></script>
 </body>
 </html>
