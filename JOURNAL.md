@@ -12,6 +12,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | Date | Nom (branche + tag) | Contenu |
 |---|---|---|
 | 2026-09-29 | `backup/ancien-projet-2026-09-29` | Ancien projet « SÈVE — Le Chant des Racines » avant sa suppression complète (branche créée sur GitHub via l'API, commit `19aa16c` ; tag seulement en local) |
+| 2026-09-29 | `backup/v1-complete-2026-09-29` | Première version complète du jeu (8 niveaux, rendu, interface, audio, revue de code), commit `3ebad21` |
 
 ---
 
