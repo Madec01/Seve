@@ -5,6 +5,7 @@
 // Le DOM est construit une fois ; refresh() ne change que les textes et classes (appelé sur les
 // événements du jeu) ; frame() anime seulement le compteur d'argent et la barre du jour.
 
+import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon } from './icons.js';
 import { season, weatherName, WEATHER_HINTS } from './text.js';
@@ -21,6 +22,7 @@ export function createHud(root, app) {
   let shownMoney = 0;
   let targetMoney = 0;
   let shownInt = null;
+  let shownDay = -1;
   let pendingDelta = 0;
   let deltaTimer = null;
 
@@ -285,10 +287,15 @@ export function createHud(root, app) {
       money.classList.toggle('is-negative', n < 0);
     }
     // Avancée de la journée
-    const p = game.state.time.elapsed / 20;
-    const k = Math.max(0, Math.min(1, p));
-    dayFill.style.transform = `scaleX(${k.toFixed(4)})`;
-    daySun.style.left = `${(k * 100).toFixed(2)}%`;
+    // (écritures de style seulement quand la valeur affichée change : pas de mise en page à
+    // chaque image pendant une pause)
+    const k = Math.max(0, Math.min(1, game.state.time.elapsed / DAY_SECONDS));
+    const key = Math.round(k * 2000);
+    if (key !== shownDay) {
+      shownDay = key;
+      dayFill.style.transform = `scaleX(${k.toFixed(4)})`;
+      daySun.style.left = `${(k * 100).toFixed(2)}%`;
+    }
   }
 
   function bind(g) {
@@ -296,6 +303,7 @@ export function createHud(root, app) {
     shownMoney = g.state.money;
     targetMoney = g.state.money;
     shownInt = null;
+    shownDay = -1;
     moneyPops.textContent = '';
     refresh();
     frame(0);

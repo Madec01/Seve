@@ -1110,6 +1110,8 @@ body.in-menu #toasts { left: 50vw; }
   filter: drop-shadow(0 calc(var(--u) * 2) 0 rgba(30, 15, 20, 0.35));
 }
 .tuto-bubble.is-visible { opacity: 1; transform: none; }
+/* Bulle cachée (tutoriel fini, passé, étape en attente) : ni clic ni focus sur ses boutons. */
+.tuto-bubble:not(.is-visible) { pointer-events: none; visibility: hidden; transition: opacity var(--t-med) ease, transform var(--t-med) var(--ease-pop), visibility 0s linear var(--t-med); }
 .tuto-bubble::after {
   content: '';
   position: absolute;

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createGame, loadGame, STATE_VERSION } from '../src/core/game.js';
 import { DAY_SECONDS } from './helpers.js';
+import { LEVELS } from '../src/data/levels.js';
 
 /** Petit joueur déterministe : récolte, achète, plante, arrose. */
 function playDay(g) {
@@ -141,4 +142,34 @@ test('update ignore un dt infini ou invalide', () => {
   assert.equal(g.state.time.day, 1);
   assert.equal(g.state.time.elapsed, 0);
   assert.equal(g.state.status, 'playing');
+});
+
+test('loadGame accepte tout état atteint en jouant (tous niveaux, en cours de journée et en fin de partie)', () => {
+  let checked = 0;
+  for (const level of LEVELS) {
+    for (let seed = 1; seed <= 4; seed++) {
+      const g = createGame({ levelId: level.id, seed });
+      let r = seed * 7919;
+      const rnd = () => (r = (r * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+      for (let step = 0; step < 200 && g.state.status === 'playing'; step++) {
+        for (const p of g.query.plots()) {
+          if (p.action === 'harvest') g.actions.harvest(p.index);
+          else if (p.action === 'plant' && rnd() < 0.8) {
+            const crops = g.query.plantableCrops(p.index);
+            if (crops.length) g.actions.plant(p.index, crops[Math.floor(rnd() * crops.length)].id);
+          } else if (p.action === 'water' && rnd() < 0.7) g.actions.water(p.index);
+          else if (p.action === 'unlock' && rnd() < 0.05) g.actions.unlockPlot(p.index);
+        }
+        const buyable = g.query.investments().filter((i) => i.canBuy);
+        if (buyable.length && rnd() < 0.3) g.actions.buyInvestment(buyable[Math.floor(rnd() * buyable.length)].id);
+        if (seed % 2 === 0) g.state.money += 40; // tient l'année entière une fois sur deux
+        g.update(DAY_SECONDS * (0.3 + rnd() * 0.5));
+        const saved = JSON.parse(JSON.stringify(g.serialize()));
+        const h = loadGame(saved);
+        assert.deepEqual(h.state, g.state);
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 300);
 });

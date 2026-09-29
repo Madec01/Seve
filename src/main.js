@@ -881,8 +881,9 @@ function frame(t) {
     if (g.state.status !== 'playing') attract = createAttractGame();
   }
   if (g) app.scene.render(g, t);
-  app.hud.frame(dt);
+  // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
+  app.hud.frame(dt);
 }
 
 // ── Chargement ────────────────────────────────────────────────────────────────────

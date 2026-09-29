@@ -548,6 +548,7 @@ export function createDialogs(layer, app) {
     starNodes.forEach((n, i) => {
       if (i >= ev.stars) return;
       setTimeout(() => {
+        if (!n.isConnected) return; // fenêtre déjà quittée (niveau suivant) : pas de son dans la partie
         n.classList.add('is-on');
         app.audio.play(i === 2 ? 'unlock' : 'confirm', { pitch: 0, rate: 1 + i * 0.12 });
       }, reduce ? 0 : 700 + i * 550);

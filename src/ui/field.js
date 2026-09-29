@@ -10,6 +10,7 @@ import { incomeProfile, season } from './text.js';
 
 export function createField(popup, app) {
   let current = null; // { kind: 'seed' | 'unlock', index }
+  let refreshQueued = false;
 
   function close(sound = true) {
     if (!current) return;
@@ -277,8 +278,13 @@ export function createField(popup, app) {
 
   function onEvent(ev) {
     if (!current) return;
-    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'plotUnlocked', 'frost', 'rot', 'purchased'].includes(ev.type)) {
-      requestAnimationFrame(refresh);
+    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'plotUnlocked', 'frost', 'rot', 'purchased'].includes(ev.type) && !refreshQueued) {
+      // Une aube émet plusieurs événements : une seule reconstruction par image.
+      refreshQueued = true;
+      requestAnimationFrame(() => {
+        refreshQueued = false;
+        refresh();
+      });
     }
     if (ev.type === 'bankrupt' || ev.type === 'victory') close(false);
   }

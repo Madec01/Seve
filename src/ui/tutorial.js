@@ -173,7 +173,10 @@ export function createTutorial(layer, app) {
   // ── Déroulé ───────────────────────────────────────────────────────────────────
   function start(g, from = 0) {
     game = g;
-    tutoPlot = null;
+    // Reprise d'une partie sauvegardée en cours de tutoriel : la parcelle d'exemple n'est pas
+    // sauvegardée ; on reprend la première parcelle semée (sans elle, ni anneau ni saut d'étape).
+    const planted = from > 0 ? g.query.plots().filter((p) => p.cropId) : [];
+    tutoPlot = (planted.find((p) => p.cropId === 'carrot') || planted[0])?.index ?? null;
     index = -1;
     go(Math.max(0, Math.min(STEPS.length - 1, from || 0)));
   }
@@ -195,12 +198,15 @@ export function createTutorial(layer, app) {
     render();
   }
 
+  // (garde : un bouton d'une bulle périmée, tutoriel arrêté, ne doit rien faire)
   function next() {
+    if (!game || index < 0) return;
     app.audio.play('click');
     go(index + 1);
   }
 
   function skip() {
+    if (!game || index < 0) return;
     app.audio.play('close');
     finish();
   }
@@ -212,7 +218,16 @@ export function createTutorial(layer, app) {
     index = -1;
     game = null;
     app.saveTutorial({ done: true, step: null });
+    hideAll();
+  }
+
+  function hideAll() {
+    if (bubble.contains(document.activeElement)) document.activeElement.blur();
     bubble.classList.remove('is-visible');
+    // Contenu retiré après le fondu (la bulle cachée ne reçoit déjà plus ni clic ni focus).
+    setTimeout(() => {
+      if (index < 0) clear(bubble);
+    }, 400);
     ring.classList.remove('is-visible');
     pill.classList.remove('is-visible');
   }
@@ -223,9 +238,7 @@ export function createTutorial(layer, app) {
     clearUiHighlight();
     index = -1;
     game = null;
-    bubble.classList.remove('is-visible');
-    ring.classList.remove('is-visible');
-    pill.classList.remove('is-visible');
+    hideAll();
   }
 
   /** Réduit la bulle : il ne reste que le rappel compact de l'étape (cliquable pour la rouvrir). */
@@ -368,7 +381,11 @@ export function createTutorial(layer, app) {
       const anchor = h.type === 'plot' ? app.fieldPageRect() || rect : rect;
       const prefer = h.type === 'plot' ? 'bottom' : h.selector === '#card-chickenCoop' ? 'left' : 'bottom';
       bubble.classList.remove('is-free');
-      const side = placeNear(bubble, anchor, prefer, 18);
+      let side = placeNear(bubble, anchor, prefer, 18);
+      // Étape sans pause visant l'interface (poulailler) : le joueur continue de jouer, la bulle
+      // ne doit pas recouvrir le champ ; elle descend sous la clôture s'il y a la place (sans
+      // flèche : elle ne serait plus en face de sa cible, qui reste surlignée).
+      if (h.type === 'ui' && !s.pauses && avoidField()) side = 'none';
       const b = bubble.getBoundingClientRect();
       const cx = rect.left + rect.width / 2 - b.left;
       const cy = rect.top + rect.height / 2 - b.top;
@@ -384,6 +401,18 @@ export function createTutorial(layer, app) {
       bubble.style.top = `${Math.round(stage.top + stage.height - r.height - 24)}px`;
       bubble.dataset.side = 'none';
     }
+  }
+
+  function avoidField() {
+    const f = app.fieldPageRect();
+    if (!f) return;
+    const b = bubble.getBoundingClientRect();
+    const overlaps = b.left < f.right && b.right > f.left && b.top < f.bottom && b.bottom > f.top;
+    if (!overlaps) return false;
+    const below = f.bottom + 12;
+    if (below + b.height > window.innerHeight - 8) return false;
+    bubble.style.top = `${Math.round(below)}px`;
+    return true;
   }
 
   // ── Événements ────────────────────────────────────────────────────────────────
