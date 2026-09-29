@@ -34,6 +34,15 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 - Simulation `tools/simulate.js` : 4 joueurs-robots (insouciant, équilibré, investisseur, optimisé) × 200 graines par niveau ; option `--trace` pour suivre une partie jour par jour.
 - Équilibrage : investissements rentabilisés en 9 à 15 jours, cultures d'hiver peu rentables, fermage d'hiver élevé ; prêt du niveau 7 porté à 150 pièces tous les 7 jours (jours 4, 11, 18, 25), la mensualité de 40 pièces du premier jet ne pesait rien. Tableaux chiffrés mis à jour dans `docs/GAME_DESIGN.md`.
 
+### 2026-09-29 — Interface, audio et câblage
+
+- `index.html`, `css/style.css` : page unique (canvas + barre du haut, panneau, fenêtres, infobulle, messages, tutoriel), cadres Kenney en border-image au pixel près, trois échelles (×2, ×3, ×4) de 1024 × 600 à la 4K, panneau repliable, jouable au toucher en paysage.
+- `src/ui/` : barre du haut (compteur d'argent animé, prévision du fermage colorée), panneau Investissements / Bilan, choix des graines près de la parcelle (Maj + clic : tout le champ), glisser pour arroser ou récolter, fenêtres (menu, niveaux, options, crédits, pause, fin de saison, faillite, victoire), messages, tutoriel du niveau 1 (Joseph, le voisin).
+- `src/audio/audio.js` : Web Audio, fondus de 2 s, ambiances selon météo et saison, cris d'animaux ponctuels, coq à l'aube, limitation des sons répétés.
+- `src/storage.js` : partie en cours, progression, options, tutoriel (localStorage protégé).
+- `src/main.js` : chargement, boucle, raccourcis, sauvegarde automatique ; outils de débogage avec `?debug=1`.
+- Icônes dessinées pour le jeu : `assets/sprites/ui/icons.png` (script `generate-icons.py`).
+
 ---
 
 ## Idées (à étudier plus tard)
