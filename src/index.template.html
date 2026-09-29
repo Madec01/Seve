@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Une année à la ferme : un jeu de gestion tout doux en pixel art. Tenez une année complète sans faire faillite.">
+  <meta name="theme-color" content="#3f2631">
+  <title>Une année à la ferme</title>
+  <!-- Application installable (PWA) : manifeste, icônes ; le service worker est enregistré par src/pwa.js -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="La Ferme">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="application-name" content="La Ferme">
+  <meta name="color-scheme" content="only light">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="assets/icons/favicon-48.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+  <!-- {{GENERATED}} -->
+{{PRELOAD}}
+  <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
+       tools/build.js) : télécharge le jeu en montrant la progression, réessaie en cas d'échec,
+       affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
+{{BOOT}}
+{{STYLES}}
+</head>
+<body class="is-loading">
+  <!-- Scène de la ferme (canvas pixel art), sous toute l'interface : plein écran -->
+  <div id="stage">
+    <canvas id="scene" aria-label="La ferme"></canvas>
+  </div>
+
+  <!-- Barre du haut (2 lignes) : argent, saison, météo, fermage, vitesse -->
+  <header id="hud" aria-label="Informations de la ferme"></header>
+
+  <!-- Barre d'onglets en bas : Ferme · Acheter · Bilan · Menu -->
+  <nav id="tabbar" aria-label="Navigation"></nav>
+
+  <!-- Feuilles du bas (achats, bilan, graines, fiches) -->
+  <div id="sheet-layer"></div>
+
+  <!-- Bandeau (changement de saison, avertissements) et messages -->
+  <div id="banner" class="banner" role="status" aria-live="polite"></div>
+  <div id="toasts" aria-live="polite"></div>
+
+  <!-- Tutoriel : bulle et anneau de surbrillance -->
+  <div id="tutorial"></div>
+
+  <!-- Fenêtres (menus, bilans) -->
+  <div id="modal-layer"></div>
+
+  <!-- Infobulle (souris seulement ; au toucher, tout passe par les fiches) -->
+  <div id="tooltip" class="tooltip" role="tooltip"></div>
+
+  <!-- Téléphone tenu à l'horizontale -->
+  <div id="rotate" class="rotate" aria-hidden="true">
+    <div class="rotate-box">
+      <div class="rotate-phone"></div>
+      <p class="rotate-title">Tournez votre téléphone</p>
+      <p class="rotate-text">La ferme se joue en tenant le téléphone à la verticale.</p>
+    </div>
+  </div>
+
+  <!-- Écran de chargement -->
+  <div id="loading" class="loading">
+    <div class="loading-box">
+      <div class="logo-ribbon"><h1 class="logo-title">Une année à la ferme</h1></div>
+      <div class="loading-gauge" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="loading-fill"></div>
+      </div>
+      <p class="loading-text">Chargement…</p>
+      <button type="button" class="btn btn--red btn--big loading-start" hidden>Commencer</button>
+      <p class="loading-error" hidden></p>
+    </div>
+  </div>
+
+  <noscript>
+    <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
+  </noscript>
+</body>
+</html>

@@ -47,7 +47,8 @@ Problèmes signalés sur la V1 : **tout est trop petit**, **l'affichage est coup
 ## Application installable (PWA)
 
 - `manifest.webmanifest` : nom « Une année à la ferme », nom court « La Ferme », `display: standalone` (ou `fullscreen`), `orientation: portrait`, couleurs de thème, icônes 192/512 + maskable, captures d'écran.
-- **Service worker** : met en cache tout le jeu (HTML, CSS, JS, images, sons, police) pour jouer **hors ligne** ; cache versionné, mise à jour propre (message « Nouvelle version disponible — Recharger »).
+- **Service worker** : met en cache tout le jeu (HTML, CSS, JS, images, sons, police) pour jouer **hors ligne** ; cache versionné, mise à jour propre (message « Nouvelle version disponible — Recharger »). Fichiers publiés à empreinte (`node tools/build.js`) : jamais de mélange de versions, même avec le cache HTTP de GitHub Pages (docs/ARCHITECTURE.md, « Construction et publication »).
+- **Chargement robuste sur réseau mobile** : un seul fichier JS et un seul CSS, jauge qui avance dès le premier octet, nouveaux essais automatiques, erreur réelle affichée (« Détails »), démarrage sans attendre la musique.
 - Bouton « Installer le jeu » (événement `beforeinstallprompt`) dans le menu, quand c'est possible.
 - **Jamais bloqué sur une version cassée** : garde-fou de démarrage dans `index.html` (nouvelle version activée et un seul rechargement si le jeu ne démarre pas ; sinon bouton « Réparer le jeu ») et bouton « Réparer le jeu (vider le cache) » dans les options (progression conservée).
 - Garder l'écran allumé pendant la partie si possible (Wake Lock, réglable).

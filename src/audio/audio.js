@@ -13,6 +13,8 @@
 // Avant le déverrouillage, les demandes de musique et d'ambiance sont mémorisées et appliquées
 // dès que le contexte existe ; les effets sonores sont ignorés.
 
+import { assetUrl } from '../version.js';
+
 const FADE = 2; // secondes
 const DEFAULT_THROTTLE = 45; // ms entre deux lectures du même son
 const THROTTLE = { coin: 90, hover: 70, harvest: 60, water: 60, plant: 60, buy: 120, rooster: 25000, error: 150, warning: 400 };
@@ -47,7 +49,7 @@ export function createAudio(manifest, initialSettings = {}) {
     if (!raw.has(url)) {
       raw.set(
         url,
-        fetch(url).then((r) => {
+        fetch(assetUrl(url)).then((r) => {
           if (!r.ok) throw new Error(`Son introuvable : ${url}`);
           return r.arrayBuffer();
         }),
@@ -395,10 +397,10 @@ export function createAudio(manifest, initialSettings = {}) {
     get context() {
       return ctx;
     },
-    /** Précharge (décode) une entrée du catalogue en tâche de fond. */
+    /** Précharge (décode) une entrée du catalogue en tâche de fond. Renvoie une promesse (jamais rejetée). */
     warm(entry) {
-      if (ctx) load(entry);
-      else fetchRaw(urlOf(entry)).catch(() => {});
+      if (ctx) return load(entry).catch(() => null);
+      return fetchRaw(urlOf(entry)).catch(() => null);
     },
   };
 }

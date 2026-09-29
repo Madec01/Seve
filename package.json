@@ -1,0 +1,14 @@
+{
+  "name": "une-annee-a-la-ferme",
+  "private": true,
+  "description": "Jeu de gestion cosy en pixel art. Le jeu publié n'a aucune dépendance : esbuild sert seulement à construire dist/ (node tools/build.js).",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.js",
+    "check": "node tools/build.js --check",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

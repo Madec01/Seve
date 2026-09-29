@@ -6,17 +6,30 @@
 //                                   dessus des objets (toits, clôtures, arbres…) reçoivent aussi une
 //                                   couche de neige (« chapeaux » blancs sous le contour).
 //
+// Les adresses passent par assetUrl() (src/version.js) : « ?v=<empreinte> » dans le jeu empaqueté.
+//
 // Le recoloriage se fait une seule fois, au chargement, sur des canvas hors écran : le rendu reste
 // au pixel près (aucun filtre en temps réel) et les contours sombres sont conservés.
 
-/** Charge une image ; rejette avec un message clair si elle est introuvable. */
-export function loadImage(src) {
-  return new Promise((resolve, reject) => {
+import { assetUrl } from '../version.js';
+
+/**
+ * Charge une image ; en cas d'échec (réseau instable), jusqu'à `retries` nouveaux essais espacés,
+ * en contournant les caches (« r=n » dans l'adresse). Rejette avec un message clair à la fin.
+ */
+export function loadImage(src, retries = 2) {
+  const url = assetUrl(src);
+  const attempt = (n) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`Image introuvable : ${src}`));
-    img.src = src;
+    img.src = n ? `${url}${url.includes('?') ? '&' : '?'}r=${n}` : url;
   });
+  const run = (n) => attempt(n).catch((err) => {
+    if (n >= retries) throw err;
+    return new Promise((r) => setTimeout(r, 600 * (n + 1))).then(() => run(n + 1));
+  });
+  return run(0);
 }
 
 /**

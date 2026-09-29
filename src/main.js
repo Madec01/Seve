@@ -1019,13 +1019,19 @@ async function boot() {
   const startBtn = $('.loading-start', loading);
   const errBox = $('.loading-error', loading);
 
+  // La jauge est tenue par le chargeur de index.html (window.__bootProgress) : il y a déjà
+  // compté le téléchargement du jeu lui-même ; ici, la suite (images, police, premiers sons).
   const parts = { images: 0, ui: 0, font: 0, audio: 0 };
-  const weights = { images: 0.25, ui: 0.15, font: 0.1, audio: 0.5 };
+  const weights = { images: 0.45, ui: 0.25, font: 0.15, audio: 0.15 };
   const paint = () => {
     const v = Object.entries(parts).reduce((s, [k, p]) => s + p * weights[k], 0);
-    fill.style.transform = `scaleX(${v.toFixed(3)})`;
-    gauge.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+    if (typeof window.__bootProgress === 'function') window.__bootProgress(v);
+    else {
+      fill.style.transform = `scaleX(${v.toFixed(3)})`;
+      gauge.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+    }
   };
+  paint();
 
   const uiImages = [
     'assets/sprites/ui/icons.png',
@@ -1042,6 +1048,21 @@ async function boot() {
     'assets/sprites/ui/checkbox-on.png',
     'assets/sprites/ui/checkbox-off.png',
   ];
+
+  // Sons attendus avant « Commencer » : seulement les petits bruits de l'écran d'accueil et du
+  // menu (quelques Ko), et jamais plus de 4 s. Musiques, ambiances et autres effets se
+  // téléchargent ensuite en fond (la musique du menu démarre dès qu'elle est arrivée).
+  const bootSounds = ['confirm', 'click', 'open', 'close', 'page', 'toggle'].map((k) => AUDIO.sfx[k]).filter(Boolean);
+  const soundsReady = Promise.race([
+    audio.prefetch(bootSounds, (done, total) => {
+      parts.audio = done / total;
+      paint();
+    }),
+    new Promise((resolve) => setTimeout(resolve, 4000)),
+  ]).then(() => {
+    parts.audio = 1;
+    paint();
+  });
 
   try {
     let uiDone = 0;
@@ -1065,10 +1086,7 @@ async function boot() {
         parts.font = 1;
         paint();
       }),
-      audio.prefetch([...Object.values(AUDIO.sfx), AUDIO.music.menu, AUDIO.music.spring], (done, total) => {
-        parts.audio = done / total;
-        paint();
-      }),
+      soundsReady,
     ];
     const [imgs] = await Promise.all(tasks);
     images = imgs;
@@ -1088,11 +1106,23 @@ async function boot() {
   document.body.classList.add('in-menu');
   requestAnimationFrame(frame);
 
-  // Le reste de la musique et des ambiances se télécharge en fond.
-  for (const k of ['summer', 'autumn', 'winter']) audio.warm(AUDIO.music[k]);
-  for (const e of Object.values(AUDIO.ambience)) audio.warm(e);
-  audio.warm(AUDIO.music.victory.intro);
-  audio.warm(AUDIO.music.victory.loop);
+  // Le reste des sons se télécharge en fond, deux à la fois et le plus utile d'abord : sur un
+  // réseau lent, la musique du menu n'est pas ralentie par tout le reste.
+  const warmQueue = [
+    AUDIO.music.menu,
+    ...Object.values(AUDIO.sfx),
+    AUDIO.music.spring,
+    ...['summer', 'autumn', 'winter', 'night'].map((k) => AUDIO.music[k]),
+    ...Object.values(AUDIO.ambience),
+    AUDIO.music.victory.intro,
+    AUDIO.music.victory.loop,
+  ].filter(Boolean);
+  const warmNext = () => {
+    const e = warmQueue.shift();
+    if (e) Promise.resolve(audio.warm(e)).finally(warmNext);
+  };
+  warmNext();
+  warmNext();
 
   text.textContent = 'Prêt !';
   startBtn.hidden = false;
@@ -1162,6 +1192,11 @@ if (DEBUG) {
 // (`?nosw` dans l'adresse : sans service worker, pour le débogage.)
 pwa.initPWA();
 
-boot();
+boot().catch((err) => {
+  // Erreur imprévue pendant le chargement : le chargeur de index.html affiche le vrai message
+  // (« Détails ») et propose « Réparer le jeu ».
+  console.error(err);
+  window.__bootFail?.(err);
+});
 
 export { app };

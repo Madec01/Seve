@@ -831,6 +831,8 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); z-index: 32; }
   width: min(30rem, calc(100vw - 16px));
   pointer-events: none;
 }
+/* Message à toucher (« Nouvelle version disponible ») : au-dessus des fenêtres, sinon le menu le recouvre. */
+#toasts:has(.toast.is-action) { z-index: 65; }
 body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
 /* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
    sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
@@ -1384,7 +1386,11 @@ body.is-rotated .rotate { display: grid; }
   z-index: 100;
   inset: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* jamais plus large que l'écran */
   place-items: center;
+  place-items: safe center; /* contenu plus haut que l'écran (« Détails ») : défile depuis le haut */
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 16px);
   background:
     radial-gradient(ellipse at 50% 40%, rgba(255, 241, 210, 0.08), transparent 60%),
@@ -1393,7 +1399,7 @@ body.is-rotated .rotate { display: grid; }
   transition: opacity 450ms ease;
 }
 .loading.is-done { opacity: 0; pointer-events: none; }
-.loading-box { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 100%; }
+.loading-box { display: flex; flex-direction: column; align-items: center; gap: 16px; min-width: 0; max-width: 100%; }
 .loading-gauge {
   position: relative;
   width: min(22rem, 80vw);
@@ -1414,10 +1420,24 @@ body.is-rotated .rotate { display: grid; }
 }
 .loading-text { margin: 0; color: var(--parch); font-size: 1.0625rem; text-shadow: 0 var(--px1) 0 var(--outline); }
 .loading-start { animation: pulse-soft 1.6s ease-in-out infinite; }
-.loading-error { margin: 0; max-width: 30rem; color: #ffc9c0; text-align: center; font-size: 0.9375rem; }
-/* Garde-fou de démarrage (index.html) : aide et bouton « Réparer le jeu » */
+.loading-error { margin: 0; max-width: min(30rem, 100%); color: #ffc9c0; text-align: center; font-size: 0.9375rem; }
+/* Garde-fou de démarrage (src/loader.js) : aide, bouton « Réparer le jeu », « Détails » */
 .boot-help { color: var(--parch); }
 .boot-repair { min-height: 48px; }
+.boot-details { width: min(30rem, 100%); max-width: 100%; color: var(--parch); font-size: 0.875rem; }
+.boot-details > summary { min-height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: underline; }
+.boot-details > pre {
+  margin: 0;
+  max-height: 40vh;
+  overflow: auto;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  font: 12px/1.35 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
 .noscript { position: fixed; inset: 0; display: grid; place-items: center; margin: 0; color: var(--parch); background: var(--forest); z-index: 200; }
 
 /* ─── Grand écran en paysage : onglets dans la barre du haut ────────────────── */

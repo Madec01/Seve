@@ -28,18 +28,20 @@ Puis ouvrir http://localhost:8000
 
 | Commande | Rôle |
 |---|---|
-| `node --test tests/` | Tests de la logique du jeu |
+| `npm install` puis `node tools/build.js` | Construit la version publiée (`dist/`, `index.html`, `dev.html`, `sw.js`) — **avant chaque commit** |
+| `node --test tests/` | Tests de la logique du jeu (et vérification que la version publiée est à jour) |
 | `node tools/simulate.js` | Simulation d'équilibrage (joueurs-robots sur les 8 niveaux) |
 | `tools/scene-preview.html` | Aperçu de la scène (saisons, météo, installations) |
 | `tools/atlas-preview.html` | Aperçu de tous les sprites |
 | `index.html?debug=1` | Outils de débogage (`window.__game`, `window.__debug`) |
+| `dev.html` (ou `index.html?dev=1`) | Jeu non empaqueté : modules de `src/` et styles de `css/`, sans service worker |
 
 - `docs/GAME_DESIGN.md` : règles, économie, niveaux.
 - `docs/ARCHITECTURE.md` : organisation du code et contrats entre modules.
 - `JOURNAL.md` : journal des modifications, idées et bugs.
 
-Aucune dépendance, aucune compilation : HTML, CSS et JavaScript natifs.
+Le jeu publié n'a aucune dépendance (HTML, CSS et JavaScript natifs). Une seule étape de construction (`node tools/build.js`, avec esbuild en dépendance de développement) réunit les modules et les styles en deux fichiers à empreinte (`dist/game.<empreinte>.js` / `.css`) : GitHub Pages n'a pas d'étape de construction, `dist/` est donc versionné dans le dépôt.
 
 ## Crédits
 
-Graphismes Kenney (CC0), musique Sirental (CC BY 4.0), sons Kenney et Freesound (CC0), police Pixelify Sans (OFL). Détail complet dans [`CREDITS.md`](CREDITS.md).
+Graphismes Kenney (CC0), musique Sirental (CC BY 4.0), sons Kenney et Freesound (CC0), police Jersey 15 retouchée « Jersey Ferme » (OFL). Détail complet dans [`CREDITS.md`](CREDITS.md).

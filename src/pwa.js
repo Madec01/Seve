@@ -15,9 +15,17 @@
 //   pwa.isWakeLockSupported()               pour masquer l'option si le navigateur ne sait pas faire
 //   pwa.lockPortrait()                      tente de verrouiller l'orientation (appli installée) ; sans erreur
 //   pwa.getVersion()                        Promise<string|null> : version du cache hors ligne
+//   pwa.pageVersion()                       version de la page (empreinte écrite par tools/build.js), ou null
 //   pwa.onOfflineReady(() => …)             le jeu est entièrement en cache (1re installation)
 //   pwa.repairApp()                         « Réparer le jeu » : désinscrit le service worker du jeu,
-//                                           vide ses caches (ferme-*) et recharge ; localStorage gardé
+//                                           vide ses caches (ferme-*), retélécharge la page et ses
+//                                           fichiers puis recharge ; localStorage gardé
+//
+// Mises à jour : le service worker s'active tout seul dès qu'il est installé (sw.js). La page
+// compare alors sa propre version (window.__FERME_BUILD__.id, écrite dans index.html par
+// tools/build.js) à celle du service worker : si elles diffèrent, la page est plus ancienne →
+// « Nouvelle version disponible ». Si elles sont égales (cas courant : la page vient déjà du
+// réseau), rien à proposer.
 //
 // Tout est protégé : sur un navigateur sans service worker, sans Wake Lock, etc., les fonctions
 // ne font rien et renvoient des valeurs neutres.
@@ -28,6 +36,7 @@ const subscribe = (type, fn) => { listeners[type].add(fn); return () => listener
 
 let registration = null;
 let waitingWorker = null;
+let updateReady = false; // une version plus récente que la page est disponible
 let reloading = false;
 let userAskedUpdate = false;
 let installEvent = null;
@@ -41,16 +50,38 @@ const UPDATE_CHECK_MS = 30 * 60 * 1000; // la partie peut rester ouverte longtem
 function trackWaiting(worker) {
   if (!worker) return;
   waitingWorker = worker;
+  updateReady = true;
   emit('update');
+}
+
+/** Version de la page (null en mode développement ou sans build). */
+export function pageVersion() {
+  const b = typeof window !== 'undefined' ? window.__FERME_BUILD__ : null;
+  return b && b.id && !b.dev ? b.id : null;
+}
+
+/**
+ * Un nouveau service worker vient de prendre le contrôle (c'est la version la plus récente
+ * connue) : si sa version n'est pas celle de la page, la page est plus ancienne → proposer de recharger.
+ */
+function compareVersions() {
+  const mine = pageVersion();
+  if (!mine || !navigator.serviceWorker.controller) return;
+  getVersion().then((v) => {
+    if (v && v !== mine && !updateReady) {
+      updateReady = true; // rien à activer : un simple rechargement suffit
+      emit('update');
+    }
+  });
 }
 
 function watchInstalling(worker) {
   if (!worker) return;
   worker.addEventListener('statechange', () => {
     if (worker.state !== 'installed') return;
-    // Un contrôleur existe déjà → c'est une mise à jour ; sinon, 1re installation : prêt hors ligne.
-    if (navigator.serviceWorker.controller) trackWaiting(registration.waiting || worker);
-    else emit('offline');
+    // Première installation (pas encore de contrôleur) : le jeu est prêt hors ligne. Une mise à
+    // jour s'active d'elle-même (sw.js) : « controllerchange » compare alors les versions.
+    if (!navigator.serviceWorker.controller) emit('offline');
   });
 }
 
@@ -83,20 +114,27 @@ export function initPWA({ serviceWorker = true } = {}) {
     }
   });
 
-  const noSW = new URLSearchParams(location.search).has('nosw');
+  // `?nosw` dans l'adresse, ou mode développement (dev.html) : pas de service worker.
+  const noSW = new URLSearchParams(location.search).has('nosw') || Boolean(window.__FERME_BUILD__ && window.__FERME_BUILD__.dev);
   if (!serviceWorker || noSW || !('serviceWorker' in navigator) || !window.isSecureContext) return;
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     // Ne recharger que si le joueur l'a demandé (1re installation : clients.claim() change aussi le contrôleur).
-    if (!userAskedUpdate || reloading) return;
-    reloading = true;
-    location.reload();
+    if (userAskedUpdate && !reloading) {
+      reloading = true;
+      location.reload();
+      return;
+    }
+    compareVersions();
   });
 
   const register = () => {
     navigator.serviceWorker.register('./sw.js', { scope: './', updateViaCache: 'none' }).then((reg) => {
       registration = reg;
+      // Service worker d'une ancienne version (avant l'activation automatique) resté en attente.
       if (reg.waiting && navigator.serviceWorker.controller) trackWaiting(reg.waiting);
+      // (Pas de comparaison ici : une page plus récente que le service worker en place est
+      // normale — elle vient du réseau — et le nouveau service worker va s'installer.)
       watchInstalling(reg.installing);
       reg.addEventListener('updatefound', () => watchInstalling(reg.installing));
       setInterval(() => { if (document.visibilityState === 'visible') reg.update().catch(() => {}); }, UPDATE_CHECK_MS);
@@ -109,13 +147,13 @@ export function initPWA({ serviceWorker = true } = {}) {
 
 /** S'abonner : une nouvelle version attend d'être activée. Renvoie une fonction de désabonnement. */
 export function onUpdateAvailable(fn) {
-  if (waitingWorker) queueMicrotask(() => fn());
+  if (updateReady) queueMicrotask(() => fn());
   return subscribe('update', fn);
 }
 
 /** Vrai si une nouvelle version attend. */
 export function isUpdateAvailable() {
-  return Boolean(waitingWorker);
+  return updateReady;
 }
 
 /**
@@ -124,7 +162,7 @@ export function isUpdateAvailable() {
  */
 export function applyUpdate() {
   userAskedUpdate = true;
-  const worker = waitingWorker || (registration && registration.waiting);
+  const worker = (registration && registration.waiting) || null;
   if (!worker) {
     location.reload();
     return;
@@ -158,7 +196,8 @@ export function getVersion() {
 
 /**
  * Réparation (bouton des options, ou du garde-fou de démarrage dans index.html) : désinscrit le
- * service worker du jeu, supprime ses caches puis recharge depuis le réseau. La progression et
+ * service worker du jeu, supprime ses caches puis recharge depuis le réseau (le vrai travail est
+ * fait par window.__repairGame, défini par le chargeur de index.html : src/loader.js). La progression et
  * la partie (localStorage) ne sont pas touchées. Renvoie une promesse (la page se recharge).
  */
 export async function repairApp() {
