@@ -21,8 +21,8 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build-sw-manifest.js : ne pas modifier à la main
-const VERSION = '029c6f7a11bf';
-// 177 fichiers, 25.8 Mo
+const VERSION = '2c24ab7da60c';
+// 178 fichiers, 25.8 Mo
 const PRECACHE = [
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705],
@@ -161,10 +161,10 @@ const PRECACHE = [
   ["assets/sprites/ui/slot-parchment.png", '57ce96c6f85e42d1', 196],
   ["assets/sprites/ui/slot-wood.png", '77631b56d79873e0', 174],
   ["css/fonts.css", '68ec8bc700385c7a', 1236],
-  ["css/style.css", '4a199919e7aaacf2', 57033],
+  ["css/style.css", 'c64a9eb753909211', 63413],
   ["index.html", '6339227456bad747', 3857],
   ["manifest.webmanifest", '5d6c91a92a02c504', 1533],
-  ["src/audio/audio.js", '41f7f06d1190b083', 15495],
+  ["src/audio/audio.js", '833e59968773e1a0', 15982],
   ["src/audio/manifest.js", 'bcd255827929807c', 3941],
   ["src/core/calendar.js", 'adf7ac06b4e95cec', 1963],
   ["src/core/economy.js", '84ce1bf05d91e684', 5415],
@@ -179,28 +179,29 @@ const PRECACHE = [
   ["src/data/crops.js", 'c011ab1a1ddd7943', 1591],
   ["src/data/investments.js", '095673bbf646f849', 3948],
   ["src/data/levels.js", 'bf9b0a69d5b26474', 6618],
-  ["src/main.js", 'f673f620086a1040', 37300],
+  ["src/main.js", 'be45db034fb1122b', 43721],
   ["src/pwa.js", '9331dfae764defec', 10669],
   ["src/render/assets.js", 'f7d380c1734854a3', 7648],
   ["src/render/atlas.js", 'f5fa36a437ff3ef1', 21103],
-  ["src/render/effects.js", '1c86421ea864a0e3', 34787],
+  ["src/render/effects.js", '512767e9ac6feac9', 35567],
   ["src/render/layout-common.js", '26d7d02798dcb1a7', 9176],
-  ["src/render/layout-portrait.js", '59583436120f1c1e', 16373],
+  ["src/render/layout-portrait.js", 'c1430d8843e31497', 16388],
   ["src/render/layout.js", 'ece7d711b704bfe8', 14708],
-  ["src/render/scene.js", 'e2770e81d2447c8c', 38870],
+  ["src/render/scene.js", '5e26049806d9ceba', 46830],
   ["src/storage.js", '8ca43f6dabd9fc8d', 5321],
-  ["src/ui/dialogs.js", 'e8ac7b528d02e7e6', 30674],
+  ["src/ui/dialogs.js", 'c7594cc80fdb2e19', 30799],
   ["src/ui/dom.js", '4ce9149d5d52a48f', 5278],
-  ["src/ui/field.js", '0edccdf4ce026fb2', 17651],
-  ["src/ui/hud.js", 'be08c3dea863e3ad', 16430],
+  ["src/ui/field.js", '2dd12f3b67d206f1', 18884],
+  ["src/ui/gestures.js", 'ae98ca4707dfecd5', 10330],
+  ["src/ui/hud.js", '420ecbc77fcbcaeb', 16491],
   ["src/ui/icons.js", '0171f8b27c837bda', 3990],
   ["src/ui/panel.js", '4f3ce52754586e1e', 16373],
-  ["src/ui/sheets.js", 'cedf997e69272e9e', 8337],
+  ["src/ui/sheets.js", 'ddc9d972737f89eb', 8163],
   ["src/ui/tabbar.js", 'df6fca62dd05cf4e', 1880],
   ["src/ui/text.js", 'c08166c9b956236e', 4353],
-  ["src/ui/toasts.js", 'f12c793be2eb1fa5', 3192],
-  ["src/ui/tooltip.js", '8538782989083160', 2868],
-  ["src/ui/tutorial.js", 'a0882f2989498c56', 22748],
+  ["src/ui/toasts.js", 'd05a480fd74a343b', 3290],
+  ["src/ui/tooltip.js", 'b2da8b2d915163ab', 3543],
+  ["src/ui/tutorial.js", 'b56bb557852d8b92', 23529],
 ];
 // </precache>
 

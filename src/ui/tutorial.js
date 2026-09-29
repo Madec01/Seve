@@ -21,7 +21,8 @@ export function createTutorial(layer, app) {
   let tutoPlot = null; // parcelle choisie pour l'exemple
   let lastRect = '';
   let hidden = false; // 'dialog' (tout caché), 'popup' (bulle cachée, rappel visible) ou false
-  let minimized = false; // la bulle a été réduite par le joueur : seul le rappel reste affiché
+  let minimized = false;
+  let userExpanded = false; // la bulle a été rouverte à la main : plus de réduction automatique // la bulle a été réduite par le joueur : seul le rappel reste affiché
 
   const ring = el('div.tuto-ring', { 'aria-hidden': 'true' });
   const bubble = el('div.tuto-bubble', { role: 'dialog', 'aria-live': 'polite', 'aria-label': 'Tutoriel' });
@@ -255,18 +256,19 @@ export function createTutorial(layer, app) {
   }
 
   /** Réduit la bulle : il ne reste que le rappel compact de l'étape (cliquable pour la rouvrir). */
-  function minimize() {
+  function minimize(auto = false) {
     if (minimized) return;
-    app.audio.play('close', { volume: 0.6 });
+    if (!auto) app.audio.play('close', { volume: 0.6 });
     minimized = true;
     layer.classList.add('is-min');
     updatePill();
-    pill.focus?.({ preventScroll: true });
+    if (!auto && app.keyboardMode) pill.focus?.({ preventScroll: true });
   }
 
   function expand() {
     if (!minimized) return;
     app.audio.play('open', { volume: 0.6 });
+    userExpanded = true;
     minimized = false;
     layer.classList.remove('is-min');
     updatePill();
@@ -276,7 +278,9 @@ export function createTutorial(layer, app) {
 
   function updatePill() {
     const s = step();
-    const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup'));
+    // Feuille haute (achats, bilan) : pas de rappel par-dessus (il couvrirait son en-tête).
+    const tallSheet = hidden === 'popup' && app.sheets?.box.classList.contains('is-tall');
+    const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup') && !tallSheet);
     if (show) {
       if (!pillAvatar.firstChild) pillAvatar.append(sprite('farmer', 'sprite--xs'));
       pillTitle.textContent = s.title;
@@ -307,6 +311,7 @@ export function createTutorial(layer, app) {
       return;
     }
     minimized = false;
+    userExpanded = false;
     layer.classList.remove('is-min');
     const canMinimize = !!s.hint && (!s.buttons || s.id === 'coop');
     append(bubble, [
@@ -389,14 +394,14 @@ export function createTutorial(layer, app) {
       ring.classList.remove('is-visible');
     }
     if (app.isWide()) positionWide(h, rect, s);
-    else positionPortrait(rect);
+    else positionPortrait(rect, s);
   }
 
   /**
    * Portrait : la bulle prend la largeur de l'écran et se range en haut (sous la barre du haut)
    * ou en bas (au-dessus des onglets ou de la feuille), du côté où elle ne couvre pas la cible.
    */
-  function positionPortrait(rect) {
+  function positionPortrait(rect, s) {
     bubble.classList.remove('is-free');
     bubble.classList.add('is-docked');
     const vw = window.innerWidth;
@@ -438,6 +443,13 @@ export function createTutorial(layer, app) {
       bubble.dataset.side = side === 'top' ? 'top' : 'bottom';
     } else {
       bubble.dataset.side = 'none';
+    }
+    // Étape sans pause (on joue pendant ce temps) : si la bulle cache le champ, elle se réduit
+    // d'elle-même en rappel compact (le joueur peut la rouvrir d'un toucher).
+    if (s && !s.pauses && !userExpanded && s.hint) {
+      const f = app.fieldPageRect();
+      const by = Math.round(y);
+      if (f && by < f.bottom && by + h > f.top) minimize(true);
     }
   }
 

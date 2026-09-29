@@ -125,13 +125,17 @@ Résultats de la simulation (200 parties par niveau et par stratégie, voir `too
 
 ## 9. Interface
 
-- **Barre du haut** : argent, date (jour X — saison — icône), météo du jour + prévision, vitesse (pause/×1/×2/×4), bouton menu.
-- **Panneau de droite (onglets)** : *Investissements* (cartes avec prix, revenu, entretien, quantité possédée) et *Bilan* (revenu net estimé, prochain fermage, historique simple).
-- **Scène centrale** (canvas pixel art, zoom entier) : champ, bâtiments, animaux animés, décor saisonnier.
-- **Fenêtres** : menu principal, sélection du niveau (avec étoiles), options (volumes musique / sons / ambiance, plein écran), écran de fin de saison (résumé), victoire, faillite, pause.
+Pensée d'abord pour le **téléphone tenu en portrait** (cahier des charges : `docs/MOBILE.md`).
+
+- **Barre du haut** (2 lignes) : argent et saison (jour X/7), météo du jour → demain, prochain fermage (montant, jours restants, couleur vert / orange / rouge), un gros bouton de vitesse (×1 → ×2 → ×4 → pause ; appui long : pause). Toucher une case ouvre sa fiche détaillée.
+- **Onglets en bas** : *Ferme* (ferme les feuilles, recentre le champ), *Acheter* (cartes d'investissement avec prix, revenu par saison, entretien, quantité possédée ; raison écrite si l'achat est impossible), *Bilan* (solde quotidien, fermages de l'année, prêt, marché, bilan de l'année, objectifs), *Menu* (pause, options, recommencer, quitter).
+- **Scène** (canvas pixel art, zoom entier) : parcelles de 2 × 2 tuiles, bâtiments, animaux, décor saisonnier ; défilement vertical au doigt si le monde dépasse l'écran.
+- **Au doigt** : toucher une parcelle agit tout de suite (semer → choix des graines, arroser, récolter, ouvrir) ; toucher une parcelle déjà arrosée ou faire un appui long → sa fiche ; glisser sur le champ → arroser ou récolter en série ; toucher un bâtiment → sa fiche (achat possible).
+- **Choix des graines** : feuille du bas, grandes lignes (durée, prix de la graine, prix de vente, gain par jour, avertissements gel / sol fatigué / cours), une touche pour semer, option « Semer partout ».
+- **Fenêtres** : menu principal, sélection du niveau (avec étoiles), options (volumes, vibration, écran allumé, animations réduites, plein écran, installer le jeu), crédits, pause, fin de saison (résumé), victoire, faillite.
 - **Textes flottants** : « +12 » au-dessus des récoltes et des bâtiments à l'aube.
-- **Tutoriel** (niveau 1) : bulles guidées — planter, arroser, attendre, récolter, acheter un poulailler, comprendre le fermage, préparer l'hiver.
-- Raccourcis : Espace = pause, 1/2/3 = vitesses, Échap = menu.
+- **Tutoriel** (niveau 1) : bulles courtes placées en haut ou en bas de l'écran sans cacher la cible — planter, arroser, accélérer, récolter, comprendre le fermage, acheter un poulailler, préparer l'hiver.
+- **Ordinateur** : même interface, onglets dans la barre du haut, feuilles à droite ; raccourcis Espace = pause, 1/2/3 = vitesses, B = acheter, N = bilan, F = ferme, M = son, Échap = menu.
 
 ## 10. Audio
 

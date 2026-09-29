@@ -35,6 +35,7 @@ export function createField(app) {
       return;
     }
     current = { kind, ...target };
+    lastSig = signature(current);
     app.sheets.open({
       id: kind,
       kind: 'popup',
@@ -306,10 +307,34 @@ export function createField(app) {
     return el('div.tip-rows', rows);
   }
 
+  /**
+   * Résumé de ce qu'affiche la feuille ouverte : elle n'est reconstruite que s'il change (un
+   * toucher en cours sur une ligne ne doit pas tomber sur un élément remplacé à chaque pièce gagnée).
+   */
+  function signature(c) {
+    const g = app.game;
+    if (!g) return '';
+    if (c.kind === 'investment') return JSON.stringify(g.query.investments().find((i) => i.id === c.id));
+    const p = g.query.plot(c.index);
+    if (c.kind === 'seeds') {
+      const free = g.query.plots().filter((q) => q.action === 'plant').length;
+      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money])]);
+    }
+    if (c.kind === 'unlock') {
+      const can = g.state.money >= (p.unlockCost ?? Infinity);
+      return JSON.stringify([p.unlocked, p.unlockCost, can, can ? 0 : g.state.money]);
+    }
+    return JSON.stringify([p, g.query.finance().waterCost, g.state.weather.today]);
+  }
+  let lastSig = '';
+
   // Les chiffres (argent, cours, pousse) changent : la feuille ouverte est reconstruite.
   function refresh() {
     if (!isOpen()) return;
     const c = current;
+    const sig = signature(c);
+    if (sig === lastSig) return;
+    lastSig = sig;
     if (c.kind === 'investment') return openInvestmentInfo(c.id, true);
     const p = app.game?.query.plot(c.index);
     if (!p) return close(false);

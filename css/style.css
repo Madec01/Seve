@@ -487,7 +487,7 @@ body.is-loading #tabbar { transform: translateY(110%); pointer-events: none; }
   padding: 0 calc(var(--safe-r) + 2px) 0 calc(var(--safe-l) + 2px);
   border-style: solid;
   border-width: calc(var(--u) * 6) calc(var(--u) * 6) 0;
-  border-image: var(--img-parch) 8 8 0 fill / calc(var(--u) * 8) calc(var(--u) * 8) 0 stretch;
+  border-image: var(--img-parch) 8 fill / calc(var(--u) * 8) calc(var(--u) * 8) 0 stretch;
   image-rendering: pixelated;
   pointer-events: auto;
   filter: drop-shadow(0 calc(var(--u) * -2) 0 rgba(30, 15, 20, 0.35));
@@ -561,7 +561,7 @@ body.layout-wide .sheet {
   margin: 0;
   padding: 0 0 calc(var(--safe-b) + 4px);
   border-width: calc(var(--u) * 6) 0 0 calc(var(--u) * 6);
-  border-image: var(--img-parch) 8 0 0 8 fill / calc(var(--u) * 8) 0 0 calc(var(--u) * 8) stretch;
+  border-image: var(--img-parch) 8 fill / calc(var(--u) * 8) 0 0 calc(var(--u) * 8) stretch;
   filter: drop-shadow(calc(var(--u) * -2) 0 0 rgba(30, 15, 20, 0.35));
   transform: translateX(calc(100% + 24px));
   touch-action: auto;
@@ -571,7 +571,8 @@ body.layout-wide .sheet-grab { display: none; }
 body.layout-wide .sheet-head { padding-top: 6px; }
 
 /* Contenu des fiches (parcelle, bâtiment, barre du haut) */
-.info-sheet { display: flex; flex-direction: column; gap: 10px; font-size: 1rem; line-height: 1.35; }
+.info-sheet,
+.info-dyn { display: flex; flex-direction: column; gap: 10px; font-size: 1rem; line-height: 1.35; }
 .info-sheet .tip-rows { gap: 6px; }
 .info-sheet .tip-title { font-size: 1.125rem; }
 .info-sheet .tip-sub { font-size: 0.875rem; }
@@ -771,14 +772,15 @@ body.layout-wide .sheet-head { padding-top: 6px; }
   transition: opacity 260ms ease, transform 360ms var(--ease-pop);
 }
 body.in-menu .banner { top: calc(var(--safe-t) + 10px); }
-.banner.is-visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
+/* Le bandeau ne capte pas les touchers : la scène dessous reste jouable. */
+.banner.is-visible { opacity: 1; transform: translate(-50%, 0); }
 .banner-ribbon {
   position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: calc(var(--u) * 32);
-  padding: calc(var(--u) * 4) calc(var(--u) * 16) calc(var(--u) * 7);
+  padding: calc(var(--u) * 6) calc(var(--u) * 12) calc(var(--u) * 9);
   color: var(--parch);
   text-shadow: 0 var(--px1) 0 var(--red-dark), var(--px1) 0 0 var(--red-dark);
 }
@@ -799,7 +801,7 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); }
 .banner--season .banner-ribbon::before { filter: hue-rotate(80deg) saturate(0.7); }
 .banner--season .banner-ribbon { text-shadow: 0 var(--px1) 0 #3c6a2a, var(--px1) 0 0 #3c6a2a; }
 .banner-titles { flex: 1; min-width: 0; text-align: center; }
-.banner-title { font-size: 1.375rem; font-weight: 700; line-height: 1.1; }
+.banner-title { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
 .banner-text { font-size: 0.9375rem; line-height: 1.2; }
 
 #toasts {
@@ -892,7 +894,7 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
   padding: 0 calc(var(--safe-r) + 4px) calc(var(--safe-b) + 8px) calc(var(--safe-l) + 4px);
   border-style: solid;
   border-width: calc(var(--u) * 10) calc(var(--u) * 8) 0;
-  border-image: var(--img-parch-ornate) 12 12 0 fill / calc(var(--u) * 12) calc(var(--u) * 12) 0 stretch;
+  border-image: var(--img-parch-ornate) 12 fill / calc(var(--u) * 12) calc(var(--u) * 12) 0 stretch;
   image-rendering: pixelated;
   filter: drop-shadow(0 calc(var(--u) * -2) 0 rgba(30, 15, 20, 0.35));
   touch-action: pan-y;
@@ -902,19 +904,22 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
   position: relative;
   align-self: center;
   margin: calc(var(--u) * -30) 0 6px;
-  min-width: 15rem;
-  max-width: calc(100% - 7rem);
+  width: max-content;
+  min-width: 14rem;
+  max-width: calc(100% - 1rem);
   height: calc(var(--u) * 32);
-  padding: calc(var(--u) * 4) calc(var(--u) * 16) calc(var(--u) * 8);
+  padding: calc(var(--u) * 4) calc(var(--u) * 4) calc(var(--u) * 8);
   display: grid;
   place-items: center;
   border-style: solid;
-  border-width: 0 calc(var(--u) * 32);
-  border-image: var(--img-ribbon) 0 32 fill / 0 calc(var(--u) * 32) stretch;
+  border-width: 0 calc(var(--u) * 24);
+  border-image: var(--img-ribbon) 0 32 fill / 0 calc(var(--u) * 24) stretch;
   image-rendering: pixelated;
   touch-action: none;
 }
 .dialog.is-closable .dialog-ribbon { margin-top: calc(var(--u) * -34); }
+.dialog.is-closable .dialog-ribbon { max-width: calc(100% - 7rem); min-width: 0; }
+@media (max-width: 399px) { .dialog-title { font-size: 1.25rem; } }
 .dialog-ribbon.ribbon--red { border-image-source: var(--img-banner); }
 .dialog-ribbon.ribbon--dark { filter: saturate(0.25) brightness(0.8); }
 .dialog-title {
@@ -926,7 +931,8 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
   white-space: nowrap;
   text-shadow: 0 var(--u) 0 var(--red-dark), var(--u) 0 0 var(--red-dark), calc(var(--u) * -1) 0 0 var(--red-dark);
 }
-.dialog-x { position: absolute; top: calc(var(--u) * -4); right: 0; z-index: 2; }
+/* ✕ à hauteur du ruban, à droite (il ne couvre jamais le contenu) */
+.dialog-x { position: absolute; top: calc(var(--u) * -32); right: 0; z-index: 2; }
 .dialog-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1134,7 +1140,7 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
 /* Crédits */
 .credits { display: flex; flex-direction: column; gap: 10px; font-size: 0.9375rem; line-height: 1.4; user-select: text; -webkit-user-select: text; }
 .credits p { margin: 2px 0; }
-.credits a { display: inline-block; padding: 2px 0; }
+.credits a { display: inline-block; padding: 14px 0; margin: -14px 0; } /* cible de 48 px sans écarter les lignes */
 .credits-intro { color: var(--text-soft); }
 .credit-block h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 3px; font-size: 1.0625rem; }
 .credit-quote {
@@ -1260,6 +1266,7 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
 .tuto-dot { width: calc(var(--u) * 3); height: calc(var(--u) * 3); background: var(--parch-3); }
 .tuto-dot.is-past { background: var(--wood-light); }
 .tuto-dot.is-on { background: var(--red); box-shadow: 0 0 0 var(--u) var(--red-dark); }
+body:not(.layout-wide) #tutorial.is-popup .tuto-ring,
 #tutorial.is-min .tuto-bubble,
 #tutorial.is-popup .tuto-bubble { visibility: hidden; opacity: 0; pointer-events: none; }
 .tuto-min {

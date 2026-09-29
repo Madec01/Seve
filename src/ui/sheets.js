@@ -55,7 +55,7 @@ export function swipeToClose(box, { grab = [], scroller = null, onClose, canClos
     if (!g) continue;
     const down = (e) => {
       if (e.button !== undefined && e.button !== 0) return;
-      if (e.target.closest('button:not(.sheet-grab)')) return; // le ✕ reste un bouton
+      if (e.target.closest('button')) return; // le ✕ reste un bouton
       begin(e.clientY);
       try {
         g.setPointerCapture(e.pointerId);
@@ -127,7 +127,8 @@ export function createSheets(layer, app) {
   let closeTimer = null;
 
   const backdrop = el('div.sheet-backdrop', { 'aria-hidden': 'true' });
-  const grabBar = el('button.sheet-grab', { type: 'button', 'aria-label': 'Fermer (glisser vers le bas)', tabindex: '-1' }, el('span.sheet-grab-bar'));
+  // Poignée : zone de glissement (pas un bouton : le ✕ et Échap ferment la feuille).
+  const grabBar = el('div.sheet-grab', { 'aria-hidden': 'true' }, el('span.sheet-grab-bar'));
   const headIcon = el('span.sheet-icon');
   const title = el('h2.sheet-title', { id: 'sheet-title' });
   const closeBtn = el('button.sheet-x', { type: 'button', 'aria-label': 'Fermer', id: 'sheet-close', onclick: () => close('button') }, icon('close', 'md'));
@@ -141,10 +142,6 @@ export function createSheets(layer, app) {
   backdrop.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     close('outside');
-  });
-  grabBar.addEventListener('click', (e) => {
-    // Clic simple sur la poignée (souris, clavier) : ferme aussi.
-    if (e.detail === 0 || e.pointerType === 'mouse') close('button');
   });
 
   swipeToClose(box, { grab: [grabBar, head], scroller: body, onClose: (r) => close(r) });

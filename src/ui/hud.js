@@ -105,20 +105,23 @@ export function createHud(root, app) {
 
   root.append(el('div.hud-row', money, weather, bill, speedBtn), dayline);
 
-  // Fiches de la barre du haut (au toucher : c'est la seule façon de voir ces détails)
+  // Fiches de la barre du haut (au toucher : c'est la seule façon de voir ces détails). Seule la
+  // partie chiffrée est reconstruite quand l'argent change ; le bouton reste le même élément.
+  let infoDyn = null;
+  let infoKind = null;
+  function infoRows(kind) {
+    if (kind === 'money') return [dateTip(), moneyTip()];
+    if (kind === 'weather') return [weatherTip()];
+    return [billTip()];
+  }
   function openInfo(kind) {
     if (!game) return;
     app.audio.play('page', { volume: 0.7 });
-    if (kind === 'money') app.sheets.open({ id: 'info-money', kind: 'popup', icon: icon('coin', 'md'), title: 'Argent et saison', content: el('div.info-sheet', dateTip(), moneyTip()) });
-    else if (kind === 'weather') app.sheets.open({ id: 'info-weather', kind: 'popup', icon: icon(game.state.weather.today, 'md'), title: 'Météo', content: el('div.info-sheet', weatherTip()) });
-    else
-      app.sheets.open({
-        id: 'info-bill',
-        kind: 'popup',
-        icon: icon('bill', 'md'),
-        title: 'Prochain fermage',
-        content: el('div.info-sheet', billTip(), el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'))),
-      });
+    infoKind = kind;
+    infoDyn = el('div.info-dyn', infoRows(kind));
+    const titles = { money: ['coin', 'Argent et saison'], weather: [game.state.weather.today, 'Météo'], bill: ['bill', 'Prochain fermage'] };
+    const actions = kind === 'bill' ? el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-bilan', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet')) : null;
+    app.sheets.open({ id: `info-${kind}`, kind: 'popup', icon: icon(titles[kind][0], 'md'), title: titles[kind][1], content: el('div.info-sheet', infoDyn, actions) });
   }
 
   // ── Infobulles ────────────────────────────────────────────────────────────────
@@ -308,7 +311,7 @@ export function createHud(root, app) {
     if (key !== shownDay) {
       shownDay = key;
       dayFill.style.transform = `scaleX(${k.toFixed(4)})`;
-      daySun.style.left = `${(k * 100).toFixed(2)}%`;
+      daySun.style.left = `calc(4px + ${k.toFixed(4)} * (100% - 8px))`;
     }
   }
 
@@ -340,11 +343,9 @@ export function createHud(root, app) {
     infoQueued = true;
     requestAnimationFrame(() => {
       infoQueued = false;
-      const id = app.sheets?.current;
-      if (!game || !id?.startsWith('info-')) return;
-      if (id === 'info-money') app.sheets.setContent(el('div.info-sheet', dateTip(), moneyTip()));
-      else if (id === 'info-weather') app.sheets.setContent(el('div.info-sheet', weatherTip()));
-      else if (id === 'info-bill') app.sheets.setContent(el('div.info-sheet', billTip(), el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'))));
+      if (!game || !infoDyn || app.sheets?.current !== `info-${infoKind}`) return;
+      const fresh = el('div.info-dyn', infoRows(infoKind));
+      if (fresh.textContent !== infoDyn.textContent) infoDyn.replaceChildren(...fresh.childNodes);
     });
   }
 

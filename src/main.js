@@ -1136,6 +1136,10 @@ if (DEBUG) {
   };
 }
 
+// Application installable : service worker (hors ligne, mises à jour), invitation à installer.
+// (`?nosw` dans l'adresse : sans service worker, pour le débogage.)
+pwa.initPWA();
+
 boot();
 
 export { app };
