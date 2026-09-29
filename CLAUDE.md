@@ -9,7 +9,13 @@ Le but : tenir une année complète (4 saisons, en accéléré) sans faire faill
 
 Un hook `UserPromptSubmit` (dans `.claude/settings.json`) réinjecte ces règles à chaque message.
 
+## Priorité : le téléphone
+
+Le jeu se joue **d'abord sur téléphone, en portrait** (Android + Chrome), installable comme une application (PWA). Voir `docs/MOBILE.md` : toute décision se prend d'abord pour le téléphone.
+
 ## Documents de référence
+
+- `docs/MOBILE.md` : cahier des charges de la version téléphone (prioritaire).
 
 - `docs/GAME_DESIGN.md` : règles du jeu, économie, niveaux (la source de vérité du gameplay).
 - `docs/ARCHITECTURE.md` : organisation du code, contrats entre modules, conventions.
