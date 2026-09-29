@@ -62,6 +62,10 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 - Parties complètes des niveaux 1 à 8 pilotées par l'interface (clics sur les parcelles, fenêtre des graines, cartes d'achat, bilans) à ×4 : 8 victoires (2 à 3 étoiles), niveau suivant débloqué, rechargement + « Continuer » à l'identique (niveaux 1, 3, 4, 7), faillite (niveaux 2 et 5) puis « Réessayer », aucune erreur ni avertissement dans la console.
 - Tests « singe » (clics et touches au hasard, onglet caché, redimensionnements, tactile) sur les 8 niveaux ; longue partie à ×4 : 60 images/s, tas JS stable (6 à 10 Mo), particules bornées.
 
+### 2026-09-29 — Mise en ligne
+
+- Ajout de `.nojekyll` : le jeu peut être servi tel quel par GitHub Pages, directement depuis la branche de travail (pas besoin d'action de déploiement).
+
 ---
 
 ## Idées (à étudier plus tard)
