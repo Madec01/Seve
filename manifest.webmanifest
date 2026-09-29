@@ -1,0 +1,28 @@
+{
+  "id": "./",
+  "name": "Une année à la ferme",
+  "short_name": "La Ferme",
+  "description": "Un jeu de gestion tout doux en pixel art : semez, récoltez, investissez et tenez une année complète à la ferme sans faire faillite. Jouable hors ligne.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "portrait",
+  "background_color": "#2f4a33",
+  "theme_color": "#3f2631",
+  "categories": ["games", "entertainment"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icons/icon-monochrome-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
+  ],
+  "screenshots": [
+    { "src": "assets/screenshots/ferme-1.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "La ferme au printemps : champ, bâtiments et animaux" },
+    { "src": "assets/screenshots/ferme-2.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "Choix des graines et gestion de l'argent" }
+  ]
+}

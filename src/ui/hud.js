@@ -1,7 +1,8 @@
-// Barre du haut : argent (compteur animé), date et saison, météo du jour et de demain,
-// prochain fermage (avec alerte), vitesses et menu.
+// Barre du haut (compacte, deux lignes, pensée pour le téléphone en portrait) : argent et saison,
+// météo du jour → demain, prochain fermage (couleur d'alerte), bouton de vitesse unique, et la
+// course du soleil de la journée sur toute la largeur.
 //
-// createHud(root, app) → { bind(game), refresh(), frame(dt), onEvent(ev) }
+// createHud(root, app) → { bind(game), refresh(), frame(dt), onEvent(ev), openInfo(kind) }
 // Le DOM est construit une fois ; refresh() ne change que les textes et classes (appelé sur les
 // événements du jeu) ; frame() anime seulement le compteur d'argent et la barre du jour.
 
@@ -9,13 +10,6 @@ import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon } from './icons.js';
 import { season, weatherName, WEATHER_HINTS } from './text.js';
-
-const SPEEDS = [
-  { speed: 0, icon: 'pause', label: 'Pause', key: 'Espace' },
-  { speed: 1, icon: 'play', label: 'Vitesse normale', key: '1' },
-  { speed: 2, icon: 'fast', label: 'Vitesse ×2', key: '2' },
-  { speed: 4, icon: 'faster', label: 'Vitesse ×4', key: '3' },
-];
 
 export function createHud(root, app) {
   let game = null;
@@ -27,84 +21,103 @@ export function createHud(root, app) {
   let deltaTimer = null;
 
   // ── Construction ───────────────────────────────────────────────────────────────
+  // Trois cases touchables (≥ 48 px de haut, sur deux lignes de texte) et le bouton de vitesse.
+  // Toucher une case ouvre sa fiche (ce qui était en infobulle) ; à la souris, l'infobulle reste.
   const moneyValue = el('span.money-value', '0');
   const moneyPops = el('span.money-pops');
+  const seasonIcon = icon('spring', 'sm');
+  const dateMain = el('span.date-main', '');
   const money = el(
-    'div.chip.hud-money.has-tip',
-    { id: 'hud-money', 'data-tip-side': 'bottom' },
-    icon('coin', 'md'),
-    moneyValue,
+    'button.hud-cell.hud-money.has-tip',
+    { type: 'button', id: 'hud-money', 'data-tip-side': 'bottom', 'aria-label': 'Argent et saison', onclick: () => openInfo('money') },
+    el('span.hud-line.hud-line--big', icon('coin', 'sm'), moneyValue),
+    el('span.hud-line.hud-date', { id: 'hud-date' }, seasonIcon, dateMain),
     moneyPops,
   );
-  money._tip = () => moneyTip();
-
-  const seasonIcon = icon('spring', 'md');
-  const dateMain = el('span.date-main', '');
-  const dayFill = el('span.dayline-fill');
-  const daySun = el('span.dayline-sun');
-  const date = el(
-    'div.chip.hud-date.has-tip',
-    { id: 'hud-date', 'data-tip-side': 'bottom' },
-    seasonIcon,
-    el('div.hud-stack', dateMain, el('span.dayline', dayFill, daySun)),
-  );
-  date._tip = () => dateTip();
+  money._tip = () => el('div.tip-rows', dateTip(), moneyTip());
 
   const wToday = icon('sunny', 'md');
   const wName = el('span.w-name', '');
   const wTomorrow = icon('sunny', 'sm');
   const weather = el(
-    'div.chip.hud-weather.has-tip',
-    { id: 'hud-weather', 'data-tip-side': 'bottom' },
-    wToday,
-    wName,
-    el('span.w-sep'),
-    el('span.w-tomorrow', el('span.w-label', 'Demain'), wTomorrow),
+    'button.hud-cell.hud-weather.has-tip',
+    { type: 'button', id: 'hud-weather', 'data-tip-side': 'bottom', 'aria-label': 'Météo', onclick: () => openInfo('weather') },
+    el('span.hud-line.w-icons', wToday, el('span.w-arrow', '›'), el('span.w-tomorrow', wTomorrow)),
+    el('span.hud-line.hud-small', wName),
   );
   weather._tip = () => weatherTip();
 
   const billAmount = el('b.bill-amount', '');
   const billDays = el('span.bill-days', '');
   const bill = el(
-    'div.chip.hud-bill.has-tip',
-    { id: 'hud-bill', 'data-tip-side': 'bottom' },
-    icon('bill', 'md'),
-    el('div.hud-stack', el('span.bill-line', el('span.bill-label', 'Fermage '), billAmount), billDays),
+    'button.hud-cell.hud-bill.has-tip',
+    { type: 'button', id: 'hud-bill', 'data-tip-side': 'bottom', 'aria-label': 'Prochain fermage', onclick: () => openInfo('bill') },
+    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount),
+    el('span.hud-line.hud-small', billDays),
   );
   bill._tip = () => billTip();
 
-  const speedButtons = SPEEDS.map((s) => {
-    const b = el(
-      'button.hud-btn.speed-btn',
-      {
-        type: 'button',
-        id: `speed-${s.speed}`,
-        'aria-label': s.label,
-        'data-tip': `${s.label} (touche ${s.key})`,
-        'data-tip-side': 'bottom',
-        onclick: () => app.setSpeed(s.speed, { fromUser: true }),
-      },
-      icon(s.icon, 'md'),
-      s.speed > 1 ? el('span.speed-num', `×${s.speed}`) : null,
-    );
-    b.dataset.speed = s.speed;
-    return b;
+  // Vitesse : un seul gros bouton. Toucher : ×1 → ×2 → ×4 → pause → ×1 ; appui long : pause.
+  const speedIcon = icon('play', 'md');
+  const speedLabel = el('span.speed-label', '×1');
+  const speedBtn = el(
+    'button.hud-speed.has-tip',
+    { type: 'button', id: 'hud-speed', 'aria-label': 'Vitesse du temps', 'data-tip-side': 'bottom' },
+    speedIcon,
+    speedLabel,
+  );
+  speedBtn._tip = () => 'Vitesse : ×1 → ×2 → ×4 → pause (Espace : pause, touches 1, 2, 3). Appui long : pause.';
+  let pressTimer = null;
+  let longPressed = false;
+  speedBtn.addEventListener('pointerdown', () => {
+    longPressed = false;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      longPressed = true;
+      if (game && game.state.speed !== 0) {
+        app.vibrate?.(25);
+        app.setSpeed(0, { fromUser: true });
+      }
+    }, 500);
   });
-  const speed = el('div.hud-speed', { id: 'hud-speed', role: 'group', 'aria-label': 'Vitesse du temps' }, speedButtons);
+  const cancelPress = () => clearTimeout(pressTimer);
+  speedBtn.addEventListener('pointerup', cancelPress);
+  speedBtn.addEventListener('pointercancel', cancelPress);
+  speedBtn.addEventListener('pointerleave', cancelPress);
+  speedBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+  speedBtn.addEventListener('click', () => {
+    if (longPressed) {
+      longPressed = false;
+      return;
+    }
+    if (!game) return;
+    const sp = game.state.speed;
+    const next = sp === 0 ? 1 : sp === 1 ? 2 : sp === 2 ? 4 : 0;
+    app.vibrate?.(8);
+    app.setSpeed(next, { fromUser: true });
+  });
 
-  const muteIcon = icon('sound', 'md');
-  const muteBtn = el(
-    'button.hud-btn.hud-mute',
-    { type: 'button', id: 'hud-mute', 'aria-label': 'Couper le son', 'data-tip-side': 'bottom', onclick: () => app.toggleMute() },
-    muteIcon,
-  );
-  const menuBtn = el(
-    'button.hud-btn.hud-menu',
-    { type: 'button', id: 'hud-menu', 'aria-label': 'Menu', 'data-tip': 'Menu (Échap)', 'data-tip-side': 'bottom', onclick: () => app.openPauseMenu() },
-    icon('menu', 'md'),
-  );
+  const dayFill = el('span.dayline-fill');
+  const daySun = el('span.dayline-sun');
+  const dayline = el('div.hud-dayline', { 'aria-hidden': 'true' }, dayFill, daySun);
 
-  root.append(money, date, weather, bill, el('div.hud-spacer'), speed, muteBtn, menuBtn);
+  root.append(el('div.hud-row', money, weather, bill, speedBtn), dayline);
+
+  // Fiches de la barre du haut (au toucher : c'est la seule façon de voir ces détails)
+  function openInfo(kind) {
+    if (!game) return;
+    app.audio.play('page', { volume: 0.7 });
+    if (kind === 'money') app.sheets.open({ id: 'info-money', kind: 'popup', icon: icon('coin', 'md'), title: 'Argent et saison', content: el('div.info-sheet', dateTip(), moneyTip()) });
+    else if (kind === 'weather') app.sheets.open({ id: 'info-weather', kind: 'popup', icon: icon(game.state.weather.today, 'md'), title: 'Météo', content: el('div.info-sheet', weatherTip()) });
+    else
+      app.sheets.open({
+        id: 'info-bill',
+        kind: 'popup',
+        icon: icon('bill', 'md'),
+        title: 'Prochain fermage',
+        content: el('div.info-sheet', billTip(), el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'))),
+      });
+  }
 
   // ── Infobulles ────────────────────────────────────────────────────────────────
   function moneyTip() {
@@ -218,20 +231,23 @@ export function createHud(root, app) {
     targetMoney = game.state.money;
 
     setIcon(seasonIcon, c.seasonId);
-    setText(dateMain, `Jour ${c.day} · ${c.seasonName} (${c.dayOfSeason}/${c.seasonLength})`);
-    date.dataset.season = c.seasonId;
+    setText(dateMain, `${c.seasonName} ${c.dayOfSeason}/${c.seasonLength}`);
+    money.dataset.season = c.seasonId;
 
     setIcon(wToday, w.today);
     setText(wName, weatherName(w.today));
     setIcon(wTomorrow, w.tomorrow || 'sunny');
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
+    weather.querySelector('.w-arrow').style.visibility = w.tomorrow ? '' : 'hidden';
+    weather.setAttribute('aria-label', `Météo : ${weatherName(w.today)}${w.tomorrow ? `, demain ${weatherName(w.tomorrow)}` : ''}`);
 
     const p = projection();
     const status = game.state.status;
     setText(billAmount, fmt(p.amount));
     if (status === 'victory') setText(billDays, 'payé : année finie !');
     else if (status === 'bankrupt') setText(billDays, 'impayé');
-    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain soir' : `dans ${p.daysLeft} jours`);
+    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} j`);
+    bill.setAttribute('aria-label', `Fermage : ${fmt(p.amount)} pièces, ${billDays.textContent}`);
     const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn');
@@ -239,23 +255,17 @@ export function createHud(root, app) {
     bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && p.state !== 'ok');
 
     const sp = game.state.speed;
-    for (const b of speedButtons) {
-      const on = Number(b.dataset.speed) === sp;
-      b.classList.toggle('is-active', on);
-      b.setAttribute('aria-pressed', on ? 'true' : 'false');
-    }
+    setIcon(speedIcon, sp === 0 ? 'pause' : sp === 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
+    setText(speedLabel, sp === 0 ? 'Pause' : `×${sp}`);
+    speedBtn.dataset.speed = String(sp);
+    speedBtn.setAttribute('aria-label', sp === 0 ? 'En pause : toucher pour reprendre' : `Vitesse ×${sp} : toucher pour changer`);
     root.classList.toggle('is-paused', sp === 0);
-    refreshMute();
     app.tooltip?.refresh(money);
     app.tooltip?.refresh(bill);
   }
 
   function refreshMute() {
-    const muted = !!app.settings.muted;
-    setIcon(muteIcon, muted ? 'mute' : 'sound');
-    muteBtn.dataset.tip = muted ? 'Remettre le son' : 'Couper le son';
-    muteBtn.setAttribute('aria-label', muteBtn.dataset.tip);
-    muteBtn.classList.toggle('is-active', muted);
+    /* le son se règle dans le menu (options) ou avec la touche M */
   }
 
   function popDelta(delta) {
@@ -285,6 +295,7 @@ export function createHud(root, app) {
       shownInt = n;
       moneyValue.textContent = fmt(n);
       money.classList.toggle('is-negative', n < 0);
+      money.setAttribute('aria-label', `Argent : ${fmt(n)} pièces`);
     }
     // Avancée de la journée
     // (écritures de style seulement quand la valeur affichée change : pas de mise en page à
@@ -310,6 +321,7 @@ export function createHud(root, app) {
   }
 
   function onEvent(ev) {
+    if (app.sheets?.current?.startsWith('info-') && ['moneyChanged', 'dawn', 'weather'].includes(ev.type)) refreshInfo();
     if (ev.type === 'moneyChanged') {
       targetMoney = ev.money;
       if (ev.delta) popDelta(ev.delta);
@@ -319,5 +331,19 @@ export function createHud(root, app) {
     }
   }
 
-  return { bind, refresh, frame, onEvent, refreshMute, projection, el: root };
+  let infoQueued = false;
+  function refreshInfo() {
+    if (infoQueued) return;
+    infoQueued = true;
+    requestAnimationFrame(() => {
+      infoQueued = false;
+      const id = app.sheets?.current;
+      if (!game || !id?.startsWith('info-')) return;
+      if (id === 'info-money') app.sheets.setContent(el('div.info-sheet', dateTip(), moneyTip()));
+      else if (id === 'info-weather') app.sheets.setContent(el('div.info-sheet', weatherTip()));
+      else if (id === 'info-bill') app.sheets.setContent(el('div.info-sheet', billTip(), el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'))));
+    });
+  }
+
+  return { bind, refresh, frame, onEvent, refreshMute, projection, openInfo, el: root };
 }

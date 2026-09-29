@@ -1,5 +1,6 @@
 // Infobulle unique (élément #tooltip) : survol des éléments [data-tip] de l'interface, et
-// infobulles de la scène (parcelles, investissements) placées près du pointeur.
+// infobulles de la scène (parcelles, investissements) placées près du pointeur (souris).
+// Au doigt, un toucher sur un élément explicatif (pas un bouton) montre son infobulle 2,6 s.
 
 import { append, clear, el, placeNear } from './dom.js';
 
@@ -71,6 +72,19 @@ export function createTooltip(node) {
   });
   document.addEventListener('pointerdown', (e) => {
     if (owner && owner !== 'scene' && !owner.contains?.(e.target)) hide();
+  });
+  // Au doigt : toucher un élément explicatif (pas un bouton) affiche son infobulle un instant.
+  let touchTimer = null;
+  document.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'touch') return;
+    const t = e.target.closest?.('[data-tip], .has-tip');
+    if (!t || t.closest('button, .btn, a, input')) return;
+    const content = contentOf(t);
+    if (!content) return;
+    owner = t;
+    showAt(content, t.getBoundingClientRect(), t.dataset.tipSide || 'top');
+    clearTimeout(touchTimer);
+    touchTimer = setTimeout(() => hide(t), 2600);
   });
 
   return {

@@ -17,7 +17,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   muted: false,
   speed: 1, // vitesse préférée à la reprise
   reducedMotion: false,
-  panelCollapsed: null, // null = automatique selon la largeur de l'écran
+  vibration: true, // petite vibration au toucher (téléphone)
+  keepAwake: true, // garder l'écran allumé pendant la partie (Wake Lock)
 });
 
 function read(key) {
@@ -121,7 +122,6 @@ export function loadSettings() {
   if (data && typeof data === 'object') {
     for (const k of Object.keys(DEFAULT_SETTINGS)) {
       if (data[k] !== undefined && typeof data[k] === typeof DEFAULT_SETTINGS[k]) out[k] = data[k];
-      else if (k === 'panelCollapsed' && (data[k] === true || data[k] === false)) out[k] = data[k];
     }
   }
   for (const k of ['musicVolume', 'sfxVolume', 'ambienceVolume']) out[k] = Math.min(1, Math.max(0, Number(out[k]) || 0));

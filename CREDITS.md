@@ -44,6 +44,8 @@ Licences d'origine : `assets/sprites/LICENSE-kenney.txt`.
 | `assets/sprites/ui/*.png` | UI Pack – Pixel Adventure 2.0 (tuiles « Thick outline », certaines assemblées par 3) | https://kenney.nl/assets/ui-pack-pixel-adventure |
 | `assets/sprites/extra.png` | Tuiles dérivées de Tiny Farm (recoloriées / assemblées) et quelques tuiles dessinées pour le jeu dans le même style (panneau solaire, arroseur, graines semées), générées par `assets/sprites/generate-extra.py` ; placées elles aussi sous CC0 | — |
 | `assets/sprites/ui/icons.png`, `assets/sprites/ui/favicon.png` | Icônes de l'interface (météo, saisons, vitesses, étoiles…) dessinées pour le jeu dans la palette Kenney, et favicon (carotte de Tiny Farm agrandie), générées par `assets/sprites/ui/generate-icons.py` ; placées sous CC0 | — |
+| `assets/icons/*.png` | Icônes de l'application (PWA : 192/512, maskable, monochrome, apple-touch-icon, favicons) : carotte et tournesol de Tiny Farm (contour affiné à 1 pixel), butte d'herbe et soleil dessinés pour le jeu, agrandis au plus proche voisin ; générées par `assets/icons/generate-app-icons.py` ; placées sous CC0 | — |
+| `assets/screenshots/*.png` | Captures d'écran du jeu pour le manifeste de l'application ; même licence que le jeu | — |
 
 ## Effets sonores — Kenney (CC0, domaine public)
 

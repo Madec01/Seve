@@ -27,6 +27,7 @@ Le jeu se joue **d'abord sur téléphone, en portrait** (Android + Chrome), inst
 - Lancer le jeu : `python3 -m http.server 8000`, puis ouvrir http://localhost:8000
 - Tests de la logique : `node --test tests/`
 - Simulation d'équilibrage : `node tools/simulate.js`
+- Liste des fichiers hors ligne (service worker) : `node tools/build-sw-manifest.js` — **à relancer avant chaque commit** qui modifie un fichier du jeu (`--check` échoue si `sw.js` est périmé)
 
 ## Conventions
 

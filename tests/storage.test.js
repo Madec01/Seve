@@ -22,13 +22,14 @@ test('JSON invalide : valeurs par défaut', () => {
 });
 
 test('réglages : types et bornes vérifiés, vitesse inconnue ignorée', () => {
-  store.set(KEY('settings'), JSON.stringify({ musicVolume: 7, sfxVolume: 'fort', muted: 'oui', speed: 3, panelCollapsed: true }));
+  store.set(KEY('settings'), JSON.stringify({ musicVolume: 7, sfxVolume: 'fort', muted: 'oui', speed: 3, vibration: 'non', keepAwake: false }));
   const s = storage.loadSettings();
   assert.equal(s.musicVolume, 1);
   assert.equal(s.sfxVolume, storage.DEFAULT_SETTINGS.sfxVolume);
   assert.equal(s.muted, false);
   assert.equal(s.speed, 1);
-  assert.equal(s.panelCollapsed, true);
+  assert.equal(s.vibration, true);
+  assert.equal(s.keepAwake, false);
   store.set(KEY('settings'), JSON.stringify({ speed: 4 }));
   assert.equal(storage.loadSettings().speed, 4);
   store.clear();

@@ -67,6 +67,14 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 
 - Ajout de `.nojekyll` : le jeu peut être servi tel quel par GitHub Pages, directement depuis la branche de travail (pas besoin d'action de déploiement).
 
+### 2026-09-29 — Application installable (PWA) et jeu hors ligne
+
+- `manifest.webmanifest` : « Une année à la ferme » / « La Ferme », `start_url` et `scope` relatifs (`./`, fonctionne sous `/Seve/` sur GitHub Pages), `display: standalone` + `display_override: [fullscreen, standalone]`, `orientation: portrait`, couleurs `#3f2631` (thème) et `#2f4a33` (fond), icônes, 2 captures portrait (`assets/screenshots/`, prises sur l'ancienne interface : **à refaire** avec l'interface téléphone), catégorie jeux.
+- Icônes (`assets/icons/`, générées par `assets/icons/generate-app-icons.py`) : carotte et tournesol de Tiny Farm (contour affiné à 1 px) sur une butte d'herbe, ciel chaud et soleil ; agrandissement au plus proche voisin avec un facteur entier. 192/512 « any » (badge arrondi), 192/512 « maskable » (motif dans la zone sûre), 512 « monochrome », apple-touch-icon 180, favicons 32/48. `<head>` d'`index.html` : manifeste, icônes, `color-scheme: only light` (pas d'assombrissement automatique de Chrome Android).
+- `sw.js` (service worker à la racine) : précache de **tout le jeu** (≈ 177 fichiers, 25,8 Mo : HTML, CSS, modules JS, images, polices, sons ogg + mp3). Liste générée avec empreintes SHA-256 par `node tools/build-sw-manifest.js` (**à relancer après chaque modification d'un fichier du jeu**, `--check` pour vérifier). Entrées rangées par empreinte : une mise à jour ne retélécharge que les fichiers modifiés ; chaque fichier est vérifié (un CDN encore en retard fait échouer l'installation, retentée plus tard, au lieu de mélanger deux versions). Navigation → `index.html` de la version installée (cohérent avec les scripts en cache) ; fichiers → cache d'abord ; requêtes `Range` (audio) → réponse 206 construite depuis le cache ; nettoyage à l'activation ; `skipWaiting` seulement à la demande de la page.
+- `src/pwa.js` : enregistrement (`./sw.js`), détection de mise à jour + `applyUpdate()` (« Nouvelle version disponible — Recharger »), invitation à installer (`canInstall()` / `promptInstall()` / `appinstalled`), `isStandalone()`, écran allumé (Wake Lock, repris au retour au premier plan), verrouillage portrait. Aucune interface : c'est à l'interface d'appeler ces fonctions.
+- Vérifié avec Playwright (Chromium, Pixel 7), à la racine et sous `/Seve/` : installation et activation, 100 % des entrées en cache et servies, manifeste sans erreur et installable (CDP), jeu chargé et partie lancée **hors ligne** sans erreur, requêtes `Range` 206/416 correctes et `<audio>` lu hors ligne, mise à jour détectée, ancienne version conservée jusqu'au clic, puis bascule et nettoyage (seul le fichier modifié retéléchargé).
+
 ---
 
 ## Idées (à étudier plus tard)

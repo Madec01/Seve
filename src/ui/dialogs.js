@@ -11,6 +11,7 @@ import { CROPS } from '../data/crops.js';
 import { LEVELS, yearLength } from '../data/levels.js';
 import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { cropIcon, icon, sprite } from './icons.js';
+import { swipeToClose } from './sheets.js';
 import { cropCount, season, seasonArrives } from './text.js';
 
 export function createDialogs(layer, app) {
@@ -38,7 +39,7 @@ export function createDialogs(layer, app) {
     setBackgroundInert(true);
     if (opts.pauses) app.pushPause(opts.id || 'dialog');
     app.tooltip?.hide();
-    app.field?.close(false);
+    app.sheets?.close('silent');
     requestAnimationFrame(() => {
       node.classList.add('is-open');
       const target = node.querySelector('[data-autofocus]') || node.querySelector('.dialog-actions .btn:not(.is-disabled), .menu-buttons .btn, button');
@@ -91,7 +92,7 @@ export function createDialogs(layer, app) {
   const top = () => stack[stack.length - 1]?.opts.id || null;
 
   // Le reste de la page est inerte tant qu'une fenêtre est ouverte (ni clic, ni focus clavier).
-  const BACKGROUND = ['#hud', '#panel', '#stage', '#tutorial', '#popup', '#banner'];
+  const BACKGROUND = ['#hud', '#tabbar', '#sheet-layer', '#stage', '#tutorial', '#banner'];
   function setBackgroundInert(on) {
     for (const sel of BACKGROUND) {
       const n = document.querySelector(sel);
@@ -127,15 +128,31 @@ export function createDialogs(layer, app) {
    */
   function frame(o) {
     const titleId = `dlg-${Math.random().toString(36).slice(2, 8)}`;
+    const grab = o.onClose ? el('div.dialog-grab', { 'aria-hidden': 'true' }, el('span.sheet-grab-bar')) : null;
+    const body = el('div.dialog-body', o.body);
+    const ribbon = o.title ? el(`div.dialog-ribbon${o.ribbon ? `.ribbon--${o.ribbon}` : ''}`, el('h2.dialog-title', { id: titleId }, o.title)) : null;
     const box = el(
-      `div.dialog${o.cls ? `.${o.cls}` : ''}`,
+      `div.dialog${o.cls ? `.${o.cls}` : ''}${o.onClose ? '.is-closable' : ''}`,
       { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId },
-      o.title ? el(`div.dialog-ribbon${o.ribbon ? `.ribbon--${o.ribbon}` : ''}`, el('h2.dialog-title', { id: titleId }, o.title)) : null,
-      o.onClose ? el('button.dialog-x', { type: 'button', 'aria-label': 'Fermer', onclick: o.onClose }, icon('close', 'sm')) : null,
-      el('div.dialog-body', o.body),
+      grab,
+      ribbon,
+      o.onClose ? el('button.dialog-x', { type: 'button', 'aria-label': 'Fermer', onclick: o.onClose }, icon('close', 'md')) : null,
+      body,
       o.actions ? el('div.dialog-actions', o.actions) : null,
     );
-    return el('div', box);
+    // Fenêtre fermable : on la ferme aussi en la faisant glisser vers le bas (téléphone).
+    if (o.onClose) swipeToClose(box, { grab: [grab, ribbon], scroller: body, onClose: () => o.onClose() });
+    const wrap = el('div', box);
+    // Toucher le fond sombre autour de la fenêtre la ferme aussi.
+    if (o.onClose) {
+      wrap.addEventListener('pointerdown', (e) => {
+        if (e.target === wrap) {
+          e.preventDefault();
+          o.onClose();
+        }
+      });
+    }
+    return wrap;
   }
 
   function btn(label, onclick, cls = '', extra = {}) {
@@ -168,7 +185,7 @@ export function createDialogs(layer, app) {
         'div.menu-screen',
         el('div.logo', el('div.logo-ribbon', el('h1.logo-title', 'Une année à la ferme')), el('p.logo-sub', 'Un an pour faire prospérer votre ferme, sans faire faillite')),
         el('div.menu-card', deco, el('div.menu-buttons', buttons)),
-        el('p.menu-keys', 'Espace : pause · 1, 2, 3 : vitesses · Échap : menu'),
+        app.isTouch ? null : el('p.menu-keys', 'Espace : pause · 1, 2, 3 : vitesses · Échap : menu'),
       ),
     );
     return open(node, { id: 'main-menu', closable: false, menu: true, sound: false });
@@ -283,9 +300,12 @@ export function createDialogs(layer, app) {
       slider('sfxVolume', 'Sons'),
       slider('ambienceVolume', 'Ambiance'),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
-      el('h3.opt-section', 'Affichage'),
+      el('h3.opt-section', 'Téléphone et affichage'),
+      'vibrate' in navigator ? toggle('vibration', 'Vibrer au toucher', (v) => { app.updateSettings({ vibration: v }); if (v) app.vibrate(20); }) : null,
+      'wakeLock' in navigator ? toggle('keepAwake', 'Garder l\'écran allumé pendant la partie', (v) => app.updateSettings({ keepAwake: v })) : null,
       toggle('reducedMotion', 'Réduire les animations', (v) => app.updateSettings({ reducedMotion: v })),
-      document.fullscreenEnabled ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
+      document.fullscreenEnabled && !app.isStandalone() ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
+      app.canInstall() ? btn([icon('star', 'sm'), 'Installer le jeu sur l\'appareil'], () => app.installApp(), 'btn--wide', { id: 'opt-install' }) : null,
       el('h3.opt-section', 'Progression'),
       el(
         'div.opt-danger',
@@ -301,7 +321,7 @@ export function createDialogs(layer, app) {
             app.resetProgress();
             app.toasts.show({ kind: 'success', text: 'Progression réinitialisée.' });
           }
-        }, 'btn--small', { id: 'opt-reset' }),
+        }, 'btn--wide', { id: 'opt-reset' }),
       ),
     );
     const node = frame({
