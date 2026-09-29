@@ -1,0 +1,12 @@
+/* Police Pixelify Sans (Stefie Justprince, SIL Open Font License 1.1 — voir assets/fonts/OFL.txt).
+   Police variable : graisse de 400 (normal) à 700 (gras).
+   Chemins relatifs à ce fichier (css/) : fonctionne aussi dans un sous-dossier. */
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../assets/fonts/PixelifySans-Variable.woff2') format('woff2-variations'),
+       url('../assets/fonts/PixelifySans-Variable.woff2') format('woff2'),
+       url('../assets/fonts/PixelifySans-Variable.ttf') format('truetype');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
