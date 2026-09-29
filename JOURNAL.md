@@ -15,6 +15,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-09-29 | `backup/v1-complete-2026-09-29` | Première version complète du jeu (8 niveaux, rendu, interface, audio, revue de code), commit `3ebad21` |
 | 2026-09-29 | `backup/avant-mobile-2026-09-29` | État juste avant la refonte « téléphone en portrait + application installable », commit `d6dbdaa` |
 | 2026-09-29 | `backup/v2-mobile-2026-09-29` | Version téléphone terminée (portrait, interface tactile, application installable, police Jersey Ferme), commit `a1a5e02` |
+| 2026-09-29 | `backup/avant-chargement-robuste-2026-09-29` | État avant la refonte du chargement (jeu bloqué sur l'écran de chargement sur le téléphone de l'utilisateur), commit `76068cf` |
 
 ---
 
