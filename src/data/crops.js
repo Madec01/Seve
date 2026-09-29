@@ -12,9 +12,9 @@
 
 export const CROPS = [
   { id: 'carrot', name: 'Carotte', seasons: ['spring', 'autumn'], growDays: 2, seedCost: 4, sellPrice: 10, frostHardy: false },
-  { id: 'turnip', name: 'Navet', seasons: ['spring', 'autumn', 'winter'], growDays: 3, seedCost: 6, sellPrice: 15, frostHardy: true },
+  { id: 'turnip', name: 'Navet', seasons: ['spring', 'autumn', 'winter'], growDays: 3, seedCost: 6, sellPrice: 14, frostHardy: true },
   { id: 'wheat', name: 'Blé', seasons: ['spring', 'summer'], growDays: 4, seedCost: 5, sellPrice: 16, frostHardy: false },
-  { id: 'cabbage', name: 'Chou', seasons: ['autumn', 'winter'], growDays: 4, seedCost: 8, sellPrice: 21, frostHardy: true },
+  { id: 'cabbage', name: 'Chou', seasons: ['autumn', 'winter'], growDays: 4, seedCost: 8, sellPrice: 20, frostHardy: true },
   { id: 'tomato', name: 'Tomate', seasons: ['summer'], growDays: 5, seedCost: 12, sellPrice: 38, frostHardy: false },
   { id: 'corn', name: 'Maïs', seasons: ['summer', 'autumn'], growDays: 6, seedCost: 15, sellPrice: 50, frostHardy: false },
   { id: 'sunflower', name: 'Tournesol', seasons: ['summer'], growDays: 5, seedCost: 10, sellPrice: 32, frostHardy: false },

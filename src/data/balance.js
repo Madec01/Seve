@@ -40,7 +40,7 @@ export const GROWTH = {
 };
 
 /** Charges fixes quotidiennes de la ferme (avant investissements). */
-export const BASE_DAILY_CHARGE = 4;
+export const BASE_DAILY_CHARGE = 5;
 
 /** Prix des parcelles à acheter : base + pas × (parcelles déjà achetées). */
 export const PLOT_COST = { base: 40, step: 10 };
@@ -53,9 +53,9 @@ export const MARKET = {
   min: 0.5,
   max: 1.8,
   /** Rappel vers 1 à chaque aube (0 = marche aléatoire pure, 1 = tirage indépendant). */
-  meanReversion: 0.3,
+  meanReversion: 0.5,
   /** Amplitude du pas aléatoire quotidien (tirage uniforme dans ±amplitude/2). */
-  amplitude: 0.8,
+  amplitude: 0.9,
 };
 
 /** Rendement d'une culture replantée sur la même parcelle (fatigue du sol, par défaut). */

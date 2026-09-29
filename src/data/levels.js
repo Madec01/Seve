@@ -23,8 +23,6 @@
 //     soilFatigue      0, ou perte de rendement quand on replante la culture récoltée juste avant
 //     noSprinkler      true : pas d'arrosage automatique
 
-import { SEASONS } from './balance.js';
-
 const ALL_INVESTMENTS = ['chickenCoop', 'beehive', 'roadsideStand', 'cow', 'sheep', 'sprinkler', 'solarPanel', 'guestHouse'];
 
 const MILD_WEATHER = {
@@ -81,8 +79,8 @@ export const LEVELS = [
     name: 'Première année',
     description: 'Un climat doux et un fermage modeste pour apprendre les bases : planter, arroser, récolter et préparer l\'hiver.',
     tutorial: true,
-    startMoney: 60,
-    rents: [100, 180, 250, 320],
+    startMoney: 100,
+    rents: [60, 120, 170, 240],
     starThresholds: [500, 900],
     availableInvestments: ['chickenCoop', 'beehive', 'roadsideStand', 'sheep', 'sprinkler', 'solarPanel'],
   }),
@@ -90,8 +88,8 @@ export const LEVELS = [
     id: 2,
     name: 'L\'année de sécheresse',
     description: 'La pluie se fait rare et les canicules s\'enchaînent. Chaque arrosage coûte 1 pièce, même automatique.',
-    startMoney: 80,
-    rents: [120, 220, 300, 380],
+    startMoney: 120,
+    rents: [60, 110, 160, 230],
     starThresholds: [500, 900],
     weather: DROUGHT_WEATHER,
     modifiers: { waterCost: 1 },
@@ -100,8 +98,8 @@ export const LEVELS = [
     id: 3,
     name: 'L\'année pluvieuse',
     description: 'Il pleut souvent, l\'arrosage se fait tout seul… mais chaque jour de pluie, une culture peut pourrir sur pied.',
-    startMoney: 80,
-    rents: [140, 240, 320, 400],
+    startMoney: 100,
+    rents: [70, 130, 190, 260],
     starThresholds: [500, 900],
     weather: RAINY_WEATHER,
     modifiers: { rotChance: 0.05 },
@@ -110,30 +108,30 @@ export const LEVELS = [
     id: 4,
     name: 'Le petit lopin',
     description: 'Seulement 6 parcelles, impossible d\'agrandir. Pour tenir l\'année, il faudra miser sur les animaux.',
-    startMoney: 150,
+    startMoney: 200,
     gridCols: 3,
     gridRows: 2,
     startArea: { cols: 3, rows: 2 },
     unlockedPlots: 6,
     maxPlots: 6,
-    rents: [100, 180, 260, 340],
+    rents: [60, 110, 160, 220],
     starThresholds: [400, 800],
   }),
   level({
     id: 5,
     name: 'L\'hiver sans fin',
     description: 'L\'hiver dure deux semaines et le fermage d\'hiver est salé. Tout se joue dans les réserves d\'automne.',
-    startMoney: 80,
+    startMoney: 100,
     seasonLengths: [7, 7, 7, 14],
-    rents: [120, 220, 300, 520],
+    rents: [60, 120, 170, 380],
     starThresholds: [500, 900],
   }),
   level({
     id: 6,
     name: 'Le marché fou',
     description: 'Le prix de chaque légume change tous les jours, de la moitié au presque double. Vendez au bon moment !',
-    startMoney: 80,
-    rents: [130, 230, 310, 400],
+    startMoney: 100,
+    rents: [60, 120, 180, 250],
     starThresholds: [500, 900],
     modifiers: { priceVolatility: true },
   }),
@@ -142,7 +140,7 @@ export const LEVELS = [
     name: 'Le crédit',
     description: 'La banque vous prête 600 pièces pour bien démarrer, mais il faut rembourser 40 pièces tous les 7 jours en plus du fermage.',
     startMoney: 600,
-    rents: [140, 240, 320, 420],
+    rents: [150, 250, 330, 420],
     starThresholds: [500, 900],
     modifiers: { loan: { payment: 40, every: 7 } },
   }),
@@ -150,8 +148,8 @@ export const LEVELS = [
     id: 8,
     name: 'L\'année bio',
     description: 'Pas d\'arrosage automatique, et replanter la même culture sur une parcelle réduit sa récolte de 30 % : pensez à la rotation.',
-    startMoney: 80,
-    rents: [130, 230, 310, 400],
+    startMoney: 100,
+    rents: [70, 130, 180, 250],
     starThresholds: [500, 900],
     availableInvestments: ALL_INVESTMENTS.filter((id) => id !== 'sprinkler'),
     modifiers: { soilFatigue: 0.3, noSprinkler: true },
@@ -169,5 +167,3 @@ export function getLevel(id) {
 export function yearLength(lvl) {
   return lvl.seasonLengths.reduce((a, b) => a + b, 0);
 }
-
-export { SEASONS };
