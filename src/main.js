@@ -379,11 +379,11 @@ const insets = { top: 0, bottom: 0, left: 0, right: 0 };
 let insetsKey = '';
 function updateInsets() {
   const inGame = !!app.game && !app.inMenu;
-  const hud = $('#hud').getBoundingClientRect();
-  const tab = $('#tabbar').getBoundingClientRect();
-  const vh = viewportHeight();
-  insets.top = inGame ? Math.max(0, Math.round(hud.bottom)) : 0;
-  insets.bottom = inGame && !app.isWide() ? Math.max(0, Math.round(vh - tab.top)) : 0;
+  // Tailles sans les transformations (la barre glisse à l'entrée en partie).
+  const hudH = $('#hud').offsetHeight;
+  const tabH = $('#tabbar').offsetHeight;
+  insets.top = inGame ? hudH : 0;
+  insets.bottom = inGame && !app.isWide() ? tabH : 0;
   insets.left = 0;
   // Grand écran : le panneau rangé à droite (achats, bilan) réduit la scène visible.
   insets.right = inGame && app.isWide() && app.sheets.isOpen() ? Math.round(app.sheets.box.getBoundingClientRect().width) : 0;

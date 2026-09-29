@@ -112,9 +112,15 @@ export function createSceneInput(canvas, app) {
   // ── Défilement avec inertie ─────────────────────────────────────────────────
   function stopInertia() {
     inertia = null;
+    if (typeof scene()?.fling === 'function') scene().fling(0);
   }
   function startInertia(v) {
     if (!canScroll() || Math.abs(v) < 0.05 || app.reducedMotion()) return;
+    // La scène gère elle-même l'élan (frottement) quand elle sait le faire.
+    if (typeof scene().fling === 'function') {
+      scene().fling(v * 1000);
+      return;
+    }
     inertia = { v, last: performance.now() };
     const step = (t) => {
       if (!inertia) return;
