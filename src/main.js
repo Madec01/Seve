@@ -1,657 +1,1024 @@
-// Point d'entrée. Assemble le noyau, le jeu, l'interface et le son.
+// Point d'entrée : chargement des ressources, boucle de jeu, câblage cœur ↔ scène ↔ interface ↔ audio.
+//
+// Déroulé : écran de chargement (images, police, sons) → bouton « Commencer » (déverrouille l'audio)
+// → menu principal (une ferme de démonstration tourne en fond) → partie.
+//
+// Débogage (seulement avec ?debug=1 dans l'adresse) : window.__game (partie en cours),
+// window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId) }.
 
-import { Loop, clamp } from './core/loop.js';
-import { Input } from './core/input.js';
-import { on, emit } from './core/events.js';
-import { Rng, hashSeed } from './core/rng.js';
-import {
-  loadSettings, saveSettings, loadSlot, saveSlot, deleteSlot, emptySave,
-} from './core/storage.js';
-import { initAudio, resumeAudio, applySettings, audioReady } from './audio/audio.js';
-import { wood, breath, pluck, rustle, earth } from './audio/synth.js';
-import { Run, RUN_STATE } from './game/run.js';
-import { Tutorial, STEPS as TUTORIAL_STEPS } from './game/tutorial.js';
-import { derivedBonuses } from './game/progression.js';
-import { checkAchievements } from './game/achievements.js';
-import { todayChallenge, recordDaily } from './game/challenges.js';
-import { nextEcho, actForSave } from './game/lore.js';
-import { NPCS, npcBark } from './game/npcs.js';
-import { TILE } from './game/constants.js';
-import { BIOMES } from './game/biomes.js';
-import { DEGREE_INFO } from './game/scales.js';
-import { Renderer } from './ui/render.js';
-import { drawPlayer, drawCursor, drawBeatRing, drawFloaters, drawChordFlash, Particles } from './ui/actors.js';
-import { Hud } from './ui/hud.js';
-import { Screens } from './ui/screens.js';
-import { Hub } from './ui/hub.js';
-import { Dialogue, Toasts } from './ui/dialogue.js';
-import { TestMode } from './debug/testmode.js';
-import { Guide, drawIllustration } from './ui/guide.js';
-import { el, isTouchDevice, isLandscape, toggleFullscreen } from './ui/dom.js';
+import { SHEETS } from './render/atlas.js';
+import { loadImage, loadImages } from './render/assets.js';
+import { createScene } from './render/scene.js';
+import { createGame, loadGame } from './core/game.js';
+import { DAY_SECONDS, SEASONS } from './data/balance.js';
+import { getLevel, LEVELS } from './data/levels.js';
+import { getInvestment } from './data/investments.js';
+import { getCrop } from './data/crops.js';
+import { AUDIO } from './audio/manifest.js';
+import { ambienceFor, createAudio } from './audio/audio.js';
+import * as storage from './storage.js';
+import { $, el, fmt, plural } from './ui/dom.js';
+import { initSprites, investmentIcon, cropIcon } from './ui/icons.js';
+import { createTooltip } from './ui/tooltip.js';
+import { createToasts } from './ui/toasts.js';
+import { createHud } from './ui/hud.js';
+import { createPanel } from './ui/panel.js';
+import { createField } from './ui/field.js';
+import { createDialogs } from './ui/dialogs.js';
+import { createTutorial } from './ui/tutorial.js';
+import { season, seasonArrives, cropName } from './ui/text.js';
 
-const STATE = { TITLE: 'titre', MENU: 'menu', HUB: 'verger', PLAYING: 'jeu', PAUSED: 'pause', OVER: 'bilan' };
+const params = new URLSearchParams(location.search);
+const DEBUG = params.has('debug');
 
-class App {
-  constructor() {
-    this.canvas = document.getElementById('scene');
-    this.overlay = document.getElementById('overlay');
-    this.renderer = new Renderer(this.canvas);
-    this.particles = new Particles();
-    this.settings = loadSettings();
-    this.state = STATE.TITLE;
-    this.run = null;
-    this.save = null;
-    this.tutorial = null;
-    this.dpr = 1;
-    this.audioOn = false;
-    this.lastInputKind = 'clavier';
-    this.hintTimer = 0;
-    this.tutorialBanner = null;
-    this.idleBiome = null;
+// ── État de l'application ──────────────────────────────────────────────────────────
+const settings = storage.loadSettings();
+const audio = createAudio(AUDIO, settings);
+const canvas = $('#scene');
+const stage = $('#stage');
 
-    this.hud = new Hud(this.overlay);
-    this.screens = new Screens(this.overlay, this);
-    this.hub = new Hub(this.overlay, this);
-    this.dialogue = new Dialogue(this.overlay);
-    this.toasts = new Toasts(this.overlay);
-    this.testMode = new TestMode(this.overlay, this);
-    this.guide = new Guide(this.overlay);
-    this.buildTutorialBanner();
-    this.buildTutorialCard();
-    this.buildOrientationNotice();
+const app = {
+  game: null,
+  scene: null,
+  audio,
+  settings,
+  inMenu: true,
+  isTouch: matchMedia('(pointer: coarse)').matches,
+  keyboardMode: false, // le joueur navigue au clavier : focus automatique des boutons
+};
 
-    Input.init(this.canvas);
-    this.hud.pauseBtn.addEventListener('click', () => this.pauseRun());
-    this.hud.helpBtn.addEventListener('click', () => this.openGuide());
-    this.loop = new Loop((dt) => this.update(dt), (alpha, frame) => this.render(frame));
+window.addEventListener('keydown', (e) => {
+  if (['Tab', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape'].includes(e.key)) app.keyboardMode = true;
+}, true);
+window.addEventListener('pointerdown', () => {
+  app.keyboardMode = false;
+}, true);
 
-    this.bindEvents();
-    this.resize();
-    window.addEventListener('resize', () => this.resize());
-    window.addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
+let images = null;
+let attract = null; // ferme de démonstration derrière le menu
+let unwire = null;
+let pending = { billPaid: null, frost: null, end: null };
+let queuedBanner = null;
+const pauseReasons = new Set();
+let resumeSpeed = 1;
+let lastPlaySpeed = settings.speed || 1;
+let hover = { hit: null, x: 0, y: 0 };
+let drag = null; // { action, done: Set }
 
-    const wake = () => this.wakeAudio();
-    window.addEventListener('pointerdown', wake, { once: false });
-    window.addEventListener('keydown', wake, { once: false });
-    window.addEventListener('touchstart', wake, { once: false });
+// ── Interface ─────────────────────────────────────────────────────────────────────
+app.tooltip = createTooltip($('#tooltip'));
+app.toasts = createToasts($('#toasts'), $('#banner'));
+app.hud = createHud($('#hud'), app);
+app.panel = createPanel($('#panel'), app);
+app.field = createField($('#popup'), app);
+app.dialogs = createDialogs($('#modal-layer'), app);
+app.tutorial = createTutorial($('#tutorial'), app);
 
-    this.screens.title();
-    this.idleBiome = this.pickIdleBiome();
-    this.loop.start();
+applyDisplaySettings();
+
+// ── Réglages ──────────────────────────────────────────────────────────────────────
+function applyDisplaySettings() {
+  const reduce = settings.reducedMotion || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.documentElement.classList.toggle('reduced-motion', reduce);
+}
+
+app.saveSettings = () => storage.saveSettings(settings);
+
+app.updateSettings = (patch) => {
+  Object.assign(settings, patch);
+  audio.setVolumes(settings);
+  applyDisplaySettings();
+  app.hud.refreshMute();
+  app.saveSettings();
+};
+
+app.toggleMute = () => {
+  app.updateSettings({ muted: !settings.muted });
+  if (!settings.muted) audio.play('toggle');
+};
+
+app.toggleFullscreen = () => {
+  if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+};
+
+app.saveTutorial = (t) => storage.saveTutorial(t);
+app.progress = () => storage.loadProgress();
+app.isLevelUnlocked = (id) => storage.isLevelUnlocked(id);
+
+app.resetProgress = () => {
+  storage.resetProgress();
+  if (app.inMenu) app.dialogs.mainMenu();
+};
+
+// ── Pause (fenêtres, tutoriel, onglet caché) ──────────────────────────────────────
+app.pushPause = (reason) => {
+  const g = app.game;
+  if (!g || app.inMenu || g.state.status !== 'playing') return;
+  if (pauseReasons.size === 0) resumeSpeed = g.state.speed;
+  pauseReasons.add(reason);
+  if (g.state.speed !== 0) g.actions.setSpeed(0);
+  audio.setDuck(pauseReasons.has('pause') || pauseReasons.has('options'));
+  scheduleRefresh();
+};
+
+app.popPause = (reason) => {
+  if (!pauseReasons.delete(reason)) return;
+  audio.setDuck(pauseReasons.has('pause') || pauseReasons.has('options'));
+  const g = app.game;
+  if (pauseReasons.size === 0 && g && g.state.status === 'playing') {
+    g.actions.setSpeed(resumeSpeed);
+    scheduleRefresh();
   }
+};
 
-  // --- Infrastructure ---------------------------------------------------------
+/** Vitesse « réelle » de la partie (hors pauses automatiques), pour la sauvegarde. */
+function effectiveSpeed() {
+  const g = app.game;
+  if (!g) return 1;
+  return pauseReasons.size ? resumeSpeed : g.state.speed;
+}
 
-  wakeAudio() {
-    if (this.audioOn) { resumeAudio(); return; }
-    const ctx = initAudio();
-    if (!ctx) return;
-    resumeAudio();
-    applySettings(this.settings);
-    this.audioOn = true;
-    pluck(220, { dur: 2.2, gain: 0.18, damping: 0.998 });
+app.setSpeed = (speed, { fromUser = false } = {}) => {
+  const g = app.game;
+  if (!g || app.inMenu || g.state.status !== 'playing') return;
+  if (fromUser) {
+    // Un choix explicite du joueur lève la pause du tutoriel (pas celle d'une fenêtre ouverte).
+    if (app.dialogs.isOpen()) return;
+    pauseReasons.delete('tutorial');
+    pauseReasons.delete('hidden');
+    audio.play('toggle');
   }
-
-  resize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.dpr = clamp(window.devicePixelRatio || 1, 1, 2.5);
-    this.renderer.resize(w, h, this.dpr);
-    if (this.run) this.renderer.fit(this.run.field);
-    else if (this.idleBiome) this.renderer.fit({ cols: 9, rows: 7 });
-    document.body.classList.toggle('portrait', !isLandscape() && isTouchDevice());
-    document.body.classList.toggle('gaucher', this.settings.touchLayout === 'gaucher');
-  }
-
-  buildTutorialBanner() {
-    this.tutorialBanner = el('div', 'tutorial-banner hidden');
-    this.tutorialBanner.innerHTML = '<strong></strong><span></span><div class="tut-bar"><i></i></div>';
-    this.overlay.appendChild(this.tutorialBanner);
-  }
-
-  // Carte d'étape : le jeu est en pause, on lit, on clique « Compris ».
-  buildTutorialCard() {
-    this.tutorialCard = el('div', 'tutorial-card hidden');
-    this.tutorialCard.innerHTML = `
-      <div class="tc-inner">
-        <div class="tc-step"></div>
-        <h2 class="panel-title"></h2>
-        <canvas class="tc-illus" width="720" height="240"></canvas>
-        <div class="tc-text"></div>
-        <div class="tc-actions"></div>
-      </div>`;
-    this.overlay.appendChild(this.tutorialCard);
-    this.tutorialCardOpen = false;
-  }
-
-  showTutorialCard(step) {
-    if (!this.run) return;
-    this.run.pause();
-    this.tutorialCardOpen = true;
-    this.hud.hide();
-    const card = this.tutorialCard;
-    card.classList.remove('hidden');
-    card.querySelector('.tc-step').textContent = `Tutoriel · étape ${this.tutorial.index + 1} / ${TUTORIAL_STEPS.length}`;
-    card.querySelector('.panel-title').textContent = step.title;
-    const illus = card.querySelector('.tc-illus');
-    illus.classList.toggle('hidden', !step.illus);
-    this.tutorialIllus = step.illus;
-    const text = card.querySelector('.tc-text');
-    text.innerHTML = '';
-    for (const line of step.explain) text.appendChild(el('p', '', line));
-    const actions = card.querySelector('.tc-actions');
-    actions.innerHTML = '';
-    const b = el('button', 'btn primary', step.objective ? 'Compris, j’essaie' : 'C’est parti');
-    b.addEventListener('click', () => this.closeTutorialCard());
-    actions.appendChild(b);
-    const skip = el('button', 'btn ghost small', 'Passer le tutoriel');
-    skip.addEventListener('click', () => { this.tutorial.finish(); this.closeTutorialCard(); });
-    actions.appendChild(skip);
-    const inner = card.querySelector('.tc-inner');
-    inner.classList.remove('in');
-    requestAnimationFrame(() => inner.classList.add('in'));
-    wood({ freq: 520, gain: 0.2, decay: 0.1 });
-  }
-
-  closeTutorialCard() {
-    this.tutorialCard.classList.add('hidden');
-    this.tutorialCardOpen = false;
-    if (this.tutorial && !this.tutorial.done) this.tutorial.cardRead();
-    if (this.tutorial && this.tutorial.done) this.finishTutorial();
-    if (this.run && this.state === STATE.PLAYING) { this.run.resume(); this.hud.show(this.run); }
-    this.showTutorialStep();
-  }
-
-  finishTutorial() {
-    if (!this.tutorial) return;
-    this.tutorial.dispose();
-    this.tutorial = null;
-    this.tutorialBanner.classList.add('hidden');
-    if (this.save) { this.save.tutorialDone = true; this.persist(); }
-    if (this.run) { this.run.tutorialMode = false; this.run.seasonBeats = 0; }
-    this.toast('Tutoriel terminé', 'La Cendre se réveille. Bonne récolte.', '#8fce6a');
-  }
-
-  openGuide() {
-    const wasPlaying = this.state === STATE.PLAYING && this.run;
-    if (wasPlaying) { this.run.pause(); this.hud.hide(); }
-    this.guide.show(() => {
-      if (wasPlaying && this.run && this.state === STATE.PLAYING) { this.run.resume(); this.hud.show(this.run); }
-    });
-  }
-
-  replayTutorial() {
-    this.ensureSave();
-    this.save.tutorialDone = false;
-    this.persist();
-    this.screens.hide();
-    this.state = STATE.HUB;
-    this.startRun('clairiere');
-  }
-
-  buildOrientationNotice() {
-    const n = el('div', 'orientation-notice',
-      '<div><b>Tourne ton téléphone</b><p>SÈVE se joue en paysage.</p></div>');
-    this.overlay.appendChild(n);
-    const fs = el('button', 'fullscreen-btn', '⛶');
-    fs.title = 'Plein écran';
-    fs.addEventListener('click', () => { toggleFullscreen(); setTimeout(() => this.resize(), 250); });
-    this.overlay.appendChild(fs);
-  }
-
-  setSetting(key, value) {
-    this.settings[key] = value;
-    saveSettings(this.settings);
-    applySettings(this.settings);
-    this.renderer.quality = this.settings.particles;
-    if (key === 'touchLayout') this.resize();
-  }
-
-  toast(title, subtitle, color) { this.toasts.push(title, subtitle, color); }
-
-  // --- Sauvegardes -------------------------------------------------------------
-
-  readSlot(i) { return loadSlot(i); }
-  eraseSlot(i) { deleteSlot(i); }
-
-  ensureSave() {
-    if (!this.save) {
-      this.save = loadSlot(this.settings.lastSlot) || emptySave(this.settings.lastSlot);
-    }
-    return this.save;
-  }
-
-  persist() {
-    if (!this.save) return;
-    this.save.act = actForSave(this.save);
-    saveSlot(this.save.slot, this.save);
-    this.settings.lastSlot = this.save.slot;
-    saveSettings(this.settings);
-  }
-
-  newGame(slot) {
-    this.save = emptySave(slot);
-    this.persist();
-    this.screens.hide();
-    this.state = STATE.HUB;
-    this.dialogue.show('pepin', NPCS.pepin.intro, () => {
-      this.hub.verger();
-      this.toast('Bienvenue', 'Le Verger est ton point de départ.', '#8fce6a');
-    });
-  }
-
-  loadGame(slot) {
-    this.save = loadSlot(slot) || emptySave(slot);
-    this.persist();
-    this.screens.hide();
-    this.state = STATE.HUB;
-    this.hub.verger();
-  }
-
-  openSlots() { this.screens.slots(); }
-  toTitle() {
-    this.endRun(true);
-    this.hub.hide();
-    this.state = STATE.TITLE;
-    this.screens.title();
-  }
-
-  // Retour contextuel : là d'où l'on vient, jamais le titre par défaut.
-  goBack() {
-    this.screens.hide();
-    if (this.run && this.state === STATE.PAUSED) { this.hub.pause(this.run); return; }
-    if (this.save && (this.state === STATE.HUB || this.state === STATE.OVER)) { this.hub.verger(); return; }
-    this.state = STATE.TITLE;
-    this.screens.title();
-  }
-
-  openTestMode() {
-    this.testMode.show();
-  }
-
-  // --- Parties ------------------------------------------------------------------
-
-  startRun(biomeId, options = {}) {
-    this.ensureSave();
-    const save = this.save;
-    const seed = options.seed || (Date.now() ^ hashSeed(biomeId));
-    const config = {
-      biomeId,
-      seed,
-      seeds: save.unlockedSeeds.slice(),
-      bonuses: derivedBonuses(save),
-      challenge: options.challenge || null,
-      testMode: !!options.testMode,
-      save,
-    };
-    this.run = new Run(config);
-    this.run.start();
-    this.renderer.fit(this.run.field);
-    this.particles.clear();
-    this.screens.hide();
-    this.hub.hide();
-    this.hud.show(this.run);
-    this.hud.setTouch(isTouchDevice());
-    this.state = STATE.PLAYING;
-    this.currentChallenge = options.challenge || null;
-
-    if (!save.tutorialDone && biomeId === 'clairiere' && !options.challenge) {
-      this.startTutorial();
-    }
-    emit('app:runStart', this.run);
-  }
-
-  startDaily() {
-    this.ensureSave();
-    const daily = todayChallenge();
-    this.currentChallenge = daily;
-    this.startRun(daily.biome, { challenge: daily, seed: daily.config.seed });
-    this.toast(daily.label, daily.modifiers.map((m) => m.name).join(' · '), '#f6c453');
-  }
-
-  startTutorial() {
-    this.tutorial = new Tutorial(this.run);
-    this.dialogue.show('pepin', [
-      'Tu es là ! Tu es VRAIMENT là !',
-      'Moi je sais rien faire pousser. Mais je sais regarder. Je t’explique.',
-    ], () => this.showTutorialCard(this.tutorial.current()));
-  }
-
-  showTutorialStep() {
-    if (!this.tutorial || this.tutorial.done) { this.tutorialBanner.classList.add('hidden'); return; }
-    const step = this.tutorial.current();
-    if (!step || !step.objective) { this.tutorialBanner.classList.add('hidden'); return; }
-    this.tutorialBanner.classList.remove('hidden');
-    this.tutorialBanner.querySelector('strong').textContent = step.title;
-    this.tutorialBanner.querySelector('span').textContent = this.tutorial.progressText();
-  }
-
-  pauseRun() {
-    if (this.state !== STATE.PLAYING || !this.run) return;
-    this.run.pause();
-    this.state = STATE.PAUSED;
-    this.hud.hide();
-    this.hub.pause(this.run);
-  }
-
-  resumeRun() {
-    if (!this.run) { this.hub.verger(); return; }
-    this.hub.hide();
-    this.screens.hide();
-    this.hud.show(this.run);
-    if (this.run.state === RUN_STATE.SEASON_END) this.run.nextSeason();
-    else this.run.resume();
-    this.state = STATE.PLAYING;
-  }
-
-  abandonRun() {
-    if (this.run) this.collectRun(this.run, false, true);
-    this.endRun(true);
-    this.hub.verger();
-    this.state = STATE.HUB;
-  }
-
-  endRun(silent = false) {
-    if (this.tutorial) { this.tutorial.dispose(); this.tutorial = null; }
-    this.tutorialBanner.classList.add('hidden');
-    this.tutorialCard.classList.add('hidden');
-    this.tutorialCardOpen = false;
-    this.run = null;
-    this.hud.hide();
-    this.hud.hideEvent();
-    this.particles.clear();
-  }
-
-  // Transfert du Cycle vers la sauvegarde : sève, statistiques, succès, échos.
-  collectRun(run, won, abandoned = false) {
-    const save = this.ensureSave();
-    const gains = { sap: run.sap, echo: run.lastEcho || null, achievements: [] };
-    save.sap += run.sap;
-    save.totalSap += run.sap;
-    save.biome = run.biome.id;
-
-    const s = save.stats;
-    s.runs += abandoned ? 0 : 1;
-    s.harvests += run.stats.harvests;
-    s.chords += run.stats.chords;
-    s.purified += Math.round(run.stats.purified);
-    s.perfectBeats += run.stats.perfectBeats;
-    s.seedsSown += run.stats.seedsSown;
-    s.bestChain = Math.max(s.bestChain, run.bestChain);
-    s.bestScore = Math.max(s.bestScore, run.points);
-    s.chordCounts = s.chordCounts || {};
-    for (const [id, n] of Object.entries(run.stats.chordCounts)) {
-      s.chordCounts[id] = (s.chordCounts[id] || 0) + n;
-    }
-    if (won && run.stats.wilted === 0) s.flawlessRun = true;
-
-    if (run.lastEcho && !save.echoes.includes(run.lastEcho.id)) save.echoes.push(run.lastEcho.id);
-    if (this.tutorial && this.tutorial.done) save.tutorialDone = true;
-    if (won) save.tutorialDone = true;
-
-    if (this.currentChallenge) {
-      if (recordDaily(save, this.currentChallenge, run.points)) {
-        this.toast('Nouveau record', this.currentChallenge.label, '#f6c453');
+  const res = g.actions.setSpeed(speed);
+  if (res.ok) {
+    if (speed > 0) {
+      lastPlaySpeed = speed;
+      if (fromUser && settings.speed !== speed) {
+        settings.speed = speed;
+        app.saveSettings();
       }
     }
-
-    gains.achievements = checkAchievements(save);
-    this.persist();
-    return gains;
+    app.tutorial.onSpeed(speed);
+    scheduleRefresh();
   }
+};
 
-  // --- Évènements du jeu --------------------------------------------------------
+app.openPauseMenu = () => {
+  if (!app.game || app.inMenu || app.game.state.status !== 'playing') return;
+  if (app.dialogs.top() === 'pause') return;
+  app.field.close(false);
+  app.dialogs.pauseMenu();
+};
 
-  bindEvents() {
-    on('field:sow', ({ tile }) => {
-      this.burst(tile, { count: 5, color: '#c9b18a', speed: 50, size: 2.4, life: 0.5 });
-    });
-    on('field:ripe', ({ tile, plant }) => {
-      this.burst(tile, {
-        count: 8, color: DEGREE_INFO[plant.degree].glow, speed: 55, size: 2.6, life: 0.8, gravity: -20,
-      });
-      pluck(200 + Math.random() * 40, { dur: 0.5, gain: 0.06 });
-    });
-    on('field:wilt', ({ tile }) => {
-      if (this.run) this.run.stats.wilted++;
-      this.burst(tile, { count: 6, color: '#8a7d6a', speed: 30, size: 2, life: 1.1, shape: 'feuille' });
-      breath({ dur: 0.4, gain: 0.08, from: 700, to: 200 });
-      if (this.run && Math.random() < 0.3) this.bark('pepin', 'wilt');
-    });
-    on('field:echo', ({ tile }) => {
-      this.burst(tile, { count: 22, color: '#fff6e0', speed: 90, size: 3, life: 1.4, gravity: -30 });
-    });
-    on('run:chord', ({ chord, result }) => {
-      const x = (result.center.col + 0.5) * TILE;
-      const y = (result.center.row + 0.5) * TILE;
-      this.particles.spawn(x, y, {
-        count: 26, color: chord.color, speed: 190, size: 3.4, life: 1.2, gravity: 60,
-      });
-      this.particles.spawn(x, y, {
-        count: 12, color: '#fff6e0', speed: 90, size: 2.2, life: 1.6, gravity: -20, shape: 'feuille',
-      });
-      if (chord.id === 'pentatonique') this.toast('PENTATONIQUE', chord.flavour, chord.color);
-      if (this.save && !this.save.stats.chords) this.bark('pepin', 'firstChord');
-    });
-    on('run:chainUp', ({ mult }) => {
-      if (mult >= 3) this.bark('pepin', 'goodChain');
-    });
-    on('run:echo', (echo) => {
-      this.toast(`Écho — ${echo.title}`, echo.text, '#fff6e0');
-      this.bark('ondine', 'echo');
-    });
-    on('achievement', (a) => this.toast(`Succès — ${a.name}`, a.desc, '#8fce6a'));
-    on('event:start', (ev) => { this.hud.showEvent(ev); this.toast(ev.name, ev.line, ev.color); rustle(0.2); });
-    on('event:end', () => this.hud.hideEvent());
-    on('player:step', ({ x, y }) => {
-      if (this.settings.particles !== 'aucun') {
-        this.particles.spawn(x, y + 14, { count: 2, color: '#c9b18a', speed: 24, size: 1.6, life: 0.4 });
+// ── Actions du joueur ─────────────────────────────────────────────────────────────
+function report(res) {
+  if (res && !res.ok) {
+    audio.play('error');
+    app.toasts.show({ kind: 'error', text: res.reason });
+  }
+  return res;
+}
+
+app.plant = (i, cropId) => report(app.game?.actions.plant(i, cropId));
+app.water = (i) => report(app.game?.actions.water(i));
+app.harvest = (i) => report(app.game?.actions.harvest(i));
+app.unlockPlot = (i) => report(app.game?.actions.unlockPlot(i));
+app.buyInvestment = (id) => report(app.game?.actions.buyInvestment(id));
+
+/** Sème la même culture sur la parcelle choisie puis sur toutes les parcelles libres. */
+app.plantAll = (cropId, firstIndex) => {
+  const g = app.game;
+  if (!g) return 0;
+  const first = g.actions.plant(firstIndex, cropId);
+  if (!first.ok) {
+    report(first);
+    return 0;
+  }
+  let n = 1;
+  for (const p of g.query.plots()) {
+    if (p.action !== 'plant') continue;
+    const res = g.actions.plant(p.index, cropId);
+    if (!res.ok) break;
+    n += 1;
+  }
+  if (n > 1) app.toasts.show({ kind: 'success', sprite: cropIcon(cropId, 'sprite--sm'), text: `${n} parcelles semées (${cropName(cropId).toLowerCase()}).` });
+  return n;
+};
+
+function plotClick(index, e) {
+  const g = app.game;
+  const p = g.query.plot(index);
+  if (!p) return;
+  switch (p.action) {
+    case 'plant':
+      app.field.openSeedPicker(index);
+      break;
+    case 'water':
+      if (app.water(index)?.ok) drag = { action: 'water', done: new Set([index]) };
+      break;
+    case 'harvest':
+      if (app.harvest(index)?.ok) drag = { action: 'harvest', done: new Set([index]) };
+      break;
+    case 'unlock':
+      app.field.openUnlock(index);
+      break;
+    default:
+      if (g.state.status !== 'playing') return;
+      if (p.cropId && p.watered && !p.mature) {
+        audio.play('click', { volume: 0.5 });
+        app.toasts.show({ kind: 'info', icon: 'water', text: `Déjà arrosée aujourd'hui. Mûre dans ${plural(p.daysLeft, 'jour')}.`, duration: 2200 });
+      } else if (!p.unlocked) {
+        audio.play('error');
+        app.toasts.show({ kind: 'error', text: 'Le champ ne peut plus s\'agrandir.' });
       }
-      wood({ freq: 180 + Math.random() * 40, gain: 0.045, decay: 0.05, q: 3 });
-    });
-    on('player:dash', ({ x, y }) => {
-      this.particles.spawn(x, y, { count: 14, color: '#e8dcc6', speed: 130, size: 2.6, life: 0.5 });
-    });
-    on('run:season', (payload) => {
-      this.hud.hide();
-      this.state = STATE.PAUSED;
-      this.hub.seasonEnd(payload);
-      if (payload.cleared) this.bark('pepin', 'seasonClear');
-    });
-    on('run:end', ({ run, won }) => {
-      const gains = this.collectRun(run, won);
-      this.hud.hide();
-      this.state = STATE.OVER;
-      this.hub.results(run, won, gains);
-      this.endRun(true);
-    });
   }
+  if (e) e.preventDefault();
+}
 
-  bark(npcId, key) {
-    const line = npcBark(npcId, key, new Rng(Date.now()));
-    if (line) this.toast(NPCS[npcId].name, line, NPCS[npcId].color);
+// Glisser : arroser ou récolter plusieurs parcelles d'un seul geste.
+function dragOver(index) {
+  if (!drag || drag.done.has(index)) return;
+  drag.done.add(index);
+  const p = app.game?.query.plot(index);
+  if (!p || p.action !== drag.action) return;
+  if (drag.action === 'water') app.game.actions.water(index);
+  else if (drag.action === 'harvest') app.game.actions.harvest(index);
+}
+
+// ── Géométrie de la scène ─────────────────────────────────────────────────────────
+app.stageRect = () => canvas.getBoundingClientRect();
+
+/** Rectangle d'une parcelle en pixels de la page. */
+app.plotPageRect = (index) => {
+  const scene = app.scene;
+  const r = scene?.layout.plotRect(index);
+  if (!r) return null;
+  const s = canvas.getBoundingClientRect();
+  const a = scene.worldToScreen(r.x, r.y);
+  const b = scene.worldToScreen(r.x + r.w, r.y + r.h);
+  return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
+};
+
+/** Rectangle du champ clôturé en pixels de la page (placement des bulles du tutoriel). */
+app.fieldPageRect = () => {
+  const f = app.scene?.layout.field;
+  if (!f) return null;
+  const T = app.scene.layout.TILE;
+  const s = canvas.getBoundingClientRect();
+  const a = app.scene.worldToScreen(f.fence.x * T, f.fence.y * T);
+  const b = app.scene.worldToScreen((f.fence.x + f.fence.w) * T, (f.fence.y + f.fence.h) * T);
+  return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
+};
+
+function worldToPage(wx, wy) {
+  const s = canvas.getBoundingClientRect();
+  const p = app.scene.worldToScreen(wx, wy);
+  return { x: s.left + p.x, y: s.top + p.y };
+}
+
+let currentMinZoom = 0;
+function wantedMinZoom(w, h, dpr) {
+  // Zoom ×2 minimum tant qu'on voit au moins les trois quarts du monde (512 × 320 px) ;
+  // en dessous (très petite fenêtre), zoom ×1 pour tout montrer.
+  return w * dpr >= 768 && h * dpr >= 480 ? 2 : 1;
+}
+
+function resizeScene() {
+  if (!images) return;
+  const r = stage.getBoundingClientRect();
+  const w = Math.max(1, Math.round(r.width));
+  const h = Math.max(1, Math.round(r.height));
+  const dpr = window.devicePixelRatio || 1;
+  const mz = wantedMinZoom(w, h, dpr);
+  if (!app.scene || mz !== currentMinZoom) {
+    currentMinZoom = mz;
+    const level = (app.game && !app.inMenu ? app.game : attract)?.level || getLevel(1);
+    app.scene = createScene(canvas, images, level, { minZoom: mz });
   }
+  app.scene.resize(w, h, dpr);
+  app.field.reposition();
+  app.tutorial.relayout();
+}
 
-  burst(tile, opts) {
-    if (this.settings.particles === 'aucun') return;
-    const scale = this.settings.particles === 'sobre' ? 0.4 : 1;
-    this.particles.spawn((tile.c + 0.5) * TILE, (tile.r + 0.5) * TILE,
-      Object.assign({}, opts, { count: Math.max(2, Math.round((opts.count || 6) * scale)) }));
+app.onLayoutChange = () => {
+  // Le panneau glisse : on redimensionne à la fin de la transition (et tout de suite).
+  resizeScene();
+  setTimeout(resizeScene, 260);
+};
+
+new ResizeObserver(() => resizeScene()).observe(stage);
+window.addEventListener('resize', () => {
+  applyPanelMode();
+  resizeScene();
+});
+
+// Changement de densité de pixels sans changement de taille (fenêtre glissée sur un autre écran,
+// zoom du navigateur sur certains systèmes) : la requête média est réinstallée à chaque fois.
+function watchDpr() {
+  const mq = matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+  const onChange = () => {
+    mq.removeEventListener?.('change', onChange);
+    resizeScene();
+    watchDpr();
+  };
+  mq.addEventListener?.('change', onChange);
+}
+watchDpr();
+
+function applyPanelMode() {
+  const narrow = window.innerWidth < 1100;
+  document.body.classList.toggle('is-narrow', narrow);
+}
+
+// ── Souris / toucher sur la scène ─────────────────────────────────────────────────
+function localPoint(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function hitAt(e) {
+  if (!app.scene || !app.game || app.inMenu) return null;
+  const p = localPoint(e);
+  return app.scene.hitTest(p.x, p.y);
+}
+
+function sameHit(a, b) {
+  if (!a || !b) return a === b;
+  return a.type === b.type && a.index === b.index && a.id === b.id;
+}
+
+function updateHoverTip() {
+  const h = hover.hit;
+  if (!h || app.dialogs.isOpen() || app.field.isOpen()) {
+    app.tooltip.hide('scene');
+    return;
   }
+  const content = h.type === 'plot' ? app.field.plotTip(h.index) : app.field.investmentTip(h.id);
+  if (content) app.tooltip.showAtPoint(content, hover.x, hover.y, 'scene');
+  else app.tooltip.hide('scene');
+}
 
-  // --- Boucle -------------------------------------------------------------------
+function setHover(hit, e) {
+  const changed = !sameHit(hit, hover.hit);
+  hover = { hit, x: e.clientX, y: e.clientY };
+  if (changed) {
+    app.scene.setHover(hit);
+    let pointer = false;
+    if (hit?.type === 'plot') pointer = !!app.game.query.plot(hit.index)?.action;
+    else if (hit?.type === 'investment') pointer = true;
+    canvas.style.cursor = pointer ? 'pointer' : '';
+  }
+  if (e.pointerType !== 'touch') updateHoverTip();
+}
 
-  update(dt) {
-    this.lastInputKind = Input.kind();
-    this.renderer.t += dt;
-    this.dialogue.update(dt);
-    this.guide.update(dt);
-    this.testMode.update();
-    if (this.tutorialCardOpen && this.tutorialIllus) {
-      drawIllustration(this.tutorialCard.querySelector('.tc-illus'), this.tutorialIllus, this.renderer.t);
+canvas.addEventListener('pointermove', (e) => {
+  if (app.inMenu || !app.game) return;
+  const hit = hitAt(e);
+  setHover(hit, e);
+  if (drag && e.buttons & 1 && hit?.type === 'plot') dragOver(hit.index);
+});
+
+canvas.addEventListener('pointerleave', () => {
+  hover.hit = null;
+  app.scene?.setHover(null);
+  app.tooltip.hide('scene');
+  canvas.style.cursor = '';
+});
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || app.inMenu || !app.game) return;
+  if (app.field.isOpen()) {
+    app.field.close();
+    return;
+  }
+  const hit = hitAt(e);
+  setHover(hit, e);
+  if (!hit) return;
+  if (hit.type === 'plot') {
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* rien */
     }
-    if (this.guide.isOpen() || this.tutorialCardOpen) {
-      if (Input.pressed('pause') && this.guide.isOpen()) this.guide.close();
-      Input.endFrame();
+    plotClick(hit.index, e);
+  } else if (hit.type === 'investment') {
+    audio.play('page');
+    app.panel.focusInvestment(hit.id);
+  }
+  app.tooltip.hide('scene');
+});
+
+window.addEventListener('pointerup', () => {
+  drag = null;
+});
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// Clic hors de la fenêtre des graines : elle se ferme.
+document.addEventListener('pointerdown', (e) => {
+  if (!app.field.isOpen()) return;
+  if (e.target.closest('#popup') || e.target === canvas) return;
+  if (e.target.closest('#toasts, #tooltip')) return;
+  app.field.close();
+});
+
+// Sons de survol des boutons (discrets).
+let lastHoverBtn = null;
+document.addEventListener('pointerover', (e) => {
+  if (e.pointerType === 'touch') return;
+  const b = e.target.closest?.('.btn, .hud-btn, .level-card, .tab, .seed-row, .opt-toggle, .panel-handle');
+  if (b === lastHoverBtn) return;
+  lastHoverBtn = b;
+  if (b && !b.classList.contains('is-disabled')) audio.play('hover', { volume: 0.6 });
+});
+
+// ── Clavier ───────────────────────────────────────────────────────────────────────
+window.addEventListener('keydown', (e) => {
+  if (document.body.classList.contains('is-loading')) return;
+  const tag = e.target?.tagName;
+  if (tag === 'INPUT' && e.target.type !== 'range') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    if (app.field.isOpen()) return app.field.close();
+    if (app.dialogs.isOpen()) {
+      app.dialogs.closeTop();
       return;
     }
-
-    if (Input.pressed('debug')) this.testMode.toggle();
-
-    if (this.dialogue.isOpen()) {
-      if (Input.pressed('act') || Input.pressed('pause')) this.dialogue.advance();
-      Input.endFrame();
-      this.particles.update(dt);
-      return;
-    }
-
-    if (Input.pressed('pause')) {
-      if (this.state === STATE.PLAYING) this.pauseRun();
-      else if (this.screens.current && this.screens.current !== 'titre') this.goBack();
-      else if (this.state === STATE.PAUSED && this.run) this.resumeRun();
-    }
-
-    if (this.state === STATE.PLAYING && this.run) {
-      const input = {
-        move: Input.moveVector(),
-        act: Input.pressed('act'),
-        tune: Input.pressed('tune'),
-        dash: Input.pressed('dash'),
-        cycleSeed: Input.pressed('cycleSeed'),
-        seedRequest: Input.takeSeedRequest(),
-      };
-      this.run.update(dt, input);
-      this.hud.update(this.run);
-      if (this.tutorial) {
-        const advanced = this.tutorial.update(dt);
-        if (advanced) {
-          wood({ freq: 700, gain: 0.22, decay: 0.12 });
-          pluck(440, { dur: 1.2, gain: 0.18 });
-          if (this.tutorial.done) this.finishTutorial();
-          else this.showTutorialCard(this.tutorial.current());
-        } else {
-          const step = this.tutorial.current();
-          if (step && step.objective) {
-            const [cur, tot] = [step.progress(this.tutorial.t), step.target];
-            this.tutorialBanner.querySelector('span').textContent = this.tutorial.progressText();
-            this.tutorialBanner.querySelector('.tut-bar i').style.transform = `scaleX(${Math.min(1, cur / tot)})`;
-          }
-        }
-      }
-      if (this.settings.particles === 'plein') {
-        this.particles.ambient(this.run.field, this.run.biome, dt);
-      }
-    }
-
-    this.particles.update(dt);
-    Input.endFrame();
+    if (!app.inMenu && app.game) app.openPauseMenu();
+    return;
   }
+  if (app.field.isOpen() && app.field.onKey(e)) {
+    e.preventDefault();
+    return;
+  }
+  if (app.inMenu || !app.game || app.dialogs.isOpen()) return;
+  if (e.key === ' ' || e.code === 'Space') {
+    e.preventDefault();
+    const g = app.game;
+    app.setSpeed(g.state.speed === 0 ? lastPlaySpeed || 1 : 0, { fromUser: true });
+  } else if (e.key === '1') app.setSpeed(1, { fromUser: true });
+  else if (e.key === '2') app.setSpeed(2, { fromUser: true });
+  else if (e.key === '3') app.setSpeed(4, { fromUser: true });
+  else if (e.key === 'm' || e.key === 'M') app.toggleMute();
+  else if (e.key === 'b' || e.key === 'B') app.panel.toggle(undefined, true);
+});
 
-  render(frameDt) {
-    const r = this.renderer;
-    const biome = this.run ? this.run.biome : this.idleBiome;
-    const heal = this.save ? Math.min(1, (this.save.echoes || []).length / 12) : 0;
+// ── Événements du jeu ─────────────────────────────────────────────────────────────
+let refreshQueued = false;
+function scheduleRefresh() {
+  if (refreshQueued) return;
+  refreshQueued = true;
+  requestAnimationFrame(() => {
+    refreshQueued = false;
+    app.hud.refresh();
+    if (hover.hit && app.tooltip.owner === 'scene') updateHoverTip();
+  });
+}
 
-    r.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    r.drawBackground(biome, heal);
-
-    if (this.run) {
-      const shake = this.settings.screenShake && !this.settings.reducedMotion ? this.run.shake : 0;
-      if (shake > 0) {
-        const a = shake * 9;
-        r.ctx.translate((Math.random() - 0.5) * a, (Math.random() - 0.5) * a);
-      }
-      r.drawField(this.run.field, this.run);
-      if (this.testMode.showGrid) this.drawDebugGrid();
-      drawCursor(r, this.run);
-      if (this.settings.showBeatRing) drawBeatRing(r, this.run);
-      drawPlayer(r, this.run);
-      this.particles.draw(r);
-      drawFloaters(r, this.run);
-      drawChordFlash(r, this.run, frameDt || 1 / 60);
-    } else {
-      this.drawIdleScene();
+function wire(game) {
+  const off = game.on('*', (ev) => {
+    app.scene?.onEvent(ev.type, ev);
+    app.hud.onEvent(ev);
+    app.panel.onEvent(ev);
+    app.field.onEvent(ev);
+    app.tutorial.onEvent(ev);
+    reactAudio(ev, game);
+    reactMessages(ev, game);
+    switch (ev.type) {
+      case 'dawn':
+        save();
+        break;
+      case 'billPaid':
+        pending.billPaid = ev;
+        break;
+      case 'frost':
+        pending.frost = ev;
+        break;
+      case 'bankrupt':
+      case 'victory':
+        pending.end = ev;
+        break;
+      default:
+        break;
     }
+    scheduleRefresh();
+  });
+  return off;
+}
 
-    r.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    r.vignette();
-    if (this.run && Input.isTouch()) this.drawStick();
-  }
-
-  drawStick() {
-    const s = Input.stick();
-    if (!s.active) return;
-    const { ctx } = this.renderer;
-    ctx.save();
-    ctx.globalAlpha = 0.22;
-    ctx.strokeStyle = '#fff6e0';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(s.ox, s.oy, 54 * this.dpr, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.globalAlpha = 0.4;
-    ctx.fillStyle = '#fff6e0';
-    ctx.beginPath();
-    ctx.arc(s.ox + s.x * 54 * this.dpr, s.oy + s.y * 54 * this.dpr, 22 * this.dpr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  drawDebugGrid() {
-    const r = this.renderer;
-    const { ctx } = r;
-    const f = this.run.field;
-    ctx.save();
-    ctx.translate(r.cam.x, r.cam.y);
-    ctx.scale(r.cam.scale, r.cam.scale);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 1;
-    ctx.font = '11px monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    for (const t of f.tiles) {
-      ctx.strokeRect(t.c * TILE, t.r * TILE, TILE, TILE);
-      ctx.fillText(`${t.c},${t.r}`, t.c * TILE + 4, t.r * TILE + 12);
-      ctx.fillText(`b${t.blight.toFixed(1)} h${t.moisture.toFixed(1)}`, t.c * TILE + 4, t.r * TILE + 24);
-    }
-    ctx.restore();
-  }
-
-  // Décor animé derrière les menus : le jeu n'est jamais un écran mort.
-  pickIdleBiome() {
-    const ids = ['clairiere', 'marais', 'canopee'];
-    return BIOMES[ids[Math.floor(Math.random() * ids.length)]];
-  }
-
-  drawIdleScene() {
-    const r = this.renderer;
-    const { ctx, canvas } = r;
-    const t = r.t;
-    ctx.save();
-    // Quelques tiges qui ondulent au premier plan.
-    const n = 14;
-    for (let i = 0; i < n; i++) {
-      const x = (i / (n - 1)) * canvas.width + Math.sin(t * 0.3 + i) * 10;
-      const h = canvas.height * (0.18 + ((i * 37) % 10) / 40);
-      const sway = Math.sin(t * 1.1 + i * 0.8) * 18;
-      ctx.strokeStyle = 'rgba(60,90,60,0.55)';
-      ctx.lineWidth = 5;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(x, canvas.height + 10);
-      ctx.quadraticCurveTo(x + sway * 0.4, canvas.height - h * 0.6, x + sway, canvas.height - h);
-      ctx.stroke();
-      const deg = ['I', 'II', 'III', 'V', 'VI'][i % 5];
-      ctx.fillStyle = DEGREE_INFO[deg].color;
-      ctx.globalAlpha = 0.55 + 0.25 * Math.sin(t * 2 + i);
-      ctx.beginPath();
-      ctx.arc(x + sway, canvas.height - h, 9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
+function reactAudio(ev, game) {
+  switch (ev.type) {
+    case 'planted':
+      audio.play('plant');
+      break;
+    case 'watered':
+      audio.play('water');
+      break;
+    case 'harvested':
+      audio.play('harvest');
+      audio.play('coin', { delay: 0.06 });
+      break;
+    case 'purchased':
+      audio.play('buy');
+      audio.play('build', { delay: 0.25 });
+      updateAmbience(game);
+      break;
+    case 'plotUnlocked':
+      audio.play('dig');
+      audio.play('buy', { delay: 0.15 });
+      break;
+    case 'dawn':
+      audio.play('rooster', { pitch: 0.03 });
+      if (ev.incomes?.some((i) => i.amount > 0)) audio.play('coin', { delay: 0.4, volume: 0.6 });
+      break;
+    case 'seasonStart':
+      audio.playMusic(ev.seasonId);
+      break;
+    case 'seasonWarning':
+      audio.play('warning');
+      break;
+    case 'frost':
+      audio.play('frost');
+      audio.play('frostJingle', { delay: 0.35, pitch: 0 });
+      break;
+    case 'rot':
+      audio.play('rot');
+      break;
+    case 'weather':
+      updateAmbience(game);
+      break;
+    case 'billPaid':
+      if (ev.seasonId !== 'winter') audio.play('seasonEnd', { pitch: 0 });
+      break;
+    case 'bankrupt':
+      audio.playMusic(null, { fade: 1 });
+      audio.setAmbience({});
+      audio.play('bankrupt', { pitch: 0, delay: 0.3 });
+      break;
+    case 'victory':
+      audio.playMusic(null, { fade: 0.8 });
+      audio.play('victory', { pitch: 0, delay: 0.2 });
+      setTimeout(() => {
+        if (app.game === game && game.state.status === 'victory') audio.playMusic('victory', { fade: 0.3 });
+      }, 2600);
+      break;
+    default:
+      break;
   }
 }
 
-window.addEventListener('DOMContentLoaded', () => {
-  window.SEVE = new App();
+function reactMessages(ev, game) {
+  const t = app.toasts;
+  switch (ev.type) {
+    case 'seasonStart': {
+      const bill = game.query.finance().nextBill;
+      const banner = { kind: 'season', icon: ev.seasonId, title: season(ev.seasonId), text: `Fermage ${season(ev.seasonId, 'of')} : ${fmt(bill.amount)} pièces dans ${plural(bill.daysLeft + 1, 'jour')}` };
+      queuedBanner = banner; // montré après le bilan de fin de saison
+      break;
+    }
+    case 'seasonWarning': {
+      // Cultures fragiles qui seront encore au champ au premier matin d'hiver (mûres ou non).
+      const freezing = ev.frost ? game.query.plots().filter((p) => p.cropId && !frostHardy(p.cropId) && (p.willFreeze || p.mature)).length : 0;
+      app.toasts.banner({
+        kind: ev.frost ? 'frost' : 'warn',
+        icon: ev.frost ? 'winter' : ev.nextSeasonId,
+        title: `${seasonArrives(ev.nextSeasonId)} dans ${plural(ev.daysLeft, 'jour')}`,
+        text: ev.frost
+          ? freezing
+            ? `${plural(freezing, 'culture')} ${freezing > 1 ? 'vont' : 'va'} geler : récoltez avant l'hiver !`
+            : 'Au premier matin, les cultures fragiles gèleront.'
+          : `Fermage ${season(game.query.calendar().seasonId, 'of')} : ${fmt(game.query.finance().nextBill.amount)} pièces`,
+        duration: 5200,
+      });
+      break;
+    }
+    case 'frost': {
+      const n = (ev.lost || ev.lostPlots || []).length;
+      if (n) t.show({ kind: 'frost', icon: 'winter', title: 'Gel', text: `Le gel a détruit ${plural(n, 'culture')}.`, duration: 5000 });
+      break;
+    }
+    case 'rot':
+      t.show({ kind: 'rot', icon: 'rain', text: `${cropName(ev.cropId)} : la culture a pourri sous la pluie.`, duration: 4200 });
+      break;
+    case 'purchased': {
+      const inv = getInvestment(ev.investmentId);
+      const q = game.query.investments().find((i) => i.id === ev.investmentId);
+      let what = '';
+      if (inv.effects.waterPlots) what = 'Vos cultures seront arrosées chaque matin.';
+      else if (inv.effects.chargeReduction) what = `Vos charges baissent de ${inv.effects.chargeReduction} par jour.`;
+      else if (inv.effects.shearing) what = `Tonte : +${inv.effects.shearing} à la fin de chaque saison (sauf l'hiver).`;
+      else if (q?.income) what = `+${q.income} chaque matin ${season(game.query.calendar().seasonId, 'in')}.`;
+      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${inv.id === 'beehive' || inv.id === 'guestHouse' || inv.id === 'cow' ? 'e' : ''} !`, text: what });
+      break;
+    }
+    case 'harvested':
+      if (ev.fatigue) t.show({ kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
+      break;
+    case 'dawn': {
+      for (const inc of ev.incomes || []) {
+        if (inc.kind === 'shearing') t.show({ kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
+      }
+      const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
+      if (loan) t.show({ kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
+      if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function frostHardy(cropId) {
+  return !!getCrop(cropId)?.frostHardy;
+}
+
+/** Fenêtres de fin de saison / de partie, après le traitement complet d'une journée. */
+function processPending() {
+  const g = app.game;
+  if (!g) return;
+  if (pending.end) {
+    const ev = pending.end;
+    pending = { billPaid: null, frost: null, end: null };
+    queuedBanner = null;
+    app.field.close(false);
+    app.tooltip.hide();
+    pauseReasons.clear();
+    if (ev.type === 'victory') {
+      const rec = storage.recordVictory(g.level.id, ev.stars, ev.money);
+      storage.clearRun();
+      app.dialogs.victory(ev, rec);
+    } else {
+      storage.clearRun();
+      app.dialogs.bankrupt(ev);
+    }
+    return;
+  }
+  if (pending.billPaid) {
+    const ev = pending.billPaid;
+    const frost = pending.frost;
+    pending.billPaid = null;
+    pending.frost = null;
+    // Le bandeau de la nouvelle saison s'affiche quand on referme le bilan.
+    app.dialogs.seasonEnd(ev, {
+      frost,
+      onClose: () => {
+        if (queuedBanner) app.toasts.banner(queuedBanner);
+        queuedBanner = null;
+      },
+    });
+    return;
+  }
+  if (pending.frost) pending.frost = null;
+  if (queuedBanner && !app.dialogs.isOpen()) {
+    app.toasts.banner(queuedBanner);
+    queuedBanner = null;
+  }
+}
+
+function updateAmbience(game) {
+  if (!game || app.inMenu) {
+    audio.setAmbience({});
+    return;
+  }
+  const c = game.query.calendar();
+  const owned = game.state.investments;
+  audio.setAmbience(ambienceFor({ season: c.seasonId, weather: game.state.weather.today, owned }));
+  audio.setWorld({ active: true, owned, season: c.seasonId, weather: game.state.weather.today });
+}
+
+// ── Sauvegarde ────────────────────────────────────────────────────────────────────
+function save() {
+  const g = app.game;
+  if (!g || app.inMenu || g.state.status !== 'playing') return;
+  const data = g.serialize();
+  data.speed = effectiveSpeed();
+  const c = g.query.calendar();
+  storage.saveRun(data, { levelId: g.level.id, levelName: g.level.name, day: c.day, seasonId: c.seasonId, money: g.state.money });
+}
+
+app.savedRunInfo = () => {
+  const data = storage.loadRun();
+  if (!data || data.state?.status !== 'playing') return null;
+  const lvl = getLevel(data.state.levelId);
+  if (!lvl) return null;
+  const sid = SEASONS[data.state.time?.seasonIndex] || 'spring';
+  return {
+    levelId: lvl.id,
+    label: `Niveau ${lvl.id} · Jour ${data.state.time?.day ?? 1} · ${season(sid)}`,
+    data,
+  };
+};
+
+window.addEventListener('beforeunload', () => save());
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    save();
+    if (app.game && !app.inMenu && app.game.state.status === 'playing' && !app.dialogs.isOpen()) app.openPauseMenu();
+  }
 });
+
+// ── Parties ───────────────────────────────────────────────────────────────────────
+function startRun(game, { resumed = false } = {}) {
+  if (unwire) unwire();
+  app.tutorial.stop();
+  pauseReasons.clear();
+  pending = { billPaid: null, frost: null, end: null };
+  queuedBanner = null;
+  app.dialogs.closeAll();
+  app.toasts.clearAll();
+  app.field.close(false);
+  app.tooltip.hide();
+
+  app.game = game;
+  app.inMenu = false;
+  if (DEBUG) window.__game = game;
+  document.body.classList.remove('in-menu');
+  document.body.classList.add('in-game');
+  const collapsed = settings.panelCollapsed ?? window.innerWidth < 1100;
+  app.panel.toggle(!collapsed);
+
+  app.hud.bind(game);
+  app.panel.bind(game);
+  unwire = wire(game);
+  resizeScene();
+
+  if (!resumed) game.actions.setSpeed(1);
+  else if (game.state.speed > 0) lastPlaySpeed = game.state.speed;
+
+  const c = game.query.calendar();
+  audio.playMusic(c.seasonId);
+  updateAmbience(game);
+
+  const lvl = game.level;
+  if (resumed) {
+    app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()}.` });
+  } else {
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `Niveau ${lvl.id} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
+  }
+
+  const tuto = storage.loadTutorial();
+  if (lvl.tutorial && !tuto.done) app.tutorial.start(game, resumed ? tuto.step ?? 0 : 0);
+
+  save();
+  scheduleRefresh();
+}
+
+app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
+  const saved = app.savedRunInfo();
+  const inGame = app.game && !app.inMenu && app.game.state.status === 'playing';
+  if (!skipConfirm && saved && !inGame) {
+    const ok = await app.dialogs.confirm({
+      title: 'Nouvelle année ?',
+      text: `Une partie est en cours (${saved.label}). Commencer une nouvelle année l'effacera.`,
+      ok: 'Commencer',
+    });
+    if (!ok) return;
+  }
+  storage.clearRun();
+  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0 });
+  startRun(game);
+};
+
+app.continueRun = () => {
+  const saved = app.savedRunInfo();
+  if (!saved) return app.dialogs.mainMenu();
+  let game;
+  try {
+    game = loadGame(saved.data.state);
+  } catch (err) {
+    console.warn('Sauvegarde illisible :', err);
+    storage.clearRun();
+    audio.play('error');
+    app.toasts.show({ kind: 'error', text: 'La sauvegarde est illisible : elle a été effacée.' });
+    app.dialogs.mainMenu();
+    return;
+  }
+  try {
+    startRun(game, { resumed: true });
+  } catch (err) {
+    // Sauvegarde cohérente pour le cœur mais inutilisable par l'interface : on repart du menu.
+    console.warn('Reprise impossible :', err);
+    storage.clearRun();
+    app.quitToMenu({ ended: true });
+    app.toasts.show({ kind: 'error', text: 'La sauvegarde est illisible : elle a été effacée.' });
+  }
+};
+
+app.restartLevel = () => {
+  if (!app.game) return;
+  app.startLevel(app.game.level.id, { skipConfirm: true });
+};
+
+app.quitToMenu = ({ ended = false } = {}) => {
+  if (!ended) save();
+  app.tutorial.stop();
+  if (unwire) unwire();
+  unwire = null;
+  pauseReasons.clear();
+  audio.setDuck(false);
+  app.game = null;
+  app.inMenu = true;
+  if (DEBUG) window.__game = null;
+  app.toasts.clearAll();
+  app.field.close(false);
+  app.tooltip.hide();
+  hover.hit = null;
+  document.body.classList.remove('in-game');
+  document.body.classList.add('in-menu');
+  attract = createAttractGame();
+  resizeScene();
+  audio.playMusic('menu');
+  audio.setAmbience({});
+  audio.setWorld({ active: false });
+  app.dialogs.mainMenu();
+};
+
+// ── Ferme de démonstration (fond du menu) ─────────────────────────────────────────
+function createAttractGame() {
+  const g = createGame({ levelId: 1, seed: 20260929 });
+  const tend = () => {
+    for (const p of g.query.plots()) {
+      if (p.action === 'harvest') g.actions.harvest(p.index);
+    }
+    const crops = g.query.plantableCrops();
+    const crop = crops.find((c) => !c.willFreeze && c.canAfford) || crops[0];
+    for (const p of g.query.plots()) {
+      if (p.action === 'plant' && crop && g.state.money > 30) g.actions.plant(p.index, crop.id);
+    }
+    for (const p of g.query.plots()) if (p.action === 'water') g.actions.water(p.index);
+    const inv = g.query.investments().find((i) => i.canBuy && g.state.money - i.nextCost > 60);
+    if (inv) g.actions.buyInvestment(inv.id);
+  };
+  tend();
+  g.on('dawn', tend);
+  g.actions.setSpeed(2);
+  return g;
+}
+
+// ── Boucle ────────────────────────────────────────────────────────────────────────
+let lastT = null;
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = lastT === null ? 0 : Math.min(0.25, Math.max(0, (t - lastT) / 1000));
+  lastT = t;
+  if (!app.scene) return;
+  let g = null;
+  if (app.game && !app.inMenu) {
+    g = app.game;
+    if (!document.hidden) g.update(dt);
+    processPending();
+  } else if (attract) {
+    g = attract;
+    g.update(dt);
+    if (g.state.status !== 'playing') attract = createAttractGame();
+  }
+  if (g) app.scene.render(g, t);
+  app.hud.frame(dt);
+  app.tutorial.frame();
+}
+
+// ── Chargement ────────────────────────────────────────────────────────────────────
+async function boot() {
+  const loading = $('#loading');
+  const fill = $('.loading-fill', loading);
+  const gauge = $('.loading-gauge', loading);
+  const text = $('.loading-text', loading);
+  const startBtn = $('.loading-start', loading);
+  const errBox = $('.loading-error', loading);
+
+  const parts = { images: 0, ui: 0, font: 0, audio: 0 };
+  const weights = { images: 0.25, ui: 0.15, font: 0.1, audio: 0.5 };
+  const paint = () => {
+    const v = Object.entries(parts).reduce((s, [k, p]) => s + p * weights[k], 0);
+    fill.style.transform = `scaleX(${v.toFixed(3)})`;
+    gauge.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+  };
+
+  const uiImages = [
+    'assets/sprites/ui/icons.png',
+    'assets/sprites/ui/panel-parchment.png',
+    'assets/sprites/ui/panel-parchment-ornate.png',
+    'assets/sprites/ui/panel-wood.png',
+    'assets/sprites/ui/slot-wood.png',
+    'assets/sprites/ui/slot-parchment.png',
+    'assets/sprites/ui/button-red.png',
+    'assets/sprites/ui/button-slate.png',
+    'assets/sprites/ui/banner-red-ribbon.png',
+    'assets/sprites/ui/banner-red.png',
+    'assets/sprites/ui/panel-slate.png',
+    'assets/sprites/ui/checkbox-on.png',
+    'assets/sprites/ui/checkbox-off.png',
+  ];
+
+  try {
+    let uiDone = 0;
+    const tasks = [
+      loadImages(SHEETS).then((imgs) => {
+        parts.images = 1;
+        paint();
+        return imgs;
+      }),
+      Promise.all(
+        uiImages.map((src) =>
+          loadImage(src)
+            .catch(() => null)
+            .finally(() => {
+              parts.ui = ++uiDone / uiImages.length;
+              paint();
+            }),
+        ),
+      ),
+      (document.fonts?.load ? document.fonts.load('16px "Pixelify Sans"').catch(() => null) : Promise.resolve()).then(() => {
+        parts.font = 1;
+        paint();
+      }),
+      audio.prefetch([...Object.values(AUDIO.sfx), AUDIO.music.menu, AUDIO.music.spring], (done, total) => {
+        parts.audio = done / total;
+        paint();
+      }),
+    ];
+    const [imgs] = await Promise.all(tasks);
+    images = imgs;
+  } catch (err) {
+    console.error(err);
+    text.textContent = 'Impossible de charger le jeu.';
+    errBox.hidden = false;
+    errBox.textContent = String(err.message || err);
+    return;
+  }
+
+  initSprites(images);
+  applyPanelMode();
+  attract = createAttractGame();
+  resizeScene();
+  document.body.classList.add('in-menu');
+  requestAnimationFrame(frame);
+
+  // Le reste de la musique et des ambiances se télécharge en fond.
+  for (const k of ['summer', 'autumn', 'winter']) audio.warm(AUDIO.music[k]);
+  for (const e of Object.values(AUDIO.ambience)) audio.warm(e);
+  audio.warm(AUDIO.music.victory.intro);
+  audio.warm(AUDIO.music.victory.loop);
+
+  text.textContent = 'Prêt !';
+  startBtn.hidden = false;
+  if (!app.isTouch) startBtn.focus();
+  const go = () => {
+    audio.unlock();
+    audio.play('confirm');
+    loading.classList.add('is-done');
+    document.body.classList.remove('is-loading');
+    setTimeout(() => loading.remove(), 500);
+    audio.playMusic('menu', { fade: 1 });
+    app.dialogs.mainMenu();
+    if (DEBUG && params.get('level')) app.startLevel(Number(params.get('level')), { skipConfirm: true });
+  };
+  startBtn.addEventListener('click', go, { once: true });
+}
+
+// Tout geste du joueur (re)déverrouille l'audio si le navigateur l'a suspendu.
+for (const type of ['pointerdown', 'keydown', 'touchend']) {
+  window.addEventListener(type, () => audio.isUnlocked() && audio.unlock(), { passive: true });
+}
+
+// ── Débogage (?debug=1) ───────────────────────────────────────────────────────────
+if (DEBUG) {
+  window.__app = app;
+  window.__debug = {
+    /** Fait passer n journées (s'arrête si une fenêtre s'ouvre). Renvoie le nombre de jours passés. */
+    skipDays(n = 1) {
+      let done = 0;
+      for (let i = 0; i < n; i++) {
+        const g = app.game;
+        if (!g || g.state.status !== 'playing' || app.dialogs.isOpen()) break;
+        const before = g.state.time.day;
+        const speed = g.state.speed;
+        g.actions.setSpeed(1);
+        g.update(DAY_SECONDS - g.state.time.elapsed + 0.001);
+        if (g.state.status === 'playing' && g.state.speed === 1) g.actions.setSpeed(speed);
+        processPending();
+        if (g.state.time.day !== before || g.state.status !== 'playing') done += 1;
+      }
+      return done;
+    },
+    /** Centre d'une parcelle en pixels de la page. */
+    plotPoint(i) {
+      const r = app.plotPageRect(i);
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+    },
+    investmentPoint(id) {
+      const r = app.scene.layout.investmentRect(id, app.game?.state.investments[id] || 0);
+      if (!r) return null;
+      return worldToPage(r.x + r.w / 2, r.y + r.h / 2);
+    },
+    start(levelId) {
+      return app.startLevel(levelId, { skipConfirm: true });
+    },
+    levels: LEVELS.map((l) => l.id),
+  };
+}
+
+boot();
+
+export { app };

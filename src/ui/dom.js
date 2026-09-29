@@ -1,90 +1,155 @@
-// Micro-outils DOM. Pas de framework : le jeu n'en a pas besoin.
+// Petits outils DOM partagés par l'interface.
 
-export function el(tag, className = '', content = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (content) node.innerHTML = content;
+/**
+ * Crée un élément : el('div.card.is-open', { title: '…', onclick: fn, dataset: {…} }, enfants…)
+ * Les enfants peuvent être des chaînes, des nœuds, des tableaux, null/false (ignorés).
+ */
+export function el(spec, attrs, ...children) {
+  const [tag, ...classes] = spec.split('.');
+  const node = document.createElement(tag || 'div');
+  if (classes.length) node.className = classes.join(' ');
+  if (attrs && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) {
+    children.unshift(attrs);
+    attrs = null;
+  }
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === 'dataset') Object.assign(node.dataset, v);
+      else if (k === 'style' && typeof v === 'object') Object.assign(node.style, v);
+      else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2), v);
+      else if (k === 'class') node.className += ` ${v}`;
+      else if (k === 'html') node.innerHTML = v;
+      else if (k in node && typeof v !== 'string') node[k] = v;
+      else node.setAttribute(k, v === true ? '' : v);
+    }
+  }
+  append(node, children);
   return node;
 }
 
-export function button(label, onClick, className = 'btn') {
-  const b = el('button', className);
-  b.innerHTML = label;
-  b.addEventListener('click', (e) => { e.preventDefault(); onClick(e); });
-  return b;
-}
-
-export function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-
-export function row(...children) {
-  const r = el('div', 'row');
-  for (const c of children) if (c) r.appendChild(c);
-  return r;
-}
-
-export function slider(label, value, min, max, step, onInput) {
-  const wrap = el('label', 'slider');
-  wrap.innerHTML = `<span>${label}</span>`;
-  const input = el('input');
-  input.type = 'range';
-  input.min = min; input.max = max; input.step = step; input.value = value;
-  const out = el('output');
-  out.textContent = Math.round(value * 100) + '%';
-  input.addEventListener('input', () => {
-    const v = parseFloat(input.value);
-    out.textContent = Math.round(v * 100) + '%';
-    onInput(v);
-  });
-  wrap.appendChild(input);
-  wrap.appendChild(out);
-  return wrap;
-}
-
-export function toggle(label, value, onChange) {
-  const wrap = el('label', 'toggle');
-  wrap.innerHTML = `<span>${label}</span>`;
-  const input = el('input');
-  input.type = 'checkbox';
-  input.checked = !!value;
-  input.addEventListener('change', () => onChange(input.checked));
-  const track = el('i', 'track');
-  wrap.appendChild(input);
-  wrap.appendChild(track);
-  return wrap;
-}
-
-export function select(label, options, value, onChange) {
-  const wrap = el('label', 'select');
-  wrap.innerHTML = `<span>${label}</span>`;
-  const s = el('select');
-  for (const o of options) {
-    const opt = el('option');
-    opt.value = o.value; opt.textContent = o.label;
-    if (o.value === value) opt.selected = true;
-    s.appendChild(opt);
+export function append(node, children) {
+  for (const c of children.flat(Infinity)) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(typo(String(c))));
   }
-  s.addEventListener('change', () => onChange(s.value));
-  wrap.appendChild(s);
-  return wrap;
+  return node;
 }
 
-export function isFullscreen() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+const NBSP = '\u00a0';
+
+/**
+ * Typographie française : espace insécable avant « : ; ! ? % » et à l'intérieur des guillemets,
+ * pour qu'un signe ne se retrouve jamais seul en début de ligne. Appliquée à tout texte passé à el().
+ */
+export function typo(s) {
+  if (!s || typeof s !== 'string') return s;
+  return s
+    .replace(/ ([:;!?%»])/g, `${NBSP}$1`)
+    .replace(/« /g, `«${NBSP}`)
+    .replace(/(\d) (jours?|pièces?|parcelles?)\b/g, `$1${NBSP}$2`);
 }
 
-export function toggleFullscreen(target = document.documentElement) {
-  if (isFullscreen()) {
-    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+/** Remplace le texte d'un nœud (avec la typographie française). */
+export function setText(node, text) {
+  const t = typo(String(text));
+  if (node.textContent !== t) node.textContent = t;
+  return node;
+}
+
+export function clear(node) {
+  while (node.firstChild) node.removeChild(node.firstChild);
+  return node;
+}
+
+export const $ = (sel, root = document) => root.querySelector(sel);
+export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+/** Nombre entier avec espace insécable pour les milliers (« 1 250 »). */
+export function fmt(n) {
+  const v = Math.round(Number(n) || 0);
+  const s = String(Math.abs(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return v < 0 ? `−${s}` : s;
+}
+
+/** Montant signé (« +12 », « −5 »). */
+export function signed(n) {
+  const v = Math.round(Number(n) || 0);
+  return v > 0 ? `+${fmt(v)}` : fmt(v);
+}
+
+/** Gain (« +12 », et « 0 » plutôt que « +0 »). */
+export function gain(n) {
+  const v = Math.round(Number(n) || 0);
+  return v ? `+${fmt(v)}` : '0';
+}
+
+/** Dépense positive affichée en négatif (« −12 », et « 0 » plutôt que « −0 »). */
+export function loss(n) {
+  const v = Math.round(Number(n) || 0);
+  return v ? `−${fmt(v)}` : '0';
+}
+
+/** « 1 jour », « 3 jours ». */
+export function plural(n, one, many = `${one}s`) {
+  return `${fmt(n)} ${Math.abs(n) > 1 ? many : one}`;
+}
+
+/** Décimal à la française (« 1,4 »). */
+export function dec(n, digits = 1) {
+  return Number(n).toFixed(digits).replace('.', ',');
+}
+
+export function clamp(v, a, b) {
+  return Math.max(a, Math.min(b, v));
+}
+
+/** Rectangle d'un élément dans la fenêtre. */
+export function rectOf(node) {
+  return node.getBoundingClientRect();
+}
+
+/**
+ * Place un élément flottant (position: fixed) près d'un rectangle cible, sans sortir de l'écran.
+ * @param prefer 'right' | 'left' | 'top' | 'bottom'
+ */
+export function placeNear(node, target, prefer = 'right', gap = 10) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const r = node.getBoundingClientRect();
+  const w = r.width;
+  const h = r.height;
+  const order = {
+    right: ['right', 'left', 'bottom', 'top'],
+    left: ['left', 'right', 'bottom', 'top'],
+    top: ['top', 'bottom', 'right', 'left'],
+    bottom: ['bottom', 'top', 'right', 'left'],
+  }[prefer];
+  const fits = {
+    right: target.right + gap + w <= vw - 8,
+    left: target.left - gap - w >= 8,
+    top: target.top - gap - h >= 8,
+    bottom: target.bottom + gap + h <= vh - 8,
+  };
+  const side = order.find((s) => fits[s]) || prefer;
+  let x;
+  let y;
+  if (side === 'right' || side === 'left') {
+    x = side === 'right' ? target.right + gap : target.left - gap - w;
+    y = target.top + target.height / 2 - h / 2;
   } else {
-    const fn = target.requestFullscreen || target.webkitRequestFullscreen;
-    if (fn) fn.call(target).catch(() => { /* refusé par le navigateur */ });
+    x = target.left + target.width / 2 - w / 2;
+    y = side === 'bottom' ? target.bottom + gap : target.top - gap - h;
   }
+  x = clamp(x, 8, Math.max(8, vw - w - 8));
+  y = clamp(y, 8, Math.max(8, vh - h - 8));
+  node.style.left = `${Math.round(x)}px`;
+  node.style.top = `${Math.round(y)}px`;
+  node.dataset.side = side;
+  return side;
 }
 
-export function isLandscape() {
-  return window.innerWidth >= window.innerHeight;
-}
-
-export function isTouchDevice() {
-  return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+/** Réduit les animations si le joueur l'a demandé (option ou préférence du système). */
+export function reducedMotion() {
+  return document.documentElement.classList.contains('reduced-motion');
 }

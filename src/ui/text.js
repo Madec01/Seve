@@ -1,101 +1,105 @@
-// Texte animé. Règle du projet : aucun texte n'apparaît d'un bloc.
+// Textes de l'interface : saisons avec leurs articles, météo, sources de revenus et de charges.
 
-export class Typewriter {
-  constructor(el, options = {}) {
-    this.el = el;
-    this.speed = options.speed || 34;      // caractères par seconde
-    this.onChar = options.onChar || null;
-    this.onDone = options.onDone || null;
-    this.text = '';
-    this.index = 0;
-    this.acc = 0;
-    this.done = true;
-  }
+import { SEASONS, SEASON_NAMES, WEATHER_TYPES } from '../data/balance.js';
+import { getInvestment } from '../data/investments.js';
+import { getCrop } from '../data/crops.js';
 
-  play(text) {
-    this.text = text || '';
-    this.index = 0;
-    this.acc = 0;
-    this.done = this.text.length === 0;
-    this.el.textContent = '';
-    this.el.classList.add('tw-active');
-    if (this.done && this.onDone) this.onDone();
-    return this;
-  }
+export { SEASONS, SEASON_NAMES };
 
-  update(dt) {
-    if (this.done) return;
-    this.acc += dt * this.speed;
-    while (this.acc >= 1 && this.index < this.text.length) {
-      this.acc -= 1;
-      const ch = this.text[this.index];
-      this.index++;
-      // Les ponctuations font respirer la phrase.
-      if (ch === ',') this.acc -= 3;
-      if (ch === '.' || ch === '!' || ch === '?' || ch === '…') this.acc -= 7;
-      if (this.onChar) this.onChar(ch, this.index);
-    }
-    this.el.textContent = this.text.slice(0, this.index);
-    if (this.index >= this.text.length && !this.done) {
-      this.done = true;
-      this.el.classList.remove('tw-active');
-      if (this.onDone) this.onDone();
-    }
-  }
+const SEASON_FORMS = {
+  spring: { the: 'le printemps', of: 'du printemps', in: 'au printemps', end: 'Fin du printemps' },
+  summer: { the: 'l\'été', of: 'de l\'été', in: 'en été', end: 'Fin de l\'été' },
+  autumn: { the: 'l\'automne', of: 'de l\'automne', in: 'en automne', end: 'Fin de l\'automne' },
+  winter: { the: 'l\'hiver', of: 'de l\'hiver', in: 'en hiver', end: 'Fin de l\'hiver' },
+};
 
-  skip() {
-    if (this.done) return false;
-    this.index = this.text.length;
-    this.el.textContent = this.text;
-    this.done = true;
-    this.el.classList.remove('tw-active');
-    if (this.onDone) this.onDone();
-    return true;
-  }
+/** Forme d'une saison : 'name' (« Printemps »), 'the', 'of', 'in', 'end'. */
+export function season(id, form = 'name') {
+  if (form === 'name') return SEASON_NAMES[id] || id;
+  return SEASON_FORMS[id]?.[form] || id;
 }
 
-// Titre lettre par lettre, chaque lettre ondulant à son propre rythme.
-export function waveTitle(el, text, options = {}) {
-  const { delay = 0.04, amplitude = 6 } = options;
-  el.textContent = '';
-  el.classList.add('wave-title');
-  [...text].forEach((ch, i) => {
-    const span = document.createElement('span');
-    span.textContent = ch === ' ' ? ' ' : ch;
-    span.style.setProperty('--i', i);
-    span.style.setProperty('--delay', `${i * delay}s`);
-    span.style.setProperty('--amp', `${amplitude}px`);
-    el.appendChild(span);
+/** « L'été arrive », « L'hiver arrive »… */
+export function seasonArrives(id) {
+  const t = season(id, 'the');
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)} arrive`;
+}
+
+export function weatherName(id) {
+  return WEATHER_TYPES[id]?.name || '—';
+}
+
+export const WEATHER_HINTS = {
+  sunny: 'Beau temps : pensez à arroser.',
+  cloudy: 'Temps couvert : pensez à arroser.',
+  rain: 'La pluie arrose tout le champ.',
+  storm: 'L\'orage arrose tout le champ, mais l\'étal reste fermé.',
+  heatwave: 'Canicule : une culture non arrosée ne pousse pas du tout.',
+  snow: 'Neige : un joli manteau blanc, sans effet sur les cultures.',
+};
+
+export function investmentName(id) {
+  return getInvestment(id)?.name || id;
+}
+
+export function cropName(id) {
+  return getCrop(id)?.name || id;
+}
+
+/** « 3 carottes » : nom de culture en minuscule, accordé. */
+export function cropCount(id, n) {
+  const name = cropName(id).toLowerCase();
+  if (name === 'blé') return n <= 1 ? `${n} botte de blé` : `${n} bottes de blé`;
+  if (n <= 1) return `${n} ${name}`;
+  if (name.endsWith('s') || name.endsWith('x')) return `${n} ${name}`;
+  if (name === 'maïs') return `${n} maïs`;
+  if (name === 'blé') return `${n} bottes de blé`;
+  return `${n} ${name}s`;
+}
+
+export const CHARGE_NAMES = {
+  farm: 'Charges de la ferme',
+  water: 'Arrosage payant',
+  loan: 'Mensualité du prêt',
+};
+
+// ── Revenus des investissements ─────────────────────────────────────────────────────
+
+/** « au printemps », « au printemps et en automne », « au printemps, en été et en automne ». */
+export function seasonList(ids, form = 'in') {
+  const parts = ids.map((id) => season(id, form));
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
+}
+
+/**
+ * Profil d'un revenu saisonnier (par jour, pour `units` unités) :
+ * { constant, value (si constant), groups: [{ value, seasons }] triés du plus fort au plus faible }.
+ */
+export function incomeProfile(bySeason = {}, units = 1) {
+  const values = SEASONS.map((s) => (bySeason[s] || 0) * units);
+  const constant = values.every((v) => v === values[0]);
+  const groups = [];
+  SEASONS.forEach((s, i) => {
+    const g = groups.find((x) => x.value === values[i]);
+    if (g) g.seasons.push(s);
+    else groups.push({ value: values[i], seasons: [s] });
   });
-  return el;
+  groups.sort((a, b) => b.value - a.value);
+  return { constant, value: constant ? values[0] : null, values, groups };
 }
 
-// Compteur qui roule : un nombre ne change jamais d'un coup non plus.
-export function countTo(el, from, to, duration = 0.6, format = (v) => Math.round(v)) {
-  const start = performance.now();
-  const step = (now) => {
-    const k = Math.min(1, (now - start) / (duration * 1000));
-    const eased = 1 - Math.pow(1 - k, 3);
-    el.textContent = format(from + (to - from) * eased);
-    if (k < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-
-export function pulse(el, className = 'pulse') {
-  if (!el) return;
-  el.classList.remove(className);
-  // Force le navigateur à rejouer l'animation.
-  void el.offsetWidth;
-  el.classList.add(className);
-}
-
-export function fadeIn(el, delayIndex = 0) {
-  if (!el) return;
-  el.style.setProperty('--enter-delay', `${delayIndex * 0.06}s`);
-  el.classList.add('enter');
-}
-
-export function formatSap(n) {
-  return n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+/**
+ * Phrase décrivant un revenu quotidien selon les saisons :
+ * « +7 par jour, toute l'année », « +5 par jour, sauf en hiver »,
+ * « +8 par jour en été, +4 au printemps et en automne, +2 en hiver ».
+ */
+export function incomePhrase(bySeason, units = 1) {
+  const p = incomeProfile(bySeason, units);
+  if (p.constant) return p.value > 0 ? `+${p.value} par jour, toute l'année` : 'aucun revenu quotidien';
+  const paying = p.groups.filter((g) => g.value > 0);
+  const zero = p.groups.find((g) => g.value === 0);
+  if (paying.length === 1 && zero) return `+${paying[0].value} par jour, sauf ${seasonList(zero.seasons)}`;
+  const text = paying.map((g, i) => `+${g.value}${i === 0 ? ' par jour' : ''} ${seasonList(g.seasons)}`).join(', ');
+  return zero ? `${text}, rien ${seasonList(zero.seasons)}` : text;
 }

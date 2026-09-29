@@ -1,138 +1,415 @@
-// Contexte audio, bus et réverbération. Rien n'est chargé depuis un fichier :
-// la matière sonore du jeu est entièrement fabriquée à l'exécution.
+// Gestionnaire audio (Web Audio) : musique avec fondus enchaînés, ambiances en couches, effets
+// sonores avec légère variation de hauteur et limitation des répétitions, volumes séparés.
+//
+//   const audio = createAudio(AUDIO, settings);
+//   audio.prefetch(list, onProgress)   télécharge des fichiers avant le déverrouillage (écran de chargement)
+//   audio.unlock()                     à appeler dans un geste du joueur (clic, touche) : crée le contexte
+//   audio.playMusic('spring')          fondu enchaîné de 2 s ; 'victory' = intro puis boucle ; null = silence
+//   audio.play('coin')                 effet sonore
+//   audio.setAmbience({ birds, rain, wind, bees })  niveaux cibles 0..1 (fondu)
+//   audio.setWorld({ active, owned, season, weather })  cris d'animaux ponctuels
+//   audio.setVolumes(settings)         { musicVolume, sfxVolume, ambienceVolume, muted }
+//
+// Avant le déverrouillage, les demandes de musique et d'ambiance sont mémorisées et appliquées
+// dès que le contexte existe ; les effets sonores sont ignorés.
 
-let ctx = null;
-let ready = false;
-const buses = {};
-let settings = { master: 0.8, music: 0.6, sfx: 0.9, voices: 0.8 };
-let reverb = null;
-let muted = false;
+const FADE = 2; // secondes
+const DEFAULT_THROTTLE = 45; // ms entre deux lectures du même son
+const THROTTLE = { coin: 90, hover: 70, harvest: 60, water: 60, plant: 60, buy: 120, rooster: 25000, error: 150, warning: 400 };
+const MAX_VOICES = { coin: 3, harvest: 3, water: 3, plant: 3, hover: 2 };
 
-export function audioReady() { return ready; }
-export function audioCtx() { return ctx; }
-export function now() { return ctx ? ctx.currentTime : 0; }
+function pickFormat() {
+  try {
+    const a = document.createElement('audio');
+    const ogg = a.canPlayType('audio/ogg; codecs="vorbis"');
+    return ogg === 'probably' || ogg === 'maybe' ? 0 : 1;
+  } catch {
+    return 1;
+  }
+}
 
-// Une réverbération courte et boisée : le jeu doit sonner comme une pièce en
-// bois, pas comme une cathédrale numérique.
-function buildImpulse(seconds = 1.6, decay = 3.2) {
-  const rate = ctx.sampleRate;
-  const len = Math.floor(rate * seconds);
-  const buf = ctx.createBuffer(2, len, rate);
-  for (let ch = 0; ch < 2; ch++) {
-    const data = buf.getChannelData(ch);
-    for (let i = 0; i < len; i++) {
-      const t = i / len;
-      const env = Math.pow(1 - t, decay);
-      // Un peu de coloration : moins d'aigus en fin de queue.
-      data[i] = (Math.random() * 2 - 1) * env * (1 - t * 0.4);
+export function createAudio(manifest, initialSettings = {}) {
+  const preferred = pickFormat(); // 0 = ogg, 1 = mp3
+  let ctx = null;
+  let master = null;
+  const bus = { music: null, sfx: null, ambience: null };
+  let settings = { musicVolume: 0.6, sfxVolume: 0.8, ambienceVolume: 0.6, muted: false, ...initialSettings };
+  let duck = 1; // atténuation de la musique (menus de pause)
+
+  const raw = new Map(); // url → Promise<ArrayBuffer>
+  const buffers = new Map(); // clé (1er chemin) → AudioBuffer
+  const loading = new Map(); // clé → Promise<AudioBuffer|null>
+
+  const keyOf = (entry) => entry.src[0];
+  const urlOf = (entry, i = preferred) => entry.src[Math.min(i, entry.src.length - 1)];
+
+  function fetchRaw(url) {
+    if (!raw.has(url)) {
+      raw.set(
+        url,
+        fetch(url).then((r) => {
+          if (!r.ok) throw new Error(`Son introuvable : ${url}`);
+          return r.arrayBuffer();
+        }),
+      );
+      raw.get(url).catch(() => raw.delete(url));
     }
+    return raw.get(url);
   }
-  return buf;
-}
 
-export function initAudio() {
-  if (ctx) return ctx;
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) { console.warn('[audio] WebAudio indisponible'); return null; }
-  ctx = new AC();
-
-  const master = ctx.createGain();
-  master.gain.value = settings.master;
-
-  const comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -14;
-  comp.knee.value = 22;
-  comp.ratio.value = 3.2;
-  comp.attack.value = 0.006;
-  comp.release.value = 0.22;
-
-  // Léger adoucissement global : on coupe la dureté au-dessus de 12 kHz.
-  const tone = ctx.createBiquadFilter();
-  tone.type = 'lowpass';
-  tone.frequency.value = 12500;
-  tone.Q.value = 0.4;
-
-  master.connect(comp);
-  comp.connect(tone);
-  tone.connect(ctx.destination);
-
-  reverb = ctx.createConvolver();
-  reverb.buffer = buildImpulse();
-  const wet = ctx.createGain();
-  wet.gain.value = 0.34;
-  reverb.connect(wet);
-  wet.connect(master);
-
-  for (const name of ['music', 'sfx', 'voice']) {
-    const g = ctx.createGain();
-    const send = ctx.createGain();
-    g.connect(master);
-    send.gain.value = name === 'music' ? 0.5 : 0.35;
-    g.connect(send);
-    send.connect(reverb);
-    buses[name] = { gain: g, send };
+  function decode(data) {
+    return new Promise((resolve, reject) => {
+      // Ancienne signature à rappels (Safari) et promesse : on gère les deux.
+      const p = ctx.decodeAudioData(data, resolve, reject);
+      if (p && typeof p.then === 'function') p.then(resolve, reject);
+    });
   }
-  buses.master = { gain: master };
-  applySettings(settings);
-  ready = true;
-  return ctx;
-}
 
-export function resumeAudio() {
-  if (!ctx) initAudio();
-  if (ctx && ctx.state === 'suspended') ctx.resume();
-  return ctx;
-}
-
-export function bus(name) {
-  if (!ready) return null;
-  return buses[name] ? buses[name].gain : buses.sfx.gain;
-}
-
-export function applySettings(next) {
-  settings = Object.assign(settings, next || {});
-  if (!ready) return;
-  const m = muted ? 0 : settings.master;
-  buses.master.gain.gain.setTargetAtTime(m, ctx.currentTime, 0.05);
-  buses.music.gain.gain.setTargetAtTime(settings.music, ctx.currentTime, 0.05);
-  buses.sfx.gain.gain.setTargetAtTime(settings.sfx, ctx.currentTime, 0.05);
-  buses.voice.gain.gain.setTargetAtTime(settings.voices, ctx.currentTime, 0.05);
-}
-
-export function setMuted(v) { muted = v; applySettings({}); }
-export function isMuted() { return muted; }
-
-// Duck : baisse temporairement la musique pour laisser passer un moment fort.
-export function duckMusic(amount = 0.4, duration = 0.9) {
-  if (!ready) return;
-  const g = buses.music.gain.gain;
-  const t = ctx.currentTime;
-  g.cancelScheduledValues(t);
-  g.setValueAtTime(g.value, t);
-  g.linearRampToValueAtTime(settings.music * amount, t + 0.05);
-  g.linearRampToValueAtTime(settings.music, t + duration);
-}
-
-export function noiseBuffer(seconds = 1) {
-  const len = Math.floor(ctx.sampleRate * seconds);
-  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-  return buf;
-}
-
-let sharedNoise = null;
-export function getNoise() {
-  if (!sharedNoise) sharedNoise = noiseBuffer(2);
-  return sharedNoise;
-}
-
-export function panner(pan = 0) {
-  if (!ctx) return null;
-  if (ctx.createStereoPanner) {
-    const p = ctx.createStereoPanner();
-    p.pan.value = Math.max(-1, Math.min(1, pan));
+  /** Charge et décode un son (avec repli sur l'autre format). Nécessite le contexte. */
+  function load(entry) {
+    const key = keyOf(entry);
+    if (buffers.has(key)) return Promise.resolve(buffers.get(key));
+    if (loading.has(key)) return loading.get(key);
+    const order = preferred === 0 ? [0, 1] : [1, 0];
+    const p = (async () => {
+      for (const i of order) {
+        const url = urlOf(entry, i);
+        try {
+          const data = await fetchRaw(url);
+          raw.delete(url); // decodeAudioData détache le tampon : ne pas le réutiliser
+          const buf = await decode(data.slice(0));
+          buffers.set(key, buf);
+          return buf;
+        } catch {
+          /* essaie l'autre format */
+        }
+      }
+      return null;
+    })();
+    loading.set(key, p);
+    p.then((b) => {
+      if (!b) loading.delete(key);
+    });
     return p;
   }
-  return null;
+
+  /** Télécharge (sans décoder) une liste d'entrées ; onProgress(fait, total). */
+  function prefetch(entries, onProgress) {
+    let done = 0;
+    const total = entries.length;
+    return Promise.all(
+      entries.map((e) =>
+        fetchRaw(urlOf(e))
+          .catch(() => fetchRaw(urlOf(e, 1 - preferred)).catch(() => null))
+          .finally(() => {
+            done += 1;
+            if (onProgress) onProgress(done, total);
+          }),
+      ),
+    );
+  }
+
+  // ── Volumes ──────────────────────────────────────────────────────────────────────
+  function applyVolumes(immediate = false) {
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const set = (node, v) => {
+      node.gain.cancelScheduledValues(t);
+      if (immediate) node.gain.setValueAtTime(v, t);
+      else node.gain.setTargetAtTime(v, t, 0.08);
+    };
+    set(master, settings.muted ? 0 : 1);
+    set(bus.music, settings.musicVolume * settings.musicVolume * duck); // courbe douce (perception)
+    set(bus.sfx, settings.sfxVolume * settings.sfxVolume);
+    set(bus.ambience, settings.ambienceVolume * settings.ambienceVolume);
+  }
+
+  function setVolumes(next) {
+    settings = { ...settings, ...next };
+    applyVolumes();
+  }
+
+  function setDuck(on) {
+    duck = on ? 0.45 : 1;
+    applyVolumes();
+  }
+
+  // ── Déverrouillage ───────────────────────────────────────────────────────────────
+  function unlock() {
+    if (ctx) {
+      // 'suspended' (onglet revenu, politique d'autoplay) ou 'interrupted' (Safari iOS : appel, verrouillage).
+      if (ctx.state !== 'running' && ctx.state !== 'closed' && !document.hidden) ctx.resume().catch(() => {});
+      return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      ctx = new AC();
+    } catch {
+      ctx = null;
+      return;
+    }
+    master = ctx.createGain();
+    master.connect(ctx.destination);
+    for (const k of Object.keys(bus)) {
+      bus[k] = ctx.createGain();
+      bus[k].connect(master);
+    }
+    applyVolumes(true);
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    // Décode tous les effets sonores (petits) tout de suite.
+    for (const e of Object.values(manifest.sfx)) load(e);
+    // Applique ce qui a été demandé avant le déverrouillage.
+    if (music.wanted) {
+      const k = music.wanted;
+      music.wanted = null;
+      music.key = null;
+      playMusic(k, { fade: 1 });
+    }
+    updateAmbience();
+  }
+
+  const isUnlocked = () => !!ctx;
+
+  // ── Effets sonores ───────────────────────────────────────────────────────────────
+  const lastPlayed = new Map();
+  const voices = new Map();
+
+  /**
+   * @param name  clé de manifest.sfx
+   * @param opts  { volume = 1, pitch = 0.05 (variation ±), rate, throttle (ms), delay (s) }
+   */
+  function play(name, opts = {}) {
+    const entry = manifest.sfx[name];
+    if (!entry || !ctx || settings.muted || ctx.state !== 'running') return;
+    const now = performance.now();
+    const throttle = opts.throttle ?? THROTTLE[name] ?? DEFAULT_THROTTLE;
+    if (now - (lastPlayed.get(name) || -Infinity) < throttle) return;
+    const max = MAX_VOICES[name] ?? 4;
+    if ((voices.get(name) || 0) >= max) return;
+    const buf = buffers.get(keyOf(entry));
+    if (!buf) {
+      load(entry);
+      return;
+    }
+    lastPlayed.set(name, now);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const variation = opts.pitch ?? 0.05;
+    src.playbackRate.value = (opts.rate || 1) * (1 + (Math.random() * 2 - 1) * variation);
+    const g = ctx.createGain();
+    g.gain.value = (entry.volume ?? 1) * (opts.volume ?? 1);
+    src.connect(g);
+    g.connect(bus.sfx);
+    voices.set(name, (voices.get(name) || 0) + 1);
+    src.onended = () => {
+      voices.set(name, Math.max(0, (voices.get(name) || 1) - 1));
+      g.disconnect();
+    };
+    src.start(ctx.currentTime + (opts.delay || 0));
+  }
+
+  // ── Musique ──────────────────────────────────────────────────────────────────────
+  const music = { key: null, wanted: null, token: 0, track: null };
+
+  function stopTrack(track, fade) {
+    if (!track || !ctx) return;
+    const t = ctx.currentTime;
+    const g = track.gain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(0, t + Math.max(0.02, fade));
+    for (const s of track.sources) {
+      try {
+        s.stop(t + Math.max(0.02, fade) + 0.05);
+      } catch {
+        /* déjà arrêtée */
+      }
+    }
+    setTimeout(() => track.gain.disconnect(), (fade + 0.3) * 1000);
+  }
+
+  /**
+   * Change de musique avec un fondu enchaîné.
+   * @param key  'menu' | 'spring' | 'summer' | 'autumn' | 'winter' | 'night' | 'victory' | null
+   */
+  function playMusic(key, opts = {}) {
+    const fade = opts.fade ?? FADE;
+    if (!ctx) {
+      music.wanted = key;
+      return;
+    }
+    if (key === music.key && !opts.restart) return;
+    music.key = key;
+    const token = ++music.token;
+    stopTrack(music.track, fade);
+    music.track = null;
+    if (!key) return;
+
+    const entries = key === 'victory' ? [manifest.music.victory.intro, manifest.music.victory.loop] : [manifest.music[key]];
+    if (!entries[0]) return;
+    Promise.all(entries.map(load)).then((bufs) => {
+      if (token !== music.token || bufs.some((b) => !b)) return;
+      const t = ctx.currentTime + 0.05;
+      const gain = ctx.createGain();
+      const volume = entries[entries.length - 1].volume ?? 0.7;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(volume, t + (key === 'victory' ? 0.3 : fade));
+      gain.connect(bus.music);
+      const sources = [];
+      if (key === 'victory') {
+        const intro = ctx.createBufferSource();
+        intro.buffer = bufs[0];
+        intro.connect(gain);
+        intro.start(t);
+        const loop = ctx.createBufferSource();
+        loop.buffer = bufs[1];
+        loop.loop = true;
+        loop.connect(gain);
+        loop.start(t + bufs[0].duration);
+        sources.push(intro, loop);
+      } else {
+        const src = ctx.createBufferSource();
+        src.buffer = bufs[0];
+        src.loop = entries[0].loop !== false;
+        src.connect(gain);
+        src.start(t);
+        sources.push(src);
+      }
+      music.track = { key, gain, sources };
+    });
+  }
+
+  // ── Ambiances ────────────────────────────────────────────────────────────────────
+  const amb = {}; // nom → { gain, source, level }
+  const ambTargets = { birds: 0, rain: 0, wind: 0, bees: 0 };
+
+  function updateAmbience() {
+    if (!ctx) return;
+    for (const [name, target] of Object.entries(ambTargets)) {
+      const entry = manifest.ambience[name];
+      if (!entry) continue;
+      let layer = amb[name];
+      if (!layer) {
+        if (target <= 0) continue;
+        layer = amb[name] = { gain: ctx.createGain(), source: null, starting: false };
+        layer.gain.gain.value = 0;
+        layer.gain.connect(bus.ambience);
+      }
+      if (!layer.source && !layer.starting && target > 0) {
+        layer.starting = true;
+        load(entry).then((buf) => {
+          layer.starting = false;
+          if (!buf || layer.source) return;
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.loop = true;
+          src.connect(layer.gain);
+          // Départ à un endroit aléatoire de la boucle : moins répétitif.
+          src.start(ctx.currentTime, Math.random() * buf.duration);
+          layer.source = src;
+          rampLayer(name);
+        });
+      }
+      rampLayer(name);
+    }
+  }
+
+  function rampLayer(name) {
+    const layer = amb[name];
+    if (!layer || !ctx) return;
+    const entry = manifest.ambience[name];
+    const v = ambTargets[name] * (entry.volume ?? 1);
+    const t = ctx.currentTime;
+    const g = layer.gain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(g.value, t);
+    g.linearRampToValueAtTime(v, t + FADE);
+  }
+
+  /** Niveaux cibles des couches d'ambiance (0..1) ; les couches absentes passent à 0. */
+  function setAmbience(levels = {}) {
+    for (const k of Object.keys(ambTargets)) ambTargets[k] = Math.max(0, Math.min(1, levels[k] || 0));
+    updateAmbience();
+  }
+
+  // ── Animaux (cris ponctuels) ─────────────────────────────────────────────────────
+  let world = { active: false, owned: {}, season: 'spring', weather: 'sunny' };
+  let animalTimer = null;
+
+  function scheduleAnimal() {
+    clearTimeout(animalTimer);
+    animalTimer = setTimeout(animalCall, 15000 + Math.random() * 25000);
+  }
+
+  function animalCall() {
+    const o = world.owned || {};
+    const pool = [];
+    if (o.chickenCoop > 0) pool.push('chicken');
+    if (o.cow > 0) pool.push('cow');
+    if (o.sheep > 0) pool.push('sheep');
+    if (world.active && pool.length && !document.hidden) {
+      const name = pool[Math.floor(Math.random() * pool.length)];
+      play(name, { volume: 0.55, pitch: 0.08, throttle: 4000 });
+    }
+    scheduleAnimal();
+  }
+
+  function setWorld(next) {
+    world = { ...world, ...next };
+    if (world.active && !animalTimer) scheduleAnimal();
+    if (!world.active) {
+      clearTimeout(animalTimer);
+      animalTimer = null;
+    }
+  }
+
+  // ── Visibilité de l'onglet ───────────────────────────────────────────────────────
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) return;
+    if (document.hidden) ctx.suspend().catch(() => {});
+    else ctx.resume().catch(() => {});
+  });
+
+  return {
+    prefetch,
+    unlock,
+    isUnlocked,
+    play,
+    playMusic,
+    setAmbience,
+    setWorld,
+    setVolumes,
+    setDuck,
+    get musicKey() {
+      return music.key ?? music.wanted;
+    },
+    get context() {
+      return ctx;
+    },
+    /** Précharge (décode) une entrée du catalogue en tâche de fond. */
+    warm(entry) {
+      if (ctx) load(entry);
+      else fetchRaw(urlOf(entry)).catch(() => {});
+    },
+  };
+}
+
+/**
+ * Niveaux d'ambiance pour une saison, une météo et les investissements possédés.
+ * Oiseaux au printemps et en été (pas sous la pluie), vent en hiver (et par orage), pluie,
+ * abeilles l'été près des ruches.
+ */
+export function ambienceFor({ season, weather, owned = {} }) {
+  const rainy = weather === 'rain' || weather === 'storm';
+  const levels = { birds: 0, rain: 0, wind: 0, bees: 0 };
+  if ((season === 'spring' || season === 'summer') && !rainy) levels.birds = weather === 'cloudy' ? 0.6 : 0.9;
+  if (season === 'autumn' && !rainy) levels.birds = 0.3;
+  if (rainy) levels.rain = weather === 'storm' ? 1 : 0.75;
+  if (season === 'winter') levels.wind = weather === 'snow' ? 0.9 : 0.6;
+  if (weather === 'storm') levels.wind = Math.max(levels.wind, 0.5);
+  if (owned.beehive > 0 && (season === 'summer' || season === 'spring') && !rainy) {
+    levels.bees = Math.min(1, (season === 'summer' ? 0.5 : 0.25) + 0.15 * owned.beehive);
+  }
+  return levels;
 }

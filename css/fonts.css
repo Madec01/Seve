@@ -1,0 +1,33 @@
+/* Police « Pixelify Sans Ferme » : Pixelify Sans (Stefie Justprince, SIL Open Font License 1.1 —
+   voir assets/fonts/OFL.txt), en instances statiques 400 / 500 / 600 / 700, avec les chiffres 2 et 5
+   redessinés pour qu'ils ne se confondent plus avec 8 et S (assets/fonts/build-pixelify-ferme.py).
+   Le nom CSS reste « Pixelify Sans » : le canevas (textes flottants) l'utilise aussi.
+   Chemins relatifs à ce fichier (css/) : fonctionne aussi dans un sous-dossier. */
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../assets/fonts/PixelifySansFerme-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../assets/fonts/PixelifySansFerme-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../assets/fonts/PixelifySansFerme-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  src: url('../assets/fonts/PixelifySansFerme-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}

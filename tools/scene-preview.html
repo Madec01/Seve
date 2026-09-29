@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aperçu de la scène</title>
+<style>
+  @font-face { font-family: 'Pixelify Sans'; src: url(../assets/fonts/PixelifySans-Variable.woff2) format('woff2'); font-weight: 400 700; }
+  :root { --bg: #2b2633; --fg: #f3e9dc; --muted: #b9a9c9; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.3 system-ui, sans-serif; overflow: hidden; }
+  #scene { position: fixed; inset: 0; display: block; image-rendering: pixelated; }
+  #panel { position: fixed; top: 8px; left: 8px; background: rgba(43,38,51,0.88); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; max-width: 250px; z-index: 2; }
+  #panel.hidden > :not(#toggle) { display: none; }
+  #panel label { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  #panel button { font: inherit; cursor: pointer; }
+  .row { display: flex; flex-wrap: wrap; gap: 4px; }
+  #info { font: 11px ui-monospace, monospace; color: var(--muted); white-space: pre; }
+  #err { color: #ff8a80; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="panel">
+  <button id="toggle">☰ Aperçu de la scène</button>
+  <label>Niveau <select id="level"></select></label>
+  <label>Saison <select id="season"><option value="0">printemps</option><option value="1">été</option><option value="2">automne</option><option value="3">hiver</option></select></label>
+  <label>Météo <select id="weather"><option>sunny</option><option>cloudy</option><option>rain</option><option>storm</option><option>heatwave</option><option>snow</option></select></label>
+  <label>Heure <input id="day" type="range" min="0" max="1" step="0.01" value="0.45"></label>
+  <label><span>Temps qui passe</span> <input id="run" type="checkbox"></label>
+  <div class="row">
+    <button id="buyAll">Tout acheter</button>
+    <button id="buyOne">+1 achat</button>
+    <button id="sellAll">Rien</button>
+  </div>
+  <div class="row">
+    <button id="fill">Cultures au hasard</button>
+    <button id="unlock">Ouvrir tout</button>
+    <button id="empty">Vider</button>
+  </div>
+  <div class="row">
+    <button id="dawn">Aube</button>
+    <button id="frost">Gel</button>
+    <button id="harvestAll">Récolter</button>
+  </div>
+  <div id="info"></div>
+  <div id="err"></div>
+</div>
+<script type="module" src="scene-preview.js"></script>
+</body>
+</html>

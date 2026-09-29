@@ -1,196 +1,315 @@
-// Interface de jeu. En DOM (net sur tous les écrans, accessible au clavier),
-// le canvas gardant les éléments qui doivent vivre dans le monde.
+// Barre du haut : argent (compteur animé), date et saison, météo du jour et de demain,
+// prochain fermage (avec alerte), vitesses et menu.
+//
+// createHud(root, app) → { bind(game), refresh(), frame(dt), onEvent(ev) }
+// Le DOM est construit une fois ; refresh() ne change que les textes et classes (appelé sur les
+// événements du jeu) ; frame() anime seulement le compteur d'argent et la barre du jour.
 
-import { DEGREE_INFO } from '../game/scales.js';
-import { SPECIES } from '../game/plants.js';
-import { BLIGHT } from '../game/constants.js';
-import { Input } from '../core/input.js';
-import { pulse, formatSap } from './text.js';
-import { drawFloraIcon } from './flora.js';
+import { el, fmt, plural, setText, signed } from './dom.js';
+import { icon, setIcon } from './icons.js';
+import { season, weatherName, WEATHER_HINTS } from './text.js';
 
-const TOUCH_BUTTONS = [
-  { action: 'act', label: 'Agir', key: 'Espace' },
-  { action: 'tune', label: 'Accorder', key: 'E' },
-  { action: 'dash', label: 'Souffle', key: 'Maj' },
+const SPEEDS = [
+  { speed: 0, icon: 'pause', label: 'Pause', key: 'Espace' },
+  { speed: 1, icon: 'play', label: 'Vitesse normale', key: '1' },
+  { speed: 2, icon: 'fast', label: 'Vitesse ×2', key: '2' },
+  { speed: 4, icon: 'faster', label: 'Vitesse ×4', key: '3' },
 ];
 
-export class Hud {
-  constructor(root) {
-    this.root = root;
-    this.el = document.createElement('div');
-    this.el.className = 'hud hidden';
-    this.el.innerHTML = `
-      <div class="hud-top">
-        <div class="hud-left">
-          <div class="biome-name"></div>
-          <div class="season-line">
-            <span class="season-label"></span>
-            <div class="beat-bar"><i></i></div>
-          </div>
-        </div>
-        <div class="hud-center">
-          <div class="goal">
-            <div class="goal-bar"><i></i><b></b></div>
-            <div class="goal-text"></div>
-          </div>
-        </div>
-        <div class="hud-right">
-          <div class="sap-box"><span class="sap-icon">❍</span><span class="sap-value">0</span></div>
-          <div class="chain-box"><span class="chain-mult">×1</span><span class="chain-count"></span></div>
-          <button class="icon-btn help-btn" title="Comment jouer" aria-label="Comment jouer">?</button>
-          <button class="hud-menu-btn pause-btn" title="Menu (Échap)" aria-label="Menu">☰ <span>Menu</span></button>
-        </div>
-      </div>
+export function createHud(root, app) {
+  let game = null;
+  let shownMoney = 0;
+  let targetMoney = 0;
+  let shownInt = null;
+  let pendingDelta = 0;
+  let deltaTimer = null;
 
-      <div class="blight-gauge" title="Cendre">
-        <i></i><span></span>
-      </div>
+  // ── Construction ───────────────────────────────────────────────────────────────
+  const moneyValue = el('span.money-value', '0');
+  const moneyPops = el('span.money-pops');
+  const money = el(
+    'div.chip.hud-money.has-tip',
+    { id: 'hud-money', 'data-tip-side': 'bottom' },
+    icon('coin', 'md'),
+    moneyValue,
+    moneyPops,
+  );
+  money._tip = () => moneyTip();
 
-      <div class="event-banner hidden"><strong></strong><span></span></div>
+  const seasonIcon = icon('spring', 'md');
+  const dateMain = el('span.date-main', '');
+  const dayFill = el('span.dayline-fill');
+  const daySun = el('span.dayline-sun');
+  const date = el(
+    'div.chip.hud-date.has-tip',
+    { id: 'hud-date', 'data-tip-side': 'bottom' },
+    seasonIcon,
+    el('div.hud-stack', dateMain, el('span.dayline', dayFill, daySun)),
+  );
+  date._tip = () => dateTip();
 
-      <div class="context-hint"><span class="ctx-label"></span><span class="ctx-chord"></span></div>
+  const wToday = icon('sunny', 'md');
+  const wName = el('span.w-name', '');
+  const wTomorrow = icon('sunny', 'sm');
+  const weather = el(
+    'div.chip.hud-weather.has-tip',
+    { id: 'hud-weather', 'data-tip-side': 'bottom' },
+    wToday,
+    wName,
+    el('span.w-sep'),
+    el('span.w-tomorrow', el('span.w-label', 'Demain'), wTomorrow),
+  );
+  weather._tip = () => weatherTip();
 
-      <div class="seed-bar" role="listbox" aria-label="Graines"></div>
+  const billAmount = el('b.bill-amount', '');
+  const billDays = el('span.bill-days', '');
+  const bill = el(
+    'div.chip.hud-bill.has-tip',
+    { id: 'hud-bill', 'data-tip-side': 'bottom' },
+    icon('bill', 'md'),
+    el('div.hud-stack', el('span.bill-line', el('span.bill-label', 'Fermage '), billAmount), billDays),
+  );
+  bill._tip = () => billTip();
 
-      <div class="touch-controls hidden">
-        <div class="touch-buttons"></div>
-      </div>`;
-    root.appendChild(this.el);
+  const speedButtons = SPEEDS.map((s) => {
+    const b = el(
+      'button.hud-btn.speed-btn',
+      {
+        type: 'button',
+        id: `speed-${s.speed}`,
+        'aria-label': s.label,
+        'data-tip': `${s.label} (touche ${s.key})`,
+        'data-tip-side': 'bottom',
+        onclick: () => app.setSpeed(s.speed, { fromUser: true }),
+      },
+      icon(s.icon, 'md'),
+      s.speed > 1 ? el('span.speed-num', `×${s.speed}`) : null,
+    );
+    b.dataset.speed = s.speed;
+    return b;
+  });
+  const speed = el('div.hud-speed', { id: 'hud-speed', role: 'group', 'aria-label': 'Vitesse du temps' }, speedButtons);
 
-    this.biomeName = this.el.querySelector('.biome-name');
-    this.seasonLabel = this.el.querySelector('.season-label');
-    this.beatBar = this.el.querySelector('.beat-bar i');
-    this.goalBar = this.el.querySelector('.goal-bar i');
-    this.goalGhost = this.el.querySelector('.goal-bar b');
-    this.goalText = this.el.querySelector('.goal-text');
-    this.sapValue = this.el.querySelector('.sap-value');
-    this.chainMult = this.el.querySelector('.chain-mult');
-    this.chainCount = this.el.querySelector('.chain-count');
-    this.blightFill = this.el.querySelector('.blight-gauge i');
-    this.blightText = this.el.querySelector('.blight-gauge span');
-    this.eventBanner = this.el.querySelector('.event-banner');
-    this.ctxLabel = this.el.querySelector('.ctx-label');
-    this.ctxChord = this.el.querySelector('.ctx-chord');
-    this.seedBar = this.el.querySelector('.seed-bar');
-    this.touchWrap = this.el.querySelector('.touch-controls');
-    this.touchButtons = this.el.querySelector('.touch-buttons');
-    this.pauseBtn = this.el.querySelector('.pause-btn');
-    this.helpBtn = this.el.querySelector('.help-btn');
+  const muteIcon = icon('sound', 'md');
+  const muteBtn = el(
+    'button.hud-btn.hud-mute',
+    { type: 'button', id: 'hud-mute', 'aria-label': 'Couper le son', 'data-tip-side': 'bottom', onclick: () => app.toggleMute() },
+    muteIcon,
+  );
+  const menuBtn = el(
+    'button.hud-btn.hud-menu',
+    { type: 'button', id: 'hud-menu', 'aria-label': 'Menu', 'data-tip': 'Menu (Échap)', 'data-tip-side': 'bottom', onclick: () => app.openPauseMenu() },
+    icon('menu', 'md'),
+  );
 
-    this.buildTouchButtons();
-    this.lastSap = 0;
-    this.lastMult = 1;
-    this.seedEls = [];
+  root.append(money, date, weather, bill, el('div.hud-spacer'), speed, muteBtn, menuBtn);
+
+  // ── Infobulles ────────────────────────────────────────────────────────────────
+  function moneyTip() {
+    if (!game) return null;
+    const f = game.query.finance();
+    const c = game.query.calendar();
+    const rows = [el('div.tip-title', `Argent : ${plural(f.money, 'pièce')}`), el('div.tip-sub', `Chaque matin ${season(c.seasonId, 'in')} :`)];
+    let listed = 0;
+    for (const inv of game.query.investments()) {
+      if (!inv.owned) continue;
+      const units = inv.kind === 'upgrade' ? 1 : inv.owned;
+      const amount = (inv.income || 0) * units;
+      if (amount > 0) {
+        rows.push(row(`${inv.name}${units > 1 ? ` ×${units}` : ''}`, `+${fmt(amount)}`, 'pos'));
+        listed += 1;
+      }
+    }
+    if (!listed) rows.push(row('Revenus automatiques', '0'));
+    rows.push(row('Charges (ferme et entretien)', f.dailyCharges ? `−${fmt(f.dailyCharges)}` : '0', f.dailyCharges ? 'neg' : ''));
+    rows.push(el('div.tip-row.tip-total', el('span', 'Solde de chaque matin'), el(`b.${f.net < 0 ? 'neg' : 'pos'}`, `${signed(f.net)} / jour`)));
+    if (f.loan && f.loan.nextInDays !== null) rows.push(row('Prochaine mensualité du prêt', `−${fmt(f.loan.payment)}`, 'neg'));
+    rows.push(el('div.tip-sub', 'Les récoltes, elles, rapportent au moment où vous les cueillez.'));
+    if (f.money < 0) rows.push(el('div.tip-note.neg', 'Vous êtes à découvert : attention au prochain fermage !'));
+    return el('div.tip-rows', rows);
   }
 
-  buildTouchButtons() {
-    for (const b of TOUCH_BUTTONS) {
-      const btn = document.createElement('button');
-      btn.className = `tbtn tbtn-${b.action}`;
-      btn.innerHTML = `<span>${b.label}</span>`;
-      const press = (e) => { e.preventDefault(); Input.pressVirtual(b.action); btn.classList.add('down'); };
-      const release = (e) => { e.preventDefault(); Input.releaseVirtual(b.action); btn.classList.remove('down'); };
-      btn.addEventListener('touchstart', press, { passive: false });
-      btn.addEventListener('touchend', release, { passive: false });
-      btn.addEventListener('touchcancel', release, { passive: false });
-      btn.addEventListener('mousedown', press);
-      btn.addEventListener('mouseup', release);
-      btn.addEventListener('mouseleave', release);
-      this.touchButtons.appendChild(btn);
+  function dateTip() {
+    if (!game) return null;
+    const c = game.query.calendar();
+    return el(
+      'div.tip-rows',
+      el('div.tip-title', `${c.seasonName} — jour ${c.dayOfSeason} sur ${c.seasonLength}`),
+      el('div', `Jour ${c.day} de l'année (sur ${c.totalDays}).`),
+      el('div', c.daysLeftInSeason === 0 ? `Dernier jour ${season(c.seasonId, 'of')} : le fermage se paie ce soir.` : `Encore ${plural(c.daysLeftInSeason, 'jour')} avant la fin ${season(c.seasonId, 'of')}.`),
+    );
+  }
+
+  function weatherTip() {
+    if (!game) return null;
+    const w = game.query.forecast();
+    return el(
+      'div.tip-rows',
+      el('div.tip-title', `Aujourd'hui : ${weatherName(w.today)}`),
+      el('div', WEATHER_HINTS[w.today] || ''),
+      el('div.tip-sub', `Demain : ${weatherName(w.tomorrow)}. ${WEATHER_HINTS[w.tomorrow] || ''}`),
+    );
+  }
+
+  function billTip() {
+    if (!game) return null;
+    const p = projection();
+    const nodes = [
+      el('div.tip-title', `Fermage ${season(p.seasonId, 'of')} : ${fmt(p.amount)} pièces`),
+      el('div', p.daysLeft === 0 ? 'Il sera prélevé ce soir.' : `Il sera prélevé le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
+      row('Argent actuel', fmt(p.money)),
+    ];
+    if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
+    if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
+    if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
+    nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : 'neg'}`, fmt(p.projected))));
+    nodes.push(
+      el(
+        `div.tip-note.${p.state === 'danger' ? 'neg' : p.state === 'warn' ? 'warn' : 'pos'}`,
+        p.state === 'ok'
+          ? 'Vous avez déjà de quoi payer.'
+          : p.state === 'warn'
+            ? `Il manque encore ${fmt(p.amount - p.money)} pièces : récoltez avant ce soir-là.`
+            : 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !',
+      ),
+    );
+    nodes.push(el('div.tip-sub', 'Prévision = argent actuel + solde des matins à venir + cultures qui seront mûres d\'ici là.'));
+    return el('div.tip-rows', nodes);
+  }
+
+  function row(label, value, cls = '') {
+    return el('div.tip-row', el('span', label), el(`b${cls ? `.${cls}` : ''}`, value));
+  }
+
+  // ── Calculs ───────────────────────────────────────────────────────────────────
+  /** Prévision de l'argent au soir du fermage : argent + revenus nets + récoltes à venir − prêt. */
+  function projection() {
+    const f = game.query.finance();
+    const bill = f.nextBill;
+    const daysLeft = bill.daysLeft;
+    const netTotal = f.net * daysLeft;
+    let loanTotal = 0;
+    if (f.loan && f.loan.nextInDays !== null && f.loan.nextInDays > 0 && f.loan.nextInDays <= daysLeft) {
+      loanTotal = f.loan.payment * (1 + Math.floor((daysLeft - f.loan.nextInDays) / f.loan.every));
+    }
+    let crops = 0;
+    for (const p of game.query.plots()) {
+      if (!p.cropId) continue;
+      if (p.mature) crops += p.harvestValue || 0;
+      else if (p.daysLeft <= daysLeft && !p.willFreeze) {
+        const c = game.query.plantableCrops().find((x) => x.id === p.cropId);
+        crops += c ? c.sellPrice : 0;
+      }
+    }
+    // Estimation des récoltes : prix des cultures plantables ; celles qui ne le sont plus cette
+    // saison ne sont pas comptées (prudence).
+    const projected = f.money + netTotal - loanTotal + crops;
+    const state = f.money >= bill.amount + loanTotal - Math.min(0, netTotal) ? 'ok' : projected >= bill.amount ? 'warn' : 'danger';
+    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, projected, state };
+  }
+
+  // ── Mises à jour ──────────────────────────────────────────────────────────────
+  function refresh() {
+    if (!game) return;
+    const c = game.query.calendar();
+    const w = game.query.forecast();
+    targetMoney = game.state.money;
+
+    setIcon(seasonIcon, c.seasonId);
+    setText(dateMain, `Jour ${c.day} · ${c.seasonName} (${c.dayOfSeason}/${c.seasonLength})`);
+    date.dataset.season = c.seasonId;
+
+    setIcon(wToday, w.today);
+    setText(wName, weatherName(w.today));
+    setIcon(wTomorrow, w.tomorrow || 'sunny');
+    weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
+
+    const p = projection();
+    const status = game.state.status;
+    setText(billAmount, fmt(p.amount));
+    if (status === 'victory') setText(billDays, 'payé : année finie !');
+    else if (status === 'bankrupt') setText(billDays, 'impayé');
+    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain soir' : `dans ${p.daysLeft} jours`);
+    const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
+    bill.classList.toggle('is-ok', state === 'ok');
+    bill.classList.toggle('is-warn', state === 'warn');
+    bill.classList.toggle('is-danger', state === 'danger');
+    bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && p.state !== 'ok');
+
+    const sp = game.state.speed;
+    for (const b of speedButtons) {
+      const on = Number(b.dataset.speed) === sp;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    root.classList.toggle('is-paused', sp === 0);
+    refreshMute();
+    app.tooltip?.refresh(money);
+    app.tooltip?.refresh(bill);
+  }
+
+  function refreshMute() {
+    const muted = !!app.settings.muted;
+    setIcon(muteIcon, muted ? 'mute' : 'sound');
+    muteBtn.dataset.tip = muted ? 'Remettre le son' : 'Couper le son';
+    muteBtn.setAttribute('aria-label', muteBtn.dataset.tip);
+    muteBtn.classList.toggle('is-active', muted);
+  }
+
+  function popDelta(delta) {
+    pendingDelta += delta;
+    if (deltaTimer) return;
+    deltaTimer = setTimeout(() => {
+      deltaTimer = null;
+      const d = Math.round(pendingDelta);
+      pendingDelta = 0;
+      if (!d) return;
+      const pop = el(`span.money-pop.${d > 0 ? 'pos' : 'neg'}`, signed(d));
+      moneyPops.append(pop);
+      setTimeout(() => pop.remove(), 1400);
+    }, 120);
+  }
+
+  function frame(dt) {
+    if (!game) return;
+    // Compteur d'argent animé
+    if (shownMoney !== targetMoney) {
+      const diff = targetMoney - shownMoney;
+      const step = diff * Math.min(1, dt * 9);
+      shownMoney = Math.abs(diff) < 0.6 || Math.abs(step) >= Math.abs(diff) ? targetMoney : shownMoney + step;
+    }
+    const n = Math.round(shownMoney);
+    if (n !== shownInt) {
+      shownInt = n;
+      moneyValue.textContent = fmt(n);
+      money.classList.toggle('is-negative', n < 0);
+    }
+    // Avancée de la journée
+    const p = game.state.time.elapsed / 20;
+    const k = Math.max(0, Math.min(1, p));
+    dayFill.style.transform = `scaleX(${k.toFixed(4)})`;
+    daySun.style.left = `${(k * 100).toFixed(2)}%`;
+  }
+
+  function bind(g) {
+    game = g;
+    shownMoney = g.state.money;
+    targetMoney = g.state.money;
+    shownInt = null;
+    moneyPops.textContent = '';
+    refresh();
+    frame(0);
+  }
+
+  function onEvent(ev) {
+    if (ev.type === 'moneyChanged') {
+      targetMoney = ev.money;
+      if (ev.delta) popDelta(ev.delta);
+      money.classList.remove('is-bump');
+      void money.offsetWidth;
+      money.classList.add('is-bump');
     }
   }
 
-  buildSeedBar(run) {
-    this.seedBar.innerHTML = '';
-    this.seedEls = [];
-    run.availableSeeds.forEach((key, i) => {
-      const info = DEGREE_INFO[key];
-      const sp = SPECIES[key];
-      const el = document.createElement('button');
-      el.className = 'seed';
-      el.style.setProperty('--seed-color', info.color);
-      el.innerHTML = `
-        <span class="seed-key">${i + 1}</span>
-        <canvas class="seed-icon" width="56" height="56" aria-hidden="true"></canvas>
-        <span class="seed-text"><span class="seed-name">${sp.name}</span>
-        <span class="seed-deg">${key} · ${info.name}</span></span>`;
-      const ic = el.querySelector('.seed-icon').getContext('2d');
-      ic.translate(28, 50);
-      drawFloraIcon(ic, key, 48);
-      el.title = sp.desc;
-      el.addEventListener('click', () => { run.seedIndex = i; });
-      el.addEventListener('touchstart', (e) => { e.preventDefault(); run.seedIndex = i; }, { passive: false });
-      this.seedBar.appendChild(el);
-      this.seedEls.push(el);
-    });
-  }
-
-  show(run) {
-    this.el.classList.remove('hidden');
-    document.body.classList.add('in-game');
-    this.buildSeedBar(run);
-    this.biomeName.textContent = run.biome.name;
-  }
-
-  hide() { this.el.classList.add('hidden'); document.body.classList.remove('in-game'); }
-
-  setTouch(visible) {
-    this.touchWrap.classList.toggle('hidden', !visible);
-  }
-
-  showEvent(ev) {
-    this.eventBanner.classList.remove('hidden');
-    this.eventBanner.style.setProperty('--ev-color', ev.color);
-    this.eventBanner.querySelector('strong').textContent = ev.name;
-    this.eventBanner.querySelector('span').textContent = ev.line;
-    pulse(this.eventBanner, 'flash');
-  }
-
-  hideEvent() { this.eventBanner.classList.add('hidden'); }
-
-  update(run) {
-    if (!run) return;
-    this.seasonLabel.textContent = `Saison ${run.season + 1}/3`;
-    this.beatBar.style.transform = `scaleX(${1 - run.seasonRatio()})`;
-
-    const ratio = run.progressRatio();
-    this.goalBar.style.transform = `scaleX(${ratio})`;
-    this.goalGhost.style.transform = `scaleX(${Math.min(1, ratio + 0.02)})`;
-    this.goalText.textContent = `${formatSap(run.seasonSap)} / ${formatSap(run.goal)} sève`;
-    this.goalBar.parentElement.classList.toggle('full', ratio >= 1);
-
-    if (run.sap !== this.lastSap) {
-      this.sapValue.textContent = formatSap(run.sap);
-      pulse(this.sapValue, 'bump');
-      this.lastSap = run.sap;
-    }
-
-    this.chainMult.textContent = `×${run.chainMult % 1 === 0 ? run.chainMult : run.chainMult.toFixed(1)}`;
-    this.chainCount.textContent = run.chain > 0 ? `${run.chain} justes` : '';
-    this.el.querySelector('.chain-box').classList.toggle('hot', run.chainMult >= 2);
-    if (run.chainMult !== this.lastMult) {
-      pulse(this.chainMult, 'bump');
-      this.lastMult = run.chainMult;
-    }
-
-    const blight = run.field.blightRatio() / BLIGHT.loseThreshold;
-    this.blightFill.style.transform = `scaleX(${Math.min(1, blight)})`;
-    this.blightText.textContent = `Cendre ${Math.round(Math.min(1, blight) * 100)}%`;
-    this.el.querySelector('.blight-gauge').classList.toggle('danger', blight > 0.7);
-
-    this.ctxLabel.textContent = run.contextLabel();
-    const preview = run.preview();
-    if (preview && preview.chord) {
-      this.ctxChord.textContent = `${preview.chord.name} · ≈${preview.estimate} sève`;
-      this.ctxChord.style.color = preview.chord.color;
-    } else if (preview && preview.hint) {
-      const missing = preview.hint.missing.join(' + ');
-      this.ctxChord.textContent = `il manque ${missing} pour ${preview.hint.chord.name}`;
-      this.ctxChord.style.color = '#c9bfa8';
-    } else {
-      this.ctxChord.textContent = '';
-    }
-
-    this.seedEls.forEach((el, i) => el.classList.toggle('active', i === run.seedIndex % this.seedEls.length));
-  }
+  return { bind, refresh, frame, onEvent, refreshMute, projection, el: root };
 }
