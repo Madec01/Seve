@@ -21,7 +21,7 @@
 //   y 15     foin, abreuvoir des moutons
 //   y 16-31  champ clôturé (x 2-11), ruches à gauche (x 1), portail en bas (x 7)
 //   y 32     panneaux solaires (x 5-6), chemin du portail (x 7)
-//   y 33-35  puits (x 1), maison (x 2-5) │ chemin │ chambre d'hôte (x 8-11), jardin
+//   y 33-35  maison (x 1-4), puits (x 5), tonneau (x 6) │ chemin │ chambre d'hôte (x 8-11), jardin
 //   y 36     chemins vers la route
 //   y 37-38  route ──────────────────────────────
 //   y 39     étal au bord de la route (x 8-11)
@@ -133,8 +133,8 @@ export function createPortraitLayout(level) {
 
   // ── Maison, puits, panneaux solaires, chambre d'hôte ──────────────────────────────
   const yb = y; // ligne juste sous le champ
-  const house = { x: 2, y: yb + 1, w: 4, h: 3, door: { x: 4, y: yb + 3 } };
-  const well = { x: 1, y: yb + 2, w: 1, h: 2 };
+  const house = { x: 1, y: yb + 1, w: 4, h: 3, door: { x: 3, y: yb + 3 } };
+  const well = { x: 5, y: yb + 2, w: 1, h: 2 };
   const guest = { x: 8, y: yb + 1, w: 4, h: 3, door: { x: 10, y: yb + 3 } };
   const ROAD_Y = yb + 5; // route : 2 lignes
   const standY = ROAD_Y + 2;
@@ -231,7 +231,7 @@ export function createPortraitLayout(level) {
   one(well.x, well.y - 1);
   const props = [
     { name: 'barrel', x: 6, y: yb + 3, dy: 1 },
-    { name: 'bucket.water', x: 6, y: yb + 2, dx: 1, dy: 2 },
+    { name: 'bucket.water', x: 6, y: yb + 2, dx: 1, dy: 3 },
   ];
   for (const p of props) one(p.x, p.y);
   one(sprinklerSign.x, sprinklerSign.y);

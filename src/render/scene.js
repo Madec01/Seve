@@ -454,7 +454,7 @@ export function createScene(canvas, images, level, opts = {}) {
       if (d.kind === 'flowerbed' && (tileHash(d.tx, d.ty, 5) < 0.75 || season !== 'spring')) drawSprite(c, sheets, bed, d.x, d.y);
     }
     // Jardin de la chambre d'hôte
-    const guest = (owned.guestHouse || 0) > 0;
+    const guest = layout.available.has('guestHouse') && (owned.guestHouse || 0) > 0;
     if (guest) {
       for (const f of layout.garden.flowers) drawSprite(c, sheets, season === 'winter' ? 'ground.grass.tufts' : 'ground.grass.flowers', f.x * TILE, f.y * TILE);
     }
@@ -490,9 +490,10 @@ export function createScene(canvas, images, level, opts = {}) {
     const f = layout.field;
     drawFence(c, sheets, f.fence, f.gate.x);
     const sl = layout.slots;
-    if ((owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
-    if ((owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
-    if ((owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
+    const A = layout.available;
+    if (A.has('chickenCoop') && (owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
+    if (A.has('cow') && (owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
+    if (A.has('sheep') && (owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
     // 5. Décor fixe (du haut vers le bas)
     drawList.length = 0;
     for (const d of layout.deco) if (d.kind !== 'flowerbed') drawList.push(d);
@@ -516,20 +517,9 @@ export function createScene(canvas, images, level, opts = {}) {
         if (name) drawSprite(c, name.startsWith('crop') ? images : sheets, name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
       }
     }
-    if ((owned.sheep || 0) > 0) {
-      const e = sl.sheep.extras;
-      drawSprite(c, sheets, 'hay', e.x * TILE, e.y * TILE);
-      drawSprite(c, sheets, 'hay.tied', (e.x + 1) * TILE, e.y * TILE + 2);
-      drawSprite(c, sheets, 'trough.wood.water', e.x * TILE + 4, (e.y + 2) * TILE - 2);
-    }
-    if ((owned.cow || 0) > 0) {
-      const b = sl.cow.barn;
-      drawSprite(c, sheets, 'bucket.milk', (b.x - 0) * TILE - 2, (b.y + b.h) * TILE - 2);
-      drawSprite(c, sheets, 'hay.tied', (b.x + 2) * TILE + 2, (b.y + b.h) * TILE - 1);
-    }
-    if ((owned.chickenCoop || 0) > 0) {
-      const s = sl.chickenCoop.shed;
-      drawSprite(c, images, 'egg', s.x * TILE + 1, (s.y + s.h) * TILE - 3);
+    for (const id of ['sheep', 'cow', 'chickenCoop']) {
+      if (!layout.available.has(id) || (owned[id] || 0) <= 0) continue;
+      for (const p of sl[id].props || []) drawSprite(c, p.sheet === 'base' ? images : sheets, p.name, p.x, p.y);
     }
 
     // 6. Panneaux « à vendre » des emplacements libres
@@ -664,7 +654,8 @@ export function createScene(canvas, images, level, opts = {}) {
   function farmerGoTo(plotIndex, tool) {
     const r = layout.plotRect(plotIndex);
     if (!r) return;
-    const target = { x: r.x + 8, y: r.y + 27, tool, plot: plotIndex };
+    // Debout juste sous la parcelle (sur la rangée suivante en paysage, dans l'allée en portrait).
+    const target = { x: r.x + r.w / 2, y: r.y + r.h + (layout.plotScale > 1 ? 3 : 11), tool, plot: plotIndex };
     farmer.path.length = 0;
     if (!inField(farmer.x, farmer.y)) {
       const route = routePoints();
@@ -794,18 +785,25 @@ export function createScene(canvas, images, level, opts = {}) {
 
   function drawPlots(sheetsEnv, raining, season) {
     const L = layout;
-    const cols = L.field.cols;
+    const k = L.plotScale || 1; // ×2 en portrait : terre et cultures dessinées en grand
     const c = vctx;
+    const sc = k === 1 ? undefined : { scale: k };
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       const r = L.plots[i];
       if (!pv) continue;
       if (!pv.unlocked) continue;
-      const col = i % cols;
-      const left = col > 0 && plotViews[i - 1]?.unlocked;
-      const right = col < cols - 1 && plotViews[i + 1]?.unlocked;
       const wet = (pv.cropId && pv.watered) || raining;
-      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, r.y);
+      let left = false;
+      let right = false;
+      if (k === 1) {
+        // Paysage : les parcelles voisines d'une même ligne forment un sillon continu.
+        const nb = L.plotNeighbors(i);
+        left = nb.left >= 0 && !!plotViews[nb.left]?.unlocked;
+        right = nb.right >= 0 && !!plotViews[nb.right]?.unlocked;
+      }
+      // Portrait : chaque parcelle est une motte bien séparée (cible tactile lisible).
+      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, r.y + (k > 1 ? 1 : 0), sc);
     }
     // Parcelles à acheter : pointillés discrets
     c.fillStyle = 'rgba(63,38,49,0.28)';
@@ -813,11 +811,13 @@ export function createScene(canvas, images, level, opts = {}) {
       const pv = plotViews[i];
       if (!pv || pv.unlocked) continue;
       const r = L.plots[i];
-      for (let k = 2; k < 14; k += 3) {
-        c.fillRect(r.x + k, r.y + 2, 1, 1);
-        c.fillRect(r.x + k, r.y + 13, 1, 1);
-        c.fillRect(r.x + 2, r.y + k, 1, 1);
-        c.fillRect(r.x + 13, r.y + k, 1, 1);
+      const n = r.w;
+      const step = 3 * k;
+      for (let d = 2 * k; d < n - 2 * k; d += step) {
+        c.fillRect(r.x + d, r.y + 2 * k, k, k);
+        c.fillRect(r.x + d, r.y + n - 3 * k, k, k);
+        c.fillRect(r.x + 2 * k, r.y + d, k, k);
+        c.fillRect(r.x + n - 3 * k, r.y + d, k, k);
       }
     }
     // Cultures
@@ -833,20 +833,20 @@ export function createScene(canvas, images, level, opts = {}) {
       } else if (stage >= 2 && season !== 'winter') {
         dy += Math.sin(time * 1.3 + i * 0.9) > 0.8 ? -1 : 0;
       }
-      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy);
+      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
       if (pv.mature) {
         const ph = (time * 0.55 + i * 0.37) % 1;
         if (ph < 0.18) {
-          const sx = r.x + 3 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 3) * 10);
-          const sy = r.y + 1 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 4) * 6);
+          const sx = r.x + (3 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 3) * 10)) * k;
+          const sy = r.y + (1 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 4) * 6)) * k;
           c.fillStyle = '#ffffff';
-          c.fillRect(sx, sy, 1, 1);
+          c.fillRect(sx, sy, k, k);
           if (ph > 0.05 && ph < 0.13) {
             c.fillStyle = '#fff3b0';
-            c.fillRect(sx - 1, sy, 1, 1);
-            c.fillRect(sx + 1, sy, 1, 1);
-            c.fillRect(sx, sy - 1, 1, 1);
-            c.fillRect(sx, sy + 1, 1, 1);
+            c.fillRect(sx - k, sy, k, k);
+            c.fillRect(sx + k, sy, k, k);
+            c.fillRect(sx, sy - k, k, k);
+            c.fillRect(sx, sy + k, k, k);
           }
         }
       }
@@ -1043,7 +1043,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const y0 = r.y - 1;
     const x1 = r.x + r.w;
     const y1 = r.y + r.h;
-    const arm = Math.max(3, Math.min(5, Math.floor(Math.min(r.w, r.h) / 4)));
+    const arm = Math.max(3, Math.min(layout.plotScale > 1 ? 8 : 5, Math.floor(Math.min(r.w, r.h) / 4)));
     c.globalAlpha = pulse;
     // Coins en « L » : contour sombre puis blanc
     for (const [color, o] of [[OUTLINE, 1], ['#ffffff', 0]]) {
@@ -1066,11 +1066,17 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   // ── Image ───────────────────────────────────────────────────────────────────────
-  const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: WORLD_W, h: WORLD_H } };
+  const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, (timeMs - lastTime) / 1000));
     lastTime = timeMs;
     time += dt;
+    if (flingV !== 0) {
+      const before = scrollDev;
+      setScrollDev(scrollDev + flingV * dt * dpr);
+      flingV *= Math.exp(-dt * 4.5);
+      if (Math.abs(flingV) < 12 || scrollDev === before) flingV = 0;
+    }
 
     if (game.level && game.level !== layout.level) setLevel(game.level);
     if (game !== lastGame) {
@@ -1139,17 +1145,24 @@ export function createScene(canvas, images, level, opts = {}) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
-    effects.drawScreen(ctx, worldToDevice, zoom, images);
+    effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
+  }
+
+  function rebuildLayout(lvl) {
+    layout = createLayout(lvl, { mode });
+    resetTracking();
+    effects.clear();
+    userScrolled = false;
+    flingV = 0;
   }
 
   function setLevel(lvl) {
-    layout = createLayout(lvl);
-    resetTracking();
-    effects.clear();
+    rebuildLayout(lvl);
+    computeCamera();
   }
 
   // Taille initiale : celle du canvas tel qu'il est.
-  resize(canvas.clientWidth || canvas.width || WORLD_W * 2, canvas.clientHeight || canvas.height || WORLD_H * 2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  resize(canvas.clientWidth || canvas.width || 1024, canvas.clientHeight || canvas.height || 640, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
 
   return {
     resize,
@@ -1164,6 +1177,27 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.onEvent(type, payload, layout);
     },
     setLevel,
+    setInsets,
+    scrollBy,
+    setScroll,
+    getScroll() {
+      return scrollDev / dpr;
+    },
+    maxScroll() {
+      return maxScrollDev / dpr;
+    },
+    fling,
+    focusField,
+    focusPlot,
+    get layoutMode() {
+      return mode;
+    },
+    get insets() {
+      return { ...insets };
+    },
+    get dpr() {
+      return dpr;
+    },
     get layout() {
       return layout;
     },

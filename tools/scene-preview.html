@@ -2,13 +2,16 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>Aperçu de la scène</title>
 <link rel="stylesheet" href="../css/fonts.css">
 <style>
   :root { --bg: #2b2633; --fg: #f3e9dc; --muted: #b9a9c9; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13px/1.3 system-ui, sans-serif; overflow: hidden; }
-  #scene { position: fixed; inset: 0; display: block; image-rendering: pixelated; }
+  #scene { position: fixed; left: 0; top: 0; display: block; image-rendering: pixelated; touch-action: none; }
+  .inset { position: fixed; background: rgba(43,38,51,0.55); pointer-events: none; z-index: 1; border: 0 dashed rgba(243,233,220,0.5); }
+  #insetTop { border-bottom-width: 1px; }
+  #insetBottom { border-top-width: 1px; }
   #panel { position: fixed; top: 8px; left: 8px; background: rgba(43,38,51,0.88); border-radius: 6px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; max-width: 250px; z-index: 2; }
   #panel.hidden > :not(#toggle) { display: none; }
   #panel label { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
@@ -20,6 +23,8 @@
 </head>
 <body>
 <canvas id="scene"></canvas>
+<div class="inset" id="insetTop"></div>
+<div class="inset" id="insetBottom"></div>
 <div id="panel">
   <button id="toggle">☰ Aperçu de la scène</button>
   <label>Niveau <select id="level"></select></label>

@@ -175,7 +175,7 @@ export function createEffects(images) {
     kind: '', x: 0, y: 0, vx: 0, vy: 0, g: 0, t: 0, life: 1, delay: 0, color: '', floor: 0, frame: 0,
   });
   const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false });
-  const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '' });
+  const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '', scale: 1 });
   const clouds = makePool(10, { x: 0, y: 0, vx: 0 });
 
   const env = { season: 'spring', weather: 'sunny', dayProgress: 0.4, view: { x: 0, y: 0, w: 512, h: 320 } };
@@ -216,23 +216,24 @@ export function createEffects(images) {
     }
   }
 
-  function droplets(wx, wy, n = 10) {
+  // k : échelle des parcelles (1 en paysage, 2 en portrait) — les gerbes s'étalent d'autant.
+  function droplets(wx, wy, n = 10, k = 1) {
     for (let i = 0; i < n; i++) {
-      const x = wx + rand(-7, 7);
-      particle('drop', x, wy - rand(10, 18), rand(-6, 6), rand(10, 40), 260, 0.9, i % 3 ? '#8fd0ff' : '#dff3ff', i * 0.025, wy + rand(-4, 6));
+      const x = wx + rand(-7, 7) * k;
+      particle('drop', x, wy - rand(10, 18) * k, rand(-6, 6), rand(10, 40), 260, 0.9, i % 3 ? '#8fd0ff' : '#dff3ff', i * 0.025, wy + rand(-4, 6) * k);
     }
   }
 
-  function dirt(wx, wy, n = 9) {
+  function dirt(wx, wy, n = 9, k = 1) {
     for (let i = 0; i < n; i++) {
       const a = rand(0, Math.PI * 2);
-      particle('dust', wx + Math.cos(a) * 2, wy + Math.sin(a), Math.cos(a) * rand(12, 26), Math.sin(a) * rand(6, 14) - 10, 30, rand(0.35, 0.6), i % 2 ? '#cf8254' : '#eaa56c');
+      particle('dust', wx + Math.cos(a) * 2 * k, wy + Math.sin(a) * k, Math.cos(a) * rand(12, 26) * k, (Math.sin(a) * rand(6, 14) - 10) * k, 30, rand(0.35, 0.6), i % 2 ? '#cf8254' : '#eaa56c');
     }
   }
 
-  function leafBurst(wx, wy, n = 5) {
+  function leafBurst(wx, wy, n = 5, k = 1) {
     for (let i = 0; i < n; i++) {
-      particle('leaf', wx + rand(-4, 4), wy, rand(-25, 25), rand(-50, -25), 120, rand(0.5, 0.8), i % 2 ? '#65a556' : '#84c669', 0, wy + rand(2, 8));
+      particle('leaf', wx + rand(-4, 4) * k, wy, rand(-25, 25) * k, rand(-50, -25) * Math.sqrt(k), 120, rand(0.5, 0.8), i % 2 ? '#65a556' : '#84c669', 0, wy + rand(2, 8) * k);
     }
   }
 
@@ -243,11 +244,12 @@ export function createEffects(images) {
     }
   }
 
-  function ghostCrop(rect, cropId, kind, delay = 0) {
+  function ghostCrop(rect, cropId, kind, delay = 0, k = 1) {
     if (!cropId) return;
     const g = ghosts.spawn();
     g.x = rect.x;
     g.y = rect.y;
+    g.scale = k;
     g.sprite = `crop.${cropId}.dead`;
     g.t = 0;
     g.life = 3.2;
@@ -268,30 +270,31 @@ export function createEffects(images) {
    */
   function onEvent(type, payload = {}, layout) {
     if (!layout) return;
+    const k = layout.plotScale || 1;
     switch (type) {
       case 'harvested': {
         const c = layout.plotCenter(payload.plotIndex);
         if (!c) return;
-        coins(c.x, c.y - 4, 7);
-        leafBurst(c.x, c.y);
-        if (payload.amount) floatText(c.x, c.y - 10, `+${payload.amount}`, GOLD);
+        coins(c.x, c.y - 4 * k, 7 + (k - 1) * 3);
+        leafBurst(c.x, c.y, 5 * k, k);
+        if (payload.amount) floatText(c.x, c.y - 10 * k, `+${payload.amount}`, GOLD);
         break;
       }
       case 'watered': {
         const c = layout.plotCenter(payload.plotIndex);
-        if (c) droplets(c.x, c.y + 2);
+        if (c) droplets(c.x, c.y + 2 * k, 10 * k, k);
         break;
       }
       case 'planted': {
         const c = layout.plotCenter(payload.plotIndex);
-        if (c) dirt(c.x, c.y + 3);
+        if (c) dirt(c.x, c.y + 3 * k, 9 * k, k);
         break;
       }
       case 'plotUnlocked': {
         const r = layout.plotRect(payload.plotIndex);
         if (!r) return;
-        dirt(r.x + 8, r.y + 10, 12);
-        sparkle(r, 10);
+        dirt(r.x + r.w / 2, r.y + r.h * 0.62, 12 * k, k);
+        sparkle(r, 10 * k);
         break;
       }
       case 'purchased': {
@@ -314,11 +317,11 @@ export function createEffects(images) {
           i++;
         }
         // Arroseurs automatiques : gouttes sur les parcelles arrosées ce matin.
-        (payload.sprinkled || []).forEach((plotIndex, k) => {
+        (payload.sprinkled || []).forEach((plotIndex, j) => {
           const c = layout.plotCenter(plotIndex);
           if (c) {
-            for (let d = 0; d < 5; d++) {
-              particle('drop', c.x + rand(-7, 7), c.y - rand(8, 14), rand(-5, 5), rand(10, 30), 260, 0.8, d % 2 ? '#8fd0ff' : '#dff3ff', 0.1 + k * 0.04 + d * 0.03, c.y + rand(-3, 6));
+            for (let d = 0; d < 5 * k; d++) {
+              particle('drop', c.x + rand(-7, 7) * k, c.y - rand(8, 14) * k, rand(-5, 5), rand(10, 30), 260, 0.8, d % 2 ? '#8fd0ff' : '#dff3ff', 0.1 + j * 0.04 + d * 0.03, c.y + rand(-3, 6) * k);
             }
           }
         });
@@ -330,19 +333,19 @@ export function createEffects(images) {
       }
       case 'frost': {
         const lost = payload.lost || (payload.lostPlots || []).map((plotIndex) => ({ plotIndex, cropId: null }));
-        lost.forEach((l, k) => {
+        lost.forEach((l, j) => {
           const r = layout.plotRect(l.plotIndex);
           if (!r) return;
-          ghostCrop(r, l.cropId, 'frost', k * 0.05);
-          sparkle(r, 6, 'ice', k * 0.05);
+          ghostCrop(r, l.cropId, 'frost', j * 0.05, k);
+          sparkle(r, 6 * k, 'ice', j * 0.05);
         });
         break;
       }
       case 'rot': {
         const r = layout.plotRect(payload.plotIndex);
         if (!r) return;
-        ghostCrop(r, payload.cropId, 'rot');
-        flies(r.x + 8, r.y + 4);
+        ghostCrop(r, payload.cropId, 'rot', 0, k);
+        flies(r.x + r.w / 2, r.y + 4 * k);
         break;
       }
       default:
@@ -636,15 +639,16 @@ export function createEffects(images) {
       if (!g.alive || g.delay > 0) continue;
       const fade = g.t < g.life - 1 ? 1 : Math.max(0, g.life - g.t);
       ctx.globalAlpha = fade;
+      const k = g.scale || 1;
       let dy = 0;
       if (g.kind === 'rot' && g.t > 0.4) dy = Math.min(2, Math.floor((g.t - 0.4) * 2));
-      drawSprite(ctx, sheets, g.sprite, g.x, g.y - 2 + dy);
+      drawSprite(ctx, sheets, g.sprite, g.x, g.y + (-2 + dy) * k, k === 1 ? undefined : { scale: k });
       if (g.kind === 'frost') {
         // givre : petits cristaux sur la plante
         ctx.fillStyle = '#e8f6ff';
-        ctx.fillRect(g.x + 5, g.y + 1, 1, 1);
-        ctx.fillRect(g.x + 10, g.y + 4, 1, 1);
-        ctx.fillRect(g.x + 7, g.y + 7, 1, 1);
+        ctx.fillRect(g.x + 5 * k, g.y + 1 * k, k, k);
+        ctx.fillRect(g.x + 10 * k, g.y + 4 * k, k, k);
+        ctx.fillRect(g.x + 7 * k, g.y + 7 * k, k, k);
       }
     }
     ctx.globalAlpha = 1;
@@ -836,18 +840,19 @@ export function createEffects(images) {
    * Textes flottants, dessinés sur le canvas final (écran) pour rester nets.
    * @param toScreen  (wx, wy, out) → remplit out.x/out.y en pixels écran
    * @param zoom      zoom entier courant
+   * @param dpr       densité de pixels (px réels par px CSS) : le texte fait au moins 18 px CSS
    */
   const tmpPt = { x: 0, y: 0 };
-  function drawScreen(ctx, toScreen, zoom, sheets) {
+  function drawScreen(ctx, toScreen, zoom, sheets, dpr = 1) {
     let any = false;
     for (const p of texts.items) if (p.alive && p.delay <= 0) { any = true; break; }
     if (!any) return;
-    const size = Math.max(14, Math.round(zoom * 8));
+    const size = Math.max(Math.round(18 * dpr), Math.round(zoom * 8));
     ctx.font = `700 ${size}px "Pixelify Sans", "Trebuchet MS", monospace`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.lineJoin = 'round';
-    const iconScale = Math.max(1, zoom - 1);
+    const iconScale = Math.max(1, Math.round(size / 8) - 1);
     for (const p of texts.items) {
       if (!p.alive || p.delay > 0) continue;
       const k = p.t / p.life;
@@ -857,14 +862,15 @@ export function createEffects(images) {
       const tw = Math.ceil(ctx.measureText(p.text).width);
       const iw = p.icon ? 10 * iconScale : 0;
       const total = tw + iw;
-      const x = Math.round(tmpPt.x - total / 2);
+      // Centré sur son point d'ancrage, mais jamais coupé par un bord de l'écran.
+      const x = Math.round(Math.max(size * 0.3, Math.min(ctx.canvas.width - total - size * 0.3, tmpPt.x - total / 2)));
       const y = Math.round(tmpPt.y);
       ctx.globalAlpha = alpha;
       if (p.icon && sheets) {
         // La pièce du pack occupe environ le centre 8 × 10 de sa tuile.
         drawSprite(ctx, sheets, 'coin', x - 4 * iconScale, y - 8 * iconScale, { scale: iconScale });
       }
-      ctx.lineWidth = Math.max(3, zoom + 1);
+      ctx.lineWidth = Math.max(3, Math.round(size / 7));
       ctx.strokeStyle = OUTLINE;
       ctx.strokeText(p.text, x + iw, y);
       ctx.fillStyle = p.color;
