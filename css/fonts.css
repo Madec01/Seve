@@ -5,19 +5,19 @@
    Elle remplace Pixelify Sans, dont plusieurs majuscules se confondaient sur téléphone
    (« C » lu « O », « B » lu « G », « Z » lu « 2 »…).
 
-   Le nom CSS reste « Pixelify Sans » : style.css et le canevas (textes flottants,
-   src/render/effects.js) l'utilisent tel quel. Deux fichiers couvrent toutes les graisses :
+   Nom CSS : « Ferme », utilisé par style.css et par le canevas (textes flottants,
+   src/render/effects.js). Deux fichiers couvrent toutes les graisses :
    400–549 → normale, 550–900 → grasse (600 et 700 dans style.css).
    Chemins relatifs à ce fichier (css/) : fonctionne aussi dans un sous-dossier. */
 @font-face {
-  font-family: 'Pixelify Sans';
+  font-family: 'Ferme';
   src: url('../assets/fonts/JerseyFerme-Regular.woff2') format('woff2');
   font-weight: 100 549;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Pixelify Sans';
+  font-family: 'Ferme';
   src: url('../assets/fonts/JerseyFerme-Bold.woff2') format('woff2');
   font-weight: 550 900;
   font-style: normal;

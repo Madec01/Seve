@@ -1061,7 +1061,7 @@ async function boot() {
             }),
         ),
       ),
-      (document.fonts?.load ? Promise.all(['16px "Pixelify Sans"', '700 16px "Pixelify Sans"'].map((f) => document.fonts.load(f))).catch(() => null) : Promise.resolve()).then(() => {
+      (document.fonts?.load ? Promise.all(['16px "Ferme"', '700 16px "Ferme"'].map((f) => document.fonts.load(f))).catch(() => null) : Promise.resolve()).then(() => {
         parts.font = 1;
         paint();
       }),

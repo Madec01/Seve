@@ -46,6 +46,13 @@ export function createToasts(stack, bannerNode) {
     // Pas plus de 4 messages à la fois.
     const items = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
     for (const extra of items.slice(4)) dismiss(extra);
+    // Place limitée (feuille haute ouverte) : les plus anciens qui passeraient sous la barre du
+    // haut s'effacent (le plus récent reste toujours).
+    requestAnimationFrame(() => {
+      const limit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inset-top')) || 0;
+      const live = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
+      for (const n of live.slice(1)) if (n.getBoundingClientRect().top < limit + 2) dismiss(n);
+    });
     const entry = { node, timer: setTimeout(() => dismiss(node), o.duration || 3200) };
     recent.set(key, entry);
     setTimeout(() => {

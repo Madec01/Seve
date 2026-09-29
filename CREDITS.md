@@ -28,12 +28,10 @@ Modifications apportées : fichiers renommés ; les versions mp3 de secours ont 
   Source : https://github.com/scfried/soft-type-jersey (via Google Fonts, https://fonts.google.com/specimen/Jersey+15).
   Licence : SIL OFL 1.1 (pas de nom réservé), texte complet dans `assets/fonts/OFL-Jersey15.txt`.
   Fichier : `assets/fonts/Jersey15-Regular.ttf` (original, source de la version modifiée).
-- **Jersey Ferme** — version modifiée de Jersey 15, sous la même licence SIL OFL 1.1 (`assets/fonts/OFL-Jersey15.txt`). **C'est la police du jeu** (`css/fonts.css`, nom CSS conservé : « Pixelify Sans », utilisé par `style.css` et le canevas).
+- **Jersey Ferme** — version modifiée de Jersey 15, sous la même licence SIL OFL 1.1 (`assets/fonts/OFL-Jersey15.txt`). **C'est la police du jeu** (`css/fonts.css`, nom CSS « Ferme », utilisé par `style.css` et le canevas).
   Fichiers : `assets/fonts/JerseyFerme-Regular.woff2` (graisses 400–549) et `JerseyFerme-Bold.woff2` (550–900), générés par `assets/fonts/build-ferme-font.py`.
   Modifications : « I » majuscule avec empattements (il était identique à « l ») et I accentués ; flèches → ← ↑ ↓ ↔, ✕, ★, ≥, ≤, ± et espaces fines ajoutés dans le même style ; lettres agrandies (cadratin 1350 → 1170 unités) ; hinting retiré ; graisse grasse créée en épaississant chaque glyphe d'un pixel.
   Pourquoi : avec Pixelify Sans, plusieurs majuscules se confondaient sur téléphone (« C » lu « O », « B » lu « G » ou « 8 », « Z » lu « 2 », « D » lu « O »).
-- **Pixelify Sans** — Stefie Justprince, © 2021 The Pixelify Sans Project Authors, SIL OFL 1.1 (`assets/fonts/OFL.txt`), https://github.com/eifetx/Pixelify-Sans.
-  **Plus utilisée par le jeu** depuis le passage à Jersey Ferme (voir ci-dessus). Fichiers encore présents en attendant leur retrait : `assets/fonts/PixelifySans-Variable.ttf` / `.woff2`, `PixelifySansFerme-Regular/-Medium/-SemiBold/-Bold.woff2` (version modifiée : chiffres 2, 5, 7 redessinés, ligatures retirées) et `build-pixelify-ferme.py`.
 
 ## Graphismes — Kenney (CC0, domaine public)
 

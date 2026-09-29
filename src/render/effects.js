@@ -848,7 +848,7 @@ export function createEffects(images) {
     for (const p of texts.items) if (p.alive && p.delay <= 0) { any = true; break; }
     if (!any) return;
     const size = Math.max(Math.round(18 * dpr), Math.round(zoom * 8));
-    ctx.font = `700 ${size}px "Pixelify Sans", "Trebuchet MS", monospace`;
+    ctx.font = `700 ${size}px "Ferme", "Trebuchet MS", monospace`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.lineJoin = 'round';

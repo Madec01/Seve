@@ -381,7 +381,7 @@ export function createTutorial(layer, app) {
     const h = getHighlight();
     const rect = targetRect(h);
     const key = rect ? `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}` : 'none';
-    const vkey = `${key}|${window.innerWidth}x${window.innerHeight}|${app.sheets?.current || ''}`;
+    const vkey = `${key}|${window.innerWidth}x${window.innerHeight}|${app.sheets?.current || ''}|${Math.round(app.safeBottom())}`;
     if (!force && vkey === lastRect) return;
     lastRect = vkey;
     if (h?.type === 'plot' && rect) {
@@ -391,6 +391,8 @@ export function createTutorial(layer, app) {
       ring.style.width = `${Math.round(rect.width + pad * 2)}px`;
       ring.style.height = `${Math.round(rect.height + pad * 2)}px`;
       ring.classList.add('is-visible');
+      // Sous la feuille ouverte ou la barre du haut : l'anneau ne se dessine pas par-dessus.
+      ring.classList.toggle('is-covered', rect.bottom > app.safeBottom() + 1 || rect.top < app.safeTop() - 1);
     } else {
       ring.classList.remove('is-visible');
     }

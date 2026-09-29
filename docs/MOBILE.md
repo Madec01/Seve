@@ -37,6 +37,8 @@ Problèmes signalés sur la V1 : **tout est trop petit**, **l'affichage est coup
 
 - **Scène** : un monde **en portrait** (≈ 16 tuiles de large), zoom entier en pixels physiques qui remplit la largeur. Les **parcelles font 2 × 2 tuiles** (32 px monde) pour dépasser 48 CSS px à l'écran de référence ; les cultures sont dessinées à l'échelle ×2 (toujours pixel art net). Champ au centre, bâtiments/enclos au-dessus et au-dessous, maison et route en bas. Si le monde est plus haut que la zone visible, il défile verticalement au doigt (inertie légère), et la vue se recentre sur le champ au démarrage.
 - **Panneaux** (Acheter, Bilan, Menu, choix des graines, fiche d'une parcelle ou d'un bâtiment) : **feuilles qui montent du bas** (bottom sheets), hauteur max ≈ 70 % de l'écran, poignée, fermeture par glissement vers le bas, bouton ✕, ou toucher sur la scène. La scène reste visible au-dessus.
+- **La parcelle touchée reste visible** au-dessus de la feuille ouverte : la scène défile en douceur (au besoin au-delà du bas du monde), puis revient à sa place à la fermeture.
+- **Messages** (toasts) : au-dessus des onglets et des feuilles, sans capter les touchers. **Bandeau** (titre du niveau, saison) : sous la barre du haut, jamais par-dessus elle ni par-dessus une bulle du tutoriel.
 - **Choix des graines** : feuille du bas avec de grandes lignes (icône, nom, durée, prix, gain), une seule touche pour semer ; option « semer partout ».
 - **Fenêtres importantes** (fin de saison, victoire, faillite, niveaux, options, crédits) : plein écran ou feuille haute, défilement interne si besoin, boutons en bas.
 - **Tutoriel** : bulles placées en haut ou en bas selon la cible, jamais par-dessus la cible, texte court.
@@ -47,6 +49,7 @@ Problèmes signalés sur la V1 : **tout est trop petit**, **l'affichage est coup
 - `manifest.webmanifest` : nom « Une année à la ferme », nom court « La Ferme », `display: standalone` (ou `fullscreen`), `orientation: portrait`, couleurs de thème, icônes 192/512 + maskable, captures d'écran.
 - **Service worker** : met en cache tout le jeu (HTML, CSS, JS, images, sons, police) pour jouer **hors ligne** ; cache versionné, mise à jour propre (message « Nouvelle version disponible — Recharger »).
 - Bouton « Installer le jeu » (événement `beforeinstallprompt`) dans le menu, quand c'est possible.
+- **Jamais bloqué sur une version cassée** : garde-fou de démarrage dans `index.html` (nouvelle version activée et un seul rechargement si le jeu ne démarre pas ; sinon bouton « Réparer le jeu ») et bouton « Réparer le jeu (vider le cache) » dans les options (progression conservée).
 - Garder l'écran allumé pendant la partie si possible (Wake Lock, réglable).
 - Audio débloqué au premier toucher ; mise en pause propre quand l'appli passe en arrière-plan.
 

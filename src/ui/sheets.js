@@ -176,6 +176,7 @@ export function createSheets(layer, app) {
     layer.classList.add('is-open');
     layer.classList.toggle('is-panel', opts.kind === 'panel');
     document.body.classList.add('has-sheet');
+    document.body.classList.toggle('has-tall-sheet', !!opts.tall);
     document.body.dataset.sheet = opts.id;
     if (!replacing) app.audio.play('open', { volume: 0.7 });
     box.style.transform = '';
@@ -193,7 +194,7 @@ export function createSheets(layer, app) {
     current = null;
     box.classList.remove('is-visible');
     layer.classList.remove('is-open', 'is-panel');
-    document.body.classList.remove('has-sheet');
+    document.body.classList.remove('has-sheet', 'has-tall-sheet');
     delete document.body.dataset.sheet;
     if (reason !== 'silent') app.audio.play('close', { volume: 0.6 });
     closeTimer = setTimeout(() => {

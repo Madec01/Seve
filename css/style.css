@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    « Une année à la ferme » — interface, pensée d'abord pour le téléphone en portrait
-   (docs/MOBILE.md). Police Pixelify Sans (css/fonts.css), cadres Kenney « UI Pack Pixel
+   (docs/MOBILE.md). Police « Ferme » (Jersey 15 retouchée, css/fonts.css), cadres Kenney « UI Pack Pixel
    Adventure » en border-image, rendu au pixel près. --u = taille d'un pixel source à l'écran.
 
    Plan de l'écran (téléphone) : scène plein écran (#stage) ; par-dessus, la barre du haut (#hud,
@@ -105,7 +105,7 @@ body {
   overflow: hidden;
   background: var(--forest);
   color: var(--text);
-  font-family: 'Pixelify Sans', system-ui, sans-serif;
+  font-family: 'Ferme', system-ui, sans-serif;
   font-weight: 400;
   line-height: 1.25;
   /* Pas de ligatures ni de faux gras / italique : toutes les graisses utilisées existent. */
@@ -806,6 +806,16 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); z-index: 32; }
 .banner-titles { flex: 1; min-width: 0; text-align: center; }
 .banner-title { font-size: 1.25rem; font-weight: 700; line-height: 1.1; }
 .banner-text { font-size: 0.9375rem; line-height: 1.2; }
+/* Téléphone : bandeau plus compact (sans icônes, extrémités du ruban plus courtes). */
+@media (max-width: 480px) {
+  .banner-ribbon { gap: 6px; padding-left: calc(var(--u) * 9); padding-right: calc(var(--u) * 9); }
+  .banner-ribbon::before { border-width: 0 calc(var(--u) * 20); border-image-width: 0 calc(var(--u) * 20); }
+  .banner-ribbon > .ico { display: none; }
+  /* Les deux filets du ruban sont à 22 % et 72 % de sa hauteur : le texte tient entre eux. */
+  .banner-ribbon { padding: calc(var(--u) * 11) calc(var(--u) * 14) calc(var(--u) * 13); }
+  .banner-title { font-size: 1.125rem; line-height: 1; }
+  .banner-text { font-size: 0.875rem; line-height: 1; }
+}
 
 #toasts {
   position: fixed;
@@ -822,6 +832,9 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); z-index: 32; }
   pointer-events: none;
 }
 body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
+/* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
+   sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
+body.has-tall-sheet:not(.layout-wide) #toasts { bottom: calc(var(--inset-bottom) + 10px); }
 body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); width: min(30rem, calc(100vw - var(--panel-w) - 16px)); }
 .toast {
   display: flex;
@@ -1271,7 +1284,8 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
 .tuto-dot { width: calc(var(--u) * 3); height: calc(var(--u) * 3); background: var(--parch-3); }
 .tuto-dot.is-past { background: var(--wood-light); }
 .tuto-dot.is-on { background: var(--red); box-shadow: 0 0 0 var(--u) var(--red-dark); }
-body:not(.layout-wide) #tutorial.is-popup .tuto-ring,
+/* Feuille ouverte : l'anneau reste sur la parcelle (qui défile au-dessus de la feuille), sauf si elle est cachée. */
+body:not(.layout-wide) #tutorial.is-popup .tuto-ring.is-covered,
 #tutorial.is-min .tuto-bubble,
 #tutorial.is-popup .tuto-bubble { visibility: hidden; opacity: 0; pointer-events: none; }
 .tuto-min {

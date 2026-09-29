@@ -22,7 +22,7 @@
     { "src": "assets/icons/icon-monochrome-512.png", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
   ],
   "screenshots": [
-    { "src": "assets/screenshots/ferme-1.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "La ferme au printemps : champ, bâtiments et animaux" },
-    { "src": "assets/screenshots/ferme-2.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "Choix des graines et gestion de l'argent" }
+    { "src": "assets/screenshots/ferme-1.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "La ferme en été : cultures, ruches, poules et moutons" },
+    { "src": "assets/screenshots/ferme-2.png", "sizes": "1080x2400", "type": "image/png", "form_factor": "narrow", "label": "Le panneau Acheter : poulaillers, ruches et autres investissements" }
   ]
 }

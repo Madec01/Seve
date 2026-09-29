@@ -94,7 +94,7 @@ function newGame(levelId, seed) {
 
 // ── Mise en place ─────────────────────────────────────────────────────────────────────
 const images = await loadImages(SHEETS, { base: '../' });
-try { await document.fonts.load('16px "Pixelify Sans"'); } catch (e) { /* police facultative */ }
+try { await document.fonts.load('16px "Ferme"'); } catch (e) { /* police facultative */ }
 const canvas = $('scene');
 let seed = Number(params.get('seed')) || 7;
 let game = newGame(Number(params.get('level')) || 1, seed);

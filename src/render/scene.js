@@ -126,6 +126,7 @@ export function createScene(canvas, images, level, opts = {}) {
   let flingV = 0; // élan (px CSS / s)
   let overlayDev = 0; // panneau posé sur le bas de la bande (feuille ouverte), px réels
   let scrollAnim = null; // { from, to, t, dur } défilement animé (px réels, secondes)
+  let scrollBeforeOverlay = null; // défilement d'avant l'ouverture de la feuille (px réels)
   const SCROLL_ANIM = 0.32;
 
   let staticKey = -1;
@@ -338,8 +339,16 @@ export function createScene(canvas, images, level, opts = {}) {
   function setOverlay(bottomCss) {
     const v = Math.max(0, Math.round((Number(bottomCss) || 0) * dpr));
     if (v === overlayDev) return;
+    // Feuille ouverte : on retient la vue d'avant, retrouvée en douceur à la fermeture.
+    if (overlayDev === 0 && v > 0) scrollBeforeOverlay = scrollAnim ? scrollAnim.to : scrollDev;
     overlayDev = v;
-    // Feuille refermée : on revient en douceur dans les bornes du monde.
+    if (v === 0 && scrollBeforeOverlay !== null) {
+      const back = scrollBeforeOverlay;
+      scrollBeforeOverlay = null;
+      animateScrollDev(back);
+      return;
+    }
+    // Feuille plus basse : on revient en douceur dans les bornes du monde.
     const limit = scrollLimitDev();
     if (scrollAnim && scrollAnim.to > limit) scrollAnim = null;
     if (!scrollAnim && scrollDev > limit) animateScrollDev(limit);
@@ -360,6 +369,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const before = scrollDev;
     flingV = 0;
     scrollAnim = null;
+    scrollBeforeOverlay = null;
     userScrolled = true;
     setScrollDev(scrollDev + (Number(dyCss) || 0) * dpr);
     return (scrollDev - before) / dpr;
@@ -383,6 +393,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function focusField() {
     flingV = 0;
     scrollAnim = null;
+    scrollBeforeOverlay = null;
     userScrolled = false;
     focusFieldDev();
   }
@@ -1270,6 +1281,7 @@ export function createScene(canvas, images, level, opts = {}) {
     userScrolled = false;
     flingV = 0;
     scrollAnim = null;
+    scrollBeforeOverlay = null;
   }
 
   function setLevel(lvl) {
