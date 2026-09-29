@@ -29,6 +29,8 @@ const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7 };
 const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5 };
 const FARMER_SPEED = 44;
 const POP_TIME = 0.55;
+const ANIMAL_KINDS = ['chicken', 'sheep', 'cow'];
+const SEASON_INDEX = { spring: 0, summer: 1, autumn: 2, winter: 3 };
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -57,6 +59,7 @@ export function createScene(canvas, images, level, opts = {}) {
   const ctx = noSmooth(canvas.getContext('2d'));
   const seasonSheets = buildSeasonSheets(images);
   const effects = opts.effects || createEffects(images);
+  const minZoom = Math.max(1, opts.minZoom || MIN_ZOOM);
 
   let layout = createLayout(level);
 
@@ -79,7 +82,7 @@ export function createScene(canvas, images, level, opts = {}) {
   let blitX = 0; // décalage du tampon zoomé sur le canvas (px réels)
   let blitY = 0;
 
-  let staticKey = '';
+  let staticKey = -1;
   let lastTime = null;
   let time = 0;
   let hover = null;
@@ -139,7 +142,7 @@ export function createScene(canvas, images, level, opts = {}) {
     farmer.idle = 0;
     farmer.tool = null;
     initialized = false;
-    staticKey = '';
+    staticKey = -1;
   }
   resetTracking();
 
@@ -154,7 +157,7 @@ export function createScene(canvas, images, level, opts = {}) {
     canvas.height = devH;
     canvas.style.width = `${cssW}px`;
     canvas.style.height = `${cssH}px`;
-    zoom = Math.max(MIN_ZOOM, Math.floor(Math.min(devW / WORLD_W, devH / WORLD_H)));
+    zoom = Math.max(minZoom, Math.floor(Math.min(devW / WORLD_W, devH / WORLD_H)));
     viewW = Math.ceil(devW / zoom);
     viewH = Math.ceil(devH / zoom);
     ox = Math.floor((viewW - WORLD_W) / 2);
@@ -170,7 +173,7 @@ export function createScene(canvas, images, level, opts = {}) {
     vctx = noSmooth(view.getContext('2d'));
     sctx = noSmooth(staticLayer.getContext('2d'));
     noSmooth(ctx);
-    staticKey = '';
+    staticKey = -1;
   }
 
   function screenToWorld(x, y) {
@@ -205,8 +208,9 @@ export function createScene(canvas, images, level, opts = {}) {
     c.drawImage(sheets[r.sheet], r.x + qx * 8, r.y + qy * 8, 8, 8, dx + qx * 8, dy + qy * 8, 8, 8);
   }
 
+  let pathWithGuest = false;
+  const P = (tx, ty) => layout.isPath(tx, ty, pathWithGuest);
   function drawPathTile(c, sheets, tx, ty, dx, dy) {
-    const P = layout.isPath;
     const n = P(tx, ty - 1);
     const s = P(tx, ty + 1);
     const w = P(tx - 1, ty);
@@ -282,9 +286,10 @@ export function createScene(canvas, images, level, opts = {}) {
       }
     }
     // 2. Chemins et route
+    pathWithGuest = layout.available.has('guestHouse') && (owned.guestHouse || 0) > 0;
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        if (layout.isPath(tx, ty)) drawPathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
+        if (P(tx, ty)) drawPathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
       }
     }
     // Parterre de fleurs des ruches
@@ -310,6 +315,21 @@ export function createScene(canvas, images, level, opts = {}) {
       }
     }
 
+    // Lisières verticales : arbres isolés à cheval sur la coupe nette des tuiles de forêt.
+    const edgeGreen = season === 'autumn' ? 'tree.autumn' : season === 'winter' ? 'tree.pine' : 'tree.green';
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!layout.isForest(tx, ty)) continue;
+        const openRight = !layout.isForest(tx + 1, ty) && !layout.isPath(tx + 1, ty);
+        const openLeft = !layout.isForest(tx - 1, ty) && !layout.isPath(tx - 1, ty);
+        if (!openRight && !openLeft) continue;
+        const h = tileHash(tx, ty, 23);
+        const name = h < 0.3 ? 'tree.pine' : edgeGreen;
+        const dx = (openRight ? 6 : -6) + Math.floor(h * 5) - 2;
+        drawSprite(c, sheets, name, tx * TILE + dx, ty * TILE - 3 + (ty % 2) * 2);
+      }
+    }
+
     // 4. Clôtures
     const f = layout.field;
     drawFence(c, sheets, f.fence, f.gate.x);
@@ -317,13 +337,6 @@ export function createScene(canvas, images, level, opts = {}) {
     if ((owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
     if ((owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
     if ((owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
-    if (guest) {
-      const gf = layout.garden.fence;
-      for (let x = gf.x0; x <= gf.x1; x++) {
-        drawSprite(c, sheets, x === gf.x0 ? 'fence.h.left' : x === gf.x1 ? 'fence.h.right' : 'fence.h.mid', x * TILE, gf.y * TILE);
-      }
-    }
-
     // 5. Décor fixe (du haut vers le bas)
     drawList.length = 0;
     for (const d of layout.deco) if (d.kind !== 'flowerbed') drawList.push(d);
@@ -339,7 +352,14 @@ export function createScene(canvas, images, level, opts = {}) {
     // Accessoires de la ferme
     for (const p of layout.props) drawSprite(c, sheets, p.name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
     drawSprite(c, sheets, 'well', layout.well.x * TILE, layout.well.y * TILE);
-    if (guest) for (const b of layout.garden.bushes) drawSprite(c, sheets, 'bush.berry', b.x * TILE, b.y * TILE);
+    if (guest) {
+      for (const b of layout.garden.bushes) drawSprite(c, sheets, season === 'winter' ? 'bush' : 'bush.berry', b.x * TILE, b.y * TILE);
+      // Tournesols du jardin (printemps / été) ; sinon un banc de pierres.
+      for (const p of layout.garden.plants) {
+        const name = season === 'summer' ? 'crop.sunflower.4' : season === 'spring' ? 'crop.sunflower.2' : season === 'autumn' ? 'plant.weeds' : null;
+        if (name) drawSprite(c, name.startsWith('crop') ? images : sheets, name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
+      }
+    }
     if ((owned.sheep || 0) > 0) {
       const e = sl.sheep.extras;
       drawSprite(c, sheets, 'hay', e.x * TILE, e.y * TILE);
@@ -398,7 +418,7 @@ export function createScene(canvas, images, level, opts = {}) {
       sheep: layout.available.has('sheep') ? Math.min(3, owned.sheep || 0) : 0,
     };
     const pens = { chicken: sl.chickenCoop.pen, cow: sl.cow.pen, sheep: sl.sheep.pen };
-    for (const kind of ['chicken', 'cow', 'sheep']) {
+    for (const kind of ANIMAL_KINDS) {
       const list = animals[kind];
       while (list.length < want[kind]) list.push(spawnAnimal(kind, pens[kind], pop));
       if (list.length > want[kind]) list.length = want[kind];
@@ -407,16 +427,20 @@ export function createScene(canvas, images, level, opts = {}) {
 
   function syncOwned(game) {
     const owned = game.state.investments || {};
-    for (const id of Object.keys(layout.slots)) {
+    let changed = !initialized;
+    const ids = layout.slotIds;
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
       const n = owned[id] || 0;
       const before = prevOwned[id] ?? n;
+      if (n !== before) changed = true;
       if (initialized && n > before) {
         for (let k = before; k < n; k++) pops.set(`${id}.${k}`, time);
         if (before === 0) pops.set(`${id}.main`, time);
       }
       prevOwned[id] = n;
     }
-    syncAnimals(owned, initialized);
+    if (changed) syncAnimals(owned, initialized);
   }
 
   function noteHarvest(cropId) {
@@ -484,7 +508,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function farmerGoTo(plotIndex, tool) {
     const r = layout.plotRect(plotIndex);
     if (!r) return;
-    const target = { x: r.x + 8, y: r.y + 23, tool, plot: plotIndex };
+    const target = { x: r.x + 8, y: r.y + 27, tool, plot: plotIndex };
     farmer.path.length = 0;
     if (!inField(farmer.x, farmer.y)) {
       const route = routePoints();
@@ -523,7 +547,8 @@ export function createScene(canvas, images, level, opts = {}) {
     const dx = next.x - farmer.x;
     const dy = next.y - farmer.y;
     const d = Math.hypot(dx, dy);
-    const step = FARMER_SPEED * dt;
+    // Il presse le pas sur les longs trajets (maison ↔ champ).
+    const step = FARMER_SPEED * (farmer.path.length > 2 ? 1.7 : 1) * dt;
     farmer.walkT += dt;
     if (Math.abs(dx) > 0.5) farmer.facing = dx > 0 ? 1 : -1;
     if (d <= step) {
@@ -680,35 +705,35 @@ export function createScene(canvas, images, level, opts = {}) {
 
     // Maison (toujours)
     const h = layout.house;
-    pushSprite('building.house', h.x * TILE, h.y * TILE, (h.y + h.h) * TILE, sheetsEnv);
+    pushSprite('building.house', h.x * TILE, h.y * TILE, (h.y + h.h) * TILE, objSet);
 
     // Poulailler
     if (A.has('chickenCoop') && owned.chickenCoop > 0) {
       const s = sl.chickenCoop.shed;
-      pushBuilding('building.shed', s.x, s.y, s.w, s.h, sheetsEnv, 'chickenCoop.main');
+      pushBuilding('building.shed', s.x, s.y, s.w, s.h, objSet, 'chickenCoop.main');
     }
     // Vaches : grange
     if (A.has('cow') && owned.cow > 0) {
       const b = sl.cow.barn;
-      pushBuilding('building.barn.bigdoor', b.x, b.y, b.w, b.h, sheetsEnv, 'cow.main');
+      pushBuilding('building.barn.bigdoor', b.x, b.y, b.w, b.h, objSet, 'cow.main');
     }
     // Chambre d'hôte
     if (A.has('guestHouse') && owned.guestHouse > 0) {
       const g = sl.guestHouse.house;
-      pushBuilding('building.house.red', g.x, g.y, g.w, g.h, sheetsEnv, 'guestHouse.main');
+      pushBuilding('building.house.red', g.x, g.y, g.w, g.h, objSet, 'guestHouse.main');
     }
     // Ruches
     if (A.has('beehive')) {
       const n = Math.min(3, owned.beehive || 0);
       for (let k = 0; k < n; k++) {
         const t = sl.beehive.hives[k];
-        pushBuilding('beehive', t.x, t.y, 1, 1, sheetsEnv, `beehive.${k}`);
+        pushBuilding('beehive', t.x, t.y, 1, 1, objSet, `beehive.${k}`);
       }
     }
     // Étal
     if (A.has('roadsideStand') && owned.roadsideStand > 0) {
       const s = sl.roadsideStand;
-      pushBuilding('stall.cart', s.cart.x, s.cart.y, 1, 1, sheetsEnv, 'roadsideStand.main');
+      pushBuilding('stall.cart', s.cart.x, s.cart.y, 1, 1, objSet, 'roadsideStand.main');
       const pk = pops.get('roadsideStand.main');
       if (pk === undefined || time - pk > 0.3) {
         for (let k = 0; k < s.crates.length; k++) {
@@ -742,7 +767,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
 
     // Animaux
-    for (const kind of ['chicken', 'sheep', 'cow']) {
+    for (const kind of ANIMAL_KINDS) {
       for (const a of animals[kind]) {
         let hop = 0;
         if (a.moving) hop = Math.sin(a.phase * HOP_RATE[kind] * Math.PI) > 0 ? -1 : 0;
@@ -885,6 +910,7 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   // ── Image ───────────────────────────────────────────────────────────────────────
+  const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: WORLD_W, h: WORLD_H } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, (timeMs - lastTime) / 1000));
     lastTime = timeMs;
@@ -909,16 +935,29 @@ export function createScene(canvas, images, level, opts = {}) {
     syncPlots(game, raining);
     initialized = true;
 
-    const key = `${season}|${viewW}x${viewH}|${owned.chickenCoop > 0}|${owned.cow > 0}|${owned.sheep > 0}|${owned.guestHouse > 0}|${[...layout.available].map((id) => (owned[id] > 0 ? 1 : 0)).join('')}`;
+    // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
+    let key = SEASON_INDEX[season] ?? 0;
+    let bit = 4;
+    for (const id of layout.available) {
+      if ((owned[id] || 0) > 0) key += bit;
+      bit *= 2;
+    }
     if (key !== staticKey) {
       buildStatic(season, owned);
       staticKey = key;
     }
 
-    for (const kind of ['chicken', 'cow', 'sheep']) for (const a of animals[kind]) updateAnimal(a, dt);
+    for (const kind of ANIMAL_KINDS) for (const a of animals[kind]) updateAnimal(a, dt);
     updateFarmer(dt);
     emitAmbient(dt, owned, season, weather, dayProgress);
-    effects.update(dt, { season, weather, dayProgress, view: { x: -ox, y: -oy, w: viewW, h: viewH } });
+    fxState.season = season;
+    fxState.weather = weather;
+    fxState.dayProgress = dayProgress;
+    fxState.view.x = -ox;
+    fxState.view.y = -oy;
+    fxState.view.w = viewW;
+    fxState.view.h = viewH;
+    effects.update(dt, fxState);
 
     // Tampon de vue
     const c = vctx;

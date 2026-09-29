@@ -65,9 +65,9 @@ function pix(ctx, color, pts) {
 }
 
 function buildSprites() {
-  const rain = makeCanvas(3, 6, (c) => {
-    pix(c, 'rgba(210,228,255,0.85)', [2, 0, 2, 1, 1, 2, 1, 3]);
-    pix(c, 'rgba(210,228,255,0.55)', [0, 4, 0, 5]);
+  const rain = makeCanvas(3, 7, (c) => {
+    pix(c, 'rgba(236,244,255,0.95)', [2, 0, 2, 1, 1, 2, 1, 3]);
+    pix(c, 'rgba(170,200,240,0.8)', [1, 4, 0, 5, 0, 6]);
   });
   const rainHeavy = makeCanvas(4, 8, (c) => {
     pix(c, 'rgba(225,236,255,0.9)', [3, 0, 3, 1, 2, 2, 2, 3, 1, 4, 1, 5]);
@@ -132,8 +132,8 @@ const SEASON_GRADE = {
 const WEATHER_GRADE = {
   sunny: [1, 1, 1],
   cloudy: [0.9, 0.91, 0.95],
-  rain: [0.78, 0.8, 0.88],
-  storm: [0.66, 0.68, 0.8],
+  rain: [0.8, 0.83, 0.9],
+  storm: [0.68, 0.7, 0.82],
   heatwave: [1.0, 0.95, 0.84],
   snow: [0.9, 0.92, 0.98],
 };
@@ -182,7 +182,8 @@ export function createEffects(images) {
   let time = 0;
   let flash = 0; // éclair (0..1)
   let nextFlash = 3;
-  let intensity = { rain: 0, snow: 0, leaves: 0, petals: 0, clouds: 0 };
+  const intensity = { rain: 0, snow: 0, leaves: 0, petals: 0, clouds: 0 };
+  let primed = false;
   const grade = [1, 1, 1];
   const dayTmp = [1, 1, 1];
 
@@ -238,7 +239,7 @@ export function createEffects(images) {
   function sparkle(rect, n = 14, palette = 'gold', delay = 0) {
     const r = rect || { x: 0, y: 0, w: 16, h: 16 };
     for (let i = 0; i < n; i++) {
-      particle(palette === 'ice' ? 'ice' : 'spark', r.x + rand(0, r.w), r.y + rand(0, r.h), rand(-4, 4), rand(-14, -4), 0, rand(0.6, 1.1), '', delay + rand(0, 0.5));
+      particle(palette === 'ice' ? 'ice' : 'spark', r.x + rand(0, r.w), r.y + rand(0, r.h), rand(-4, 4), rand(-14, -4), 0, rand(0.7, 1.3), '', delay + rand(0, 0.6));
     }
   }
 
@@ -296,8 +297,9 @@ export function createEffects(images) {
       case 'purchased': {
         const r = layout.investmentRect(payload.investmentId, payload.owned || 1);
         if (!r) return;
-        sparkle(r, Math.min(40, 10 + Math.round((r.w * r.h) / 256) * 2), 'gold', 0.15);
-        dirt(r.x + r.w / 2, r.y + r.h - 2, 10);
+        sparkle(r, Math.min(48, 16 + Math.round((r.w * r.h) / 160)), 'gold', 0);
+        sparkle({ x: r.x - 4, y: r.y - 6, w: r.w + 8, h: 8 }, 8, 'gold', 0.25);
+        dirt(r.x + r.w / 2, r.y + r.h - 2, 14);
         break;
       }
       case 'dawn': {
@@ -311,6 +313,15 @@ export function createEffects(images) {
           coins(a.x, a.y + 6, 3, 0.35 + i * 0.3);
           i++;
         }
+        // Arroseurs automatiques : gouttes sur les parcelles arrosées ce matin.
+        (payload.sprinkled || []).forEach((plotIndex, k) => {
+          const c = layout.plotCenter(plotIndex);
+          if (c) {
+            for (let d = 0; d < 5; d++) {
+              particle('drop', c.x + rand(-7, 7), c.y - rand(8, 14), rand(-5, 5), rand(10, 30), 260, 0.8, d % 2 ? '#8fd0ff' : '#dff3ff', 0.1 + k * 0.04 + d * 0.03, c.y + rand(-3, 6));
+            }
+          }
+        });
         if (payload.charges > 0 && layout.house) {
           const h = layout.house;
           floatText((h.x + h.w / 2) * TILE, h.y * TILE - 2, `-${payload.charges}`, '#ff9a8a', { delay: 0.35 + i * 0.3, icon: true });
@@ -359,6 +370,14 @@ export function createEffects(images) {
     const wantLeaves = season === 'autumn' ? (weather === 'storm' || weather === 'rain' ? 0.6 : 1) : 0;
     const wantPetals = season === 'spring' && weather !== 'rain' && weather !== 'storm' ? 1 : 0;
     const wantClouds = weather === 'cloudy' ? 1 : weather === 'rain' || weather === 'storm' || weather === 'snow' ? 0.8 : 0.25;
+    if (!primed) {
+      // Première image (ou après clear) : la météo est déjà installée, sans montée progressive.
+      intensity.rain = wantRain;
+      intensity.snow = wantSnow;
+      intensity.leaves = wantLeaves;
+      intensity.petals = wantPetals;
+      intensity.clouds = wantClouds;
+    }
     intensity.rain = approach(intensity.rain, wantRain, dt, 0.7);
     intensity.snow = approach(intensity.snow, wantSnow, dt, 0.35);
     intensity.leaves = approach(intensity.leaves, wantLeaves, dt, 0.5);
@@ -371,10 +390,10 @@ export function createEffects(images) {
     const heavy = weather === 'storm';
     for (; alive < rainTarget; alive++) {
       const p = rain.spawn();
-      p.x = rand(0, view.w + 40);
-      p.y = rand(-view.h, 0);
+      p.x = rand(0, view.w + 60);
+      p.y = rand(-30, view.h);
       p.vy = rand(210, 260) * (heavy ? 1.2 : 1);
-      p.groundY = rand(0, view.h);
+      p.groundY = rand(Math.max(0, p.y + 8), view.h + 8);
       p.heavy = heavy;
     }
     let excess = alive - rainTarget;
@@ -412,7 +431,7 @@ export function createEffects(images) {
     for (; alive < snowTarget; alive++) {
       const p = flakes.spawn();
       p.x = rand(0, view.w);
-      p.y = rand(-view.h, 0);
+      p.y = rand(-10, view.h);
       p.vy = rand(10, 22);
       p.phase = rand(0, 6.28);
       p.size = Math.random() < 0.25 ? 2 : 1;
@@ -435,7 +454,7 @@ export function createEffects(images) {
     for (; alive < leafTarget; alive++) {
       const p = leaves.spawn();
       p.x = rand(0, view.w);
-      p.y = rand(-view.h, 0);
+      p.y = rand(-10, view.h);
       p.vy = rand(9, 16);
       p.vx = rand(4, 12);
       p.phase = rand(0, 6.28);
@@ -460,7 +479,7 @@ export function createEffects(images) {
     for (; alive < petalTarget; alive++) {
       const p = petals.spawn();
       p.x = rand(0, view.w);
-      p.y = rand(-view.h, 0);
+      p.y = rand(-10, view.h);
       p.vy = rand(6, 11);
       p.vx = rand(3, 9);
       p.phase = rand(0, 6.28);
@@ -554,6 +573,7 @@ export function createEffects(images) {
       }
     }
     flash = Math.max(0, flash - dt * 4);
+    primed = true;
   }
 
   function updateParts(dt) {
@@ -816,7 +836,7 @@ export function createEffects(images) {
     let any = false;
     for (const p of texts.items) if (p.alive && p.delay <= 0) { any = true; break; }
     if (!any) return;
-    const size = Math.max(12, Math.round(zoom * 7));
+    const size = Math.max(14, Math.round(zoom * 8));
     ctx.font = `600 ${size}px "Pixelify Sans", "Trebuchet MS", monospace`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
@@ -850,6 +870,7 @@ export function createEffects(images) {
   function clear() {
     for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds]) pool.clear();
     flash = 0;
+    primed = false;
   }
 
   return {

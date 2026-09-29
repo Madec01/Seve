@@ -45,7 +45,7 @@ const OUTLINE = [63, 38, 49];
 export const SEASON_GRASS = {
   spring: [[128, 202, 104], [150, 222, 124], [96, 168, 86]],
   summer: [[156, 198, 92], [178, 214, 110], [122, 164, 76]],
-  autumn: [[190, 172, 92], [212, 190, 110], [156, 132, 74]],
+  autumn: [[198, 172, 84], [220, 192, 102], [162, 132, 66]],
   winter: [[226, 234, 242], [250, 252, 255], [184, 200, 220]],
 };
 
@@ -56,8 +56,18 @@ function toCanvas(img) {
   const c = document.createElement('canvas');
   c.width = img.width;
   c.height = img.height;
-  const ctx = c.getContext('2d');
+  const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
+  return c;
+}
+
+// Copie dans un canvas « normal » (accéléré) : les canvas willReadFrequently restent en mémoire
+// centrale, ce qui ralentirait leur dessin à chaque image.
+function finalize(src) {
+  const c = document.createElement('canvas');
+  c.width = src.width;
+  c.height = src.height;
+  c.getContext('2d').drawImage(src, 0, 0);
   return c;
 }
 
@@ -66,7 +76,7 @@ function sameRGB(d, i, rgb) {
 }
 
 function recolorGrass(canvas, palette) {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = data.data;
   for (let i = 0; i < d.length; i += 4) {
@@ -89,7 +99,7 @@ function recolorGrass(canvas, palette) {
  * Les tuiles opaques (sol) ne sont pas touchées : aucun passage depuis le transparent.
  */
 function addSnowCaps(canvas, tile = 16) {
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const w = canvas.width;
   const h = canvas.height;
   const data = ctx.getImageData(0, 0, w, h);
@@ -129,6 +139,49 @@ function addSnowCaps(canvas, tile = 16) {
   ctx.putImageData(data, 0, 0);
 }
 
+// Hiver : toits enneigés. Couleurs remplacées tuile par tuile (les murs partagent certaines
+// couleurs avec les toits d'ardoise, d'où la restriction aux tuiles de toiture).
+const SNOW_ROOFS = [
+  {
+    sheet: 'town', // ardoise
+    tiles: [[0, 4], [1, 4], [2, 4], [0, 5], [1, 5], [2, 5], [3, 5]],
+    map: [[[90, 105, 136], [168, 184, 212]], [[139, 155, 180], [222, 232, 244]], [[192, 203, 220], [250, 252, 255]]],
+  },
+  {
+    sheet: 'town', // tuiles rouges (chambre d'hôte, cabane du poulailler)
+    tiles: [[4, 4], [5, 4], [6, 4], [4, 5], [5, 5], [6, 5], [7, 5]],
+    map: [[[195, 75, 53], [214, 170, 176]], [[242, 132, 98], [232, 236, 246]], [[252, 188, 143], [252, 252, 255]]],
+  },
+  {
+    sheet: 'farm', // toit vert de la grange
+    tiles: [[10, 6], [9, 7], [10, 7], [11, 7], [9, 8], [10, 8], [11, 8], [9, 9], [10, 9], [11, 9], [9, 10], [11, 10]],
+    map: [[[78, 151, 76], [200, 214, 234]], [[132, 198, 105], [236, 242, 252]], [[198, 229, 141], [255, 255, 255]]],
+  },
+];
+
+function snowRoofs(canvas, sheet, tile = 16) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  for (const roof of SNOW_ROOFS) {
+    if (roof.sheet !== sheet) continue;
+    for (const [tx, ty] of roof.tiles) {
+      const data = ctx.getImageData(tx * tile, ty * tile, tile, tile);
+      const d = data.data;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        for (const [from, to] of roof.map) {
+          if (sameRGB(d, i, from)) {
+            d[i] = to[0];
+            d[i + 1] = to[1];
+            d[i + 2] = to[2];
+            break;
+          }
+        }
+      }
+      ctx.putImageData(data, tx * tile, ty * tile);
+    }
+  }
+}
+
 /**
  * Planches recoloriées pour chaque saison : { spring: {farm, town, extra}, summer: …, … }.
  * À utiliser pour le décor (sol, forêt, arbres, clôtures, bâtiments) ; les cultures, animaux et
@@ -140,9 +193,10 @@ export function buildSeasonSheets(images) {
     const set = {};
     for (const [key, img] of Object.entries(images)) {
       const c = toCanvas(img);
+      if (season === 'winter') snowRoofs(c, key);
       recolorGrass(c, SEASON_GRASS[season]);
       if (season === 'winter') addSnowCaps(c);
-      set[key] = c;
+      set[key] = finalize(c);
     }
     out[season] = set;
   }

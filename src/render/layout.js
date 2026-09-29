@@ -193,12 +193,17 @@ export function createLayout(level) {
   for (let y = gate.y + 1; y < ROAD_Y; y++) addPath(MAIN_PATH_X, y); // portail → route
   for (let y = house.door.y + 1; y < ROAD_Y; y++) addPath(house.door.x, y); // maison → route
   const gh = slots.guestHouse.house;
-  for (let x = gh.door.x; x < MAIN_PATH_X; x++) addPath(x, gh.door.y + 1); // chambre d'hôte → chemin
+  const guestPath = new Set();
+  for (let x = gh.door.x; x < MAIN_PATH_X; x++) guestPath.add(`${x},${gh.door.y + 1}`); // chambre d'hôte → chemin
 
-  /** true si la tuile (même hors du monde) est un chemin ou la route. */
-  function isPath(tx, ty) {
+  /**
+   * true si la tuile (même hors du monde) est un chemin ou la route.
+   * @param withGuest  inclure le sentier de la chambre d'hôte (quand elle est construite)
+   */
+  function isPath(tx, ty, withGuest = false) {
     if (ty === ROAD_Y || ty === ROAD_Y + 1) return true;
-    return pathSet.has(`${tx},${ty}`);
+    const k = `${tx},${ty}`;
+    return pathSet.has(k) || (withGuest && guestPath.has(k));
   }
 
   /** true si la tuile (même hors du monde) est de la forêt. */
@@ -228,20 +233,36 @@ export function createLayout(level) {
     { name: 'bucket.water', x: 2, y: 14, dx: 2, dy: -3 },
   ];
   for (const p of props) mark({ x: p.x, y: p.y, w: 1, h: 1 });
-  mark(slots.chickenCoop.shed);
-  mark(slots.chickenCoop.fence);
-  mark(slots.beehive.area);
-  mark(slots.cow.barn);
-  mark({ x: slots.cow.barn.x, y: slots.cow.barn.y + slots.cow.barn.h, w: 3, h: 1 });
-  mark(slots.cow.fence);
-  mark(slots.sheep.fence);
-  mark(slots.sheep.extras);
-  mark({ x: 17, y: 15, w: 6, h: 2 }); // étal et ses abords
-  mark(slots.solarPanel.area);
-  mark({ x: 7, y: 12, w: 2, h: 1 });
-  mark(gh);
-  mark(slots.guestHouse.garden);
-  mark({ x: slots.sprinkler.sign.x, y: slots.sprinkler.sign.y, w: 1, h: 1 });
+  const has = (id) => available.has(id);
+  if (has('chickenCoop')) {
+    mark(slots.chickenCoop.shed);
+    mark(slots.chickenCoop.fence);
+  }
+  if (has('beehive')) mark(slots.beehive.area);
+  if (has('cow')) {
+    mark(slots.cow.barn);
+    mark({ x: slots.cow.barn.x, y: slots.cow.barn.y + slots.cow.barn.h, w: 3, h: 1 });
+    mark(slots.cow.fence);
+  }
+  if (has('sheep')) {
+    mark(slots.sheep.fence);
+    mark(slots.sheep.extras);
+  }
+  if (has('roadsideStand')) mark({ x: 17, y: 15, w: 6, h: 2 }); // étal et ses abords
+  else mark({ x: 17, y: 16, w: 5, h: 1 });
+  if (has('solarPanel')) {
+    mark(slots.solarPanel.area);
+    mark({ x: 7, y: 12, w: 2, h: 1 });
+  }
+  if (has('guestHouse')) {
+    mark(gh);
+    mark(slots.guestHouse.garden);
+    for (const k of guestPath) {
+      const [x, y] = k.split(',').map(Number);
+      mark({ x, y, w: 1, h: 1 });
+    }
+  }
+  if (has('sprinkler')) mark({ x: slots.sprinkler.sign.x, y: slots.sprinkler.sign.y, w: 1, h: 1 });
   for (const k of pathSet) {
     const [x, y] = k.split(',').map(Number);
     mark({ x, y, w: 1, h: 1 });
@@ -304,9 +325,9 @@ export function createLayout(level) {
     }
   }
   // Jardin de la chambre d'hôte (visible seulement si achetée) : fleurs et haie.
-  const gardenFlowers = [{ x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }];
-  const gardenBushes = [{ x: 9, y: 13 }, { x: 9, y: 14 }];
-  const gardenFence = { y: 16, x0: 9, x1: 13 };
+  const gardenFlowers = [{ x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 10, y: 16 }, { x: 11, y: 16 }];
+  const gardenBushes = [{ x: 9, y: 13 }, { x: 9, y: 14 }, { x: 9, y: 16 }];
+  const gardenPlants = [{ x: 10, y: 15, dx: 2, dy: -2 }, { x: 11, y: 15, dx: -1, dy: 1 }];
 
   // ── Fermier : maison, et trajet jusqu'au champ ───────────────────────────────────
   const T = TILE;
@@ -408,10 +429,11 @@ export function createLayout(level) {
     well,
     props,
     slots,
+    slotIds: Object.keys(slots),
     roadY: ROAD_Y,
     mainPathX: MAIN_PATH_X,
     deco,
-    garden: { flowers: gardenFlowers, bushes: gardenBushes, fence: gardenFence },
+    garden: { flowers: gardenFlowers, bushes: gardenBushes, plants: gardenPlants },
     farmerHome,
     routeToField,
     isPath,

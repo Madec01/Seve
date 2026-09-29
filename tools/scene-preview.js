@@ -35,12 +35,14 @@ try {
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const MOCK_INV = { chickenCoop: 3, beehive: 3, roadsideStand: 1, cow: 3, sheep: 3, sprinkler: 3, solarPanel: 2, guestHouse: 1 };
 
-function mockGame(levelId) {
-  const lvl = (LEVELS && LEVELS.find((l) => l.id === levelId)) || {
+function mockGame(levelId, grid) {
+  let lvl = (LEVELS && LEVELS.find((l) => l.id === levelId)) || {
     id: levelId, gridCols: 6, gridRows: 4, availableInvestments: Object.keys(MOCK_INV), modifiers: {},
   };
+  if (grid) lvl = { ...lvl, gridCols: grid[0], gridRows: grid[1], availableInvestments: Object.keys(MOCK_INV), modifiers: {} };
   const n = lvl.gridCols * lvl.gridRows;
   const state = {
+    levelId: lvl.id,
     time: { day: 1, seasonIndex: 0, dayOfSeason: 1, elapsed: 9 },
     weather: { today: 'sunny', tomorrow: 'sunny' },
     plots: Array.from({ length: n }, (_, i) => ({ unlocked: i % lvl.gridCols >= 1 && i % lvl.gridCols <= 4 && i < 18, cropId: null, growth: 0, watered: false })),
@@ -75,7 +77,11 @@ function mockGame(levelId) {
   };
 }
 
+// grid=8x5 : maquette avec une grille imposée (taille maximale du champ)
+const forcedGrid = params.get('grid') ? params.get('grid').split('x').map(Number) : null;
+
 function newGame(levelId, seed) {
+  if (forcedGrid) return mockGame(levelId, forcedGrid);
   if (createGame) {
     try { return createGame({ levelId, seed }); } catch (e) { console.warn(e); }
   }
@@ -84,6 +90,7 @@ function newGame(levelId, seed) {
 
 // ── Mise en place ─────────────────────────────────────────────────────────────────────
 const images = await loadImages(SHEETS, { base: '../' });
+try { await document.fonts.load('16px "Pixelify Sans"'); } catch (e) { /* police facultative */ }
 const canvas = $('scene');
 let seed = Number(params.get('seed')) || 7;
 let game = newGame(Number(params.get('level')) || 1, seed);
