@@ -62,3 +62,44 @@ export const CHARGE_NAMES = {
   water: 'Arrosage payant',
   loan: 'Mensualité du prêt',
 };
+
+// ── Revenus des investissements ─────────────────────────────────────────────────────
+
+/** « au printemps », « au printemps et en automne », « au printemps, en été et en automne ». */
+export function seasonList(ids, form = 'in') {
+  const parts = ids.map((id) => season(id, form));
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} et ${parts[parts.length - 1]}`;
+}
+
+/**
+ * Profil d'un revenu saisonnier (par jour, pour `units` unités) :
+ * { constant, value (si constant), groups: [{ value, seasons }] triés du plus fort au plus faible }.
+ */
+export function incomeProfile(bySeason = {}, units = 1) {
+  const values = SEASONS.map((s) => (bySeason[s] || 0) * units);
+  const constant = values.every((v) => v === values[0]);
+  const groups = [];
+  SEASONS.forEach((s, i) => {
+    const g = groups.find((x) => x.value === values[i]);
+    if (g) g.seasons.push(s);
+    else groups.push({ value: values[i], seasons: [s] });
+  });
+  groups.sort((a, b) => b.value - a.value);
+  return { constant, value: constant ? values[0] : null, values, groups };
+}
+
+/**
+ * Phrase décrivant un revenu quotidien selon les saisons :
+ * « +7 par jour, toute l'année », « +5 par jour, sauf en hiver »,
+ * « +8 par jour en été, +4 au printemps et en automne, +2 en hiver ».
+ */
+export function incomePhrase(bySeason, units = 1) {
+  const p = incomeProfile(bySeason, units);
+  if (p.constant) return p.value > 0 ? `+${p.value} par jour, toute l'année` : 'aucun revenu quotidien';
+  const paying = p.groups.filter((g) => g.value > 0);
+  const zero = p.groups.find((g) => g.value === 0);
+  if (paying.length === 1 && zero) return `+${paying[0].value} par jour, sauf ${seasonList(zero.seasons)}`;
+  const text = paying.map((g, i) => `+${g.value}${i === 0 ? ' par jour' : ''} ${seasonList(g.seasons)}`).join(', ');
+  return zero ? `${text}, rien ${seasonList(zero.seasons)}` : text;
+}

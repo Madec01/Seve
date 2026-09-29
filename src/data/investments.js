@@ -84,7 +84,7 @@ export const INVESTMENTS = [
   {
     id: 'solarPanel',
     name: 'Panneau solaire',
-    description: 'Réduit les charges quotidiennes de la ferme de 5 pièces.',
+    description: 'Réduit les charges quotidiennes de la ferme de 5 pièces par jour.',
     kind: 'unit',
     costs: [80, 100],
     income: ZERO,

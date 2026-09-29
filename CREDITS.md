@@ -28,6 +28,9 @@ Modifications apportées : fichiers renommés ; les versions mp3 de secours ont 
   Source : https://github.com/eifetx/Pixelify-Sans (via Google Fonts, https://fonts.google.com/specimen/Pixelify+Sans).
   Licence : SIL OFL 1.1, texte complet dans `assets/fonts/OFL.txt`.
   Fichiers : `assets/fonts/PixelifySans-Variable.ttf` (original) et `PixelifySans-Variable.woff2` (même police, simplement compressée en WOFF2).
+- **Pixelify Sans Ferme** — version modifiée de Pixelify Sans (la licence n'a pas de nom réservé), sous la même licence SIL OFL 1.1 (`assets/fonts/OFL.txt`).
+  Fichiers : `assets/fonts/PixelifySansFerme-Regular.woff2`, `-Medium`, `-SemiBold`, `-Bold` (instances statiques 400, 500, 600 et 700 de la police variable), générés par `assets/fonts/build-pixelify-ferme.py`.
+  Modifications : chiffres « 2 », « 5 » et « 7 » redessinés sur la grille de pixels de la police (le « 2 » d'origine se lisait « 8 » et le « 5 » se lisait « S » aux petites tailles) ; ligatures « fi », « fl », « ff », « ffi », « ffl » et « st » retirées (elles se lisaient « A »). C'est cette version que le jeu utilise (`css/fonts.css`, nom CSS « Pixelify Sans »).
 
 ## Graphismes — Kenney (CC0, domaine public)
 

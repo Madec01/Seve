@@ -130,7 +130,7 @@ export const LEVELS = [
   level({
     id: 6,
     name: 'Le marché fou',
-    description: 'Le prix de chaque légume change tous les jours, de la moitié au presque double. Vendez au bon moment !',
+    description: 'Le prix de chaque culture change tous les jours, de la moitié à presque le double. Vendez au bon moment !',
     startMoney: 100,
     rents: [70, 130, 230, 540],
     starThresholds: [280, 500],

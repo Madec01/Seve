@@ -9,7 +9,7 @@
 import { SEASONS } from '../data/balance.js';
 import { CROPS } from '../data/crops.js';
 import { LEVELS, yearLength } from '../data/levels.js';
-import { clear, el, fmt, plural, signed } from './dom.js';
+import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { cropIcon, icon, sprite } from './icons.js';
 import { cropCount, season, seasonArrives } from './text.js';
 
@@ -27,12 +27,15 @@ export function createDialogs(layer, app) {
       app.audio.play('open');
     }
     for (const s of stack) s.node.classList.add('is-behind');
+    // Élément à refocaliser à la fermeture (bouton qui a ouvert la fenêtre).
+    opts.returnFocus = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null;
     node.classList.add('dialog-wrap');
     if (opts.id) node.dataset.dialog = opts.id;
     layer.append(node);
     stack.push({ node, opts });
     layer.classList.add('is-active');
     layer.classList.toggle('is-menu', !!stack[0]?.opts.menu);
+    setBackgroundInert(true);
     if (opts.pauses) app.pushPause(opts.id || 'dialog');
     app.tooltip?.hide();
     app.field?.close(false);
@@ -59,10 +62,14 @@ export function createDialogs(layer, app) {
     if (stack.length) {
       const top = stack[stack.length - 1];
       top.node.classList.remove('is-behind');
-      const f = top.node.querySelector('.btn, button');
+      const back = entry.opts.returnFocus;
+      const f = back && top.node.contains(back) ? back : top.node.querySelector('[data-autofocus]') || top.node.querySelector('.dialog-body .btn, .dialog-actions .btn, button');
       if (f && app.keyboardMode) f.focus({ preventScroll: true });
     } else {
       layer.classList.remove('is-active', 'is-menu');
+      setBackgroundInert(false);
+      const back = entry.opts.returnFocus;
+      if (back && back.isConnected && app.keyboardMode && reason !== 'silent') back.focus({ preventScroll: true });
     }
     if (entry.opts.pauses) app.popPause(entry.opts.id || 'dialog');
     entry.opts.onClose?.(reason);
@@ -83,15 +90,29 @@ export function createDialogs(layer, app) {
   const isOpen = () => stack.length > 0;
   const top = () => stack[stack.length - 1]?.opts.id || null;
 
-  // Piège à focus (Tab reste dans la fenêtre du dessus).
-  layer.addEventListener('keydown', (e) => {
+  // Le reste de la page est inerte tant qu'une fenêtre est ouverte (ni clic, ni focus clavier).
+  const BACKGROUND = ['#hud', '#panel', '#stage', '#tutorial', '#popup', '#banner'];
+  function setBackgroundInert(on) {
+    for (const sel of BACKGROUND) {
+      const n = document.querySelector(sel);
+      if (n) n.inert = on;
+    }
+  }
+
+  // Piège à focus : Tab et Maj+Tab tournent dans la fenêtre du dessus, même si le focus était
+  // resté ailleurs (clic dans le vide, fenêtre ouverte à la souris).
+  document.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab' || !stack.length) return;
     const node = stack[stack.length - 1].node;
     const items = [...node.querySelectorAll('button, [href], input, select, [tabindex]:not([tabindex="-1"])')].filter((n) => !n.disabled && n.offsetParent !== null);
     if (!items.length) return;
     const first = items[0];
     const last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
+    const inside = node.contains(document.activeElement);
+    if (!inside) {
+      (e.shiftKey ? last : first).focus();
+      e.preventDefault();
+    } else if (e.shiftKey && document.activeElement === first) {
       last.focus();
       e.preventDefault();
     } else if (!e.shiftKey && document.activeElement === last) {
@@ -183,7 +204,7 @@ export function createDialogs(layer, app) {
           'div.level-meta',
           el('span', icon('coin', 'xs'), `Départ ${fmt(lvl.startMoney)}`),
           el('span', icon('seed', 'xs'), `${lvl.unlockedPlots}${lvl.maxPlots > lvl.unlockedPlots ? `/${lvl.maxPlots}` : ''} parcelles`),
-          el('span', icon('bill', 'xs'), `Hiver ${fmt(lvl.rents[3])}`),
+          el('span', { 'data-tip': `Fermage d'hiver, le plus cher de l'année (printemps : ${fmt(lvl.rents[0])})` }, icon('bill', 'xs'), `Hiver ${fmt(lvl.rents[3])}`),
         ),
         el(
           'div.level-foot',
@@ -222,7 +243,7 @@ export function createDialogs(layer, app) {
       paint();
       input.addEventListener('input', () => {
         paint();
-        value.textContent = `${input.value} %`;
+        value.textContent = `${input.value}\u00a0%`;
         app.updateSettings({ [key]: Number(input.value) / 100 });
       });
       input.addEventListener('change', () => {
@@ -345,6 +366,7 @@ export function createDialogs(layer, app) {
         'section.credit-block',
         el('h3', icon('info', 'sm'), 'Police'),
         el('p', el('strong', 'Pixelify Sans'), ' — Stefie Justprince, SIL Open Font License 1.1 (', link('https://github.com/eifetx/Pixelify-Sans', 'github.com/eifetx/Pixelify-Sans'), ').'),
+        el('p.credit-small', 'Version modifiée pour le jeu : chiffres 2, 5 et 7 redessinés pour être plus lisibles, ligatures retirées (même licence).'),
       ),
       el('p.credit-small', 'La liste détaillée de chaque fichier se trouve dans CREDITS.md.'),
     );
@@ -377,9 +399,17 @@ export function createDialogs(layer, app) {
           const ok = await confirm({ title: 'Recommencer ?', text: 'La partie en cours sera perdue et l\'année recommencera au premier jour du printemps.', ok: 'Recommencer', danger: true });
           if (ok) app.restartLevel();
         }, 'btn--big', { id: 'pause-restart' }),
-        btn('Quitter vers le menu', () => app.quitToMenu(), 'btn--big', { id: 'pause-quit' }),
+        btn('Quitter vers le menu', async () => {
+          const ok = await confirm({
+            title: 'Quitter la partie ?',
+            text: 'Votre progression est sauvegardée : vous pourrez reprendre l\'année là où vous l\'avez laissée avec « Continuer », depuis le menu principal.',
+            ok: 'Quitter',
+            cancel: 'Rester',
+          });
+          if (ok) app.quitToMenu();
+        }, 'btn--big', { id: 'pause-quit' }),
       ),
-      el('p.pause-hint', 'La partie est sauvegardée automatiquement chaque matin.'),
+      el('p.pause-hint', 'La partie est sauvegardée automatiquement chaque matin et quand vous quittez.'),
     );
     const node = frame({ title: 'Pause', ribbon: 'ribbon', cls: 'dialog--pause', body, onClose: () => closeTop() });
     return open(node, { id: 'pause', pauses: true });
@@ -387,22 +417,23 @@ export function createDialogs(layer, app) {
 
   // ── Bilan chiffré ─────────────────────────────────────────────────────────────
   function moneyLine(label, value, cls = '') {
+    if (value === '0') cls = 'mid';
     return el('div.sum-line', el('span', label), el(`b${cls ? `.${cls}` : ''}`, value));
   }
 
   function summaryLines(s, { rent = null } = {}) {
     const lines = [
-      moneyLine(`Récoltes vendues${s.totalHarvested ? ` (${s.totalHarvested})` : ''}`, `+${fmt(s.harvestIncome)}`, 'pos'),
-      moneyLine('Revenus des investissements', `+${fmt(s.investmentIncome)}`, 'pos'),
-      moneyLine('Charges quotidiennes', `−${fmt(s.charges)}`, 'neg'),
+      moneyLine(`Récoltes vendues${s.totalHarvested ? ` (${s.totalHarvested})` : ''}`, gain(s.harvestIncome), 'pos'),
+      moneyLine('Revenus des investissements', gain(s.investmentIncome), 'pos'),
+      moneyLine('Charges quotidiennes', loss(s.charges), 'neg'),
     ];
-    if (s.waterSpent) lines.push(moneyLine('Arrosage', `−${fmt(s.waterSpent)}`, 'neg'));
-    if (s.loanPaid) lines.push(moneyLine('Prêt', `−${fmt(s.loanPaid)}`, 'neg'));
+    if (s.waterSpent) lines.push(moneyLine('Arrosage', loss(s.waterSpent), 'neg'));
+    if (s.loanPaid) lines.push(moneyLine('Prêt', loss(s.loanPaid), 'neg'));
     const spent = s.seedsSpent + s.plotsSpent;
-    if (spent) lines.push(moneyLine('Graines et parcelles', `−${fmt(spent)}`, 'neg'));
-    if (s.investmentsSpent) lines.push(moneyLine('Investissements achetés', `−${fmt(s.investmentsSpent)}`, 'neg'));
+    if (spent) lines.push(moneyLine('Graines et parcelles', loss(spent), 'neg'));
+    if (s.investmentsSpent) lines.push(moneyLine('Investissements achetés', loss(s.investmentsSpent), 'neg'));
     const rentValue = rent ?? s.rentsPaid;
-    if (rentValue) lines.push(moneyLine(rent !== null ? 'Fermage' : 'Fermages', `−${fmt(rentValue)}`, 'neg'));
+    if (rentValue) lines.push(moneyLine(rent !== null ? 'Fermage' : 'Fermages', loss(rentValue), 'neg'));
     lines.push(el('div.sum-total', moneyLine('Bilan', signed(s.net), s.net >= 0 ? 'pos' : 'neg')));
     return el('div.sum-lines', lines);
   }
@@ -431,7 +462,7 @@ export function createDialogs(layer, app) {
       'div.next-season',
       el('h3.sum-title', icon(next, 'sm'), seasonArrives(next)),
       el('div.next-crops', crops.map((c) => el('span.next-crop.has-tip', { 'data-tip': `${c.name} : ${plural(c.growDays, 'jour')}, graine ${c.seedCost}, vente ${c.sellPrice}${c.frostHardy ? ' — résiste au gel' : ''}` }, cropIcon(c.id, 'sprite--sm'), el('span', c.name)))),
-      el('p.next-rent', icon('bill', 'xs'), `Fermage ${season(next, 'of')} : `, el('b', fmt(lvl.rents[sIdx + 1])), ` dans ${plural(lvl.seasonLengths[sIdx + 1], 'jour')}.`),
+      el('p.next-rent', icon('bill', 'xs'), `Fermage ${season(next, 'of')} : `, el('b', plural(lvl.rents[sIdx + 1], 'pièce')), `, à payer dans ${plural(lvl.seasonLengths[sIdx + 1], 'jour')}.`),
       next === 'winter'
         ? el(
             `p.next-warn${lost ? '.is-danger' : '.is-ok'}`,
@@ -472,7 +503,9 @@ export function createDialogs(layer, app) {
     const body = el(
       'div.end-screen',
       el('div.end-illus', sprite('farmer', 'sprite--hero'), sprite('crate.empty', 'sprite--hero')),
-      el('p.end-lead', `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
+      el('p.end-lead', ev.money < 0
+        ? `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous étiez à découvert (${fmt(ev.money)}).`
+        : `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
       el('p.end-missing', `Il manquait ${plural(missing, 'pièce')}.`),
       el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested)),
       el('p.end-tip', icon('info', 'sm'), tip),

@@ -9,9 +9,11 @@
 
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
 import { CROPS } from '../data/crops.js';
-import { clear, el, fmt, plural, signed, dec } from './dom.js';
-import { cropIcon, icon, investmentIcon } from './icons.js';
-import { cropCount, season, investmentName } from './text.js';
+import { clear, dec, el, fmt, gain, loss, plural, signed } from './dom.js';
+import { cropIcon, icon, investmentIcon, seasonIncomes } from './icons.js';
+import { cropCount, incomePhrase, incomeProfile, season } from './text.js';
+
+const capitalize = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export function createPanel(root, app) {
   let game = null;
@@ -108,16 +110,23 @@ export function createPanel(root, app) {
   function incomeText(inv) {
     const e = inv.effects || {};
     const parts = [];
-    const seasonal = SEASONS.map((s) => inv.incomeBySeason[s] || 0);
-    const same = seasonal.every((v) => v === seasonal[0]);
-    if (seasonal.some((v) => v > 0)) {
-      if (same) parts.push({ label: 'Revenu', value: `+${seasonal[0]} / jour`, cls: 'pos' });
-      else parts.push({ label: 'Revenu', value: `+${inv.income} / jour ${season(game.query.calendar().seasonId, 'in')}`, cls: inv.income > 0 ? 'pos' : '', tip: seasonalTip(inv) });
+    const profile = incomeProfile(inv.incomeBySeason);
+    if (profile.groups.some((g) => g.value > 0)) {
+      if (profile.constant) parts.push({ label: 'Revenu', value: `+${profile.value} / jour`, cls: 'pos', tip: 'Versé chaque matin, toute l\'année.' });
+      else {
+        const storm = e.noIncomeOn?.includes('storm') ? ' Rien les jours d\'orage.' : '';
+        parts.push({
+          label: 'Revenu / jour',
+          node: seasonIncomes(inv.incomeBySeason, 1, game.query.calendar().seasonId),
+          wide: true,
+          tip: `${capitalize(incomePhrase(inv.incomeBySeason))}.${storm}`,
+        });
+      }
     }
-    if (e.shearing) parts.push({ label: 'Tonte', value: `+${e.shearing} en fin de saison`, cls: 'pos', tip: 'Versée à l\'aube du dernier jour du printemps, de l\'été et de l\'automne (pas en hiver).' });
+    if (e.shearing) parts.push({ label: 'Tonte', value: `+${e.shearing} en fin de saison`, cls: 'pos', tip: 'Versée à l\'aube du dernier jour du printemps, de l\'été et de l\'automne (pas en hiver), juste avant le fermage.' });
     if (e.growthBonus) parts.push({ label: 'Pousse', value: `+${Math.round(e.growthBonus * 100)} % (hors hiver)`, cls: 'pos' });
-    if (e.priceBonus) parts.push({ label: 'Ventes', value: `+${Math.round(e.priceBonus * 100)} %`, cls: 'pos' });
-    if (e.chargeReduction) parts.push({ label: 'Charges', value: `−${e.chargeReduction} / jour`, cls: 'pos' });
+    if (e.priceBonus) parts.push({ label: 'Ventes', value: `+${Math.round(e.priceBonus * 100)} %`, cls: 'pos', tip: 'Toutes vos récoltes se vendent plus cher.' });
+    if (e.chargeReduction) parts.push({ label: 'Charges', value: `−${e.chargeReduction} / jour`, cls: 'pos', tip: 'Les charges quotidiennes ne descendent jamais sous zéro.' });
     if (e.waterPlots) {
       const lvl = inv.owned;
       const next = e.waterPlots[Math.min(lvl, e.waterPlots.length - 1)];
@@ -128,10 +137,6 @@ export function createPanel(root, app) {
     }
     if (inv.upkeep) parts.push({ label: 'Entretien', value: `−${inv.upkeep} / jour${inv.kind === 'upgrade' ? '' : ' chacun'}`, cls: 'neg' });
     return parts;
-  }
-
-  function seasonalTip(inv) {
-    return SEASONS.map((s) => `${season(s)} : +${inv.incomeBySeason[s] || 0}`).join(' · ');
   }
 
   function buyTip(id) {
@@ -151,7 +156,7 @@ export function createPanel(root, app) {
       c.owned.classList.toggle('is-some', inv.owned > 0);
       clear(c.stats);
       for (const p of incomeText(inv)) {
-        const s = el('span.stat', el('span.stat-label', p.label), el(`b${p.cls ? `.${p.cls}` : ''}`, p.value));
+        const s = el(`span.stat${p.wide ? '.stat--wide' : ''}`, el('span.stat-label', p.label), p.node || el(`b${p.cls ? `.${p.cls}` : ''}`, p.value));
         if (p.tip) s.dataset.tip = p.tip;
         c.stats.append(s);
       }
@@ -195,6 +200,7 @@ export function createPanel(root, app) {
   }
 
   function line(label, value, cls = '', tip = null) {
+    if (value === '0') cls = 'mid';
     const n = el('div.stats-line', el('span.stats-label', label), el(`b.stats-value${cls ? `.${cls}` : ''}`, value));
     if (tip) n.dataset.tip = tip;
     return n;
@@ -215,20 +221,20 @@ export function createPanel(root, app) {
       if (!inv.owned) continue;
       const units = inv.kind === 'upgrade' ? 1 : inv.owned;
       const amount = (inv.income || 0) * units;
-      if (amount > 0) incomeLines.push(line(`${inv.name}${units > 1 ? ` ×${units}` : ''}`, `+${fmt(amount)}`, 'pos'));
+      if (amount > 0) incomeLines.push(line(`${inv.name}${units > 1 ? ` ×${units}` : ''}`, gain(amount), 'pos'));
     }
     const chargeLines = [line('Entretien de la ferme', `−${BASE_DAILY_CHARGE}`, 'neg')];
     let solar = 0;
     for (const inv of invs) {
       if (!inv.owned) continue;
       const units = inv.kind === 'upgrade' ? 1 : inv.owned;
-      if (inv.upkeep) chargeLines.push(line(`Entretien : ${inv.name.toLowerCase()}${units > 1 ? ` ×${units}` : ''}`, `−${fmt(inv.upkeep * units)}`, 'neg'));
+      if (inv.upkeep) chargeLines.push(line(`Entretien : ${inv.name.toLowerCase()}${units > 1 ? ` ×${units}` : ''}`, loss(inv.upkeep * units), 'neg'));
       if (inv.effects?.chargeReduction) solar += inv.effects.chargeReduction * units;
     }
-    if (solar) chargeLines.push(line('Panneaux solaires', `+${fmt(solar)}`, 'pos', 'Les charges ne descendent jamais sous zéro.'));
+    if (solar) chargeLines.push(line('Panneaux solaires', gain(solar), 'pos', 'Les charges ne descendent jamais sous zéro.'));
     statsBody.append(
       section(
-        'Chaque matin',
+        `Chaque matin ${season(cal.seasonId, 'in')}`,
         incomeLines.length ? incomeLines : el('p.stats-empty', 'Aucun revenu automatique pour l\'instant : achetez un investissement.'),
         chargeLines,
         el('div.stats-total', line('Solde quotidien estimé', `${signed(f.net)} / jour`, f.net >= 0 ? 'pos' : 'neg')),
@@ -308,13 +314,13 @@ export function createPanel(root, app) {
     statsBody.append(
       section(
         'Depuis le début de l\'année',
-        line('Récoltes vendues', `+${fmt(sum.harvestIncome)}`, 'pos'),
-        line('Revenus des investissements', `+${fmt(sum.investmentIncome)}`, 'pos'),
-        line('Charges quotidiennes', `−${fmt(sum.charges)}`, 'neg'),
-        sum.waterSpent ? line('Arrosage', `−${fmt(sum.waterSpent)}`, 'neg') : null,
-        sum.loanPaid ? line('Prêt remboursé', `−${fmt(sum.loanPaid)}`, 'neg') : null,
-        line('Fermages payés', `−${fmt(sum.rentsPaid)}`, 'neg'),
-        line('Achats (graines, parcelles, investissements)', `−${fmt(spent)}`, 'neg', `Graines ${fmt(sum.seedsSpent)} · Parcelles ${fmt(sum.plotsSpent)} · Investissements ${fmt(sum.investmentsSpent)}`),
+        line('Récoltes vendues', gain(sum.harvestIncome), 'pos'),
+        line('Revenus des investissements', gain(sum.investmentIncome), 'pos'),
+        line('Charges quotidiennes', loss(sum.charges), 'neg'),
+        sum.waterSpent ? line('Arrosage', loss(sum.waterSpent), 'neg') : null,
+        sum.loanPaid ? line('Prêt remboursé', loss(sum.loanPaid), 'neg') : null,
+        line('Fermages payés', loss(sum.rentsPaid), 'neg'),
+        line('Achats (graines, parcelles, investissements)', loss(spent), 'neg', `Graines ${fmt(sum.seedsSpent)} · Parcelles ${fmt(sum.plotsSpent)} · Investissements ${fmt(sum.investmentsSpent)}`),
         el('div.stats-total', line('Bilan', signed(sum.net), sum.net >= 0 ? 'pos' : 'neg')),
         harvested.length
           ? el(

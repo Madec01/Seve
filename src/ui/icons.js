@@ -96,3 +96,17 @@ export function cropIcon(cropId, cls = 'sprite--md') {
 export function investmentIcon(id, cls = 'sprite--md') {
   return sprite(INVESTMENT_SPRITES[id] || 'sign', cls);
 }
+
+/**
+ * Revenu quotidien saison par saison : quatre petites icônes de saison suivies du montant
+ * (la saison en cours est mise en valeur). `bySeason` = revenu par unité, `units` = nombre d'unités.
+ */
+export function seasonIncomes(bySeason = {}, units = 1, currentSeason = null) {
+  return el(
+    'span.season-incomes',
+    ['spring', 'summer', 'autumn', 'winter'].map((s) => {
+      const v = (bySeason[s] || 0) * units;
+      return el(`span.si${s === currentSeason ? '.is-now' : ''}${v ? '' : '.is-zero'}`, icon(s, 'xs'), v ? `+${v}` : '0');
+    }),
+  );
+}

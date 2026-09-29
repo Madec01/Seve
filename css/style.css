@@ -89,6 +89,11 @@ body {
   font-family: 'Pixelify Sans', system-ui, sans-serif;
   font-weight: 400;
   line-height: 1.25;
+  /* Pas de ligatures (fi, fl… illisibles en pixel) ni de faux gras / italique : toutes les graisses
+     utilisées (400, 500, 600, 700) existent dans css/fonts.css. Chiffres à chasse fixe si possible. */
+  font-variant-ligatures: none;
+  font-feature-settings: 'liga' 0, 'dlig' 0;
+  font-synthesis: none;
   -webkit-font-smoothing: none;
   font-smooth: never;
   -webkit-tap-highlight-color: transparent;
@@ -99,7 +104,7 @@ body {
 
 img,
 canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
-button { font: inherit; color: inherit; }
+button, input { font: inherit; color: inherit; font-variant-ligatures: none; }
 a { color: var(--blue-dark); }
 [hidden] { display: none !important; }
 b, strong { font-weight: 700; }
@@ -539,6 +544,13 @@ body.panel-collapsed .panel-handle { display: flex; }
 .stat { display: inline-flex; gap: 0.25rem; white-space: nowrap; }
 .stat[data-tip] { text-decoration: underline dotted var(--text-soft); text-underline-offset: 2px; cursor: help; }
 .stat-label { color: var(--text-soft); }
+.stat--wide { flex-basis: 100%; flex-wrap: wrap; align-items: center; row-gap: 0.1rem; }
+/* Revenu saison par saison : icône + montant, la saison en cours encadrée */
+.season-incomes { display: inline-flex; flex-wrap: wrap; gap: 0.1rem 0.35rem; }
+.si { display: inline-flex; align-items: center; gap: 0.1rem; padding: 0 0.2rem 0 0.05rem; color: var(--pos); font-weight: 700; }
+.si.is-zero { color: var(--text-soft); font-weight: 400; }
+.si.is-now { background: #e3f3d6; box-shadow: 0 0 0 var(--u) #a8d28c; }
+.si.is-now.is-zero { background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
 .warn { color: var(--warn); }
@@ -683,6 +695,8 @@ body.panel-collapsed .panel-handle { display: flex; }
 .tip-sub { color: var(--text-soft); font-size: 0.78rem; }
 .tip-row { justify-content: space-between; gap: 0.8rem !important; }
 .tip-row span { color: var(--text-soft); }
+.tip-total { margin-top: 0.1rem; padding-top: 0.12rem; border-top: var(--u) dashed var(--parch-3); }
+.tip-total span { color: var(--text); font-weight: 700; }
 .tip-note { font-size: 0.8rem; font-weight: 600; }
 .tip-note.pos, .tip-ok { color: var(--pos); }
 .tip-note.neg { color: var(--neg); }
@@ -1044,7 +1058,8 @@ body.in-menu #toasts { left: 50vw; }
 .next-season { display: flex; flex-direction: column; gap: 0.4rem; }
 .next-crops { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 .next-crop { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0 0.35rem 0 0.1rem; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); font-size: 0.85rem; }
-.next-rent { display: flex; align-items: center; gap: 0.3rem; margin: 0; font-size: 0.9rem; }
+.next-rent { margin: 0; font-size: 0.9rem; line-height: 1.35; }
+.next-rent .ico { margin-right: 0.3rem; vertical-align: -0.1em; }
 .next-warn { display: flex; align-items: flex-start; gap: 0.4rem; margin: 0; padding: 0.3rem 0.45rem; font-size: 0.85rem; line-height: 1.3; background: #e5f1fc; box-shadow: 0 0 0 var(--u) #a9cff2; }
 .next-warn.is-danger { background: #ffe3dc; box-shadow: 0 0 0 var(--u) #f2aa9e; color: var(--neg); }
 .next-warn.is-ok { background: #e3f3d6; box-shadow: 0 0 0 var(--u) #a8d28c; color: var(--green-text); }
@@ -1086,7 +1101,7 @@ body.in-menu #toasts { left: 50vw; }
   top: 0;
   display: flex;
   gap: 0.55rem;
-  width: min(24rem, calc(100vw - 16px));
+  width: min(26rem, calc(100vw - 16px));
   padding: 0 0.1rem 0.1rem;
   pointer-events: auto;
   opacity: 0;
@@ -1128,6 +1143,62 @@ body.in-menu #toasts { left: 50vw; }
 .tuto-dot { width: calc(var(--u) * 3); height: calc(var(--u) * 3); background: var(--parch-3); }
 .tuto-dot.is-past { background: var(--wood-light); }
 .tuto-dot.is-on { background: var(--red); box-shadow: 0 0 0 var(--u) var(--red-dark); }
+/* Bulle réduite ou cachée par le choix des graines : rappel compact de l'étape */
+#tutorial.is-min .tuto-bubble,
+#tutorial.is-popup .tuto-bubble { visibility: hidden; opacity: 0; pointer-events: none; }
+.tuto-min {
+  position: absolute;
+  top: calc(var(--u) * -3);
+  right: calc(var(--u) * -3);
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 12);
+  height: calc(var(--u) * 12);
+  padding: 0;
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-wood) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  cursor: pointer;
+}
+.tuto-min:hover { filter: brightness(1.15); }
+.tuto-min:focus-visible,
+.tuto-pill:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.tuto-min-bar { display: block; width: calc(var(--u) * 5); height: var(--u); background: var(--parch); box-shadow: 0 var(--px1) 0 var(--outline); }
+.tuto-pill {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  display: none;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: min(21rem, calc(100vw - 16px));
+  padding: 0.05rem 0.45rem 0.1rem 0.1rem;
+  border-style: solid;
+  border-width: calc(var(--u) * 4);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  text-align: left;
+  pointer-events: auto;
+  cursor: pointer;
+  filter: drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35));
+}
+.tuto-pill.is-visible { display: flex; animation: toast-in 260ms var(--ease-pop); }
+.tuto-pill.is-static { cursor: default; }
+.tuto-pill:hover:not(.is-static) { filter: brightness(1.04) drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35)); }
+.tuto-pill-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 18);
+  height: calc(var(--u) * 18);
+  background: url('../assets/sprites/ui/round-wood.png') center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+.tuto-pill-body { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.tuto-pill-title { font-size: 0.8rem; color: var(--text-soft); }
+.tuto-pill-text { font-size: 0.9rem; }
 .tuto-highlight { animation: tuto-pulse 1.1s ease-in-out infinite !important; position: relative; z-index: 2; }
 @keyframes tuto-pulse {
   0%, 100% { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
@@ -1192,6 +1263,25 @@ body.in-menu #toasts { left: 50vw; }
   .btn--big { min-height: calc(var(--u) * 19); font-size: 1.05rem; }
   .menu-buttons { gap: 0.35rem; }
   .dialog-ribbon { margin-top: calc(var(--u) * -24); }
+}
+
+@media (max-height: 460px) {
+  .pause-hint { display: none; }
+  .pause-sub { margin-bottom: 0.3rem; }
+  .pause .menu-buttons { gap: 0.3rem; }
+  .end-illus { display: none; }
+  .victory-stars .ico--xl { --is: calc(var(--u) * 1.5); }
+  /* Fenêtre des graines plus compacte sur les petits écrans */
+  .seed-picker { width: min(24rem, calc(100vw - 16px)); }
+  .seed-picker .popup-hint { display: none; }
+}
+/* Écran tactile : pas de raccourcis 1, 2, 3… dans la fenêtre des graines */
+@media (pointer: coarse) {
+  .seed-header,
+  .seed-row { grid-template-columns: calc(var(--u) * 18) 1fr 3.2rem 2.6rem 3.4rem; }
+  .seed-key,
+  .seed-header span:first-child { display: none; }
+  .seed-header span:nth-child(3) { text-align: left; }
 }
 
 /* ─── Animations réduites ───────────────────────────────────────────────────── */

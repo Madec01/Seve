@@ -62,7 +62,10 @@ export function createTooltip(node) {
     onOver(e);
   });
   document.addEventListener('pointerout', onOut);
-  document.addEventListener('focusin', onOver);
+  // Au clavier seulement : un toucher donne aussi le focus, et l'infobulle resterait affichée.
+  document.addEventListener('focusin', (e) => {
+    if (e.target.matches?.(':focus-visible')) onOver(e);
+  });
   document.addEventListener('focusout', () => {
     if (owner && owner !== 'scene') hide();
   });

@@ -31,8 +31,29 @@ export function el(spec, attrs, ...children) {
 export function append(node, children) {
   for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
-    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    node.append(c instanceof Node ? c : document.createTextNode(typo(String(c))));
   }
+  return node;
+}
+
+const NBSP = '\u00a0';
+
+/**
+ * Typographie française : espace insécable avant « : ; ! ? % » et à l'intérieur des guillemets,
+ * pour qu'un signe ne se retrouve jamais seul en début de ligne. Appliquée à tout texte passé à el().
+ */
+export function typo(s) {
+  if (!s || typeof s !== 'string') return s;
+  return s
+    .replace(/ ([:;!?%»])/g, `${NBSP}$1`)
+    .replace(/« /g, `«${NBSP}`)
+    .replace(/(\d) (jours?|pièces?|parcelles?)\b/g, `$1${NBSP}$2`);
+}
+
+/** Remplace le texte d'un nœud (avec la typographie française). */
+export function setText(node, text) {
+  const t = typo(String(text));
+  if (node.textContent !== t) node.textContent = t;
   return node;
 }
 
@@ -55,6 +76,18 @@ export function fmt(n) {
 export function signed(n) {
   const v = Math.round(Number(n) || 0);
   return v > 0 ? `+${fmt(v)}` : fmt(v);
+}
+
+/** Gain (« +12 », et « 0 » plutôt que « +0 »). */
+export function gain(n) {
+  const v = Math.round(Number(n) || 0);
+  return v ? `+${fmt(v)}` : '0';
+}
+
+/** Dépense positive affichée en négatif (« −12 », et « 0 » plutôt que « −0 »). */
+export function loss(n) {
+  const v = Math.round(Number(n) || 0);
+  return v ? `−${fmt(v)}` : '0';
 }
 
 /** « 1 jour », « 3 jours ». */

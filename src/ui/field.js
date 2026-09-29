@@ -5,8 +5,8 @@
 //                                  plotTip(i), investmentTip(id), refresh(), onEvent(ev) }
 
 import { clear, el, fmt, plural, placeNear, dec } from './dom.js';
-import { cropIcon, icon, investmentIcon } from './icons.js';
-import { season } from './text.js';
+import { cropIcon, icon, investmentIcon, seasonIncomes } from './icons.js';
+import { incomeProfile, season } from './text.js';
 
 export function createField(popup, app) {
   let current = null; // { kind: 'seed' | 'unlock', index }
@@ -33,9 +33,50 @@ export function createField(popup, app) {
     place(index);
   }
 
+  /**
+   * Place la fenêtre à côté du champ entier (à droite, sinon à gauche, dessous ou dessus) pour ne
+   * cacher aucune parcelle ; si la place manque (petit écran), elle se colle à la parcelle visée.
+   */
   function place(index) {
     const r = app.plotPageRect(index);
     if (!r) return;
+    const field = app.fieldPageRect?.();
+    const w = popup.offsetWidth; // (sans la mise à l'échelle de l'animation d'ouverture)
+    const h = popup.offsetHeight;
+    // Bord droit utile : la poignée du panneau replié ne doit pas être recouverte.
+    const handle = document.getElementById('panel-handle');
+    const hr = handle && handle.offsetParent !== null ? handle.getBoundingClientRect() : null;
+    const vw = hr && hr.width ? Math.min(window.innerWidth, hr.left) : window.innerWidth;
+    const vh = window.innerHeight;
+    const hud = document.getElementById('hud')?.getBoundingClientRect().bottom || 0;
+    const top = Math.max(8, app.inMenu ? 8 : hud + 6);
+    const gap = 12;
+    if (field) {
+      const clampY = (y) => Math.round(Math.max(top, Math.min(vh - h - 8, y)));
+      const clampX = (x) => Math.round(Math.max(8, Math.min(vw - w - 8, x)));
+      const plotCy = r.top + r.height / 2;
+      const candidates = [
+        { side: 'right', ok: field.right + gap + w <= vw - 8, x: field.right + gap, y: clampY(plotCy - h / 2) },
+        { side: 'left', ok: field.left - gap - w >= 8, x: field.left - gap - w, y: clampY(plotCy - h / 2) },
+        { side: 'bottom', ok: field.bottom + gap + h <= vh - 8, x: clampX(r.left + r.width / 2 - w / 2), y: field.bottom + gap },
+        { side: 'top', ok: field.top - gap - h >= top, x: clampX(r.left + r.width / 2 - w / 2), y: field.top - gap - h },
+      ];
+      let c = candidates.find((k) => k.ok && k.y >= top - 1);
+      if (!c && h <= vh - top - 8) {
+        // Pas de place à côté du champ : à côté de la parcelle visée (sans la cacher si possible),
+        // sous la barre du haut.
+        const y = clampY(plotCy - h / 2);
+        if (r.right + gap + w <= vw - 8) c = { side: 'right', x: r.right + gap, y };
+        else if (r.left - gap - w >= 8) c = { side: 'left', x: r.left - gap - w, y };
+        else c = { side: 'over', x: vw - r.right >= r.left ? vw - w - 8 : 8, y };
+      }
+      if (c) {
+        popup.style.left = `${Math.round(c.x)}px`;
+        popup.style.top = `${Math.round(c.y)}px`;
+        popup.dataset.side = c.side;
+        return;
+      }
+    }
     placeNear(popup, r, window.innerWidth < 700 ? 'bottom' : 'right', 14);
   }
 
@@ -185,13 +226,20 @@ export function createField(popup, app) {
     const inv = game?.query.investments().find((i) => i.id === id);
     if (!inv) return null;
     const rows = [el('div.tip-title', investmentIcon(id, 'sprite--xs'), inv.owned ? `${inv.name}${inv.kind === 'upgrade' ? ` (niveau ${inv.owned})` : inv.owned > 1 ? ` ×${inv.owned}` : ''}` : `À vendre : ${inv.name}`)];
+    const units = inv.kind === 'upgrade' ? 1 : Math.max(1, inv.owned);
+    const profile = incomeProfile(inv.incomeBySeason, units);
+    const incomeRows = () => {
+      if (!profile.groups.some((g) => g.value > 0)) return;
+      if (profile.constant) rows.push(el('div', icon('coin', 'xs'), `+${fmt(profile.value)} par jour, toute l'année`));
+      else rows.push(el('div', icon('coin', 'xs'), 'Par jour :', seasonIncomes(inv.incomeBySeason, units, game.query.calendar().seasonId)));
+    };
     if (inv.owned) {
-      const units = inv.kind === 'upgrade' ? 1 : inv.owned;
-      if (inv.income) rows.push(el('div', `+${fmt(inv.income * units)} par jour ${season(game.query.calendar().seasonId, 'in')}`));
-      if (inv.effects?.shearing) rows.push(el('div', `Tonte : +${fmt(inv.effects.shearing * units)} en fin de saison`));
+      incomeRows();
+      if (inv.effects?.shearing) rows.push(el('div', `Tonte : +${fmt(inv.effects.shearing * units)} en fin de saison (sauf l'hiver)`));
       if (inv.upkeep) rows.push(el('div.tip-sub', `Entretien : −${fmt(inv.upkeep * units)} par jour`));
     } else {
       rows.push(el('div', inv.description));
+      incomeRows();
       if (inv.nextCost !== null) rows.push(el('div', icon('coin', 'xs'), `Prix : ${plural(inv.nextCost, 'pièce')}`));
     }
     rows.push(el('div.tip-sub', 'Cliquez pour voir la fiche.'));

@@ -5,7 +5,7 @@
 // Le DOM est construit une fois ; refresh() ne change que les textes et classes (appelé sur les
 // événements du jeu) ; frame() anime seulement le compteur d'argent et la barre du jour.
 
-import { el, fmt, plural, signed } from './dom.js';
+import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon } from './icons.js';
 import { season, weatherName, WEATHER_HINTS } from './text.js';
 
@@ -78,7 +78,7 @@ export function createHud(root, app) {
         type: 'button',
         id: `speed-${s.speed}`,
         'aria-label': s.label,
-        'data-tip': `${s.label} (${s.key})`,
+        'data-tip': `${s.label} (touche ${s.key})`,
         'data-tip-side': 'bottom',
         onclick: () => app.setSpeed(s.speed, { fromUser: true }),
       },
@@ -108,14 +108,25 @@ export function createHud(root, app) {
   function moneyTip() {
     if (!game) return null;
     const f = game.query.finance();
-    return el(
-      'div.tip-rows',
-      el('div.tip-title', 'Argent'),
-      row('Revenus automatiques', `${signed(f.dailyIncome)} / jour`),
-      row('Charges quotidiennes', `${signed(-f.dailyCharges)} / jour`),
-      row('Solde quotidien', `${signed(f.net)} / jour`, f.net < 0 ? 'neg' : 'pos'),
-      f.money < 0 ? el('div.tip-note.neg', 'Vous êtes à découvert : attention au prochain fermage !') : null,
-    );
+    const c = game.query.calendar();
+    const rows = [el('div.tip-title', `Argent : ${plural(f.money, 'pièce')}`), el('div.tip-sub', `Chaque matin ${season(c.seasonId, 'in')} :`)];
+    let listed = 0;
+    for (const inv of game.query.investments()) {
+      if (!inv.owned) continue;
+      const units = inv.kind === 'upgrade' ? 1 : inv.owned;
+      const amount = (inv.income || 0) * units;
+      if (amount > 0) {
+        rows.push(row(`${inv.name}${units > 1 ? ` ×${units}` : ''}`, `+${fmt(amount)}`, 'pos'));
+        listed += 1;
+      }
+    }
+    if (!listed) rows.push(row('Revenus automatiques', '0'));
+    rows.push(row('Charges (ferme et entretien)', f.dailyCharges ? `−${fmt(f.dailyCharges)}` : '0', f.dailyCharges ? 'neg' : ''));
+    rows.push(el('div.tip-row.tip-total', el('span', 'Solde de chaque matin'), el(`b.${f.net < 0 ? 'neg' : 'pos'}`, `${signed(f.net)} / jour`)));
+    if (f.loan && f.loan.nextInDays !== null) rows.push(row('Prochaine mensualité du prêt', `−${fmt(f.loan.payment)}`, 'neg'));
+    rows.push(el('div.tip-sub', 'Les récoltes, elles, rapportent au moment où vous les cueillez.'));
+    if (f.money < 0) rows.push(el('div.tip-note.neg', 'Vous êtes à découvert : attention au prochain fermage !'));
+    return el('div.tip-rows', rows);
   }
 
   function dateTip() {
@@ -148,10 +159,10 @@ export function createHud(root, app) {
       el('div', p.daysLeft === 0 ? 'Il sera prélevé ce soir.' : `Il sera prélevé le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
       row('Argent actuel', fmt(p.money)),
     ];
-    if (p.daysLeft > 0) nodes.push(row(`Revenus nets (${plural(p.daysLeft, 'jour')})`, signed(p.netTotal)));
+    if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
     if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
     if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
-    nodes.push(row('Prévision', fmt(p.projected), p.projected >= p.amount ? 'pos' : 'neg'));
+    nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : 'neg'}`, fmt(p.projected))));
     nodes.push(
       el(
         `div.tip-note.${p.state === 'danger' ? 'neg' : p.state === 'warn' ? 'warn' : 'pos'}`,
@@ -162,6 +173,7 @@ export function createHud(root, app) {
             : 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !',
       ),
     );
+    nodes.push(el('div.tip-sub', 'Prévision = argent actuel + solde des matins à venir + cultures qui seront mûres d\'ici là.'));
     return el('div.tip-rows', nodes);
   }
 
@@ -204,20 +216,20 @@ export function createHud(root, app) {
     targetMoney = game.state.money;
 
     setIcon(seasonIcon, c.seasonId);
-    dateMain.textContent = `Jour ${c.day} · ${c.seasonName} (${c.dayOfSeason}/${c.seasonLength})`;
+    setText(dateMain, `Jour ${c.day} · ${c.seasonName} (${c.dayOfSeason}/${c.seasonLength})`);
     date.dataset.season = c.seasonId;
 
     setIcon(wToday, w.today);
-    wName.textContent = weatherName(w.today);
+    setText(wName, weatherName(w.today));
     setIcon(wTomorrow, w.tomorrow || 'sunny');
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
 
     const p = projection();
     const status = game.state.status;
-    billAmount.textContent = fmt(p.amount);
-    if (status === 'victory') billDays.textContent = 'payé : année finie !';
-    else if (status === 'bankrupt') billDays.textContent = 'impayé';
-    else billDays.textContent = p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain soir' : `dans ${p.daysLeft} jours`;
+    setText(billAmount, fmt(p.amount));
+    if (status === 'victory') setText(billDays, 'payé : année finie !');
+    else if (status === 'bankrupt') setText(billDays, 'impayé');
+    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain soir' : `dans ${p.daysLeft} jours`);
     const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn');
