@@ -26,7 +26,7 @@ import { createPanel } from './ui/panel.js';
 import { createField } from './ui/field.js';
 import { createDialogs } from './ui/dialogs.js';
 import { createTutorial } from './ui/tutorial.js';
-import { season, seasonArrives, cropName } from './ui/text.js';
+import { season, seasonArrives, cropName, incomePhrase } from './ui/text.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -608,7 +608,7 @@ function reactMessages(ev, game) {
       if (inv.effects.waterPlots) what = 'Vos cultures seront arrosées chaque matin.';
       else if (inv.effects.chargeReduction) what = `Vos charges baissent de ${inv.effects.chargeReduction} par jour.`;
       else if (inv.effects.shearing) what = `Tonte : +${inv.effects.shearing} à la fin de chaque saison (sauf l'hiver).`;
-      else if (q?.income) what = `+${q.income} chaque matin ${season(game.query.calendar().seasonId, 'in')}.`;
+      else if (q?.income || Object.values(q?.incomeBySeason || {}).some(Boolean)) what = `${incomePhrase(q.incomeBySeason)}.`;
       t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${inv.id === 'beehive' || inv.id === 'guestHouse' || inv.id === 'cow' ? 'e' : ''} !`, text: what });
       break;
     }
@@ -702,6 +702,13 @@ app.savedRunInfo = () => {
   if (!data || data.state?.status !== 'playing') return null;
   const lvl = getLevel(data.state.levelId);
   if (!lvl) return null;
+  try {
+    loadGame(data.state); // sauvegarde abîmée ou d'une ancienne version : pas de « Continuer »
+  } catch (err) {
+    console.info('Sauvegarde ignorée :', err.message);
+    storage.clearRun();
+    return null;
+  }
   const sid = SEASONS[data.state.time?.seasonIndex] || 'spring';
   return {
     levelId: lvl.id,
@@ -929,7 +936,7 @@ async function boot() {
             }),
         ),
       ),
-      (document.fonts?.load ? document.fonts.load('16px "Pixelify Sans"').catch(() => null) : Promise.resolve()).then(() => {
+      (document.fonts?.load ? Promise.all(['16px "Pixelify Sans"', '700 16px "Pixelify Sans"'].map((f) => document.fonts.load(f))).catch(() => null) : Promise.resolve()).then(() => {
         parts.font = 1;
         paint();
       }),
