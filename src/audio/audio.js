@@ -365,10 +365,18 @@ export function createAudio(manifest, initialSettings = {}) {
   }
 
   // ── Visibilité de l'onglet ───────────────────────────────────────────────────────
+  // Téléphone : appli en arrière-plan (accueil, écran verrouillé) → silence ; au retour, reprise
+  // (si le navigateur la refuse sans geste, le prochain toucher la relance via unlock()).
   document.addEventListener('visibilitychange', () => {
     if (!ctx) return;
     if (document.hidden) ctx.suspend().catch(() => {});
     else ctx.resume().catch(() => {});
+  });
+  window.addEventListener('pagehide', () => {
+    if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+  });
+  window.addEventListener('pageshow', () => {
+    if (ctx && !document.hidden && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   });
 
   return {

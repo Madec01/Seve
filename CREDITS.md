@@ -24,13 +24,14 @@ Modifications apportées : fichiers renommés ; les versions mp3 de secours ont 
 
 ## Police (SIL Open Font License 1.1)
 
-- **Pixelify Sans** — Stefie Justprince, © 2021 The Pixelify Sans Project Authors.
-  Source : https://github.com/eifetx/Pixelify-Sans (via Google Fonts, https://fonts.google.com/specimen/Pixelify+Sans).
-  Licence : SIL OFL 1.1, texte complet dans `assets/fonts/OFL.txt`.
-  Fichiers : `assets/fonts/PixelifySans-Variable.ttf` (original) et `PixelifySans-Variable.woff2` (même police, simplement compressée en WOFF2).
-- **Pixelify Sans Ferme** — version modifiée de Pixelify Sans (la licence n'a pas de nom réservé), sous la même licence SIL OFL 1.1 (`assets/fonts/OFL.txt`).
-  Fichiers : `assets/fonts/PixelifySansFerme-Regular.woff2`, `-Medium`, `-SemiBold`, `-Bold` (instances statiques 400, 500, 600 et 700 de la police variable), générés par `assets/fonts/build-pixelify-ferme.py`.
-  Modifications : chiffres « 2 », « 5 » et « 7 » redessinés sur la grille de pixels de la police (le « 2 » d'origine se lisait « 8 » et le « 5 » se lisait « S » aux petites tailles) ; ligatures « fi », « fl », « ff », « ffi », « ffl » et « st » retirées (elles se lisaient « A »). C'est cette version que le jeu utilise (`css/fonts.css`, nom CSS « Pixelify Sans »).
+- **Jersey 15** — Sarah Cadigan-Fried, © 2023 The Soft Type Project Authors.
+  Source : https://github.com/scfried/soft-type-jersey (via Google Fonts, https://fonts.google.com/specimen/Jersey+15).
+  Licence : SIL OFL 1.1 (pas de nom réservé), texte complet dans `assets/fonts/OFL-Jersey15.txt`.
+  Fichier : `assets/fonts/Jersey15-Regular.ttf` (original, source de la version modifiée).
+- **Jersey Ferme** — version modifiée de Jersey 15, sous la même licence SIL OFL 1.1 (`assets/fonts/OFL-Jersey15.txt`). **C'est la police du jeu** (`css/fonts.css`, nom CSS « Ferme », utilisé par `style.css` et le canevas).
+  Fichiers : `assets/fonts/JerseyFerme-Regular.woff2` (graisses 400–549) et `JerseyFerme-Bold.woff2` (550–900), générés par `assets/fonts/build-ferme-font.py`.
+  Modifications : « I » majuscule avec empattements (il était identique à « l ») et I accentués ; flèches → ← ↑ ↓ ↔, ✕, ★, ≥, ≤, ± et espaces fines ajoutés dans le même style ; lettres agrandies (cadratin 1350 → 1170 unités) ; hinting retiré ; graisse grasse créée en épaississant chaque glyphe d'un pixel.
+  Pourquoi : avec Pixelify Sans, plusieurs majuscules se confondaient sur téléphone (« C » lu « O », « B » lu « G » ou « 8 », « Z » lu « 2 », « D » lu « O »).
 
 ## Graphismes — Kenney (CC0, domaine public)
 
@@ -44,6 +45,8 @@ Licences d'origine : `assets/sprites/LICENSE-kenney.txt`.
 | `assets/sprites/ui/*.png` | UI Pack – Pixel Adventure 2.0 (tuiles « Thick outline », certaines assemblées par 3) | https://kenney.nl/assets/ui-pack-pixel-adventure |
 | `assets/sprites/extra.png` | Tuiles dérivées de Tiny Farm (recoloriées / assemblées) et quelques tuiles dessinées pour le jeu dans le même style (panneau solaire, arroseur, graines semées), générées par `assets/sprites/generate-extra.py` ; placées elles aussi sous CC0 | — |
 | `assets/sprites/ui/icons.png`, `assets/sprites/ui/favicon.png` | Icônes de l'interface (météo, saisons, vitesses, étoiles…) dessinées pour le jeu dans la palette Kenney, et favicon (carotte de Tiny Farm agrandie), générées par `assets/sprites/ui/generate-icons.py` ; placées sous CC0 | — |
+| `assets/icons/*.png` | Icônes de l'application (PWA : 192/512, maskable, monochrome, apple-touch-icon, favicons) : carotte et tournesol de Tiny Farm (contour affiné à 1 pixel), butte d'herbe et soleil dessinés pour le jeu, agrandis au plus proche voisin ; générées par `assets/icons/generate-app-icons.py` ; placées sous CC0 | — |
+| `assets/screenshots/*.png` | Captures d'écran du jeu pour le manifeste de l'application ; même licence que le jeu | — |
 
 ## Effets sonores — Kenney (CC0, domaine public)
 

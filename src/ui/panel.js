@@ -1,8 +1,8 @@
-// Panneau de droite : onglets « Investissements » (cartes d'achat) et « Bilan » (revenus,
-// charges, fermages, prêt, statistiques de l'année).
+// Contenus « Acheter » (cartes d'investissement) et « Bilan » (revenus, charges, fermages, prêt,
+// statistiques de l'année), affichés dans une feuille du bas (voir sheets.js et app.openTab).
 //
-// createPanel(root, app) → { bind(game), refresh(), onEvent(ev), setTab(id), focusInvestment(id),
-//                            toggle(force), isOpen() }
+// createPanel(app) → { bind(game), refresh(), onEvent(ev), focusInvestment(id), shopNode,
+//                      statsNode, showStats(), cardOf(id) }
 // Les cartes sont construites une fois par partie puis mises à jour en place (pas de
 // reconstruction du DOM à chaque événement) ; le bilan est reconstruit seulement quand son
 // onglet est visible, au plus une fois par image.
@@ -15,60 +15,19 @@ import { cropCount, incomePhrase, incomeProfile, season } from './text.js';
 
 const capitalize = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
-export function createPanel(root, app) {
+export function createPanel(app) {
   let game = null;
-  let tab = 'shop';
   let dirty = { shop: true, stats: true };
   let scheduled = false;
   const cards = new Map(); // id → { node, parts }
 
   // ── Structure ─────────────────────────────────────────────────────────────────
-  const levelTitle = el('div.panel-level', '');
-  const tabShop = el('button.tab', { type: 'button', role: 'tab', id: 'tab-shop', onclick: () => setTab('shop', true) }, icon('coin', 'sm'), el('span', 'Investissements'));
-  const tabStats = el('button.tab', { type: 'button', role: 'tab', id: 'tab-stats', onclick: () => setTab('stats', true) }, icon('bill', 'sm'), el('span', 'Bilan'));
-  const shopList = el('div.shop-list', { role: 'tabpanel', id: 'panel-shop' });
-  const statsBody = el('div.stats', { role: 'tabpanel', id: 'panel-stats' });
-  const scroller = el('div.panel-scroll', shopList, statsBody);
-  const closeBtn = el('button.panel-close', { type: 'button', 'aria-label': 'Fermer le panneau', 'data-tip': 'Replier le panneau', onclick: () => toggle(false, true) }, icon('close', 'sm'));
-  const inner = el('div.panel-inner', el('div.panel-head', levelTitle, closeBtn), el('div.tabs', { role: 'tablist' }, tabShop, tabStats), scroller);
-  const handle = el(
-    'button.panel-handle',
-    { type: 'button', id: 'panel-handle', 'aria-label': 'Ouvrir le panneau Investissements et bilan', onclick: () => toggle(undefined, true) },
-    icon('coin', 'md'),
-    el('span.panel-handle-text', 'Ferme'),
-  );
-  root.append(handle, inner);
+  // Deux contenus, affichés dans une feuille du bas (téléphone) ou un panneau à droite (grand écran).
+  const shopList = el('div.shop-list', { id: 'panel-shop' });
+  const statsBody = el('div.stats', { id: 'panel-stats' });
 
-  // ── Onglets ───────────────────────────────────────────────────────────────────
-  function setTab(id, fromUser = false) {
-    if (fromUser && id !== tab) app.audio.play('page');
-    tab = id;
-    tabShop.classList.toggle('is-active', id === 'shop');
-    tabStats.classList.toggle('is-active', id === 'stats');
-    tabShop.setAttribute('aria-selected', id === 'shop');
-    tabStats.setAttribute('aria-selected', id === 'stats');
-    shopList.hidden = id !== 'shop';
-    statsBody.hidden = id !== 'stats';
-    scroller.scrollTop = 0;
-    schedule();
-  }
-
-  function isOpen() {
-    return !document.body.classList.contains('panel-collapsed');
-  }
-
-  /** Ouvre ou replie le panneau (force = true/false, ou bascule). */
-  function toggle(force, fromUser = false) {
-    const open = force === undefined ? !isOpen() : !!force;
-    if (open === isOpen()) return;
-    document.body.classList.toggle('panel-collapsed', !open);
-    if (fromUser) {
-      app.audio.play(open ? 'open' : 'close');
-      app.settings.panelCollapsed = !open;
-      app.saveSettings();
-    }
-    app.onLayoutChange?.();
-    if (open) schedule();
+  function isShown(id) {
+    return !!app.sheets?.isOpen(id);
   }
 
   // ── Cartes d'investissement ───────────────────────────────────────────────────
@@ -90,20 +49,21 @@ export function createPanel(root, app) {
       const price = el('span.buy-price', '');
       const buyLabel = el('span.buy-label', 'Acheter');
       const buy = el(
-        'button.btn.btn--buy.has-tip',
-        { type: 'button', 'data-tip-side': 'left', onclick: () => onBuy(inv.id, buy) },
+        'button.btn.btn--red.btn--buy',
+        { type: 'button', id: `buy-${inv.id}`, onclick: () => onBuy(inv.id, buy) },
         buyLabel,
         el('span.buy-cost', icon('coin', 'sm'), price),
       );
-      buy._tip = () => buyTip(inv.id);
+      const reason = el('p.card-reason', '');
       const node = el(
         'article.card',
         { dataset: { id: inv.id }, id: `card-${inv.id}` },
         el('div.card-icon', investmentIcon(inv.id, 'sprite--card')),
-        el('div.card-main', el('div.card-top', name, owned), desc, stats, el('div.card-foot', buy)),
+        el('div.card-main', el('div.card-top', name, owned), desc, stats),
+        el('div.card-foot', buy, reason),
       );
       shopList.append(node);
-      cards.set(inv.id, { node, owned, stats, price, buy, buyLabel });
+      cards.set(inv.id, { node, owned, stats, price, buy, buyLabel, reason });
     }
   }
 
@@ -139,13 +99,6 @@ export function createPanel(root, app) {
     return parts;
   }
 
-  function buyTip(id) {
-    const inv = game?.query.investments().find((i) => i.id === id);
-    if (!inv) return null;
-    if (inv.canBuy) return `Acheter ${inv.kind === 'upgrade' ? 'le niveau suivant' : 'une unité'} pour ${fmt(inv.nextCost)} pièces`;
-    return inv.reason;
-  }
-
   function updateCards() {
     const list = game.query.investments();
     for (const inv of list) {
@@ -168,7 +121,10 @@ export function createPanel(root, app) {
       c.node.classList.toggle('is-maxed', maxed);
       c.node.classList.toggle('is-owned', inv.owned > 0);
       c.node.classList.toggle('is-affordable', inv.canBuy);
-      app.tooltip?.refresh(c.buy);
+      // Au toucher, pas d'infobulle : la raison d'un achat impossible est écrite sous le bouton.
+      c.reason.textContent = maxed || inv.canBuy ? '' : inv.reason || '';
+      c.reason.hidden = !c.reason.textContent;
+      c.buy.classList.toggle('btn--red', inv.canBuy);
     }
   }
 
@@ -181,14 +137,13 @@ export function createPanel(root, app) {
     }
   }
 
-  /** Ouvre le panneau sur la carte d'un investissement (clic dans la scène). */
+  /** Ouvre la feuille des achats sur la carte d'un investissement. */
   function focusInvestment(id) {
-    toggle(true);
-    setTab('shop');
+    if (!isShown('shop')) app.openTab('shop');
     flush();
     const c = cards.get(id);
     if (!c) return;
-    c.node.scrollIntoView({ block: 'nearest', behavior: document.documentElement.classList.contains('reduced-motion') ? 'auto' : 'smooth' });
+    c.node.scrollIntoView({ block: 'center', behavior: document.documentElement.classList.contains('reduced-motion') ? 'auto' : 'smooth' });
     c.node.classList.remove('is-focus');
     void c.node.offsetWidth;
     c.node.classList.add('is-focus');
@@ -365,12 +320,11 @@ export function createPanel(root, app) {
       updateCards();
       dirty.shop = false;
     }
-    if (tab === 'stats' && dirty.stats && isOpen()) {
-      const top = scroller.scrollTop;
+    if (dirty.stats && isShown('stats')) {
       buildStats();
-      scroller.scrollTop = top;
       dirty.stats = false;
     }
+    app.tabbar?.setBadge('shop', game.state.status === 'playing' && game.query.investments().some((i) => i.canBuy));
   }
 
   function refresh() {
@@ -380,11 +334,7 @@ export function createPanel(root, app) {
 
   function bind(g) {
     game = g;
-    const lvl = g.query.level();
-    clear(levelTitle);
-    levelTitle.append(el('span.panel-level-num', `Niveau ${lvl.id}`), el('span.panel-level-name', lvl.name));
     buildCards();
-    setTab('shop');
     refresh();
   }
 
@@ -393,18 +343,21 @@ export function createPanel(root, app) {
     if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory'].includes(ev.type)) refresh();
   }
 
-  setTab('shop');
-
   return {
     bind,
     refresh,
     onEvent,
-    setTab,
+    flush,
     focusInvestment,
-    toggle,
-    isOpen,
-    get tab() {
-      return tab;
+    shopNode: shopList,
+    statsNode: statsBody,
+    /** Le bilan vient d'être affiché : il est reconstruit tout de suite. */
+    showStats() {
+      dirty.stats = true;
+      if (game) {
+        buildStats();
+        dirty.stats = false;
+      }
     },
     cardOf: (id) => cards.get(id)?.node || null,
   };

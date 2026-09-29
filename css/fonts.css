@@ -1,33 +1,25 @@
-/* Police « Pixelify Sans Ferme » : Pixelify Sans (Stefie Justprince, SIL Open Font License 1.1 —
-   voir assets/fonts/OFL.txt), en instances statiques 400 / 500 / 600 / 700, avec les chiffres 2 et 5
-   redessinés pour qu'ils ne se confondent plus avec 8 et S (assets/fonts/build-pixelify-ferme.py).
-   Le nom CSS reste « Pixelify Sans » : le canevas (textes flottants) l'utilise aussi.
+/* Police du jeu : « Jersey Ferme », version modifiée de Jersey 15 (Sarah Cadigan-Fried,
+   The Soft Type Project, SIL Open Font License 1.1 — voir assets/fonts/OFL-Jersey15.txt),
+   construite par assets/fonts/build-ferme-font.py : « I » à empattements (distinct de « l »),
+   flèches et symboles ajoutés, lettres agrandies (×1,15), graisse grasse ajoutée.
+   Elle remplace Pixelify Sans, dont plusieurs majuscules se confondaient sur téléphone
+   (« C » lu « O », « B » lu « G », « Z » lu « 2 »…).
+
+   Nom CSS : « Ferme », utilisé par style.css et par le canevas (textes flottants,
+   src/render/effects.js). Deux fichiers couvrent toutes les graisses :
+   400–549 → normale, 550–900 → grasse (600 et 700 dans style.css).
    Chemins relatifs à ce fichier (css/) : fonctionne aussi dans un sous-dossier. */
 @font-face {
-  font-family: 'Pixelify Sans';
-  src: url('../assets/fonts/PixelifySansFerme-Regular.woff2') format('woff2');
-  font-weight: 400;
+  font-family: 'Ferme';
+  src: url('../assets/fonts/JerseyFerme-Regular.woff2') format('woff2');
+  font-weight: 100 549;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'Pixelify Sans';
-  src: url('../assets/fonts/PixelifySansFerme-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Pixelify Sans';
-  src: url('../assets/fonts/PixelifySansFerme-SemiBold.woff2') format('woff2');
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Pixelify Sans';
-  src: url('../assets/fonts/PixelifySansFerme-Bold.woff2') format('woff2');
-  font-weight: 700;
+  font-family: 'Ferme';
+  src: url('../assets/fonts/JerseyFerme-Bold.woff2') format('woff2');
+  font-weight: 550 900;
   font-style: normal;
   font-display: swap;
 }

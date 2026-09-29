@@ -3,7 +3,11 @@
 //
 // Paramètres d'URL (pour les captures automatiques) :
 //   level=1..8  season=0..3  weather=sunny|cloudy|rain|storm|heatwave|snow  day=0..1
-//   inv=all|none  crops=1  unlock=1  seed=123  panel=0 (masque le panneau)
+//   inv=all|none  crops=1  unlock=1  seed=123  panel=0 (masque le panneau)  grid=8x5 (maquette)
+//   Vue téléphone : w=412&h=915&dpr=2.625 (canvas de w × h px CSS, centré, densité imposée)
+//   Bandeaux simulés : top=64&bottom=72 (px CSS couverts par la barre du haut et les onglets ;
+//   par défaut 64 / 72 en vue téléphone, 0 sinon) ; mode=portrait|landscape|auto ; scroll=px
+//   Au doigt ou à la souris : glisser = défiler, toucher bref = action sur la parcelle.
 // window.preview expose { game, scene, set(opts), buyAll(), fill(), … } pour les scripts.
 //
 // Cet outil modifie directement game.state (saison, météo, achats) : c'est volontaire, pour
@@ -90,11 +94,20 @@ function newGame(levelId, seed) {
 
 // ── Mise en place ─────────────────────────────────────────────────────────────────────
 const images = await loadImages(SHEETS, { base: '../' });
-try { await document.fonts.load('16px "Pixelify Sans"'); } catch (e) { /* police facultative */ }
+try { await document.fonts.load('16px "Ferme"'); } catch (e) { /* police facultative */ }
 const canvas = $('scene');
 let seed = Number(params.get('seed')) || 7;
 let game = newGame(Number(params.get('level')) || 1, seed);
-const scene = createScene(canvas, images, game.level || game.query.level());
+const phone = params.get('w') && params.get('h') ? { w: Number(params.get('w')), h: Number(params.get('h')) } : null;
+const forcedDpr = params.get('dpr') ? Number(params.get('dpr')) : null;
+const insets = {
+  top: Number(params.get('top') ?? (phone ? 64 : 0)),
+  bottom: Number(params.get('bottom') ?? (phone ? 72 : 0)),
+  left: 0,
+  right: 0,
+};
+const scene = createScene(canvas, images, game.level || game.query.level(), { layoutMode: params.get('mode') || 'auto' });
+scene.setInsets(insets);
 let unsub = null;
 
 function wire() {
@@ -105,7 +118,19 @@ function wire() {
 wire();
 
 function fit() {
-  scene.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1);
+  const w = phone ? phone.w : window.innerWidth;
+  const h = phone ? phone.h : window.innerHeight;
+  if (phone) {
+    canvas.style.left = `${Math.max(0, Math.round((window.innerWidth - w) / 2))}px`;
+    canvas.style.top = `${Math.max(0, Math.round((window.innerHeight - h) / 2))}px`;
+  }
+  scene.resize(w, h, forcedDpr || window.devicePixelRatio || 1);
+  // Bandeaux simulés (barre du haut, onglets)
+  const r = canvas.getBoundingClientRect();
+  const top = $('insetTop');
+  const bottom = $('insetBottom');
+  top.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${insets.top}px`;
+  bottom.style.cssText = `left:${r.left}px;top:${r.bottom - insets.bottom}px;width:${r.width}px;height:${insets.bottom}px`;
 }
 window.addEventListener('resize', fit);
 fit();
@@ -223,10 +248,51 @@ $('weather').onchange = () => api.set({ weather: $('weather').value });
 $('day').oninput = () => api.set({ day: $('day').value });
 for (const k of ['buyAll', 'buyOne', 'sellAll', 'fill', 'unlock', 'empty', 'dawn', 'frost', 'harvestAll']) $(k).onclick = () => api[k]();
 
-canvas.addEventListener('mousemove', (e) => scene.setHover(scene.hitTest(e.offsetX, e.offsetY)));
+// Glisser pour défiler (avec élan), toucher bref pour agir.
+let drag = null;
+const local = (e) => {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+};
+canvas.addEventListener('pointerdown', (e) => {
+  const p = local(e);
+  drag = { id: e.pointerId, x: p.x, y: p.y, lastY: p.y, lastT: performance.now(), v: 0, moved: false, touch: e.pointerType !== 'mouse' };
+  canvas.setPointerCapture?.(e.pointerId);
+});
+canvas.addEventListener('pointermove', (e) => {
+  const p = local(e);
+  if (!drag || drag.id !== e.pointerId) {
+    if (e.pointerType === 'mouse') scene.setHover(scene.hitTest(p.x, p.y));
+    return;
+  }
+  if (!drag.moved && Math.hypot(p.x - drag.x, p.y - drag.y) > 8) drag.moved = true;
+  if (drag.moved) {
+    const now = performance.now();
+    const dy = p.y - drag.lastY;
+    scene.scrollBy(-dy);
+    const dt = Math.max(1, now - drag.lastT) / 1000;
+    drag.v = drag.v * 0.6 + (-dy / dt) * 0.4;
+    drag.lastY = p.y;
+    drag.lastT = now;
+  }
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (!drag || drag.id !== e.pointerId) return;
+  const d = drag;
+  drag = null;
+  if (d.moved) {
+    if (performance.now() - d.lastT < 80) scene.fling(d.v);
+    return;
+  }
+  const p = local(e);
+  act(scene.hitTest(p.x, p.y, { touch: d.touch }));
+});
+canvas.addEventListener('pointercancel', () => { drag = null; });
 canvas.addEventListener('mouseleave', () => scene.setHover(null));
-canvas.addEventListener('click', (e) => {
-  const hit = scene.hitTest(e.offsetX, e.offsetY);
+canvas.addEventListener('wheel', (e) => { scene.scrollBy(e.deltaY); e.preventDefault(); }, { passive: false });
+
+function act(hit) {
+  scene.setHover(hit);
   if (!hit) return;
   game.state.money = 99999;
   if (hit.type === 'plot' && game.actions.plant) {
@@ -240,7 +306,11 @@ canvas.addEventListener('click', (e) => {
   } else if (hit.type === 'investment' && game.actions.buyInvestment) {
     game.actions.buyInvestment(hit.id);
   }
-});
+}
+
+api.insets = insets;
+api.setInsets = (ins) => { Object.assign(insets, ins); scene.setInsets(insets); fit(); };
+api.act = act;
 
 // ── État initial depuis l'URL ─────────────────────────────────────────────────────────
 api.set({
@@ -252,6 +322,7 @@ if (params.get('unlock') === '1') api.unlock();
 if (params.get('inv') === 'all') api.buyAll();
 if (params.get('crops') === '1') api.fill();
 if (params.get('panel') === '0') $('panel').classList.add('hidden');
+if (params.get('scroll') !== null) scene.setScroll(Number(params.get('scroll')));
 
 // ── Boucle ────────────────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -273,7 +344,7 @@ function frame(t) {
   fpsT += dt;
   if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   const cal = game.query.calendar();
-  $('info').textContent = `zoom ×${scene.zoom}  ${fps} i/s  rendu ${cost.toFixed(1)} ms\n${cal.seasonId} jour ${cal.day}  ${game.state.weather.today}  ${(cal.dayProgress * 100) | 0} %`;
+  $('info').textContent = `${scene.layoutMode} zoom ×${scene.zoom}  défil. ${Math.round(scene.getScroll())}/${Math.round(scene.maxScroll())}\n${fps} i/s  rendu ${cost.toFixed(1)} ms\n${cal.seasonId} jour ${cal.day}  ${game.state.weather.today}  ${(cal.dayProgress * 100) | 0} %`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

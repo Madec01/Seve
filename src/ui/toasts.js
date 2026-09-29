@@ -16,7 +16,7 @@ export function createToasts(stack, bannerNode) {
   }
 
   /**
-   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200 }
+   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick? }
    */
   function show(opts) {
     const o = typeof opts === 'string' ? { text: opts } : opts;
@@ -37,11 +37,22 @@ export function createToasts(stack, bannerNode) {
       o.sprite || icon(o.icon || KIND_ICON[kind] || 'info', 'md'),
       el('div.toast-body', o.title ? el('strong.toast-title', o.title) : null, el('span.toast-text', o.text)),
     );
-    node.addEventListener('click', () => dismiss(node));
+    node.addEventListener('click', () => {
+      dismiss(node);
+      o.onClick?.();
+    });
+    if (o.onClick) node.classList.add('is-action');
     stack.prepend(node);
     // Pas plus de 4 messages à la fois.
     const items = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
     for (const extra of items.slice(4)) dismiss(extra);
+    // Place limitée (feuille haute ouverte) : les plus anciens qui passeraient sous la barre du
+    // haut s'effacent (le plus récent reste toujours).
+    requestAnimationFrame(() => {
+      const limit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inset-top')) || 0;
+      const live = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
+      for (const n of live.slice(1)) if (n.getBoundingClientRect().top < limit + 2) dismiss(n);
+    });
     const entry = { node, timer: setTimeout(() => dismiss(node), o.duration || 3200) };
     recent.set(key, entry);
     setTimeout(() => {
@@ -72,6 +83,12 @@ export function createToasts(stack, bannerNode) {
     bannerNode.onclick = () => bannerNode.classList.remove('is-visible');
   }
 
+  /** Cache le bandeau tout de suite (ex. une bulle du tutoriel prend sa place en haut). */
+  function hideBanner() {
+    clearTimeout(bannerTimer);
+    bannerNode.classList.remove('is-visible');
+  }
+
   function clearAll() {
     for (const n of [...stack.children]) n.remove();
     recent.clear();
@@ -79,5 +96,5 @@ export function createToasts(stack, bannerNode) {
     bannerNode.classList.remove('is-visible');
   }
 
-  return { show, banner, clearAll };
+  return { show, banner, hideBanner, clearAll };
 }

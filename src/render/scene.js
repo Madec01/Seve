@@ -1,30 +1,59 @@
 // Scène de la ferme (canvas 2D, pixel art).
 //
-// createScene(canvas, images, level) → scene
-//   scene.resize(cssW, cssH, dpr)       taille du canvas (px CSS) et densité de pixels
+// createScene(canvas, images, level, opts?) → scene
+//   opts : { effects, minZoom (paysage), layoutMode: 'auto' | 'portrait' | 'landscape' }
+//   scene.resize(cssW, cssH, dpr)       taille du canvas (px CSS) et densité de pixels ; en mode
+//                                       'auto', choisit la disposition portrait si cssH > cssW × 1,05
 //   scene.render(game, timeMs)          dessine une image (à appeler dans requestAnimationFrame)
-//   scene.screenToWorld(x, y)           px CSS (relatifs au canvas) → { x, y } monde
+//   scene.setInsets({ top, bottom, left, right })
+//                                       px CSS couverts par l'interface (barre du haut, onglets) :
+//                                       la « bande visible » est entre eux ; le champ y est centré
+//   scene.scrollBy(dyCss)               fait défiler (comme scrollTop : + = voir plus bas) ;
+//                                       renvoie le déplacement réellement appliqué (px CSS)
+//   scene.getScroll() / scene.maxScroll()   défilement courant / maximal (px CSS, 0 si tout tient)
+//   scene.setScroll(yCss)               défilement absolu (borné)
+//   scene.fling(vyCss)                  élan après un glissé (px CSS / s, même sens que scrollBy)
+//   scene.focusField()                  recentre la vue sur le champ
+//   scene.focusPlot(i, opts?)           fait défiler juste ce qu'il faut pour voir la parcelle i
+//                                       opts : { margin (px CSS, 24), bottom (px CSS couverts en
+//                                       plus en bas, ex. bulle du tutoriel), animate (bool) }
+//   scene.setOverlay(bottomCss)         panneau temporaire posé sur le bas de la bande visible
+//                                       (feuille du bas ouverte) : on peut alors faire défiler
+//                                       au-delà du bas du monde (forêt) pour garder une parcelle
+//                                       au-dessus de la feuille ; 0 = retour animé dans les bornes
+//   scene.scrollTo(yCss, animate?)      défilement absolu, animé en douceur si animate
+//   scene.layoutMode                    'portrait' | 'landscape'
+//   scene.screenToWorld(x, y)           px CSS (relatifs au canvas) → { x, y } monde (défilement compris)
 //   scene.worldToScreen(wx, wy)         monde → { x, y } px CSS (pour placer une infobulle)
-//   scene.hitTest(x, y)                 px CSS → { type:'plot', index } | { type:'investment', id } | null
+//   scene.hitTest(x, y, opts?)          px CSS → { type:'plot', index } | { type:'investment', id } | null
+//                                       opts.touch = true : tolérant (doigt) — une touche dans l'allée
+//                                       ou la clôture à moins de ~8 px CSS d'une parcelle la désigne
 //   scene.setHover(hit)                 surbrillance (résultat de hitTest, ou null)
 //   scene.onEvent(type, payload)        = effects.onEvent(type, payload, scene.layout)
 //   scene.setLevel(level)               change de niveau (nouvelle disposition)
-//   scene.layout, scene.effects, scene.zoom
+//   scene.layout, scene.effects, scene.zoom, scene.dpr
 //
-// Rendu : tout est dessiné à l'échelle 1 dans un tampon « vue » (le monde + la forêt autour),
-// puis recopié sur le canvas avec un zoom entier (imageSmoothingEnabled = false). Le sol, la
-// forêt, les clôtures et le décor fixe sont mis en cache (reconstruits au changement de saison,
-// d'achat d'enclos ou de taille). Les textes flottants sont dessinés après le zoom, nets.
+// Rendu : tout est dessiné à l'échelle 1 dans un tampon « vue » (le monde + la forêt autour, sur
+// toute la hauteur qu'on peut faire défiler), puis recopié sur le canvas avec un zoom entier
+// (imageSmoothingEnabled = false) et un décalage entier en pixels réels : le défilement reste net.
+// Le sol, la forêt, les clôtures et le décor fixe sont mis en cache (reconstruits au changement de
+// saison, d'achat d'enclos ou de taille). Les textes flottants sont dessinés après le zoom, nets.
+//
+// Portrait : le zoom est le plus grand entier tel que la partie essentielle du monde (12 tuiles)
+// tienne dans la largeur ; les colonnes de forêt des bords peuvent être rognées.
 //
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import { TILE, drawSprite, cropSprite, soilSprite, spriteRect } from './atlas.js';
 import { buildSeasonSheets } from './assets.js';
-import { createLayout, tileHash, WORLD_W, WORLD_H } from './layout.js';
+import { createLayout, tileHash } from './layout.js';
 import { createEffects } from './effects.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
+const PORTRAIT_RATIO = 1.05; // portrait si hauteur > largeur × 1,05
+const MAX_TILE_CSS = 40; // portrait : une tuile ne dépasse pas ~40 px CSS (tablettes)
+const TOUCH_SLOP_CSS = 8; // tolérance du toucher autour des parcelles
 const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7 };
 const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5 };
 const FARMER_SPEED = 44;
@@ -61,26 +90,44 @@ export function createScene(canvas, images, level, opts = {}) {
   const effects = opts.effects || createEffects(images);
   const minZoom = Math.max(1, opts.minZoom || MIN_ZOOM);
 
-  let layout = createLayout(level);
+  const modeOpt = opts.layoutMode || 'auto';
+  let mode = modeOpt === 'portrait' ? 'portrait' : 'landscape';
+  let layout = createLayout(level, { mode });
 
   // Tampons
-  const view = makeCanvas(WORLD_W, WORLD_H);
+  const view = makeCanvas(layout.width, layout.height);
   let vctx = noSmooth(view.getContext('2d'));
-  const staticLayer = makeCanvas(WORLD_W, WORLD_H);
+  const staticLayer = makeCanvas(layout.width, layout.height);
   let sctx = noSmooth(staticLayer.getContext('2d'));
-  const scratch = makeCanvas(WORLD_W, WORLD_H);
+  const scratch = makeCanvas(layout.width, layout.height);
 
-  // Géométrie écran
+  // Géométrie écran (px réels du canvas sauf mention)
   let dpr = 1;
-  let cssW = WORLD_W * 2;
-  let cssH = WORLD_H * 2;
+  let cssW = layout.width * 2;
+  let cssH = layout.height * 2;
+  let devW = cssW;
+  let devH = cssH;
   let zoom = 2;
-  let viewW = WORLD_W;
-  let viewH = WORLD_H;
+  let viewW = layout.width;
+  let viewH = layout.height;
   let ox = 0; // origine du monde dans le tampon de vue
   let oy = 0;
-  let blitX = 0; // décalage du tampon zoomé sur le canvas (px réels)
+  let blitX = 0; // position du tampon zoomé sur le canvas (px réels, défilement compris)
   let blitY = 0;
+  let baseX = 0; // position de l'origine du monde sur le canvas, défilement nul (px réels)
+  let baseY = 0;
+  let bufX0 = 0; // coin haut-gauche du tampon, en px du monde
+  let bufY0 = 0;
+  const insets = { top: 0, bottom: 0, left: 0, right: 0 }; // px CSS
+  const band = { x: 0, y: 0, w: 1, h: 1 }; // bande visible (px réels)
+  let scrollDev = 0; // défilement vertical (px réels, entier)
+  let maxScrollDev = 0;
+  let userScrolled = false; // le joueur a fait défiler : ne plus recentrer tout seul
+  let flingV = 0; // élan (px CSS / s)
+  let overlayDev = 0; // panneau posé sur le bas de la bande (feuille ouverte), px réels
+  let scrollAnim = null; // { from, to, t, dur } défilement animé (px réels, secondes)
+  let scrollBeforeOverlay = null; // défilement d'avant l'ouverture de la feuille (px réels)
+  const SCROLL_ANIM = 0.32;
 
   let staticKey = -1;
   let lastTime = null;
@@ -95,6 +142,8 @@ export function createScene(canvas, images, level, opts = {}) {
   let prevGrowth = [];
   let prevWatered = [];
   let prevUnlocked = [];
+  let unlockedCount = -1;
+  let visualIndex = null; // « vcol,vrow » → index de parcelle (portrait)
   const prevOwned = {};
   const pops = new Map(); // clé → temps de départ
   const recentCrops = []; // cagettes de l'étal (plus récentes en premier)
@@ -129,6 +178,8 @@ export function createScene(canvas, images, level, opts = {}) {
     prevGrowth = new Array(n).fill(-1);
     prevWatered = new Array(n).fill(false);
     prevUnlocked = new Array(n).fill(false);
+    unlockedCount = -1;
+    visualIndex = null;
     for (const k of Object.keys(prevOwned)) delete prevOwned[k];
     pops.clear();
     recentCrops.length = 0;
@@ -147,33 +198,233 @@ export function createScene(canvas, images, level, opts = {}) {
   resetTracking();
 
   // ── Géométrie ───────────────────────────────────────────────────────────────────
+  function wantedMode(w, h) {
+    if (modeOpt === 'portrait' || modeOpt === 'landscape') return modeOpt;
+    return h > w * PORTRAIT_RATIO ? 'portrait' : 'landscape';
+  }
+
   function resize(w, h, ratio = (typeof window !== 'undefined' && window.devicePixelRatio) || 1) {
     dpr = ratio || 1;
     cssW = Math.max(1, w);
     cssH = Math.max(1, h);
-    const devW = Math.max(1, Math.round(cssW * dpr));
-    const devH = Math.max(1, Math.round(cssH * dpr));
-    canvas.width = devW;
-    canvas.height = devH;
-    canvas.style.width = `${cssW}px`;
-    canvas.style.height = `${cssH}px`;
-    zoom = Math.max(minZoom, Math.floor(Math.min(devW / WORLD_W, devH / WORLD_H)));
-    viewW = Math.ceil(devW / zoom);
-    viewH = Math.ceil(devH / zoom);
-    ox = Math.floor((viewW - WORLD_W) / 2);
-    oy = Math.floor((viewH - WORLD_H) / 2);
-    blitX = -Math.floor((viewW * zoom - devW) / 2);
-    blitY = -Math.floor((viewH * zoom - devH) / 2);
-    view.width = viewW;
-    view.height = viewH;
-    staticLayer.width = viewW;
-    staticLayer.height = viewH;
-    scratch.width = viewW;
-    scratch.height = viewH;
-    vctx = noSmooth(view.getContext('2d'));
-    sctx = noSmooth(staticLayer.getContext('2d'));
+    devW = Math.max(1, Math.round(cssW * dpr));
+    devH = Math.max(1, Math.round(cssH * dpr));
+    if (canvas.width !== devW) canvas.width = devW;
+    if (canvas.height !== devH) canvas.height = devH;
+    if (canvas.style) {
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+    }
     noSmooth(ctx);
+    const m = wantedMode(cssW, cssH);
+    if (m !== mode) {
+      mode = m;
+      rebuildLayout(layout.level);
+    }
+    computeCamera();
+  }
+
+  /** Zoom, position du monde, taille des tampons ; garde (ou recentre) le défilement. */
+  function computeCamera() {
+    const prevMax = maxScrollDev;
+    band.x = Math.round(insets.left * dpr);
+    band.y = Math.round(insets.top * dpr);
+    band.w = Math.max(1, devW - band.x - Math.round(insets.right * dpr));
+    band.h = Math.max(1, devH - band.y - Math.round(insets.bottom * dpr));
+    const ess = layout.essential;
+    if (mode === 'portrait') {
+      const byWidth = Math.floor(band.w / ess.w);
+      // Le champ entier doit tenir en hauteur dans la bande (cas extrêmes : écran très bas).
+      const byField = Math.floor(band.h / (layout.fieldRect.h + TILE));
+      const cap = Math.max(1, Math.floor((MAX_TILE_CSS * dpr) / TILE));
+      zoom = Math.max(1, Math.min(byWidth, byField, cap));
+    } else {
+      zoom = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
+    }
+    // Horizontal : partie essentielle centrée dans la bande.
+    baseX = Math.round(band.x + band.w / 2 - (ess.x + ess.w / 2) * zoom);
+    // Vertical : monde centré s'il tient, sinon défilement (0 = haut du monde en haut de la bande).
+    const worldDevH = layout.height * zoom;
+    if (worldDevH <= band.h) {
+      baseY = Math.round(band.y + (band.h - worldDevH) / 2);
+      maxScrollDev = 0;
+    } else {
+      baseY = band.y;
+      maxScrollDev = worldDevH - band.h;
+    }
+    // Tampon : couvre tout le canvas, pour tout défilement possible.
+    bufX0 = Math.floor(-baseX / zoom) - 1;
+    bufY0 = Math.floor(-baseY / zoom) - 1;
+    const w = Math.ceil(devW / zoom) + 3;
+    // + une hauteur d'écran : défilement au-delà du bas du monde quand une feuille est ouverte.
+    const h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
+    ox = -bufX0;
+    oy = -bufY0;
+    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h) {
+      viewW = w;
+      viewH = h;
+      view.width = viewW;
+      view.height = viewH;
+      staticLayer.width = viewW;
+      staticLayer.height = viewH;
+      scratch.width = viewW;
+      scratch.height = viewH;
+      vctx = noSmooth(view.getContext('2d'));
+      sctx = noSmooth(staticLayer.getContext('2d'));
+    }
     staticKey = -1;
+    if (!userScrolled) focusFieldDev();
+    else if (prevMax > 0 && maxScrollDev > 0) setScrollDev(Math.round((scrollDev / prevMax) * maxScrollDev));
+    else setScrollDev(scrollDev);
+  }
+
+  /** Défilement maximal : bornes du monde, ou plus loin si une feuille couvre le bas. */
+  function scrollLimitDev() {
+    if (overlayDev <= 0) return maxScrollDev;
+    const worldBottom = baseY + layout.height * zoom; // bas du monde, défilement nul
+    const visibleBottom = band.y + band.h - overlayDev;
+    return Math.max(maxScrollDev, Math.round(worldBottom - visibleBottom));
+  }
+
+  function setScrollDev(v) {
+    scrollDev = Math.max(0, Math.min(scrollLimitDev(), Math.round(v)));
+    blitX = baseX + bufX0 * zoom;
+    blitY = baseY - scrollDev + bufY0 * zoom;
+  }
+
+  /** Défilement qui place le centre vertical d'un rectangle (px du monde) au centre de la bande. */
+  function centerOnDev(r) {
+    return baseY + (r.y + r.h / 2) * zoom - (band.y + band.h / 2);
+  }
+
+  function focusFieldDev() {
+    setScrollDev(centerOnDev(layout.fieldRect));
+  }
+
+  function setInsets(ins = {}) {
+    let changed = false;
+    for (const k of ['top', 'bottom', 'left', 'right']) {
+      if (ins[k] === undefined) continue;
+      const v = Math.max(0, Number(ins[k]) || 0);
+      if (v !== insets[k]) {
+        insets[k] = v;
+        changed = true;
+      }
+    }
+    if (changed) computeCamera();
+  }
+
+  /** Défilement animé (px réels) : départ rapide, arrivée en douceur. */
+  function animateScrollDev(target) {
+    const to = Math.max(0, Math.min(scrollLimitDev(), Math.round(target)));
+    const reduce = typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion');
+    if (reduce || Math.abs(to - scrollDev) < 2) {
+      scrollAnim = null;
+      setScrollDev(to);
+      return;
+    }
+    scrollAnim = { from: scrollDev, to, t: 0, dur: SCROLL_ANIM };
+  }
+
+  function stepScrollAnim(dt) {
+    if (!scrollAnim) return;
+    const a = scrollAnim;
+    a.t = Math.min(a.dur, a.t + dt);
+    const k = a.t / a.dur;
+    const e = 1 - (1 - k) ** 3;
+    setScrollDev(a.from + (a.to - a.from) * e);
+    if (k >= 1) scrollAnim = null;
+  }
+
+  function setOverlay(bottomCss) {
+    const v = Math.max(0, Math.round((Number(bottomCss) || 0) * dpr));
+    if (v === overlayDev) return;
+    // Feuille ouverte : on retient la vue d'avant, retrouvée en douceur à la fermeture.
+    if (overlayDev === 0 && v > 0) scrollBeforeOverlay = scrollAnim ? scrollAnim.to : scrollDev;
+    overlayDev = v;
+    if (v === 0 && scrollBeforeOverlay !== null) {
+      const back = scrollBeforeOverlay;
+      scrollBeforeOverlay = null;
+      animateScrollDev(back);
+      return;
+    }
+    // Feuille plus basse : on revient en douceur dans les bornes du monde.
+    const limit = scrollLimitDev();
+    if (scrollAnim && scrollAnim.to > limit) scrollAnim = null;
+    if (!scrollAnim && scrollDev > limit) animateScrollDev(limit);
+  }
+
+  function scrollTo(yCss, animate = false) {
+    flingV = 0;
+    userScrolled = true;
+    if (animate) animateScrollDev((Number(yCss) || 0) * dpr);
+    else {
+      scrollAnim = null;
+      setScrollDev((Number(yCss) || 0) * dpr);
+    }
+    return scrollDev / dpr;
+  }
+
+  function scrollBy(dyCss) {
+    const before = scrollDev;
+    flingV = 0;
+    scrollAnim = null;
+    scrollBeforeOverlay = null;
+    userScrolled = true;
+    setScrollDev(scrollDev + (Number(dyCss) || 0) * dpr);
+    return (scrollDev - before) / dpr;
+  }
+
+  function setScroll(yCss) {
+    flingV = 0;
+    scrollAnim = null;
+    userScrolled = true;
+    setScrollDev((Number(yCss) || 0) * dpr);
+    return scrollDev / dpr;
+  }
+
+  function fling(vyCss) {
+    if (maxScrollDev <= 0) return;
+    userScrolled = true;
+    scrollAnim = null;
+    flingV = Math.max(-4000, Math.min(4000, Number(vyCss) || 0));
+  }
+
+  function focusField() {
+    flingV = 0;
+    scrollAnim = null;
+    scrollBeforeOverlay = null;
+    userScrolled = false;
+    focusFieldDev();
+  }
+
+  /**
+   * Fait défiler le moins possible pour que la parcelle soit entièrement visible (avec une marge),
+   * au-dessus de la feuille ouverte (setOverlay) et d'une éventuelle zone couverte en plus.
+   * @param opts nombre (marge, compatibilité) ou { margin = 24, bottom = 0, animate = false }
+   * @returns défilement visé (px CSS)
+   */
+  function focusPlot(i, opts = {}) {
+    const o = typeof opts === 'number' ? { margin: opts } : opts || {};
+    const r = layout.plotRect(i);
+    if (!r) return scrollDev / dpr;
+    flingV = 0;
+    const m = (o.margin ?? 24) * dpr;
+    const cur = scrollAnim ? scrollAnim.to : scrollDev;
+    const top = baseY - cur + r.y * zoom;
+    const bottom = top + r.h * zoom;
+    const visTop = band.y + m;
+    const visBottom = band.y + band.h - overlayDev - Math.max(0, (o.bottom || 0) * dpr) - m;
+    let target = cur;
+    if (bottom > visBottom) target = cur + (bottom - visBottom);
+    if (top - (target - cur) < visTop) target = cur - (visTop - top); // le haut d'abord si trop petit
+    if (target === cur) return cur / dpr;
+    if (o.animate) animateScrollDev(target);
+    else {
+      scrollAnim = null;
+      setScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
   }
 
   function screenToWorld(x, y) {
@@ -197,9 +448,11 @@ export function createScene(canvas, images, level, opts = {}) {
     return out;
   }
 
-  function hitTest(x, y) {
+  function hitTest(x, y, hitOpts) {
     const w = screenToWorld(x, y);
-    return layout.hitTest(w.x, w.y, lastGame ? lastGame.state.investments : undefined);
+    const owned = lastGame ? lastGame.state.investments : undefined;
+    if (hitOpts && hitOpts.touch) return layout.hitTestNear(w.x, w.y, owned, (TOUCH_SLOP_CSS * dpr) / zoom);
+    return layout.hitTest(w.x, w.y, owned);
   }
 
   // ── Couche fixe : sol, chemins, forêt, clôtures, décor ────────────────────────────
@@ -298,7 +551,7 @@ export function createScene(canvas, images, level, opts = {}) {
       if (d.kind === 'flowerbed' && (tileHash(d.tx, d.ty, 5) < 0.75 || season !== 'spring')) drawSprite(c, sheets, bed, d.x, d.y);
     }
     // Jardin de la chambre d'hôte
-    const guest = (owned.guestHouse || 0) > 0;
+    const guest = layout.available.has('guestHouse') && (owned.guestHouse || 0) > 0;
     if (guest) {
       for (const f of layout.garden.flowers) drawSprite(c, sheets, season === 'winter' ? 'ground.grass.tufts' : 'ground.grass.flowers', f.x * TILE, f.y * TILE);
     }
@@ -334,9 +587,10 @@ export function createScene(canvas, images, level, opts = {}) {
     const f = layout.field;
     drawFence(c, sheets, f.fence, f.gate.x);
     const sl = layout.slots;
-    if ((owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
-    if ((owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
-    if ((owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
+    const A = layout.available;
+    if (A.has('chickenCoop') && (owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
+    if (A.has('cow') && (owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
+    if (A.has('sheep') && (owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
     // 5. Décor fixe (du haut vers le bas)
     drawList.length = 0;
     for (const d of layout.deco) if (d.kind !== 'flowerbed') drawList.push(d);
@@ -360,20 +614,9 @@ export function createScene(canvas, images, level, opts = {}) {
         if (name) drawSprite(c, name.startsWith('crop') ? images : sheets, name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
       }
     }
-    if ((owned.sheep || 0) > 0) {
-      const e = sl.sheep.extras;
-      drawSprite(c, sheets, 'hay', e.x * TILE, e.y * TILE);
-      drawSprite(c, sheets, 'hay.tied', (e.x + 1) * TILE, e.y * TILE + 2);
-      drawSprite(c, sheets, 'trough.wood.water', e.x * TILE + 4, (e.y + 2) * TILE - 2);
-    }
-    if ((owned.cow || 0) > 0) {
-      const b = sl.cow.barn;
-      drawSprite(c, sheets, 'bucket.milk', (b.x - 0) * TILE - 2, (b.y + b.h) * TILE - 2);
-      drawSprite(c, sheets, 'hay.tied', (b.x + 2) * TILE + 2, (b.y + b.h) * TILE - 1);
-    }
-    if ((owned.chickenCoop || 0) > 0) {
-      const s = sl.chickenCoop.shed;
-      drawSprite(c, images, 'egg', s.x * TILE + 1, (s.y + s.h) * TILE - 3);
+    for (const id of ['sheep', 'cow', 'chickenCoop']) {
+      if (!layout.available.has(id) || (owned[id] || 0) <= 0) continue;
+      for (const p of sl[id].props || []) drawSprite(c, p.sheet === 'base' ? images : sheets, p.name, p.x, p.y);
     }
 
     // 6. Panneaux « à vendre » des emplacements libres
@@ -453,6 +696,13 @@ export function createScene(canvas, images, level, opts = {}) {
   function syncPlots(game, raining) {
     const plots = game.state.plots;
     const n = Math.min(plots.length, layout.plots.length);
+    // Une parcelle achetée change le prix (ou la possibilité d'achat) des autres : on les relit.
+    let open = 0;
+    for (let i = 0; i < n; i++) if (plots[i].unlocked) open++;
+    if (open !== unlockedCount) {
+      unlockedCount = open;
+      for (let i = 0; i < n; i++) if (!plots[i].unlocked && plotViews[i]) plotViews[i] = null;
+    }
     let changed = 0;
     let lastIdx = -1;
     let lastTool = null;
@@ -508,7 +758,8 @@ export function createScene(canvas, images, level, opts = {}) {
   function farmerGoTo(plotIndex, tool) {
     const r = layout.plotRect(plotIndex);
     if (!r) return;
-    const target = { x: r.x + 8, y: r.y + 27, tool, plot: plotIndex };
+    // Debout juste sous la parcelle (sur la rangée suivante en paysage, dans l'allée en portrait).
+    const target = { x: r.x + r.w / 2, y: r.y + r.h + (layout.plotScale > 1 ? 3 : 11), tool, plot: plotIndex };
     farmer.path.length = 0;
     if (!inField(farmer.x, farmer.y)) {
       const route = routePoints();
@@ -636,32 +887,62 @@ export function createScene(canvas, images, level, opts = {}) {
     return pushSprite(name, Math.round(x + (wTiles * TILE - w) / 2), Math.round(bottom - h), bottom, set, { scale: s });
   }
 
+  /** Parcelle voisine (à l'écran, par un côté) d'une parcelle ouverte ? (portrait) */
+  function touchesOpen(i) {
+    const p = layout.plots[i];
+    if (p.vcol === undefined) return true;
+    if (!visualIndex) visualIndex = new Map(layout.plots.map((q) => [`${q.vcol},${q.vrow}`, q.index]));
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const j = visualIndex.get(`${p.vcol + dc},${p.vrow + dr}`);
+      if (j !== undefined && plotViews[j]?.unlocked) return true;
+    }
+    return false;
+  }
+
   function drawPlots(sheetsEnv, raining, season) {
     const L = layout;
-    const cols = L.field.cols;
+    const k = L.plotScale || 1; // ×2 en portrait : terre et cultures dessinées en grand
     const c = vctx;
+    const sc = k === 1 ? undefined : { scale: k };
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       const r = L.plots[i];
       if (!pv) continue;
       if (!pv.unlocked) continue;
-      const col = i % cols;
-      const left = col > 0 && plotViews[i - 1]?.unlocked;
-      const right = col < cols - 1 && plotViews[i + 1]?.unlocked;
       const wet = (pv.cropId && pv.watered) || raining;
-      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, r.y);
+      let left = false;
+      let right = false;
+      if (k === 1) {
+        // Paysage : les parcelles voisines d'une même ligne forment un sillon continu.
+        const nb = L.plotNeighbors(i);
+        left = nb.left >= 0 && !!plotViews[nb.left]?.unlocked;
+        right = nb.right >= 0 && !!plotViews[nb.right]?.unlocked;
+      }
+      // Portrait : chaque parcelle est une motte bien séparée (cible tactile lisible).
+      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, r.y + (k > 1 ? 1 : 0), sc);
     }
-    // Parcelles à acheter : pointillés discrets
-    c.fillStyle = 'rgba(63,38,49,0.28)';
+    // Parcelles à acheter : herbe un peu plus sombre et pointillés clairs ; en portrait, une pièce
+    // (« à vendre », qui se balance doucement) sur celles qui touchent le potager ouvert — on voit
+    // où le champ peut s'agrandir sans encombrer la vue. Toutes restent achetables d'un toucher.
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       if (!pv || pv.unlocked) continue;
       const r = L.plots[i];
-      for (let k = 2; k < 14; k += 3) {
-        c.fillRect(r.x + k, r.y + 2, 1, 1);
-        c.fillRect(r.x + k, r.y + 13, 1, 1);
-        c.fillRect(r.x + 2, r.y + k, 1, 1);
-        c.fillRect(r.x + 13, r.y + k, 1, 1);
+      const n = r.w;
+      c.fillStyle = 'rgba(47,74,51,0.16)';
+      c.fillRect(r.x + k, r.y + k, n - 2 * k, n - 2 * k);
+      c.fillStyle = k > 1 ? 'rgba(255,241,210,0.55)' : 'rgba(63,38,49,0.28)';
+      const step = 3 * k;
+      for (let d = 2 * k; d < n - 2 * k; d += step) {
+        c.fillRect(r.x + d, r.y + 2 * k, k, k);
+        c.fillRect(r.x + d, r.y + n - 3 * k, k, k);
+        c.fillRect(r.x + 2 * k, r.y + d, k, k);
+        c.fillRect(r.x + n - 3 * k, r.y + d, k, k);
+      }
+      if (k > 1 && pv.unlockCost !== null && pv.unlockCost !== undefined && touchesOpen(i)) {
+        const bob = Math.sin(time * 1.6 + i * 0.8) > 0.6 ? -1 : 0;
+        // La pièce du pack occupe le centre ~8 × 10 de sa tuile de 16 px.
+        drawSprite(c, sheetsEnv, 'coin', r.x + (n - TILE) / 2, r.y + (n - TILE) / 2 + bob);
       }
     }
     // Cultures
@@ -677,20 +958,20 @@ export function createScene(canvas, images, level, opts = {}) {
       } else if (stage >= 2 && season !== 'winter') {
         dy += Math.sin(time * 1.3 + i * 0.9) > 0.8 ? -1 : 0;
       }
-      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy);
+      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
       if (pv.mature) {
         const ph = (time * 0.55 + i * 0.37) % 1;
         if (ph < 0.18) {
-          const sx = r.x + 3 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 3) * 10);
-          const sy = r.y + 1 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 4) * 6);
+          const sx = r.x + (3 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 3) * 10)) * k;
+          const sy = r.y + (1 + Math.floor(tileHash(i, Math.floor(time * 0.55 + i * 0.37), 4) * 6)) * k;
           c.fillStyle = '#ffffff';
-          c.fillRect(sx, sy, 1, 1);
+          c.fillRect(sx, sy, k, k);
           if (ph > 0.05 && ph < 0.13) {
             c.fillStyle = '#fff3b0';
-            c.fillRect(sx - 1, sy, 1, 1);
-            c.fillRect(sx + 1, sy, 1, 1);
-            c.fillRect(sx, sy - 1, 1, 1);
-            c.fillRect(sx, sy + 1, 1, 1);
+            c.fillRect(sx - k, sy, k, k);
+            c.fillRect(sx + k, sy, k, k);
+            c.fillRect(sx, sy - k, k, k);
+            c.fillRect(sx, sy + k, k, k);
           }
         }
       }
@@ -887,7 +1168,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const y0 = r.y - 1;
     const x1 = r.x + r.w;
     const y1 = r.y + r.h;
-    const arm = Math.max(3, Math.min(5, Math.floor(Math.min(r.w, r.h) / 4)));
+    const arm = Math.max(3, Math.min(layout.plotScale > 1 ? 8 : 5, Math.floor(Math.min(r.w, r.h) / 4)));
     c.globalAlpha = pulse;
     // Coins en « L » : contour sombre puis blanc
     for (const [color, o] of [[OUTLINE, 1], ['#ffffff', 0]]) {
@@ -910,11 +1191,18 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   // ── Image ───────────────────────────────────────────────────────────────────────
-  const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: WORLD_W, h: WORLD_H } };
+  const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, (timeMs - lastTime) / 1000));
     lastTime = timeMs;
     time += dt;
+    stepScrollAnim(dt);
+    if (flingV !== 0) {
+      const before = scrollDev;
+      setScrollDev(scrollDev + flingV * dt * dpr);
+      flingV *= Math.exp(-dt * 4.5);
+      if (Math.abs(flingV) < 12 || scrollDev === before) flingV = 0;
+    }
 
     if (game.level && game.level !== layout.level) setLevel(game.level);
     if (game !== lastGame) {
@@ -983,17 +1271,26 @@ export function createScene(canvas, images, level, opts = {}) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
-    effects.drawScreen(ctx, worldToDevice, zoom, images);
+    effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
+  }
+
+  function rebuildLayout(lvl) {
+    layout = createLayout(lvl, { mode });
+    resetTracking();
+    effects.clear();
+    userScrolled = false;
+    flingV = 0;
+    scrollAnim = null;
+    scrollBeforeOverlay = null;
   }
 
   function setLevel(lvl) {
-    layout = createLayout(lvl);
-    resetTracking();
-    effects.clear();
+    rebuildLayout(lvl);
+    computeCamera();
   }
 
   // Taille initiale : celle du canvas tel qu'il est.
-  resize(canvas.clientWidth || canvas.width || WORLD_W * 2, canvas.clientHeight || canvas.height || WORLD_H * 2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+  resize(canvas.clientWidth || canvas.width || 1024, canvas.clientHeight || canvas.height || 640, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
 
   return {
     resize,
@@ -1008,6 +1305,35 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.onEvent(type, payload, layout);
     },
     setLevel,
+    setInsets,
+    scrollBy,
+    setScroll,
+    scrollTo,
+    setOverlay,
+    getScroll() {
+      return scrollDev / dpr;
+    },
+    maxScroll() {
+      return maxScrollDev / dpr;
+    },
+    fling,
+    get overlay() {
+      return overlayDev / dpr;
+    },
+    get scrolling() {
+      return !!scrollAnim || flingV !== 0;
+    },
+    focusField,
+    focusPlot,
+    get layoutMode() {
+      return mode;
+    },
+    get insets() {
+      return { ...insets };
+    },
+    get dpr() {
+      return dpr;
+    },
     get layout() {
       return layout;
     },

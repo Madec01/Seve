@@ -5,6 +5,10 @@
 //                                getHighlight(), active, step }
 // getHighlight() → { type: 'plot', index } | { type: 'ui', selector } | null : ce qui est mis en
 // valeur (la scène n'a pas de surbrillance dédiée : l'anneau est un élément DOM posé sur la parcelle).
+//
+// Téléphone en portrait : la bulle occupe toute la largeur, en haut (sous la barre du haut) ou en
+// bas (au-dessus des onglets ou de la feuille ouverte), du côté opposé à sa cible pour ne jamais la
+// couvrir ; la scène défile pour montrer la parcelle visée (scene.focusPlot). Textes courts.
 
 import { append, clear, el, fmt, placeNear, setText } from './dom.js';
 import { icon, sprite } from './icons.js';
@@ -17,7 +21,8 @@ export function createTutorial(layer, app) {
   let tutoPlot = null; // parcelle choisie pour l'exemple
   let lastRect = '';
   let hidden = false; // 'dialog' (tout caché), 'popup' (bulle cachée, rappel visible) ou false
-  let minimized = false; // la bulle a été réduite par le joueur : seul le rappel reste affiché
+  let minimized = false;
+  let userExpanded = false; // la bulle a été rouverte à la main : plus de réduction automatique // la bulle a été réduite par le joueur : seul le rappel reste affiché
 
   const ring = el('div.tuto-ring', { 'aria-hidden': 'true' });
   const bubble = el('div.tuto-bubble', { role: 'dialog', 'aria-live': 'polite', 'aria-label': 'Tutoriel' });
@@ -45,12 +50,15 @@ export function createTutorial(layer, app) {
     return open[0].index;
   };
 
+  // « Touchez » au doigt, « Cliquez » à la souris.
+  const tap = (cap = true) => (app.isTouch ? (cap ? 'Touchez' : 'touchez') : cap ? 'Cliquez' : 'cliquez');
+
   const STEPS = [
     {
       id: 'welcome',
       title: 'Bienvenue à la ferme !',
       text: () =>
-        `Vous avez un an pour faire prospérer cette ferme. Chaque saison dure ${game.level.seasonLengths[0]} jours et, le dernier soir, il faut payer le fermage au propriétaire. Je vous montre les bases ?`,
+        `Un an pour faire prospérer la ferme ! Chaque saison dure ${game.level.seasonLengths[0]} jours ; le dernier soir, on paie le fermage. Je vous montre ?`,
       pauses: true,
       buttons: [
         { label: 'Passer le tutoriel', action: () => skip() },
@@ -59,9 +67,9 @@ export function createTutorial(layer, app) {
     },
     {
       id: 'plant',
-      hint: () => (app.field.isOpen() ? 'Choisissez « Carotte » dans la liste.' : 'Cliquez sur la parcelle qui clignote.'),
+      hint: () => (app.field.isOpen() ? `${tap()} « Carotte » dans la liste.` : `${tap()} la parcelle qui clignote.`),
       title: 'Semer',
-      text: () => 'Cliquez sur la parcelle qui clignote, puis choisissez des carottes : elles sont bon marché et poussent en 2 jours.',
+      text: () => `${tap()} la parcelle qui clignote, puis choisissez la carotte : pas chère, mûre en 2 jours.`,
       pauses: true,
       enter: () => {
         tutoPlot = firstEmptyPlot();
@@ -77,9 +85,9 @@ export function createTutorial(layer, app) {
     },
     {
       id: 'water',
-      hint: () => 'Cliquez sur votre carotte pour l\'arroser.',
+      hint: () => `${tap()} la carotte pour l'arroser.`,
       title: 'Arroser',
-      text: () => 'Cliquez à nouveau sur la parcelle pour l\'arroser. Une culture arrosée pousse deux fois plus vite. L\'arrosage vaut pour la journée : il faudra recommencer chaque matin.',
+      text: () => `${tap()} la parcelle pour l'arroser : elle poussera deux fois plus vite. À refaire chaque matin !${app.isTouch ? ' (Glissez le doigt sur le champ pour tout arroser d\'un coup.)' : ''}`,
       pauses: true,
       skipIf: () => tutoPlot !== null && game.query.plot(tutoPlot)?.watered,
       skipToast: 'Il pleut : la pluie arrose le champ pour vous !',
@@ -88,22 +96,25 @@ export function createTutorial(layer, app) {
     },
     {
       id: 'speed',
-      hint: () => 'Accélérez le temps avec ×2 ou ×4 (en haut à droite).',
+      hint: () => `${tap()} le bouton de vitesse (en haut à droite).`,
       title: 'Le temps passe',
-      text: () => 'Une journée dure 20 secondes. Pour aller plus vite, cliquez sur ×2 ou ×4 en haut à droite (touches 2 et 3, et 1 pour revenir à la normale). La touche Espace met le jeu en pause.',
+      text: () =>
+        app.isTouch
+          ? 'Une journée dure 20 secondes. Touchez le bouton de vitesse en haut à droite pour passer à ×2, puis ×4, puis pause. Appui long : pause.'
+          : 'Une journée dure 20 secondes. Cliquez sur le bouton de vitesse en haut à droite (×2, ×4, pause), ou touches 1, 2, 3 et Espace.',
       target: () => ({ type: 'ui', selector: '#hud-speed' }),
       advanceSpeed: (s) => s >= 2,
       advance: (ev) => ev.type === 'dawn',
     },
     {
       id: 'harvest',
-      hint: () => (tutoPlot !== null && game.query.plot(tutoPlot)?.mature ? 'Cliquez sur la carotte mûre pour la récolter.' : 'Arrosez chaque matin, puis récoltez la carotte.'),
+      hint: () => (tutoPlot !== null && game.query.plot(tutoPlot)?.mature ? `${tap()} la carotte mûre pour la récolter.` : 'Arrosez chaque matin, puis récoltez.'),
       title: 'Récolter',
       text: () => {
         const p = tutoPlot !== null ? game.query.plot(tutoPlot) : null;
-        if (p?.mature) return 'Votre carotte est mûre ! Cliquez dessus pour la récolter : l\'argent arrive tout de suite.';
-        if (p?.cropId && !p.watered) return 'Un nouveau jour : pensez à arroser votre carotte. Quand elle sera mûre, cliquez dessus pour la récolter.';
-        return 'Patience… Arrosez chaque matin ; quand la carotte sera mûre, cliquez dessus pour la récolter.';
+        if (p?.mature) return `Elle est mûre ! ${tap()}-la pour la récolter : l'argent arrive tout de suite.`;
+        if (p?.cropId && !p.watered) return `Nouveau jour : arrosez la carotte. Mûre, ${tap(false)}-la pour la récolter.`;
+        return `Patience… Arrosez chaque matin ; une fois mûre, ${tap(false)} la carotte pour la récolter.`;
       },
       target: () => (tutoPlot !== null ? { type: 'plot', index: tutoPlot } : null),
       refreshOn: ['dawn', 'watered', 'moneyChanged'],
@@ -114,26 +125,25 @@ export function createTutorial(layer, app) {
       hint: () => 'Le fermage se paie le dernier soir de chaque saison.',
       title: 'Le fermage',
       text: () =>
-        `Bravo, première récolte vendue ! Ici, c'est le fermage à payer au propriétaire le dernier soir de la saison : ${fmt(game.query.finance().nextBill.amount)} pièces ce printemps. S'il vous manque de l'argent ce soir-là, c'est la faillite. La couleur vous prévient : vert, vous avez déjà de quoi payer ; orange, il faut encore récolter ; rouge, danger !`,
+        `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Vert : c'est couvert ; orange : récoltez encore ; rouge : danger !`,
       pauses: true,
       target: () => ({ type: 'ui', selector: '#hud-bill' }),
       buttons: [{ label: 'Compris', primary: true, action: () => next() }],
     },
     {
       id: 'coop',
-      hint: () => (game.state.money >= 70 ? 'Achetez un poulailler dans le panneau de droite.' : 'Récoltez jusqu\'à 70 pièces, puis achetez un poulailler.'),
+      hint: () => (game.state.money >= 70 ? 'Achetez un poulailler (onglet « Acheter »).' : `Récoltez jusqu'à 70 pièces (${fmt(game.state.money)}), puis achetez un poulailler.`),
       title: 'Investir',
       text: () =>
         game.state.money >= 70
-          ? 'Les investissements rapportent chaque matin, même en hiver quand rien ne pousse. Vous avez de quoi acheter un poulailler : cliquez sur « Acheter ».'
-          : `Les investissements rapportent chaque matin, même en hiver quand rien ne pousse. Récoltez encore un peu et achetez un poulailler dès que vous aurez 70 pièces (vous en avez ${fmt(game.state.money)}).`,
+          ? `Les investissements rapportent chaque matin, même en hiver. ${app.sheets.isOpen('shop') ? `${tap()} « Acheter » sur le poulailler.` : `Ouvrez l'onglet « Acheter » en bas.`}`
+          : `Les investissements rapportent chaque matin, même en hiver. À 70 pièces, achetez un poulailler (vous en avez ${fmt(game.state.money)}).`,
       enter: () => {
-        app.panel.toggle(true);
-        app.panel.setTab('shop');
-        app.panel.focusInvestment('chickenCoop');
+        if (game.state.money >= 70) app.panel.focusInvestment('chickenCoop');
       },
-      target: () => ({ type: 'ui', selector: '#card-chickenCoop' }),
-      refreshOn: ['moneyChanged'],
+      target: () => (app.sheets.isOpen('shop') ? { type: 'ui', selector: '#card-chickenCoop' } : { type: 'ui', selector: '#tab-shop' }),
+      showOver: ['shop'],
+      refreshOn: ['moneyChanged', 'sheet'],
       advance: (ev) => ev.type === 'purchased',
       buttons: [{ label: 'Plus tard', action: () => next() }],
     },
@@ -141,7 +151,10 @@ export function createTutorial(layer, app) {
       id: 'onward',
       hint: () => 'Plantez, arrosez, récoltez, investissez.',
       title: 'À vous de jouer',
-      text: () => 'Plantez, arrosez, récoltez et investissez. Survolez une parcelle ou un bâtiment pour tout savoir. Je reviendrai vous prévenir avant l\'hiver !',
+      text: () =>
+        app.isTouch
+          ? 'Plantez, arrosez, récoltez, investissez. Appui long sur une parcelle ou un bâtiment : sa fiche. Je reviendrai avant l\'hiver !'
+          : 'Plantez, arrosez, récoltez, investissez. Survolez une parcelle ou un bâtiment pour tout savoir. Je reviendrai avant l\'hiver !',
       buttons: [{ label: 'D\'accord', primary: true, action: () => next() }],
     },
     {
@@ -155,7 +168,7 @@ export function createTutorial(layer, app) {
       hint: () => 'Récoltez avant l\'hiver et gardez des réserves.',
       title: 'L\'hiver approche',
       text: () =>
-        `Dans deux jours, c'est l'hiver. Au premier matin, les cultures qui ne résistent pas au gel seront perdues : récoltez ce qui est mûr. En hiver, seuls le navet et le chou se plantent, et le fermage est le plus cher de l'année (${fmt(game.level.rents[3])} pièces) : gardez des réserves !`,
+        `L'hiver arrive dans deux jours : le gel détruira les cultures fragiles, récoltez ce qui est mûr ! En hiver, seuls navet et chou poussent, et le fermage est le plus cher (${fmt(game.level.rents[3])} pièces).`,
       pauses: true,
       target: () => ({ type: 'ui', selector: '#hud-bill' }),
       buttons: [{ label: 'Compris', primary: true, action: () => next() }],
@@ -163,7 +176,7 @@ export function createTutorial(layer, app) {
     {
       id: 'done',
       title: 'Vous savez tout !',
-      text: () => 'Tenez jusqu\'au fermage d\'hiver pour réussir l\'année. Bonne récolte !',
+      text: () => 'Payez le fermage d\'hiver et l\'année est gagnée. Bonne récolte !',
       buttons: [{ label: 'Merci !', primary: true, action: () => finish() }],
     },
   ];
@@ -173,7 +186,10 @@ export function createTutorial(layer, app) {
   // ── Déroulé ───────────────────────────────────────────────────────────────────
   function start(g, from = 0) {
     game = g;
-    tutoPlot = null;
+    // Reprise d'une partie sauvegardée en cours de tutoriel : la parcelle d'exemple n'est pas
+    // sauvegardée ; on reprend la première parcelle semée (sans elle, ni anneau ni saut d'étape).
+    const planted = from > 0 ? g.query.plots().filter((p) => p.cropId) : [];
+    tutoPlot = (planted.find((p) => p.cropId === 'carrot') || planted[0])?.index ?? null;
     index = -1;
     go(Math.max(0, Math.min(STEPS.length - 1, from || 0)));
   }
@@ -193,14 +209,18 @@ export function createTutorial(layer, app) {
     s.enter?.();
     if (s.pauses) app.pushPause('tutorial');
     render();
+    focusTarget();
   }
 
+  // (garde : un bouton d'une bulle périmée, tutoriel arrêté, ne doit rien faire)
   function next() {
+    if (!game || index < 0) return;
     app.audio.play('click');
     go(index + 1);
   }
 
   function skip() {
+    if (!game || index < 0) return;
     app.audio.play('close');
     finish();
   }
@@ -212,7 +232,16 @@ export function createTutorial(layer, app) {
     index = -1;
     game = null;
     app.saveTutorial({ done: true, step: null });
+    hideAll();
+  }
+
+  function hideAll() {
+    if (bubble.contains(document.activeElement)) document.activeElement.blur();
     bubble.classList.remove('is-visible');
+    // Contenu retiré après le fondu (la bulle cachée ne reçoit déjà plus ni clic ni focus).
+    setTimeout(() => {
+      if (index < 0) clear(bubble);
+    }, 400);
     ring.classList.remove('is-visible');
     pill.classList.remove('is-visible');
   }
@@ -223,24 +252,23 @@ export function createTutorial(layer, app) {
     clearUiHighlight();
     index = -1;
     game = null;
-    bubble.classList.remove('is-visible');
-    ring.classList.remove('is-visible');
-    pill.classList.remove('is-visible');
+    hideAll();
   }
 
   /** Réduit la bulle : il ne reste que le rappel compact de l'étape (cliquable pour la rouvrir). */
-  function minimize() {
+  function minimize(auto = false) {
     if (minimized) return;
-    app.audio.play('close', { volume: 0.6 });
+    if (!auto) app.audio.play('close', { volume: 0.6 });
     minimized = true;
     layer.classList.add('is-min');
     updatePill();
-    pill.focus?.({ preventScroll: true });
+    if (!auto && app.keyboardMode) pill.focus?.({ preventScroll: true });
   }
 
   function expand() {
     if (!minimized) return;
     app.audio.play('open', { volume: 0.6 });
+    userExpanded = true;
     minimized = false;
     layer.classList.remove('is-min');
     updatePill();
@@ -250,34 +278,29 @@ export function createTutorial(layer, app) {
 
   function updatePill() {
     const s = step();
-    const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup'));
+    // Feuille haute (achats, bilan) : pas de rappel par-dessus (il couvrirait son en-tête).
+    const tallSheet = hidden === 'popup' && app.sheets?.box.classList.contains('is-tall');
+    const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup') && !tallSheet);
     if (show) {
       if (!pillAvatar.firstChild) pillAvatar.append(sprite('farmer', 'sprite--xs'));
       pillTitle.textContent = s.title;
       setText(pillText, s.hint());
-      const stage = app.stageRect();
       pill.classList.add('is-visible');
-      const pw = pill.offsetWidth;
-      const ph = pill.offsetHeight;
-      // En haut à gauche de la scène ; sinon un autre coin, pour ne pas couvrir le choix des graines.
-      const pop = document.getElementById('popup');
-      const pr = hidden === 'popup' && pop ? pop.getBoundingClientRect() : null;
-      const handle = document.getElementById('panel-handle');
-      const hr = handle && handle.offsetParent !== null ? handle.getBoundingClientRect() : null;
-      const right = hr && hr.width ? Math.min(stage.right, hr.left) : stage.right;
-      const corners = [
-        [stage.left + 8, stage.top + 8],
-        [right - pw - 8, stage.top + 8],
-        [stage.left + 8, stage.bottom - ph - 8],
-        [right - pw - 8, stage.bottom - ph - 8],
-      ];
-      const free = ([x, y]) => !pr || x + pw <= pr.left || x >= pr.right || y + ph <= pr.top || y >= pr.bottom;
-      const [x, y] = corners.find(free) || corners[0];
-      pill.style.left = `${Math.round(x)}px`;
-      pill.style.top = `${Math.round(y)}px`;
+      // Sous la barre du haut, à gauche (la feuille ouverte est en bas : elle n'est pas couverte).
+      const top = app.safeTop();
+      const left = app.safeLeft() + 8;
+      pill.style.left = `${Math.round(left)}px`;
+      pill.style.top = `${Math.round(top + 8)}px`;
       pill.classList.toggle('is-static', hidden === 'popup' && !minimized);
+      app.toasts?.hideBanner?.(); // le rappel se place là où s'affiche le bandeau
     }
     pill.classList.toggle('is-visible', show);
+  }
+
+  /** Montre la parcelle visée (la scène défile si elle dépasse l'écran). */
+  function focusTarget() {
+    const h = getHighlight();
+    if (h?.type === 'plot' && typeof app.scene?.focusPlot === 'function') app.scene.focusPlot(h.index, { animate: true });
   }
 
   function render() {
@@ -289,6 +312,7 @@ export function createTutorial(layer, app) {
       return;
     }
     minimized = false;
+    userExpanded = false;
     layer.classList.remove('is-min');
     const canMinimize = !!s.hint && (!s.buttons || s.id === 'coop');
     append(bubble, [
@@ -339,36 +363,111 @@ export function createTutorial(layer, app) {
     uiTarget = null;
   }
 
+  function targetRect(h) {
+    if (h?.type === 'plot') return app.plotPageRect(h.index);
+    if (h?.type === 'ui') {
+      const n = document.querySelector(h.selector);
+      if (n && n.offsetParent !== null) {
+        const r = n.getBoundingClientRect();
+        if (r.width && r.height) return r;
+      }
+    }
+    return null;
+  }
+
   function position(force = false) {
     const s = step();
     if (!s || s.dormant) return;
     const h = getHighlight();
-    let rect = null;
-    if (h?.type === 'plot') rect = app.plotPageRect(h.index);
-    else if (h?.type === 'ui') {
-      const n = document.querySelector(h.selector);
-      if (n && n.offsetParent !== null) rect = n.getBoundingClientRect();
-    }
+    const rect = targetRect(h);
     const key = rect ? `${Math.round(rect.left)},${Math.round(rect.top)},${Math.round(rect.width)},${Math.round(rect.height)}` : 'none';
-    if (!force && key === lastRect) return;
-    lastRect = key;
+    const vkey = `${key}|${window.innerWidth}x${window.innerHeight}|${app.sheets?.current || ''}|${Math.round(app.safeBottom())}`;
+    if (!force && vkey === lastRect) return;
+    lastRect = vkey;
     if (h?.type === 'plot' && rect) {
-      const pad = 4;
+      const pad = 3;
       ring.style.left = `${Math.round(rect.left - pad)}px`;
       ring.style.top = `${Math.round(rect.top - pad)}px`;
       ring.style.width = `${Math.round(rect.width + pad * 2)}px`;
       ring.style.height = `${Math.round(rect.height + pad * 2)}px`;
       ring.classList.add('is-visible');
+      // Sous la feuille ouverte ou la barre du haut : l'anneau ne se dessine pas par-dessus.
+      ring.classList.toggle('is-covered', rect.bottom > app.safeBottom() + 1 || rect.top < app.safeTop() - 1);
     } else {
       ring.classList.remove('is-visible');
     }
+    if (app.isWide()) positionWide(h, rect, s);
+    else positionPortrait(rect, s);
+  }
+
+  /**
+   * Portrait : la bulle prend la largeur de l'écran et se range en haut (sous la barre du haut)
+   * ou en bas (au-dessus des onglets ou de la feuille), du côté où elle ne couvre pas la cible.
+   */
+  function positionPortrait(rect, s) {
+    bubble.classList.remove('is-free');
+    bubble.classList.add('is-docked');
+    const vw = window.innerWidth;
+    const top = app.safeTop() + 8;
+    const bottom = app.safeBottom() - 8; // bord haut des onglets ou de la feuille ouverte
+    const b = bubble.getBoundingClientRect();
+    const w = b.width;
+    const h = b.height;
+    const x = Math.round(Math.max(8, (vw - w) / 2));
+    let side = 'none';
+    let y;
+    if (!rect) {
+      y = bottom - h;
+    } else {
+      const cy = rect.top + rect.height / 2;
+      const roomTop = rect.top - 14 - top; // place au-dessus de la cible
+      const roomBottom = bottom - (rect.bottom + 14);
+      const preferTop = cy > (top + bottom) / 2;
+      const fitsTop = roomTop >= h;
+      const fitsBottom = roomBottom >= h;
+      if ((preferTop && fitsTop) || (!fitsBottom && fitsTop)) {
+        y = top;
+        side = 'top';
+      } else if (fitsBottom) {
+        y = bottom - h;
+        side = 'bottom';
+      } else {
+        // Pas de place sans recouvrir : du côté le plus grand, collée au bord.
+        y = roomTop > roomBottom ? top : bottom - h;
+        side = 'none';
+      }
+    }
+    bubble.style.left = `${x}px`;
+    bubble.style.top = `${Math.round(y)}px`;
+    // Bulle en haut de l'écran : le bandeau (titre du niveau, saison) lui laisse la place.
+    if (y < top + 80) app.toasts?.hideBanner?.();
+    if (rect && side !== 'none') {
+      const cx = rect.left + rect.width / 2 - x;
+      bubble.style.setProperty('--ax', `${Math.round(Math.max(22, Math.min(w - 22, cx)))}px`);
+      // La flèche pointe vers la cible : bulle en haut → flèche en bas.
+      bubble.dataset.side = side === 'top' ? 'top' : 'bottom';
+    } else {
+      bubble.dataset.side = 'none';
+    }
+    // Étape sans pause (on joue pendant ce temps) : si la bulle cache le champ, elle se réduit
+    // d'elle-même en rappel compact (le joueur peut la rouvrir d'un toucher).
+    if (s && !s.pauses && !userExpanded && s.hint) {
+      const f = app.fieldPageRect();
+      const by = Math.round(y);
+      if (f && by < f.bottom && by + h > f.top) minimize(true);
+    }
+  }
+
+  function positionWide(h, rect, s) {
+    bubble.classList.remove('is-docked');
     if (rect) {
       // Parcelle : la bulle se place autour du champ entier (sans cacher d'autres parcelles),
       // la flèche restant alignée sur la parcelle visée.
       const anchor = h.type === 'plot' ? app.fieldPageRect() || rect : rect;
-      const prefer = h.type === 'plot' ? 'bottom' : h.selector === '#card-chickenCoop' ? 'left' : 'bottom';
+      const prefer = h.type === 'plot' ? 'bottom' : h.selector === '#card-chickenCoop' ? 'left' : h.selector.startsWith('#tab-') ? 'bottom' : 'bottom';
       bubble.classList.remove('is-free');
-      const side = placeNear(bubble, anchor, prefer, 18);
+      let side = placeNear(bubble, anchor, prefer, 18);
+      if (h.type === 'ui' && !s.pauses && avoidField()) side = 'none';
       const b = bubble.getBoundingClientRect();
       const cx = rect.left + rect.width / 2 - b.left;
       const cy = rect.top + rect.height / 2 - b.top;
@@ -381,9 +480,21 @@ export function createTutorial(layer, app) {
       const stage = app.stageRect();
       const r = bubble.getBoundingClientRect();
       bubble.style.left = `${Math.round(stage.left + (stage.width - r.width) / 2)}px`;
-      bubble.style.top = `${Math.round(stage.top + stage.height - r.height - 24)}px`;
+      bubble.style.top = `${Math.round(app.safeBottom() - r.height - 16)}px`;
       bubble.dataset.side = 'none';
     }
+  }
+
+  function avoidField() {
+    const f = app.fieldPageRect();
+    if (!f) return false;
+    const b = bubble.getBoundingClientRect();
+    const overlaps = b.left < f.right && b.right > f.left && b.top < f.bottom && b.bottom > f.top;
+    if (!overlaps) return false;
+    const below = f.bottom + 12;
+    if (below + b.height > app.safeBottom() - 8) return false;
+    bubble.style.top = `${Math.round(below)}px`;
+    return true;
   }
 
   // ── Événements ────────────────────────────────────────────────────────────────
@@ -418,9 +529,22 @@ export function createTutorial(layer, app) {
 
   function frame() {
     if (!game || index < 0) return;
-    // Une fenêtre cache tout le tutoriel ; le choix des graines ne cache que la bulle (elle le
-    // recouvrirait sur petit écran) : le rappel compact de l'étape reste alors affiché.
-    const state = app.dialogs.isOpen() ? 'dialog' : app.field.isOpen() ? 'popup' : false;
+    // Une fenêtre cache tout le tutoriel ; une feuille (graines, fiche…) ne cache que la bulle :
+    // le rappel compact de l'étape reste affiché en haut. Exception : l'étape « Investir » garde
+    // sa bulle au-dessus de la feuille des achats (elle vise la carte du poulailler).
+    const s = step();
+    const sheet = app.sheets?.current;
+    const state = app.dialogs.isOpen() ? 'dialog' : sheet && !(s?.showOver || []).includes(sheet) ? 'popup' : false;
+    if (sheet !== lastSheet) {
+      lastSheet = sheet;
+      if (s?.refreshOn?.includes('sheet')) {
+        clearUiHighlight();
+        applyUiHighlight();
+        const t = bubble.querySelector('.tuto-text');
+        if (t) setText(t, s.text());
+      }
+      lastRect = '';
+    }
     if (state !== hidden) {
       hidden = state;
       layer.classList.toggle('is-hidden', hidden === 'dialog');
@@ -428,8 +552,9 @@ export function createTutorial(layer, app) {
       if (!hidden) lastRect = '';
       updatePill();
     }
-    if (!hidden && !minimized) position();
+    if (hidden !== 'dialog') position();
   }
+  let lastSheet = null;
 
   return {
     start,

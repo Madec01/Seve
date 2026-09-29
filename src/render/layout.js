@@ -18,6 +18,8 @@
 // Aucune dépendance au DOM.
 
 import { TILE } from './atlas.js';
+import { seededRandom, tileHash, px, sprinklerHeads, makeQueries } from './layout-common.js';
+import { createPortraitLayout } from './layout-portrait.js';
 
 export const WORLD_COLS = 32;
 export const WORLD_ROWS = 20;
@@ -29,39 +31,14 @@ const MAIN_PATH_X = 15; // chemin du portail du champ jusqu'à la route
 const FIELD_BOTTOM_ROW = 8; // dernière ligne de parcelles (grille ancrée en bas)
 const FIELD_CENTER_X = 16;
 
-/** Générateur pseudo-aléatoire déterministe (mulberry32). */
-export function seededRandom(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Hachage entier → [0, 1) d'une position de tuile (décor stable, sans scintillement). */
-export function tileHash(x, y, salt = 0) {
-  let h = (x * 374761393 + y * 668265263 + salt * 2147483647) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-
-const px = (r) => ({ x: r.x * TILE, y: r.y * TILE, w: r.w * TILE, h: r.h * TILE });
-const inRect = (r, x, y) => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h;
-const union = (a, b) => {
-  const x = Math.min(a.x, b.x);
-  const y = Math.min(a.y, b.y);
-  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
-};
+export { seededRandom, tileHash };
 
 /**
  * @param level  objet niveau (src/data/levels.js) : gridCols, gridRows, availableInvestments,
  *               modifiers.noSprinkler, id.
  */
-export function createLayout(level) {
+export function createLayout(level, opts = {}) {
+  if (opts.mode === 'portrait') return createPortraitLayout(level);
   const cols = Math.max(1, Math.min(8, level.gridCols || 6));
   const rows = Math.max(1, Math.min(5, level.gridRows || 4));
   const available = new Set(
@@ -90,30 +67,7 @@ export function createLayout(level) {
   const well = { x: 1, y: 12, w: 1, h: 2 };
 
   // Arrosage automatique : têtes dans les marges haute et basse du champ, selon le niveau (2/4/6).
-  const sprinklerTiles = [];
-  {
-    const top = gy - 1;
-    const bottom = gy + rows;
-    const left = gx + (cols >= 4 ? 1 : 0);
-    const right = gx + cols - 1 - (cols >= 4 ? 1 : 0);
-    const mid = gx + Math.floor(cols / 2) - (cols % 2 === 0 ? 1 : 0);
-    const cand = [
-      { x: left, y: top }, { x: right, y: top },
-      { x: left, y: bottom }, { x: right, y: bottom },
-      { x: mid, y: top }, { x: Math.min(right, mid + 1 + (cols % 2 === 0 ? 1 : 0)), y: bottom },
-    ];
-    // Évite le portail et les doublons.
-    const seen = new Set();
-    for (const t of cand) {
-      if (t.x === gate.x && t.y === bottom) t.x = t.x - 1 >= gx ? t.x - 1 : t.x + 1;
-      const k = `${t.x},${t.y}`;
-      if (!seen.has(k)) {
-        seen.add(k);
-        sprinklerTiles.push(t);
-      }
-    }
-    while (sprinklerTiles.length < 6) sprinklerTiles.push(sprinklerTiles[sprinklerTiles.length % Math.max(1, sprinklerTiles.length)]);
-  }
+  const sprinklerTiles = sprinklerHeads(gx, gy, cols, rows, gate);
 
   const slots = {
     chickenCoop: {
@@ -165,27 +119,6 @@ export function createLayout(level) {
   };
   // Le panneau « à vendre » de l'arrosage ne doit pas tomber sur le pré des vaches ou le chemin.
   if (slots.sprinkler.sign.x >= 22) slots.sprinkler.sign = { x: fence.x - 1, y: fence.y + fence.h - 1 };
-
-  // Zone d'un emplacement (tuiles) selon le nombre possédé (0 = panneau seul).
-  function slotTiles(id, n = 99) {
-    const s = slots[id];
-    if (!s) return null;
-    if (n <= 0) return { x: s.sign.x, y: s.sign.y, w: 1, h: 1 };
-    switch (id) {
-      case 'chickenCoop': return union(s.shed, s.fence);
-      case 'beehive': {
-        const k = Math.min(s.hives.length, n);
-        return { x: s.hives[0].x, y: s.hives[0].y, w: k, h: 1 };
-      }
-      case 'cow': return union(s.barn, s.fence);
-      case 'sheep': return s.fence;
-      case 'roadsideStand': return s.area;
-      case 'solarPanel': return { x: s.units[0].x, y: s.units[0].y - 1, w: Math.min(2, n), h: 2 };
-      case 'guestHouse': return s.house;
-      case 'sprinkler': return null; // plusieurs têtes : voir hitTest
-      default: return null;
-    }
-  }
 
   // ── Chemins (masque de tuiles) ───────────────────────────────────────────────────
   const pathSet = new Set();
@@ -339,80 +272,31 @@ export function createLayout(level) {
     { x: gate.x * T + 8, y: (gate.y - 1) * T + 12 },
   ];
 
+  // ── Accessoires des emplacements (px ; dessinés quand l'emplacement est acheté) ─────
+  // sheet : 'season' (planches de la saison) ou 'base' (planches d'origine).
+  {
+    const e = slots.sheep.extras;
+    slots.sheep.props = [
+      { name: 'hay', sheet: 'season', x: e.x * T, y: e.y * T },
+      { name: 'hay.tied', sheet: 'season', x: (e.x + 1) * T, y: e.y * T + 2 },
+      { name: 'trough.wood.water', sheet: 'season', x: e.x * T + 4, y: (e.y + 2) * T - 2 },
+    ];
+    const b = slots.cow.barn;
+    slots.cow.props = [
+      { name: 'bucket.milk', sheet: 'season', x: b.x * T - 2, y: (b.y + b.h) * T - 2 },
+      { name: 'hay.tied', sheet: 'season', x: (b.x + 2) * T + 2, y: (b.y + b.h) * T - 1 },
+    ];
+    const s = slots.chickenCoop.shed;
+    slots.chickenCoop.props = [{ name: 'egg', sheet: 'base', x: s.x * T + 1, y: (s.y + s.h) * T - 3 }];
+  }
+
   // ── Requêtes ─────────────────────────────────────────────────────────────────────
-  function plotRect(index) {
-    const p = plots[index];
-    return p ? { x: p.x, y: p.y, w: p.w, h: p.h } : null;
-  }
+  const q = makeQueries({ plots, slots, available, field, width: WORLD_W, height: WORLD_H, solarExtendUp: 1 });
 
-  /** Rectangle (px) d'un investissement pour n unités possédées (défaut : zone complète). */
-  function investmentRect(id, n = 99) {
-    if (id === 'sprinkler') {
-      const k = n <= 0 ? 0 : slots.sprinkler.perLevel[Math.min(2, n - 1)];
-      if (k === 0) return px({ x: slots.sprinkler.sign.x, y: slots.sprinkler.sign.y, w: 1, h: 1 });
-      return px({ x: fence.x, y: fence.y, w: fence.w, h: fence.h });
-    }
-    const t = slotTiles(id, n);
-    return t ? px(t) : null;
-  }
-
-  /** Point (px) au-dessus d'un investissement, pour les textes flottants. */
-  function investmentAnchor(id, n = 99) {
-    const s = slots[id];
-    if (!s) return { x: WORLD_W / 2, y: WORLD_H / 2 };
-    let r;
-    switch (id) {
-      case 'chickenCoop': r = px(s.shed); break;
-      case 'cow': r = px(s.barn); break;
-      case 'sheep': r = px(s.pen); break;
-      case 'beehive': r = px(slotTiles(id, n > 0 ? n : 3)); break;
-      case 'roadsideStand': r = px({ x: s.cart.x, y: s.cart.y, w: 1, h: 1 }); break;
-      case 'solarPanel': r = px(slotTiles(id, n > 0 ? n : 2)); break;
-      case 'guestHouse': r = px(s.house); break;
-      case 'sprinkler': r = px({ x: gate.x, y: fence.y, w: 1, h: 1 }); break;
-      default: r = investmentRect(id, n);
-    }
-    return { x: r.x + (r.w >> 1), y: r.y - 2 };
-  }
-
-  /** Centre (px) d'une parcelle. */
-  function plotCenter(index) {
-    const p = plots[index];
-    return p ? { x: p.x + 8, y: p.y + 8 } : null;
-  }
-
-  /**
-   * Ce qui se trouve sous un point du monde.
-   * @param owned  facultatif : { id: nombre possédé } (ex. game.state.investments). Sans lui,
-   *               toutes les zones comptent ; avec lui, un emplacement non acheté ne réagit que
-   *               sur son panneau « à vendre ».
-   * @returns {type:'plot', index} | {type:'investment', id} | null
-   */
-  function hitTest(wx, wy, owned) {
-    const tx = Math.floor(wx / TILE);
-    const ty = Math.floor(wy / TILE);
-    if (tx >= gx && tx < gx + cols && ty >= gy && ty < gy + rows) {
-      return { type: 'plot', index: (ty - gy) * cols + (tx - gx) };
-    }
-    const count = (id) => (owned ? owned[id] || 0 : 99);
-    if (available.has('sprinkler')) {
-      const n = count('sprinkler');
-      const k = n > 0 ? slots.sprinkler.perLevel[Math.min(2, n - 1)] : 0;
-      for (let i = 0; i < k; i++) {
-        const u = slots.sprinkler.units[i];
-        if (u.x === tx && u.y === ty) return { type: 'investment', id: 'sprinkler' };
-      }
-      if (n === 0 && slots.sprinkler.sign.x === tx && slots.sprinkler.sign.y === ty) {
-        return { type: 'investment', id: 'sprinkler' };
-      }
-    }
-    for (const id of Object.keys(slots)) {
-      if (id === 'sprinkler' || !available.has(id)) continue;
-      const t = slotTiles(id, count(id));
-      if (t && inRect(t, tx, ty)) return { type: 'investment', id };
-      // Toit des bâtiments : la zone cliquable inclut aussi les pixels au-dessus.
-    }
-    return null;
+  /** Voisines (même ligne à l'écran) d'une parcelle : index à gauche / à droite, ou -1. */
+  function plotNeighbors(index) {
+    const c = index % cols;
+    return { left: c > 0 ? index - 1 : -1, right: c < cols - 1 ? index + 1 : -1 };
   }
 
   return {
@@ -438,10 +322,20 @@ export function createLayout(level) {
     routeToField,
     isPath,
     isForest,
-    plotRect,
-    plotCenter,
-    investmentRect,
-    investmentAnchor,
-    hitTest,
+    mode: 'landscape',
+    plotSize: TILE, // côté d'une parcelle (px du monde)
+    plotScale: 1, // échelle de dessin des cultures et de la terre
+    transposed: false,
+    // Partie à toujours garder visible (px du monde) : ici tout le monde.
+    essential: { x: 0, y: 0, w: WORLD_W, h: WORLD_H },
+    fieldRect: px(fence),
+    plotNeighbors,
+    slotTiles: q.slotTiles,
+    plotRect: q.plotRect,
+    plotCenter: q.plotCenter,
+    investmentRect: q.investmentRect,
+    investmentAnchor: q.investmentAnchor,
+    hitTest: q.hitTest,
+    hitTestNear: q.hitTestNear,
   };
 }
