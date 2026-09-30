@@ -544,7 +544,7 @@ Si une cible « tous les bonus » n'est pas tenue, on réduit les bonus (jamais 
 
 ### Résultats *(équilibré, 2026-09-30, 200 parties par niveau et par stratégie)*
 
-Niveaux 1 à 8 sans bonus : **identiques à la v2**, partie par partie (tableau de la simulation v2 reproduit à l'identique ; `tests/parity.test.js`).
+Niveaux 1 à 8 sans bonus : **identiques à la v2**, partie par partie (tableau de la simulation v2 reproduit à l'identique ; `tests/parity.test.js`). Seule exception, voulue (intégration, 2026-09-30) : le robot optimal du niveau 2 n'achète plus une parcelle qu'il ne pourrait pas semer et arroser (arrosage payant) ; 2 parties sur 30 de la parité changent, argent médian 437 → 445 (le cœur, lui, reste identique à la v2 : 400 parties des robots scriptés).
 
 Niveaux 9 à 12, sans bonus (victoires · argent médian · ★★★) :
 
@@ -563,7 +563,9 @@ Tous les bonus (bonus réduits après une première simulation : Bas de laine +1
 |---|---|
 | balanced et optimal gagnent ≥ 95 % | tenu partout sauf aux niveaux 3 et 6 (balanced 92 % / 90 %, optimal 92 % / 92 %) — **déjà sous 95 % sans bonus en v2** (89 à 95 %), aucun réglage des bonus ne peut y remédier ; les bonus n'y font pas baisser les victoires (sauf optimal au niveau 3 : 95 → 92 %, dans le bruit) |
 | careless en faillite ≥ 50 % (2, 4, 5, 7, 8, 9 à 12) et ≥ 35 % (3, 6) | tenu : 100 % aux niveaux 2, 4, 5, 7 à 12 ; 39 % au niveau 3 ; 82 % au niveau 6 (le niveau 1 reste gagné par tous, comme en v2) |
-| argent médian de l'optimal + 30 % au plus | tenu aux niveaux 1 (+14 %), 2 (−20 %) et 3 (+28 %) ; **non tenu ailleurs** (+39 % à +237 %) |
+| argent médian de l'optimal + 30 % au plus | tenu aux niveaux 1 (+14 %), 2 (+24 %) et 3 (+28 %) ; **non tenu ailleurs** (+39 % à +237 %) |
+
+Niveau 2 avec tous les bonus : le premier tableau donnait **−20 %** (437 → 348). Aucun bonus n'y nuit par ses règles : c'était le robot optimal. Pris seul, « Bas de laine » faisait tomber l'optimal de 437 à 164 et « Arpenteur » à 324 : un peu d'argent en plus (ou des parcelles moins chères) lui faisait acheter des parcelles dès le printemps, sans garder de quoi semer **et arroser** (1 pièce par arrosage) ; l'été, la moitié du champ restait vide. « Semencier » faisait perdre 16 % des parties : le robot arrosait ses pommes de terre les jours de canicule (arrosage facultatif pour elles) jusqu'à ne plus pouvoir payer le fermage. Un joueur n'est jamais forcé à ces choix ; les deux robots sont corrigés (`canFarmMorePlots`, `skipOptionalWater` dans `tools/simulate.js`) : 445 → 554 (+24 %), Bas de laine seul 452, Arpenteur seul 437, Semencier seul 100 % de victoires. Au niveau 3 (optimal 95 → 92 % de victoires avec les bonus), c'est la pourriture : avec plus d'argent, le robot sème davantage de maïs et de blé, à la merci d'une série de jours de pluie (hasard, pas une règle).
 
 Pourquoi la dernière cible n'est pas tenue : l'économie est **à effet boule de neige** et les robots « gelés » par la parité (leurs décisions des niveaux 1 à 8 doivent rester celles de la v2) sont souvent juste sous un seuil de décision. Exemple mesuré : au niveau 5, **10 pièces de plus au départ, sans aucun bonus**, font passer l'optimal de 2 poulaillers à 3 vaches et son argent final de 269 à 487 (+81 %). Chaque bonus pris seul rapporte à l'optimal de 0 à ~100 pièces (souvent moins que ce seuil), mais les 14 réunis se composent. Réduire encore les bonus les rendrait insignifiants pour un joueur sans tenir la cible (tout gain de ~10 pièces franchit ces seuils). Le robot insouciant, lui, n'en profite presque pas (+5 à +20 pièces, sauf +90 au niveau 2) : les bonus récompensent le joueur qui investit, sans rendre les niveaux triviaux (★★★ reste à conquérir sans bonus, et « Pur et dur » l'exige).
 

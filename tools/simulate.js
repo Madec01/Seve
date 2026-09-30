@@ -394,6 +394,25 @@ function committedWater(c) {
   return w;
 }
 
+/**
+ * Arrosage payant (niveau sécheresse) : une parcelle de plus ne sert que si l'on peut encore semer ET
+ * arroser jusqu'à la récolte toutes les parcelles vides (celle-ci comprise) avec l'argent qui reste.
+ * Sans ce garde-fou, un peu d'argent en plus (« Bas de laine », parcelles moins chères) faisait acheter
+ * des parcelles trop tôt : champ à moitié semé faute d'argent, année finie plus bas.
+ */
+function canFarmMorePlots(c, moneyLeft) {
+  if (!c.level.modifiers.waterCost) return true;
+  // Saison en cours et suivante : les semis de la saison suivante (été : tomates, maïs) coûtent souvent plus.
+  let perPlot = 0;
+  for (const si of [c.cal.seasonIndex, Math.min(3, c.cal.seasonIndex + 1)]) {
+    const model = seasonCropModel(c, SEASONS[si]);
+    const best = model.id ? c.crops.find((cr) => cr.id === model.id) : null;
+    if (best) perPlot = Math.max(perPlot, c.seed(best) + waterFor(c, best) * model.cycle);
+  }
+  const empty = c.state.plots.filter((p) => p.unlocked && !p.cropId).length + 1;
+  return moneyLeft >= empty * perPlot;
+}
+
 /** Fonds de roulement : de quoi replanter une bonne partie du champ (saison en cours ou suivante). */
 function workingCapital(c, factor = 0.6) {
   const si = c.cal.daysLeftInSeason <= 1 ? Math.min(3, c.cal.seasonIndex + 1) : c.cal.seasonIndex;
@@ -444,9 +463,20 @@ function waterAll(game, budget) {
   const { q, state } = ctx(game);
   for (let i = 0; i < state.plots.length; i++) {
     if (q.plot(i).action !== 'water') continue;
+    // v3 : pomme de terre un jour de canicule (arrosage payant) : elle pousse quand même à moitié ;
+    // on n'arrose pas si l'arrosage entamerait la réserve du fermage.
+    if (skipOptionalWater(game, i)) continue;
     if (!click(budget)) return;
     if (!game.actions.water(i).ok) return;
   }
+}
+
+/** Arrosage facultatif (culture qui pousse aussi sans eau) qui ferait passer sous la réserve du fermage. */
+function skipOptionalWater(game, i) {
+  const c = ctx(game);
+  const crop = getCrop(c.state.plots[i].cropId);
+  if (!crop || (crop.dryGrowth ?? 0.5) < 1 || !c.level.modifiers.waterCost) return false;
+  return c.state.money - c.level.modifiers.waterCost < reserve(c) + committedWater(c);
 }
 
 /**
@@ -622,6 +652,7 @@ const STRATEGIES = {
       for (const id of candidates(c)) {
         const cost = purchaseCost(c, id);
         if (cost > spendable) continue;
+        if (id === 'plot' && !canFarmMorePlots(c, spendable - cost)) continue;
         const ratio = (purchaseValue(c, id) - cost) / cost;
         if (ratio > OPT_RATIO && (!best || ratio > best.ratio)) best = { id, ratio };
       }

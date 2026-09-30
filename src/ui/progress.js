@@ -108,39 +108,50 @@ export function createProgress(app, storage) {
     }
   }
 
-  /** Vérifie les succès pendant une partie (aube, achat, récolte) ; annonce les nouveaux. */
-  function checkGame(game) {
-    if (!available() || !has('checkAchievements') || !has('unlockAchievements')) return [];
-    const ctx = contextOf(game);
-    if (!ctx) return [];
-    let ids = [];
+  /**
+   * Succès nouvellement remplis : avec le contexte d'une partie **en cours** (aube, achat, récolte),
+   * sinon sans contexte (progression seule). Une partie terminée a déjà été comptée par
+   * recordRunEnd : repasser son contexte compterait ses chiffres deux fois dans les cumuls.
+   */
+  function newAchievements(game) {
+    if (!available() || !has('checkAchievements') || !has('unlockAchievements')) return null;
+    const ctx = game && game.state?.status === 'playing' ? contextOf(game) : null;
+    if (game && game.state?.status === 'playing' && !ctx) return null;
     try {
-      ids = P().checkAchievements(get(), ctx) || [];
+      return P().checkAchievements(get(), ctx) || [];
     } catch (err) {
       console.warn('checkAchievements :', err);
-      return [];
+      return null;
     }
-    if (!ids.length) return [];
+  }
+
+  /** Vérifie les succès (partie en cours, ou progression seule si game est nul ou terminé) ; annonce les nouveaux. */
+  function checkGame(game) {
+    const ids = newAchievements(game);
+    if (!ids || !ids.length) return [];
     const res = P().unlockAchievements(get(), ids);
     commit(res.progress);
     announce(ids, res.rewards);
     return ids;
   }
 
-  /** Au démarrage : succès de progression déjà acquis (anciennes parties). */
+  /**
+   * Au démarrage : succès mérités par les anciennes parties. Ceux que storage.js a débloqués en
+   * migrant une progression v1 (progressMigration, une seule fois) + ceux de la progression seule.
+   */
   function checkBoot() {
-    if (!available() || !has('checkAchievements') || !has('unlockAchievements')) return [];
     let ids = [];
     try {
-      ids = P().checkAchievements(get(), null) || [];
-    } catch (err) {
-      console.warn('checkAchievements (démarrage) :', err);
-      return [];
+      ids = storage.progressMigration?.()?.retroactive || [];
+    } catch {
+      ids = [];
     }
-    if (!ids.length) return [];
-    const res = P().unlockAchievements(get(), ids);
-    commit(res.progress);
-    return ids;
+    const more = newAchievements(null) || [];
+    if (more.length) {
+      const res = P().unlockAchievements(get(), more);
+      commit(res.progress);
+    }
+    return [...new Set([...ids, ...more])];
   }
 
   function rewardText(r) {
@@ -190,16 +201,10 @@ export function createProgress(app, storage) {
   // ── Fin de partie ─────────────────────────────────────────────────────────────
   /**
    * info : { levelId, outcome: 'victory'|'bankrupt'|'abandon', stars, money, summary, perksActive }
-   * → { rewards: { ecus, newStars, newBest, firstTime }, achievements: [id], starsAvailable, legacy }
+   * → { rewards: { ecus, newStars, newBest, firstTime }, achievements: [id], starsAvailable }
    */
   function recordRunEnd(info) {
-    if (!available() || !has('recordRunEnd')) {
-      // Jeu v2 : seule la victoire est notée (étoiles, record, niveau suivant).
-      if (info.outcome !== 'victory') return { rewards: { ecus: 0 }, achievements: [], starsAvailable: 0, legacy: true };
-      const rec = storage.recordVictory(info.levelId, info.stars, info.money);
-      current = null;
-      return { rewards: { ecus: 0, newStars: rec.newStars, newBest: rec.newBest, firstTime: rec.firstTime }, achievements: [], starsAvailable: 0, legacy: true };
-    }
+    if (!available() || !has('recordRunEnd')) return { rewards: { ecus: 0 }, achievements: [], starsAvailable: 0 };
     let res;
     try {
       res = P().recordRunEnd(get(), info);

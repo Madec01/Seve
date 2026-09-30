@@ -270,11 +270,10 @@ export function createGrange(app) {
         el('h3.farm-sec-title', CATEGORY_TITLE[category]),
         el(
           'div.cos-grid',
-          list.map((item, i) =>
+          list.map((item) =>
             cosmeticTile(app, item, {
               placed: item.id === currentId,
               placedLabel: 'Choisi',
-              index: i,
               onPick: async (it) => {
                 if (it.id === currentId) return;
                 if (!(await unlockFlow(app, it))) return;
@@ -297,9 +296,8 @@ export function createGrange(app) {
           el('p.farm-sec-sub', 'Débloquez-les ici, puis posez-les avec « Décorer la ferme ».'),
           el(
             'div.cos-grid',
-            decoItems.map((item, i) =>
+            decoItems.map((item) =>
               cosmeticTile(app, item, {
-                index: i,
                 count: counts[item.id] || 0,
                 onPick: async (it, st) => {
                   if (st === 'owned') {

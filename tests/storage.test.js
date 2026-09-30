@@ -10,7 +10,7 @@ window.localStorage = {
   removeItem: (k) => store.delete(k),
 };
 const storage = await import('../src/storage.js');
-const { defaultProgress } = await import('../src/core/progression.js');
+const { defaultProgress, recordRunEnd } = await import('../src/core/progression.js');
 const KEY = (k) => `une-annee-a-la-ferme.${k}`;
 
 test('JSON invalide : valeurs par défaut', () => {
@@ -47,8 +47,10 @@ test('progression abîmée : entrées nettoyées, niveaux verrouillés par défa
   assert.equal(p.schema, 2);
   assert.equal(storage.isLevelUnlocked(2, p), false);
   assert.equal(storage.isLevelUnlocked(4, p), true);
-  const rec = storage.recordVictory(1, 2, 300);
-  assert.equal(rec.firstTime, true);
+  // Fin de partie : progression.recordRunEnd (le seul chemin de l'interface), puis enregistrement.
+  const rec = recordRunEnd(p, { levelId: 1, outcome: 'victory', stars: 2, money: 300, summary: null, perksActive: false });
+  assert.equal(rec.rewards.firstTime, true);
+  storage.saveProgress(rec.progress);
   assert.deepEqual(storage.loadProgress().levels[1], { stars: 3, bestMoney: 300, completed: true, played: true });
   store.clear();
 });

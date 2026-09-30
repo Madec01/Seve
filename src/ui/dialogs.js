@@ -8,9 +8,7 @@
 // le permet. Le focus clavier reste dans la fenêtre active.
 
 import { SEASONS } from '../data/balance.js';
-import * as cropsData from '../data/crops.js';
-
-const { CROPS } = cropsData;
+import { gameCrops } from '../core/perks.js';
 import { LEVELS, yearLength } from '../data/levels.js';
 import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { achievementIcon, cropIcon, ecuIcon, icon, investmentIcon, productIcon, sprite, spriteAny } from './icons.js';
@@ -551,7 +549,7 @@ export function createDialogs(layer, app) {
 
   /** Récompenses de fin d'année : écus, succès débloqués, étoiles à dépenser (bouton Grange). */
   function rewardsBlock(record) {
-    if (!record || record.legacy || !app.progression?.available()) return null;
+    if (!record || !app.progression?.available()) return null;
     const ecus = record.rewards?.ecus || 0;
     const achs = record.achievements || [];
     const spare = record.starsAvailable || 0;
@@ -595,9 +593,8 @@ export function createDialogs(layer, app) {
     const sIdx = SEASONS.indexOf(ev.seasonId);
     const next = SEASONS[sIdx + 1];
     const s = ev.summary;
-    // Cultures de la partie : celles du niveau (+ les nouveautés avec le bonus « Semencier »).
-    const extra3 = g.state.perks?.seedMerchant ? cropsData.NEW_CROPS || [] : [];
-    const runCrops = CROPS.filter((c) => !lvl.crops || lvl.crops.includes(c.id) || extra3.includes(c.id));
+    // Cultures de la partie : celles du niveau (+ les nouveautés avec « Semencier », niveaux 1 à 8 seulement).
+    const runCrops = gameCrops(lvl, g.state.perks || {});
     const crops = runCrops.filter((c) => c.seasons.includes(next));
     const hardy = runCrops.filter((c) => c.frostHardy).map((c) => c.name.toLowerCase());
     const hardyText = hardy.length > 1 ? `${hardy.slice(0, -1).join(', ')} et ${hardy[hardy.length - 1]}` : hardy[0] || 'le navet et le chou';

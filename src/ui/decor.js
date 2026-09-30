@@ -100,9 +100,9 @@ function stateOf(app, item, placed) {
 
 /**
  * Tuile d'un objet (≥ 64 px) : icône, nom, « Posé » / « Débloqué » / écus / « Il manque… ».
- * opts : { placed, placedLabel, onPick(item), index }
+ * opts : { placed, placedLabel, onPick(item) }
  */
-export function cosmeticTile(app, item, { placed = false, placedLabel = 'Posé', onPick, index = 0, count = 0 } = {}) {
+export function cosmeticTile(app, item, { placed = false, placedLabel = 'Posé', onPick, count = 0 } = {}) {
   const st = stateOf(app, item, placed);
   const missing = st === 'poor' ? item.price - app.progression.ecus() : 0;
   const status =
@@ -122,7 +122,7 @@ export function cosmeticTile(app, item, { placed = false, placedLabel = 'Posé',
       'aria-label': `${item.name} : ${status.textContent}`,
       onclick: () => onPick?.(item, st),
     },
-    el('span.cos-icon', item.category === 'outfit' ? outfitIcon(item.id, 'sprite--card', index) : cosmeticIcon(item, item.category === 'large' ? 'sprite--md' : 'sprite--card', index)),
+    el('span.cos-icon', item.category === 'outfit' ? outfitIcon(item.id, 'sprite--card') : cosmeticIcon(item, item.category === 'large' ? 'sprite--md' : 'sprite--card')),
     el('span.cos-name', item.name),
     status,
   );
@@ -183,21 +183,17 @@ export function createDecor(app) {
       b('slots', 'Objets', icon('star', 'md'), () => openSlots()),
       b('path', 'Allées', icon('seed', 'md'), () => openPath()),
       b('fence', 'Clôture', icon('lock', 'md'), () => openFence()),
-      b('outfit', 'Tenue', outfitIcon(P().cosmetics().outfit, 'sprite--sm', outfitIndex(P().cosmetics().outfit)), () => openOutfit()),
+      b('outfit', 'Tenue', outfitIcon(P().cosmetics().outfit, 'sprite--sm'), () => openOutfit()),
       b('done', 'Terminer', icon('play', 'md'), () => exit(), '.is-done'),
     );
     document.body.append(header, bar);
-  }
-
-  function outfitIndex(id) {
-    return Math.max(0, items('outfit').findIndex((o) => o.id === id));
   }
 
   function refreshBar() {
     if (!bar) return;
     setText(ecusNode, fmt(P().ecus()));
     const ob = bar.querySelector('#decor-outfit .tabbar-ico');
-    if (ob) ob.replaceChildren(outfitIcon(P().cosmetics().outfit, 'sprite--sm', outfitIndex(P().cosmetics().outfit)));
+    if (ob) ob.replaceChildren(outfitIcon(P().cosmetics().outfit, 'sprite--sm'));
   }
 
   function enter({ fromMenu: menu = app.inMenu } = {}) {
@@ -254,11 +250,13 @@ export function createDecor(app) {
     if (hit.type === 'sign') {
       app.audio.play('page', { volume: 0.7 });
       openSign();
+      app.revealDecorSlot?.('sign', 'decor-sign');
       return true;
     }
     if (hit.type === 'farmer') {
       app.audio.play('page', { volume: 0.7 });
       openOutfit();
+      app.revealDecorSlot?.('farmer', 'decor-outfit');
       return true;
     }
     return false;
@@ -321,7 +319,7 @@ export function createDecor(app) {
     const content = el(
       'div.decor-sheet',
       el('p.decor-now', placedItem ? ['Posé ici : ', el('b', placedItem.name)] : 'Emplacement libre : choisissez un objet.'),
-      el('div.cos-grid', list.map((item, i) => cosmeticTile(app, item, { placed: item.id === placedId, onPick: pick, index: i }))),
+      el('div.cos-grid', list.map((item) => cosmeticTile(app, item, { placed: item.id === placedId, onPick: pick }))),
       placedId
         ? el(
             'button.btn.btn--wide',
@@ -341,6 +339,8 @@ export function createDecor(app) {
     );
     if (silent && app.sheets.current === `decor-slot:${slotId}`) return app.sheets.setContent(content);
     sheet(`slot:${slotId}`, slot.name, placedItem ? cosmeticIcon(placedItem, 'sprite--md') : icon('star', 'md'), content);
+    // L'emplacement reste visible au-dessus de la feuille (aussi depuis la liste « Objets »).
+    app.revealDecorSlot?.(slotId, `decor-slot:${slotId}`);
   }
 
   /** Liste des emplacements (aussi utilisable sans les repères de la scène). */
@@ -391,12 +391,12 @@ export function createDecor(app) {
     };
     const content = el(
       'div.decor-sheet',
-      el('div.cos-grid', list.map((item, i) => cosmeticTile(app, item, { placed: item.id === currentId, placedLabel: 'Choisi', onPick: pick, index: i }))),
+      el('div.cos-grid', list.map((item) => cosmeticTile(app, item, { placed: item.id === currentId, placedLabel: 'Choisi', onPick: pick }))),
       el('p.sheet-hint', 'Purement décoratif : aucun effet sur le jeu.'),
     );
     if (silent && app.sheets.current === `decor-${id}`) return app.sheets.setContent(content);
     const cur = list.find((i) => i.id === currentId);
-    sheet(id, title, cur ? cosmeticIcon(cur, 'sprite--md', list.indexOf(cur)) : icon('star', 'md'), content);
+    sheet(id, title, cur ? cosmeticIcon(cur, 'sprite--md') : icon('star', 'md'), content);
   }
 
   const openOutfit = (silent) => choiceSheet('outfit', CATEGORY_TITLE.outfit, 'outfit', P().cosmetics().outfit, (id) => P().setOutfit(id), silent);

@@ -363,18 +363,47 @@ app.onDialogChange = () => {
  * défiler au-delà du bas du monde) ; la parcelle visée par la feuille reste visible au-dessus.
  */
 let revealIndex = null;
+let revealDecor = null; // { id: emplacement | 'sign' | 'farmer', sheet: id de la feuille }
+let revealInvestment = null; // { id: investissement, sheet: id de la feuille }
 function updateSheetOverlay() {
   const s = app.scene;
   if (!s || typeof s.setOverlay !== 'function') return;
-  const open = app.sheets.isOpen() && !app.isWide() && !app.inMenu;
+  // Mode décoration depuis le menu : la scène du menu est la ferme décorée, elle suit aussi la feuille.
+  const open = app.sheets.isOpen() && !app.isWide() && (!app.inMenu || app.decor?.active);
   s.setOverlay(open ? app.sheets.box.offsetHeight : 0);
   if (!open) {
     revealIndex = null;
+    revealDecor = null;
+    revealInvestment = null;
     return;
   }
   const i = app.field.current?.index;
   if (revealIndex !== null && i === revealIndex) s.focusPlot(i, { margin: 14, animate: true });
+  if (revealDecor && app.sheets.current === revealDecor.sheet && typeof s.focusDecorSlot === 'function') s.focusDecorSlot(revealDecor.id, { margin: 14 });
+  if (revealInvestment && app.sheets.current === revealInvestment.sheet && typeof s.focusRect === 'function') {
+    const id = revealInvestment.id;
+    s.focusRect(s.layout.investmentRect?.(id, app.game?.state.investments[id] || 0), { margin: 14 });
+  }
 }
+
+/** Fiche d'un bâtiment ou d'un enclos (atelier, poulailler…) : il reste visible au-dessus de la feuille. */
+app.revealInvestment = (id, sheetId) => {
+  const s = app.scene;
+  if (!s || typeof s.focusRect !== 'function') return;
+  revealInvestment = { id, sheet: sheetId };
+  updateSheetOverlay();
+};
+
+/**
+ * Mode décoration : l'emplacement touché (ou le panneau, ou le fermier) reste visible au-dessus de
+ * sa feuille. À appeler juste après l'ouverture de la feuille `sheetId`.
+ */
+app.revealDecorSlot = (id, sheetId) => {
+  const s = app.scene;
+  if (!s || typeof s.focusDecorSlot !== 'function') return;
+  revealDecor = { id, sheet: sheetId };
+  updateSheetOverlay(); // setOverlay d'abord : la feuille est comptée dans la zone couverte
+};
 
 /** Fait défiler la scène (en douceur) pour que la parcelle reste visible au-dessus de la feuille. */
 app.revealPlot = (index) => {
@@ -901,7 +930,7 @@ function reactMessages(ev, game) {
       else if (inv.effects.chargeReduction) what = `Vos charges baissent de ${inv.effects.chargeReduction} par jour.`;
       else if (inv.effects.shearing) what = `Tonte : +${inv.effects.shearing} à la fin de chaque saison (sauf l'hiver).`;
       else if (q?.income || Object.values(q?.incomeBySeason || {}).some(Boolean)) what = `${incomePhrase(q.incomeBySeason)}.`;
-      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${inv.id === 'beehive' || inv.id === 'guestHouse' || inv.id === 'cow' ? 'e' : ''} !`, text: what });
+      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${['beehive', 'guestHouse', 'cow', 'goat', 'dairy'].includes(inv.id) ? 'e' : ''} !`, text: what });
       break;
     }
     case 'harvested':
@@ -1150,7 +1179,7 @@ function startRun(game, { resumed = false } = {}) {
   if (resumed) {
     app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()}.` });
   } else if (lvl.contest) {
-    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `Concours du village : jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
   } else {
     app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
   }

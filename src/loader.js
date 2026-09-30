@@ -64,11 +64,14 @@
 
   function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) { /* stockage bloqué */ } }
   function tried() { try { return !!sessionStorage.getItem(KEY); } catch (e) { return true; } }
-  function note(msg) {
+  // Étapes normales : console.info ; échecs et nouveaux essais : console.warn (une partie qui démarre
+  // bien ne laisse aucun avertissement dans la console).
+  function note(msg, problem) {
     var line = '[' + ((Date.now() - t0) / 1000).toFixed(1) + ' s] ' + msg;
     log.push(line);
     if (log.length > 40) log.shift();
-    try { console.warn('[chargement] ' + msg); } catch (e) { /* console absente */ }
+    if (problem === undefined) problem = /ÉCHEC|essai|introuvable|aucun progrès|rejetée|erreur/i.test(msg);
+    try { (problem ? console.warn : console.info)('[chargement] ' + msg); } catch (e) { /* console absente */ }
     renderDetails();
   }
   function errText(err) {

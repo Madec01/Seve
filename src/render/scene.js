@@ -45,6 +45,7 @@
 //   scene.focusDecorSlot(id, opts?)     (v3) défile pour voir l'emplacement (ou 'sign', 'farmer') au-dessus
 //                                       de la feuille ouverte ; opts { margin, animate }
 //   scene.focusDecorArea(animate?)      (v3) défile sur la cour (fait aussi à l'entrée en mode décoration)
+//   scene.focusRect(r, opts?)           (v3) défile pour voir le rectangle r (px du monde) au-dessus de la feuille
 //   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
 //
@@ -501,9 +502,20 @@ export function createScene(canvas, images, level, opts = {}) {
   function focusDecorSlot(id, opts = {}) {
     const d = id === 'farmer' ? { ...farmerRect(), kind: 'small' } : (layout.decorSlots || []).find((s0) => s0.id === id);
     if (!d) return scrollDev / dpr;
+    // Les petits objets dépassent d'une tuile vers le haut.
+    return focusRect(d.kind === 'small' ? { x: d.x, y: d.y - TILE, w: d.w, h: d.h + TILE } : d, opts);
+  }
+
+  /**
+   * (v3) Fait défiler le moins possible pour voir le rectangle `r` (px du monde) au-dessus de la
+   * feuille ouverte. opts : { margin (px CSS, 24), animate (true) }. Renvoie le défilement visé (px CSS).
+   */
+  function focusRect(r, opts = {}) {
+    if (!r) return scrollDev / dpr;
+    const d = r;
     flingV = 0;
     userScrolled = true;
-    const top0 = d.kind === 'small' ? d.y - TILE : d.y; // les grands objets dépassent vers le haut
+    const top0 = d.y;
     const m = (opts.margin ?? 24) * dpr;
     const cur = scrollAnim ? scrollAnim.to : scrollDev;
     const top = baseY - cur + top0 * zoom;
@@ -1996,6 +2008,7 @@ export function createScene(canvas, images, level, opts = {}) {
     },
     focusDecorSlot,
     focusDecorArea,
+    focusRect,
     get decorMode() {
       return decorMode;
     },

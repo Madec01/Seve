@@ -5,6 +5,8 @@
 //
 //   node tools/capture-parity.js            écrit tests/fixtures/parity-v2.json (à ne lancer qu'une fois, en v2)
 //   node tools/capture-parity.js --check    rejoue et compare au fichier (sans l'écrire)
+//   node tools/capture-parity.js --update-sim "raison"   robots de tools/simulate.js modifiés : réécrit seulement la
+//        partie « sim », si les parties des robots scriptés (le cœur) sont toujours identiques à la v2
 //   node tools/capture-parity.js --v1-saves <dossier>   écrit tests/fixtures/v1-saves.json : vraies sauvegardes
 //        v1 (en pleine journée) produites par le code v2 extrait dans <dossier> (git archive c938af8 src | tar -x -C <dossier>),
 //        et la fin de leur partie en v2 (tests/migration.test.js)
@@ -269,6 +271,23 @@ if (isMain && process.argv.includes('--v1-saves')) {
     }
     console.log(bad ? `${bad} parties différentes sur ${PARITY_CASES.length}` : `Parité exacte : ${PARITY_CASES.length} parties identiques`);
     if (bad) process.exitCode = 1;
+    process.exit();
+  }
+  if (process.argv.includes('--update-sim')) {
+    // Robots de la simulation améliorés (tools/simulate.js) : seule la partie « sim » est réécrite, et
+    // seulement si le cœur est inchangé (les 400 parties des robots scriptés restent identiques à la v2).
+    const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8'));
+    const bad = Object.entries(results).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(fixture.cases[k]));
+    if (bad.length) {
+      console.log(`Refusé : ${bad.length} parties des robots scriptés diffèrent de la v2 (le cœur a changé).`);
+      process.exit(1);
+    }
+    const changed = Object.keys(sim).filter((k) => JSON.stringify(sim[k]) !== JSON.stringify(fixture.sim[k]));
+    const reason = process.argv[process.argv.indexOf('--update-sim') + 1] || 'robots de la simulation modifiés';
+    fixture.sim = sim;
+    fixture.simUpdates = [...(fixture.simUpdates || []), { at: new Date().toISOString(), reason, changed }];
+    writeFileSync(FIXTURE, JSON.stringify(fixture) + '\n');
+    console.log(`Partie « sim » mise à jour : ${changed.length} parties changées (${changed.join(', ')})`);
     process.exit();
   }
   mkdirSync(dirname(FIXTURE), { recursive: true });

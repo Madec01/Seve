@@ -69,6 +69,7 @@ export function createField(app) {
     });
     current = { kind, ...target };
     if (target.index !== undefined) app.revealPlot?.(target.index);
+    else if (target.id) app.revealInvestment?.(target.id, kind);
   }
 
   // ── Choix de la graine ────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@
 // onglet est visible, au plus une fois par image.
 
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
-import { CROPS } from '../data/crops.js';
+import { gameCrops } from '../core/perks.js';
 import { clear, dec, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
 import { cropCount, incomePhrase, incomeProfile, season } from './text.js';
@@ -344,7 +344,7 @@ export function createPanel(app) {
     // Marché
     if (lvl.modifiers.priceVolatility) {
       const crops = q.plantableCrops();
-      const all = CROPS.filter((c) => !lvl.crops || lvl.crops.includes(c.id));
+      const all = gameCrops(lvl, game.state.perks || {});
       statsBody.append(
         section(
           'Cours du marché aujourd\'hui',

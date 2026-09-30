@@ -2,7 +2,7 @@
 // Chaque accès est protégé (navigation privée, stockage plein ou désactivé) : en cas d'échec,
 // le jeu continue sans sauvegarde et les lectures renvoient des valeurs par défaut.
 
-import { PROGRESS_SCHEMA, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress, recordRunEnd } from './core/progression.js';
+import { PROGRESS_SCHEMA, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
 
 const PREFIX = 'une-annee-a-la-ferme.';
 const KEYS = {
@@ -98,16 +98,6 @@ export function progressMigration() {
 
 export function saveProgress(progress) {
   return write(KEYS.progress, progress);
-}
-
-/**
- * Note le résultat d'un niveau gagné (compatibilité v2 ; la v3 utilise progression.recordRunEnd,
- * qui compte aussi les cumuls et les succès). Renvoie { progress, newBest, newStars, firstTime }.
- */
-export function recordVictory(levelId, stars, money) {
-  const res = recordRunEnd(loadProgress(), { levelId, outcome: 'victory', stars, money, summary: null, perksActive: false });
-  saveProgress(res.progress);
-  return { progress: res.progress, newBest: res.rewards.newBest, newStars: res.rewards.newStars, firstTime: res.rewards.firstTime };
 }
 
 /** Le niveau 1 est toujours ouvert ; les suivants s'ouvrent quand le précédent est terminé. */
