@@ -16,6 +16,7 @@
 //   actors.rectOf(hit)                     rectangle (px monde) d'une cible (surbrillance)
 //   actors.onEvent(type, payload, layout)  réactions (envol des corbeaux, retour de Joseph…)
 //   actors.stats()                         nombres d'acteurs dessinés (mesures)
+//   actors.markers()                       positions des employés, de Joseph, des visiteurs (mini-carte)
 //
 // Lecture seule : l'état du jeu n'est jamais modifié. Les heures des tâches et des passages sont celles
 // du cœur (secondes écoulées dans la journée, state.time.elapsed) : à ×4, tout va 4 fois plus vite.
@@ -130,6 +131,21 @@ export function createCareerActors() {
     if (joseph) joseph.y += dy;
   }
 
+  // Bords du monde (px) : carte 2D (x0 < 0 avec des terrains à gauche), sinon 0 … largeur.
+  const worldX0 = () => Math.min(0, layout?.x0 ?? 0);
+  const worldX1 = () => layout?.x1 ?? layout?.width ?? 0;
+
+  /**
+   * Repères de la mini-carte : [{ kind: 'staff' | 'joseph' | 'visitor', x, y, working?, id? }] (px monde).
+   */
+  function markers() {
+    const out = [];
+    for (const a of staff.values()) if (a.visible && a.s) out.push({ kind: 'staff', id: a.id, x: a.x, y: a.y, working: !!a.working });
+    if (joseph && joseph.state !== 'out') out.push({ kind: 'joseph', x: joseph.x, y: joseph.y });
+    for (const v of visitors.values()) if (!v.leaving) out.push({ kind: 'visitor', id: v.id, x: v.x, y: v.y });
+    return out;
+  }
+
   // ── Points des cibles ────────────────────────────────────────────────────────────────
   function homePoint(k = 0) {
     // Devant la maison, en deux rangs (le perron puis le pied des murs), sans cacher la porte.
@@ -164,7 +180,7 @@ export function createCareerActors() {
       }
       case 'lot': {
         const l = layout.lots.find((e) => e.id === target.lotId);
-        if (l) return { x: 7 * T + (k % 3) * 10, y: l.lane * T + 12 };
+        if (l) return { x: ((l.ox || 0) + 7) * T + (k % 3) * 10, y: l.lane * T + 12 };
         break;
       }
       case 'home':
@@ -283,20 +299,20 @@ export function createCareerActors() {
           : { x: h.stand.x * T - 8 - k * 18, y: (h.roadY + 2) * T + 13 };
         const sprite = kind === 'pet' ? (o.data?.petId === 'dog' ? 'pet.dog' : 'pet.cat') : kind === 'merchant' ? 'npc.visitor.3' : VISITOR_SPRITES[Math.floor(tileHash(String(o.id).length, k, 5) * 2)];
         // Déjà là au chargement de la partie ; sinon il arrive par la route.
-        visitors.set(o.id, { id: o.id, kind, sprite, x: kind === 'pet' || !initialized ? spot.x : -24, y: spot.y, tx: spot.x, ty: spot.y, facing: 1, walkD: 0, cropId: o.data?.cropId || null });
+        visitors.set(o.id, { id: o.id, kind, sprite, x: kind === 'pet' || !initialized ? spot.x : worldX0() - 24, y: spot.y, tx: spot.x, ty: spot.y, facing: 1, walkD: 0, cropId: o.data?.cropId || null });
       }
       k++;
     }
     for (const [id, v] of [...visitors]) {
       if (seen.has(id)) continue;
-      if (!v.leaving) { v.leaving = true; v.tx = layout.width + 24; v.facing = 1; }
+      if (!v.leaving) { v.leaving = true; v.tx = worldX1() + 24; v.facing = 1; }
     }
     // Touristes (événement au hasard) et villageois des jours de fête : promeneurs sur la route.
     const want = (ev.active?.kind === 'tourists' || ev.active?.id === 'tourists' ? 3 : 0) + (ev.today ? 3 : 0);
     while (walkers.filter((w) => !w.leaving).length < want) {
       const n = walkers.length;
       const dir = n % 2 ? -1 : 1;
-      walkers.push({ x: !initialized ? (2 + n * 3.5) * T : dir > 0 ? -20 - n * 30 : layout.width + 20 + n * 30, y: road - 2 + (n % 3) * 5, dir, sprite: VISITOR_SPRITES[n % 3], walkD: 0, pause: 0, leaving: false, stopX: rnd(3, 11) * T });
+      walkers.push({ x: !initialized ? (2 + n * 3.5) * T : dir > 0 ? worldX0() - 20 - n * 30 : worldX1() + 20 + n * 30, y: road - 2 + (n % 3) * 5, dir, sprite: VISITOR_SPRITES[n % 3], walkD: 0, pause: 0, leaving: false, stopX: rnd(3, 11) * T });
     }
     let alive = walkers.filter((w) => !w.leaving).length;
     for (const w of walkers) {
@@ -323,7 +339,7 @@ export function createCareerActors() {
     const spot = josephSpot();
     const road = (layout.home.roadY + 1) * T + 6;
     if (!joseph && !initialized) joseph = { x: spot.x, y: spot.y, route: [spot], d: 0, state: 'wait', reason, t: 0, stay, facing: -1, walkD: 0 };
-    else if (!joseph) joseph = { x: -20, y: road, route: [{ x: -20, y: road }, { x: layout.farmerHome.x - 20, y: road }, { x: spot.x, y: road }, spot], d: 0, state: 'in', reason, t: 0, stay, facing: 1, walkD: 0 };
+    else if (!joseph) joseph = { x: worldX0() - 20, y: road, route: [{ x: worldX0() - 20, y: road }, { x: layout.farmerHome.x - 20, y: road }, { x: spot.x, y: road }, spot], d: 0, state: 'in', reason, t: 0, stay, facing: 1, walkD: 0 };
     else {
       joseph.reason = reason;
       joseph.stay = stay;
@@ -552,7 +568,7 @@ export function createCareerActors() {
         w.stopped = true;
         w.pause = rnd(1.2, 3);
       }
-      const out = w.dir > 0 ? w.x > layout.width + 30 : w.x < -30;
+      const out = w.dir > 0 ? w.x > worldX1() + 30 : w.x < worldX0() - 30;
       if (out) {
         if (w.leaving) walkers.splice(i, 1);
         else {
@@ -572,7 +588,7 @@ export function createCareerActors() {
       j.leaveIn -= dt;
       if (j.leaveIn <= 0 && j.state !== 'out') {
         const road = (layout.home.roadY + 1) * T + 6;
-        j.route = [{ x: j.x, y: j.y }, { x: j.x, y: road }, { x: -30, y: road }];
+        j.route = [{ x: j.x, y: j.y }, { x: j.x, y: road }, { x: worldX0() - 30, y: road }];
         j.d = 0;
         j.state = 'out';
         delete j.leaveIn;
@@ -956,5 +972,5 @@ export function createCareerActors() {
     return { staff: staff.size, animals, crows: crows.size, flying: flying.length, machines: machines.size, walkers: walkers.length, visitors: visitors.size, joseph: !!joseph, drawn: lastDrawn };
   }
 
-  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, get joseph() { return joseph; } };
+  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, markers, get joseph() { return joseph; } };
 }

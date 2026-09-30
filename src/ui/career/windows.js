@@ -297,7 +297,7 @@ export function createCareerWindows(app, { getGame, openJournal }) {
       /* valeur par défaut */
     }
     const lines = [
-      ['Bienvenue chez vous ! La ferme est petite, mais la forêt au-dessus est à vendre, terrain par terrain…', 'happy'],
+      ['Bienvenue chez vous ! La ferme est petite, mais la forêt tout autour est à vendre, terrain par terrain…', 'happy'],
       [`Chaque saison, il y a des charges : ${fmt(charges)} pièces pour commencer. Elles grandissent avec la ferme.`, 'content'],
       ['Je vous ai laissé deux poules. Touchez le poulailler pour ramasser les œufs !', 'proud'],
     ];

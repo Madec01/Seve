@@ -8,8 +8,12 @@
 //   openTab(id, { fromUser }), activeTab(), tabs(),
 //   onHit(hit) → bool,              toucher dans la scène (terrains, abris, employés, corbeaux…)
 //   open.* (map, lot, building, storage, team, employee, hire, journal, quest, offer, charges),
-//   refresh(), frame()
+//   refresh(), frame(),             frame() : à chaque image (mini-carte)
+//   minimap                         la mini-carte (src/ui/career/minimap.js)
 // }
+//
+// Carte 2D (retours d'un joueur) : on achète un terrain précis de la lisière (buyLot(lot.id)), la vue va sur lui
+// après l'achat ; la mini-carte en bas à droite et la grande carte (re-toucher « Ferme ») servent à se déplacer.
 //
 // Les feuilles de la carrière sont « vivantes » : leur contenu est reconstruit (au plus une fois par
 // image) quand le jeu change, et seulement si ce qui est affiché a changé (un toucher en cours ne
@@ -24,12 +28,13 @@ import { icon, sprite, cropIcon } from '../icons.js';
 import { season } from '../text.js';
 import { cIcon, joseph, lotIcon, buildingIcon, portrait, animalProductIcon, animalIcon, capitalize } from './util.js';
 import { shopContent } from './shop.js';
-import { mapContent, lotContent, buildOptionsContent, planPickerContent } from './lots.js';
+import { mapContent, lotContent, buildOptionsContent, planPickerContent, lotInView } from './lots.js';
 import { buildingContent, storageContent } from './buildings.js';
 import { teamContent, employeeContent, hireContent } from './staff.js';
 import { journalContent, chargesContent } from './journal.js';
 import { offerContent, questContent, offerTitle } from './events.js';
 import { createCareerWindows } from './windows.js';
+import { createMinimap } from './minimap.js';
 
 export const CAREER_TABS = [
   { id: 'farm', label: 'Ferme', icon: 'seed', key: 'F' },
@@ -53,6 +58,7 @@ export function createCareerUI(app) {
   let live = null; // { spec, lastHtml }
   let queued = false;
   let journalTab = 'farm';
+  let mapHere = null; // terrain regardé quand la carte s'est ouverte
   const seen = { candidatesDay: null, questId: null, offers: new Set() };
   const badges = { staff: false, journal: false };
 
@@ -64,6 +70,37 @@ export function createCareerUI(app) {
 
   const active = () => !!game && app.game === game && game.mode === 'career' && !app.inMenu;
   const Q = () => game?.query.career || {};
+
+  const minimap = createMinimap(app, {
+    active,
+    openLot: (lotId) => {
+      if (lotId) open.lot(lotId);
+    },
+    openMap: () => open.map(),
+  });
+
+  /** Montre un terrain à l'écran (défilement animé dans les deux sens) ; ferme la feuille ouverte. */
+  function showLot(lotId) {
+    if (app.sheets.isOpen()) app.sheets.close();
+    requestAnimationFrame(() => app.scene?.focusLot?.(lotId, { animate: true }));
+  }
+
+  /**
+   * Achète CE terrain de la lisière (carte 2D) ; ouvre sa fiche (choisir l'aménagement) et amène la vue sur lui
+   * (après la reconstruction de la disposition : deux images plus tard).
+   */
+  function buyLot(lotId) {
+    const res = act('buyLot', lotId);
+    if (res?.ok) {
+      const id = res.lotId || lotId;
+      open.lot(id);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (app.sheets.current === 'c-lot') app.revealLot?.(id, 'c-lot');
+        else app.scene?.focusLot?.(id, { animate: true });
+      }));
+    }
+    return res;
+  }
 
   /** Requête de carrière protégée (lot pas encore livré ou erreur → valeur par défaut). */
   function q(name, fallback, ...args) {
@@ -206,6 +243,12 @@ export function createCareerUI(app) {
     act,
     schedule,
     close: closeSheet,
+    buyLot,
+    showLot,
+    minimap,
+    get mapHere() {
+      return mapHere;
+    },
     get open() {
       return open;
     },
@@ -232,6 +275,8 @@ export function createCareerUI(app) {
       app.hints.maybe('career.lotForSale', { selector: '#c-shop-lot' });
     },
     map() {
+      // « Vous êtes ici » : le terrain au centre de la vue, avant que la feuille ne la couvre.
+      if (app.sheets.current !== 'c-map') mapHere = app.sheets.isOpen() ? mapHere : lotInView(app);
       openLive({ id: 'c-map', kind: 'panel', tall: true, title: 'Carte de la ferme', icon: () => cIcon('map', 'sprite--md', 'seed'), build: () => mapContent(ui) });
     },
     lot(lotId) {
@@ -395,7 +440,9 @@ export function createCareerUI(app) {
         else open.journal('joseph');
         return true;
       case 'lotForSale': {
-        const next = q('nextLot', null);
+        // Le panneau « À vendre » touché : la feuille d'achat de CE terrain (prix, ou pourquoi pas encore).
+        const lot = hit.lotId ? q('lot', null, hit.lotId) : null;
+        const next = lot || q('nextLot', null);
         if (next) open.lot(next.id);
         else open.map();
         return true;
@@ -639,10 +686,25 @@ export function createCareerUI(app) {
         else if (ev.outcome === 'expired') t.show({ kind: 'info', icon: 'calendar', text: 'Une proposition a expiré : pas grave !', duration: 2600 });
         break;
       case 'questOffered':
+        // Demandée depuis le Carnet : la feuille s'ouvre déjà (pas de message en double).
+        if (ev.asked) break;
         app.audio.play('warning', { volume: 0.45 });
         t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), title: 'Joseph a une demande', text: `${ev.quest?.text || 'Une quête vous attend.'} Touchez pour voir.`, duration: 6000, onClick: () => open.quest() });
         badges.journal = true;
         app.hints.maybe('career.quest', { selector: '#tab-journal' });
+        break;
+      case 'questReminder':
+        // Rappels à 3 jours et à 1 jour de l'échéance d'une quête acceptée (une fois chacun).
+        app.audio.play('warning', { volume: 0.35 });
+        t.show({ kind: ev.daysLeft <= 1 ? 'warn' : 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-reminder', title: ev.daysLeft <= 1 ? 'Quête de Joseph : dernier jour demain' : `Quête de Joseph : plus que ${plural(ev.daysLeft, 'jour')}`, text: `« ${ev.line || 'Petit rappel, rien de grave !'} » Touchez pour voir.`, duration: 5600, onClick: () => open.quest() });
+        break;
+      case 'questWithdrawn':
+        // Proposition jamais acceptée : Joseph la retire, sans reproche (message discret).
+        t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-withdrawn', text: `« ${ev.line || 'Finalement, je me suis débrouillé. Merci quand même !'} » — Joseph`, duration: 3400 });
+        break;
+      case 'offerReminder':
+        app.audio.play('warning', { volume: 0.35 });
+        t.show({ kind: 'warn', sprite: cIcon('visitor'), key: `c-offer-reminder-${ev.offerId}`, title: 'Commande : dernier jour demain', text: `${ev.text || 'Une commande attend encore.'} Touchez pour voir.`, duration: 5600, onClick: () => open.offer(ev.offerId) });
         break;
       case 'questProgress':
         break;
@@ -656,7 +718,8 @@ export function createCareerUI(app) {
         t.show({ kind: 'success', sprite: joseph('happy', 'sprite--sm'), title: `Quête réussie : +${fmt(ev.amount || 0)} pièces`, text: `« ${ev.line || 'Formidable, merci !'} »${ev.ecus ? ` · +${plural(ev.ecus, 'écu')}` : ''}`, duration: 5200 });
         break;
       case 'questExpired':
-        if (!ev.declined) t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), text: `« ${ev.line || 'Pas grave, une autre fois !'} » — Joseph${ev.amount ? ` (+${fmt(ev.amount)} pour ce qui était livré)` : ''}`, duration: 4200 });
+        // Échec en douceur : aucune pénalité, ce qui a été mis de côté est payé.
+        if (!ev.declined) t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), title: 'Quête de Joseph terminée', text: `« ${ev.line || 'Ce n\'est pas grave du tout ! Merci d\'avoir essayé.'} »${ev.amount ? ` +${fmt(ev.amount)} pièces pour ce qui était livré.` : ' Aucune pénalité.'}`, duration: 5200 });
         break;
       case 'josephHeart':
         app.audio.play('unlock', { volume: 0.5 });
@@ -792,6 +855,11 @@ export function createCareerUI(app) {
     windows.process();
   }
 
+  /** À chaque image (après le dessin de la scène) : la mini-carte. */
+  function frame() {
+    minimap.frame();
+  }
+
   return {
     active,
     bind,
@@ -807,6 +875,10 @@ export function createCareerUI(app) {
     q,
     act,
     refresh: schedule,
+    frame,
+    minimap,
+    buyLot,
+    showLot,
     windows,
     get game() {
       return game;

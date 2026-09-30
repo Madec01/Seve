@@ -104,11 +104,34 @@ export function questCard(ui, quest) {
   }
   return el(
     'article.c-quest',
+    { id: 'c-quest-card' },
     josephSays(`« ${quest.line ? `${quest.line} ` : ''}${quest.text || ''} »`.replace('«  »', '« J\'aurais besoin d\'un petit service… »'), quest.accepted ? 'content' : 'surprised'),
     quest.accepted ? el('div.c-offer-prog', bar(progress, n), el('small', `${fmt(progress)} / ${fmt(n)}`)) : null,
-    el('div.c-quest-facts', el('span', icon('star', 'sm'), `Récompense : ${rewardText}`), quest.daysLeft !== undefined && quest.daysLeft !== null ? el('span', icon('calendar', 'sm'), quest.daysLeft <= 0 ? 'Dernier jour !' : `Jusqu'à la fin de la saison (${plural(quest.daysLeft, 'jour')})`) : null),
+    el('div.c-quest-facts', el('span', icon('star', 'sm'), `Récompense : ${rewardText}`), questTimeFacts(quest)),
     actions.length ? el('div.c-offer-actions', actions) : null,
   );
+}
+
+/**
+ * Délais d'une quête (docs/ARCHITECTURE.md « rythme tranquille ») : proposée, aucun compte à rebours (« Si vous
+ * acceptez : jusqu'à la fin de l'hiver » et combien de temps Joseph attend la réponse) ; acceptée, l'échéance du cœur
+ * (deadlineText) et les jours qui restent (mêmes mots que les rappels : « plus que 3 jours », « demain soir »).
+ */
+export function questTimeFacts(quest) {
+  const out = [];
+  const deadline = quest.deadline || null;
+  const left = Number.isFinite(quest.daysLeft) ? quest.daysLeft : null;
+  if (!quest.accepted) {
+    if (deadline || left !== null) out.push(el('span.c-quest-when', icon('calendar', 'sm'), `Délai si vous acceptez : jusqu'à ${deadline || 'plus tard'}${left !== null ? ` (${plural(left, 'jour')})` : ''}`));
+    const wait = quest.offerDaysLeft;
+    if (Number.isFinite(wait)) out.push(el('span.c-quest-wait', icon('info', 'sm'), wait <= 0 ? 'Joseph attend votre réponse jusqu\'à ce soir.' : `Rien ne presse : Joseph attend votre réponse encore ${plural(wait, 'jour')}.`));
+    return out;
+  }
+  if (left === null) return quest.deadlineText ? [el('span.c-quest-when', icon('calendar', 'sm'), quest.deadlineText)] : [];
+  const urgent = left <= 1;
+  const text = left <= 0 ? 'Dernier jour : jusqu\'à ce soir !' : left === 1 ? 'Jusqu\'à demain soir (dernier jour demain).' : `${quest.deadlineText || `Jusqu'à ${deadline}`} · plus que ${plural(left, 'jour')}`;
+  out.push(el(`span.c-quest-when${urgent ? '.is-urgent' : ''}`, icon('calendar', 'sm'), text));
+  return out;
 }
 
 function questAct(ui, action) {
@@ -118,6 +141,47 @@ function questAct(ui, action) {
 
 export function questContent(ui) {
   const quest = ui.q('quest', null);
-  if (!quest) return el('div.info-sheet', josephSays('« Rien à vous demander pour l\'instant. Je repasserai à la prochaine saison ! »', 'content'));
-  return el('div.info-sheet.c-quest-sheet', questCard(ui, quest), el('p.sheet-hint', 'Livraison : depuis le grenier, ou avec vos prochaines récoltes (mises de côté pour Joseph). Refuser ne coûte rien.'));
+  if (!quest) return el('div.info-sheet', josephSays('« Rien à vous demander pour l\'instant. Je repasserai plus tard ! »', 'content'), askJosephBlock(ui));
+  return el('div.info-sheet.c-quest-sheet', questCard(ui, quest), el('p.sheet-hint', quest.accepted ? 'Livraison : depuis le grenier, ou avec vos prochaines récoltes (mises de côté pour Joseph). Si c\'est raté, ce n\'est pas grave : ce qui est livré est payé.' : 'Refuser ne coûte rien. Si c\'est raté, aucune pénalité : ce qui est livré est payé.'));
+}
+
+/**
+ * « Demander un service à Joseph » (Carnet, fiche de quête vide) : joseph().ask = { canAsk, reason,
+ * nextOfferInSeasons } ; réponse de Joseph (askQuest().line) en message.
+ */
+export function askJosephBlock(ui) {
+  const { app } = ui;
+  const j = ui.q('joseph', null);
+  const ask = j?.ask;
+  if (!ask) return null;
+  const has = typeof ui.game?.actions.career?.askQuest === 'function';
+  if (!has) return null;
+  const next = ask.nextOfferInSeasons;
+  const note = ask.canAsk
+    ? next
+      ? `Sinon, Joseph repassera de lui-même ${next <= 1 ? 'à la prochaine saison' : `dans ${plural(next, 'saison')}`}.`
+      : 'Joseph propose aussi des services de lui-même, de temps en temps.'
+    : ask.reason;
+  return el(
+    'section.c-sec.c-ask',
+    { id: 'c-ask' },
+    el(
+      `button.btn.btn--wide${ask.canAsk ? '.btn--red' : '.is-disabled'}`,
+      { type: 'button', id: 'c-ask-joseph', 'aria-disabled': ask.canAsk ? 'false' : 'true', onclick: () => {
+        if (!ask.canAsk) {
+          app.audio.play('error');
+          if (ask.reason) app.toasts.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), text: ask.reason, duration: 3200 });
+          return;
+        }
+        const res = ui.act('askQuest');
+        if (!res?.ok) return;
+        app.audio.play(res.quest ? 'confirm' : 'click', { volume: 0.7 });
+        app.toasts.show({ kind: 'info', sprite: joseph(res.quest ? 'happy' : 'content', 'sprite--sm'), key: 'c-ask', text: `« ${res.line || (res.quest ? 'Justement, j\'y pensais…' : 'Rien pour l\'instant, merci !')} » — Joseph`, duration: 4200 });
+        if (res.quest && app.sheets.current !== 'c-quest') ui.open.quest();
+      } },
+      joseph('content', 'sprite--sm'),
+      el('span', 'Demander un service à Joseph'),
+    ),
+    note ? el('p.stats-note', note) : null,
+  );
 }

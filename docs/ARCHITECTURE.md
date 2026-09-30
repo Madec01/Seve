@@ -1404,3 +1404,210 @@ Corrections et réglages après l'assemblage des cinq lots (tests : `tests/caree
 - **Simulation** : `--matrix --seasons 7,10,14 --difficulties detente,classique` (une partie de la matrice) ; robot
   casual de `tools/sim-career-staff.js` : au plus 2 terrains de plus arrosés et 2 de plus mécanisés par an.
 
+
+## Carrière v2 — carte 2D (contrat du cœur, 2026-09-30)
+
+Retours d'un vrai joueur : agrandir la ferme **sur les côtés** (pas seulement vers le haut). Les terrains sont des
+**blocs d'une grille** autour de la ferme de départ. `CAREER_VERSION = 2` (migration automatique des carrières v1).
+
+### Grille et identifiants (`src/data/career/lots.js`)
+
+- Case `(col, row)` : `col` −2 … 2 (0 = la colonne d'origine, négatif = à gauche), `row` 0 … 6 vers le haut
+  (`LOT_GRID = { cols: [-2, 2], rows: [0, 6], home: { col: 0, row: 0 }, blockCols: 14, blockRows: 11, homeRows: 40,
+  topForest: 2, legacyRows: 12 }`). La **ferme de départ** (maison, champ de départ, basse-cour : `home`, `start`,
+  `yard`) occupe la case (0, 0) ; sa taille ne change pas. Rangée 0 : terrains de côté, à gauche et à droite de la ferme.
+- Identifiant d'une case : `lotIdAt(col, row)` — colonne 0 : `lot${row + 2}` (**les anciens identifiants** : `lot3` =
+  rangée 1…) ; côtés : `lot${row + 2}w${-col}` (ouest) / `lot${row + 2}e${col}` (est), ex. `lot2w1` = (−1, 0),
+  `lot5e2` = (2, 3). `lotCellOf(id) → { col, row } | null`, `inLotGrid(col, row)`, `lotNameAt(col, row)` (noms fixes :
+  `LOT_NAMES` pour la colonne 0, `SIDE_LOT_NAMES` pour les côtés, tous différents).
+- `state.career.lots[k]` : + `col`, `row` (entiers ; ferme de départ : 0, 0). `index` = **ordre d'achat** (3, 4, …),
+  plus la rangée. Un terrain acheté ne bouge jamais.
+
+### Achat
+
+- **À vendre** (« lisière ») : une case de la grille, libre, qui **touche par un côté** un terrain possédé ou la ferme
+  de départ. Au départ : (0, 1) `lot3`, (−1, 0) `lot2w1`, (1, 0) `lot2e1`. Plus de lisière quand la ferme a
+  `MAX_LOTS` terrains.
+- **Achetable** (`buyable`) : sur la lisière **et** le rang permet un terrain de plus (`MAX_LOTS_BY_RANK` = 1, 3, 6,
+  9, 12, **16** aux rangs 1 à 6 ; `MAX_LOTS = 16`). L'argent n'est pas compté (`canBuy` = achetable + assez d'argent).
+- **Prix** : selon le nombre de terrains déjà possédés, quelle que soit la case : `LOT_PRICES` = 250, 400, 600, 900,
+  1 300, 1 900, 2 700, 3 800, 5 300, 7 400, 10 000, 14 000, **18 500, 24 000, 30 000, 37 000** (total 158 050) ;
+  +15 de charges de saison par terrain (Détente ; +25 Classique), inchangé. Le verger de Joseph (8 ♥) : moitié prix
+  sur toute la lisière, pour le prochain achat.
+- `actions.career.buyLot(lotId?)` → `{ ok, lotId, index, col, row, cost }` (+ `special`, `lotType` pour le verger de
+  Joseph). Sans argument : le terrain proposé (`nextLot()`). Refus : « Terrain inconnu. » (hors grille),
+  « Ce terrain est déjà à vous. », « Ce terrain ne touche pas encore votre ferme. », « Rang N requis », « Pas assez
+  d'argent… », « Tous les terrains sont achetés. ».
+- Événement `lotBought { lotId, index, col, row, cost, name }`.
+
+### Requêtes
+
+```js
+lots() → [ // possédés (ordre d'achat : home, start, yard, puis achats), PUIS la lisière à vendre
+  { id, index, col, row, fixed /* home/start/yard */, owned, bought, forSale, buyable, canBuy, lockedReason, reason,
+    lockedByRank, price /* payé, ou prix de vente */, basePrice?, special?, chargeIncrease?, type /* null à vendre */,
+    typeName, name, developCost, plots, slots, buildings, machines, staff, plan } ]
+lot(id)                       // un terrain possédé OU à vendre (même forme)
+nextLot() → null | vente      // le terrain proposé : colonne la plus proche du centre, puis le plus bas, puis la gauche
+grid() → { cols: [min, max], rows: [min, max],  // étendue MONTRÉE : ferme + possédés + lisière (verrouillée comprise)
+           home: { col: 0, row: 0 }, bounds: { cols: [-2, 2], rows: [0, 6] },
+           block: { cols: 14, rows: 11, homeRows: 40, topForest: 2 },
+           lots: lots(),
+           cells: [{ col, row, id, name, type, state: 'home' | 'owned' | 'buyable' | 'locked' | 'forest' }] }
+           // cells : toute la grille (mini-carte), de la rangée la plus haute à la plus basse, de gauche à droite
+```
+
+### Géométrie du monde (pour le rendu)
+
+- Tuile 16 px. Un bloc = **14 × 11 tuiles** (224 × 176 px) : 12 utiles, x 0 et x 13 forêt ou haie ; 10 lignes de
+  contenu + l'allée (ligne 10).
+- Largeur du monde = `(cols[1] − cols[0] + 1) × 14` tuiles sur l'étendue de `grid()` (lisière comprise, montrée en forêt
+  + panneau « À vendre ») ; colonne `c` à x = `14 × c` tuiles (négatif à gauche : la colonne 0 ne bouge pas).
+- Hauteur : `topForest (2) + rows[1] × 11 + homeRows (40)` tuiles. Rangée `r ≥ 1` : `y = 2 + (rows[1] − r) × 11`.
+  Rangée 0 = la bande de la ferme de départ (40 lignes : basse-cour 11, champ de départ 13, maison et route 16) ; un
+  terrain de côté en rangée 0 occupe ses **11 premières lignes** (à côté de la basse-cour, juste sous la rangée 1 de sa
+  colonne) ; dessous, à côté du champ et de la maison : décor (forêt, route prolongée).
+- Anciennes carrières : colonne 0 jusqu'à la rangée 12 (`legacyRows`) : `rows[1]` peut dépasser 6.
+
+### Sauvegarde et migration
+
+- `checkCareerState` : `lots[k].index === k` ; ferme de départ en (0, 0) ; chaque terrain acheté : identifiant =
+  `lotIdAt(col, row)`, case dans la grille (ou colonne 0 jusqu'à la rangée 12 pour une ancienne carrière), case libre,
+  et **touche** la ferme ou un terrain acheté avant lui. Décor `lotN(w|e)K.corner` accepté.
+- `migrateCareer` v1 → v2 : terrains achetés → `col 0`, `row = index − 2` (même identifiant, même image) ; ferme de
+  départ → (0, 0). Les anciennes carrières au rang 6 peuvent acheter jusqu'à 4 terrains de plus, sur les côtés.
+
+## Carrière v2 — rythme tranquille des quêtes et des commandes (2026-09-30)
+
+Retours : « trop de quêtes en peu de temps », « une saison pour planter 10 patates, j'ai oublié d'appuyer sur pause,
+c'était déjà trop tard ». Choix : **Joseph propose de lui-même, rarement, et le délai ne court qu'après « Accepter »**
+(le plus reposant : rien n'est raté si on ne regarde pas ; on peut aussi lui demander un service quand on a envie).
+
+- `QUEST_PACE = { seasonsBetweenOffers: 2, offerSeasons: 2, minSeasons: 2, growthFactor: 3, marginDays: 2,
+  reminders: [3, 1] }` (`src/data/career/quests.js`).
+- **Une seule quête à la fois.** Proposition au début d'une saison (rang ≥ 2) si aucune quête et au moins 2 saisons
+  depuis la précédente proposition (`joseph.lastOfferSeason`, saison absolue = `(année − 1) × 4 + saison`).
+- **Proposition** (`accepted: false`) : aucun compte à rebours ; elle attend jusqu'au soir du dernier jour de la
+  saison SUIVANTE (`quest.offerEndDay`), puis Joseph la retire gentiment : événement `questWithdrawn { quest, line }`
+  (pas de `questExpired`).
+- **Délai** (à l'acceptation, `questDeadline(state, q)`) : au moins `max(2 × durée de saison, 3 × pousse + 2)` jours
+  (pousse : la culture ; produit : culture + jours d'atelier ; œufs : n ÷ pondeuses), arrondi au **soir du dernier
+  jour** de la saison où il tombe (« jusqu'à la fin de l'hiver »). Saisons de 7 jours : 14 à 20 jours (citrouilles : 23 à
+  29) ; 14 jours : 28 à 41.
+  `quest.acceptedDay`, `quest.endDay`. Le temps ne passe pas en pause (vitesse 0 : `update` ne fait rien).
+- **Rappels** : `questReminder { quest, daysLeft: 3 | 1, line }` à l'aube, une fois chacun (`quest.reminded`).
+- **Échec doux** : `questExpired { quest, accepted: true, amount, line }` — ce qui a été mis de côté est payé au prix
+  normal, aucune pénalité, aucun cœur perdu ; réplique « Ce n'est pas grave du tout ! Merci d'avoir essayé… ».
+- **Taille** (`QUEST_TEMPLATES[].n = { base, perRank, jitter, capPerPlot?, capPerTree?, min? }`) :
+  `base + perRank × (rang − 2) + tirage 0..jitter`, plafonnée par la ferme (culture : ½ des parcelles de champ ouvertes,
+  au moins 3 ; fruits : 2 par arbre). Culture 4-5 au rang 2, 12-13 au rang 6 ; produits 2-3 → 6-7 ; œufs 6-8 → 22-24 ;
+  fruits 3-4 → 7-8 ; pommiers 2. Culture d'une quête : semable cette saison **et** la suivante, pousse ≤ durée de saison.
+- **Demander un service** : `actions.career.askQuest() → { ok, quest | null, line }` (rang ≥ 2, pas de quête en cours,
+  une fois par jour ; refus : « Rang 2 requis », « Joseph attend déjà votre réponse. », « Une quête de Joseph est déjà
+  en cours. », « … repassez demain. ») ; `questOffered.asked = true`.
+- `quest()` : + `endDay`, `deadline` (« la fin de l'hiver »), `deadlineText` (« Jusqu'à la fin de l'hiver »),
+  `offerDaysLeft` / `offerEndDay` (proposition : jours avant qu'elle parte ; `null` une fois acceptée). Pour une
+  proposition, `daysLeft` = le délai qu'on aurait en acceptant aujourd'hui. `acceptQuest().line` dit l'échéance.
+- `joseph().ask = { canAsk, reason, nextOfferInSeasons, seasonsBetweenOffers }` (Carnet : bouton « Demander un
+  service » et « Joseph repassera dans N saisons »).
+- **Commandes de visiteurs** : tirage du jour 0,3 → **0,15** ; poids visiteur 30 → 20, corbeaux 15 → 10, marchand
+  10 → 8 ; commande de **5 jours** (7 en saisons de 14 jours : `visitorDays(state)`) au lieu de 2 ; 3 à 5 récoltes (2 à 4
+  si chères) ; seulement une culture qu'on peut avoir à temps (au grenier, déjà semée, ou pousse ≤ jours − 1) ;
+  **une seule commande à la fois** ; rappel `offerReminder { offerId, kind, daysLeft: 1, data, text }` la veille du
+  dernier jour d'une commande acceptée. Au plus une quête + une commande ouvertes. Fêtes inchangées.
+- Migration (quête d'une carrière v1) : `offerEndDay` = fin de la saison suivante ; quête acceptée : échéance =
+  max(ancienne, délai d'aujourd'hui) (jamais raccourcie) ; `joseph.lastOfferSeason` = la saison en cours.
+
+## Carrière v2 — « Ce que fait ce bâtiment » (fiches, 2026-09-30)
+
+`src/data/career/descriptions.js` (pur) : pour chaque bâtiment (maison, grenier, étal, serre, chambre d'hôte, 8 abris,
+3 ateliers), machine (8), animal (8), aménagement de la ferme (ruche, panneau) et aménagement de terrain (7) :
+`role` (une phrase « À quoi ça sert »), `tips` (conseils) ; lignes **calculées à partir des données** :
+`effectLines(kind, id, level)` (capacité, places et produits des ateliers, revenus par saison, entretien, carburant,
+traction…), `describe(kind, id, level) → { kind, id, role, tips, effectLines, nextEffectLines, levels: [{ level, name,
+cost, rank, lines }] }`, `aboutFields(kind, id, level)`, `DESCRIBED` (ids décrits par genre).
+
+Champs ajoutés aux requêtes (`role`, `tips`, `effectLines` = niveau actuel, ou niveau 1 si pas encore construit,
+`nextEffectLines` = niveau suivant ou `null`, `levelLines` = tous les niveaux) :
+
+- `buildings()` / `building(id)` (bâtiment) ; `shelters()` / `shelter(id)` (abri, + `animalAbout` = description de
+  l'animal) ; `machines()` / `machine(key)` (niveau de la machine) et `machineCatalog()` (niveau 1) ;
+  `query.investments()` en carrière (animaux, ruche, panneau : `role`, `tips`, `effectLines`, `levelLines: []`) ;
+  `lotTypes(lotId)` (aménagements : `role`, `tips`, `effectLines`).
+- `query.career.about(kind, id, level?) → describe(...) + { level }` avec `kind` ∈ `'building' | 'machine' | 'animal'
+  | 'item' | 'lotType'` ; sans `level` : le niveau possédé (bâtiment, meilleure machine), sinon 1.
+- Tests : `tests/career-about.test.js` (chaque identifiant décrit, lignes par niveau, requêtes).
+
+## Carrière v2 — carte 2D : rendu (RENDER, 2026-09-30)
+
+Retour de joueur : agrandir la ferme **sur les côtés** et une **mini-carte**. Le cœur (lot CORE) place chaque terrain
+sur une case `(lot.col, lot.row)` et donne `query.career.grid()` ; le rendu en fait un monde 2D.
+
+- **Monde** (`src/render/layout-career.js`, pur) : un bloc de 14 × 11 tuiles par case ; colonne `c` = tuiles
+  `14c … 14c + 13` (**x négatif à gauche** : les coordonnées de la colonne 0 ne bougent jamais) ; ligne `r ≥ 1` au-dessus
+  de la basse-cour, ligne 0 à côté d'elle ; la ferme de départ (basse-cour, champ de départ, maison) reste en colonne 0.
+  `createCareerLayout(level, { career, plots, investments, grid })` ; `grid` = `query.career.grid()` (facultatif).
+  Terrains à vendre (`grid.lots` non possédés) : forêt assombrie du bloc + grand panneau (prix / cadenas écrits par la
+  scène, à jour 4 fois par seconde) ; toute autre case : forêt dense. Chemins : épine (x 12 du bloc) par suite de
+  terrains d'une colonne, jusqu'à la route pour la ligne 0 ; allées prolongées d'un bloc à son voisin de la même ligne.
+  `route(a, b)` : colonne 0 comme avant, sinon plus court chemin sur les allées (en cache).
+  Nouveaux champs : `x0`, `x1` (px), `grid { cMin, cMax, rMax, rowTop, rowBottom, x0Tiles, colsTiles, rowY(r), roadY,
+  homeBottom }`, `saleBands` (`saleBand` = le premier), `lots[].col/row/ox` (+ `price`, `buyable`, `lockedReason`,
+  `lockedByRank` des terrains à vendre), `bandAt(wy, wx?)`. `careerGridCells(career, grid)`, `careerGridKey(grid)`.
+- **Sans grille** (cœur d'avant) ou **ancienne carrière** en colonne : disposition **identique** à la précédente
+  (vérifié : parcelles, décor, chemins, forêt, cibles, trajets ; mode Niveaux identique au pixel près, captures
+  déterministes).
+- **Caméra** (`scene.js`) : zoom inchangé (une colonne de 12 tuiles utiles = la largeur du téléphone) ; défilement
+  horizontal du centre de la colonne la plus à gauche à celui de la plus à droite (bords du monde sur grand écran).
+  Couche fixe = tout le monde (≈ 1 120 × 2 250 px pour 5 colonnes), vue = l'écran ; parcelles et objets hors de la
+  vue non dessinés. API : `scrollBy(dx, dy)`, `fling(vx, vy)`, `setScroll(x, y)` (un argument : vertical, comme
+  avant), `getScroll()` / `maxScroll()` → `{ x, y }` (valent `y` dans un calcul), `focusLot` (les deux axes),
+  `focusWorld(wx, wy, { animate })`, `viewRect()`, `getMinimap({ w, h, ctx?, x?, y? })`, `minimapToWorld(mx, my)`,
+  `minimapLotAt(mx, my)`. `actors.markers()` (employés, Joseph, visiteurs).
+- **Ce que l'interface doit faire** : glisser en 2D (`scrollBy(-dx, -dy)` au lieu de `scrollBy(-dy)` en carrière,
+  `fling(vx, vy)`), un petit canevas de mini-carte (ex. 96 × 132 px CSS × dpr, en bas à droite au-dessus des onglets)
+  redessiné à chaque image par `getMinimap({ w, h, ctx })` (fond en cache : ≈ 0,15 ms) ; toucher la mini-carte →
+  `minimapToWorld` puis `focusWorld(x, y, { animate: true })` (ou `minimapLotAt` → fiche du terrain).
+- **Aperçu** : `tools/scene-preview.html?career=1&stage=8&sides=6&minimap=1` (glisser en 2D, toucher la mini-carte) ;
+  `sides=N` achète N terrains de côté (grille simulée si le cœur n'a pas `grid()`), `scrollx=px`.
+- Tests : `tests/career-render-layout.test.js` (blocs, cases, cibles des côtés, forêt, allées reliées, trajets).
+
+## Carrière v2 — interface (UI, 2026-09-30)
+
+- **Gestes** (`src/ui/gestures.js`) : en carrière (`scene.careerMode`), glisser = `scrollBy(dx, dy)` et `fling(vx, vy)` ;
+  verrou d'axe au départ (angle < ≈ 23° d'un axe) ; un glissé parti d'une parcelle ne fait une série
+  (arroser / récolter) que si cette parcelle a cette action, sinon il fait défiler. Molette : `deltaX` ou Maj + molette
+  = horizontal. `canScroll()` regarde `maxScroll().x` et `.y`. Niveaux : chemin d'avant (un axe).
+- **Mini-carte** (`src/ui/career/minimap.js`) : `createMinimap(app, { active, openLot, openMap })` →
+  `{ frame(), setHidden(v), hidden, shown, root }` ; `#minimap` (fixe, `z-index` 18, au-dessus de `--inset-bottom`),
+  canevas `w × h` CSS × `devicePixelRatio`, `scene.getMinimap({ w, h, ctx })` à chaque image (appelé par
+  `careerUI.frame()` depuis la boucle de `main.js`, après `scene.render`). Visible seulement en carrière, sans feuille,
+  fenêtre, bulle (`hints.active`, `tutorial.active`) ni décoration. Choix « cachée » : `localStorage`
+  `une-annee-a-la-ferme.minimap` (`hidden` / `shown`). Toucher → `minimapToWorld` + `focusWorld(animate)`, glisser →
+  `focusWorld(animate: false)`, appui long → `minimapLotAt` → `open.lot`, sinon `open.map`.
+- **careerUI** : + `frame()`, `minimap`, `buyLot(lotId)` (achète ce terrain, ouvre sa fiche, `revealLot` deux images
+  plus tard, après la reconstruction de la disposition), `showLot(lotId)` (ferme la feuille, `focusLot` animé) ; le
+  contexte `ui` des contenus a aussi `buyLot`, `showLot`, `minimap`, `mapHere`. `onHit('lotForSale')` ouvre la fiche de
+  `hit.lotId`. Messages : `questReminder`, `questWithdrawn`, `offerReminder`, `questExpired` (doux), `questOffered.asked`
+  (pas de message : la feuille s'ouvre).
+- **Carte des terrains** (`mapContent`, `src/ui/career/lots.js`) : grille `grid().cells` (+ `lots()` pour les
+  anciennes carrières au-delà de la rangée 6), boutons `#c-cell-<lotId>` (`.is-home | .is-owned.t-<type> |
+  .is-buyable | .is-locked | .is-forest`, `.is-here` = terrain au centre de la vue à l'ouverture, `lotInView(app)` via
+  `scene.viewRect()` + `layout.bandAt`), puis listes « À vendre » / « Vos terrains ». `lotWhere(lot)` (util) : place d'un
+  terrain en mots.
+- **Fiches** : `aboutSection(about, { app, kind, key, level, levels, next, tips, title })`, `nextLines(lines, title)`,
+  `levelsFold(app, key, levels, current)` (`foldSection`, état retenu d'une reconstruction à l'autre), `roleLine(role)`
+  (`src/ui/career/util.js`) ; lus sur `building(id)` / `about(kind, id)` / `investments()` / `lotTypes()` /
+  `machineCatalog()` / `machines()`. `buildingCard(ui, b, { lines: true })` : lignes du niveau suivant au-dessus du
+  bouton. `src/ui/buildings.js` (fiche d'atelier) et `field.openInvestmentInfo` ajoutent la section en carrière ;
+  `field.openBuilding(id)` d'un atelier de carrière (absent d'`investments()`) ouvre `careerUI.open.building(id)`.
+- **Ateliers de carrière** (2026-09-30) : `query.career.building(id).processing` = `workshopInfo(state, id, level)`
+  (`src/core/career/buildings.js`) → `{ level, places, basePlaces, extraPlaces (artisan), nextPlaces, on, used, upkeep,
+  source: 'harvest'|'animal', recipes: [{ input, inputName, productId, productName, days, value, active, minLevel, maxLevel }] }`.
+  `query.processing()[].name` = nom de carrière ; `setProcessing` / `sellProcessing` identiques aux niveaux ; en carrière, une
+  vente en l'état (joueur, charges) s'ajoute aussi à `yearStats.incomeBy.other`. La fiche de carrière d'un atelier
+  (`src/ui/career/buildings.js`) réutilise `workshopControls(proc, source, id, actions, { sellHint })`, `recipesSection`,
+  `confirmSellRaw(app, id, proc)` de `src/ui/buildings.js` (ids `#bld-switch`, `#bld-sellraw`).
+- **Quêtes** (`src/ui/career/events.js`) : `questTimeFacts(quest)` (proposition : `deadline` + `daysLeft` « si vous
+  acceptez », `offerDaysLeft` ; acceptée : `deadlineText`, « plus que N jours », « demain soir », « ce soir »),
+  `askJosephBlock(ui)` (`#c-ask-joseph`, `joseph().ask`, `actions.career.askQuest()`).

@@ -23,6 +23,7 @@ import { getProduct } from '../../data/products.js';
 import { BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { FARM_MACHINE_LOT, MACHINES, MACHINES_BY_ID, machineKey } from '../../data/career/machines.js';
 import { CAREER_ANIMALS_BY_ID } from '../../data/career/animals.js';
+import { aboutFields } from '../../data/career/descriptions.js';
 import { registerCareerExtension } from './registry.js';
 import { rankLabel } from './buildings.js';
 import { lotTypeName } from './land.js';
@@ -457,6 +458,7 @@ function machineLine(api, key) {
     coverage: m.id === 'sprinklers' ? sprinklerCoverage(api, m, cw.ok ? cw.level : m.level) : null,
     passes: def.passes.slice(),
     run: run ? JSON.parse(JSON.stringify(run)) : null,
+    ...aboutFields('machine', m.id, m.level),
   };
 }
 
@@ -502,6 +504,7 @@ function catalog(api) {
       places,
       compatibleLots: [...new Set(places.filter((p) => !p.owned).map((p) => p.lotId))],
       owned: Object.values(state.career.machines).filter((m) => m && m.id === def.id).length,
+      ...aboutFields('machine', def.id, 1),
     };
   });
 }

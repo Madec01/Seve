@@ -23,7 +23,7 @@ export const HINTS = {
   // Mode Carrière (docs/CARRIERE.md § 10.8)
   'career.start': { title: 'Votre ferme', text: 'Semez, arrosez, récoltez comme d\'habitude. Le Carnet montre les objectifs du prochain rang.', where: 'game', who: 'joseph' },
   'career.collect': { title: 'Les œufs', text: 'Les abris gardent leurs produits 3 jours : touchez le poulailler pour les ramasser.', where: 'game', who: 'joseph' },
-  'career.lotForSale': { title: 'La forêt à vendre', text: 'Le terrain au-dessus de la ferme est à vendre. Chaque terrain ajoute un peu de charges de saison.', where: 'game', who: 'joseph' },
+  'career.lotForSale': { title: 'La forêt à vendre', text: 'La forêt autour de la ferme est à vendre, au-dessus et sur les côtés. Chaque terrain ajoute un peu de charges de saison.', where: 'game', who: 'joseph' },
   'career.plan': { title: 'Le plan de culture', text: 'Chaque champ a un plan par saison : c\'est ce que sèment le semoir et les jardiniers.', where: 'game', who: 'joseph' },
   'career.hire': { title: 'L\'embauche', text: 'La maison peut loger des employés : ouvrez l\'onglet « Équipe » pour embaucher.', where: 'game', who: 'joseph' },
   'career.leave': { title: 'L\'hiver', text: 'En hiver, les champs sont vides : mettez l\'équipe en congé pour ne pas payer de salaires.', where: 'game', who: 'joseph' },

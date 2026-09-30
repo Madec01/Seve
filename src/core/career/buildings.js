@@ -9,8 +9,11 @@
 import { BUILDINGS, BUILDINGS_BY_ID, FARM_ITEMS, buildingMaxLevel, shelterFor } from '../../data/career/buildings.js';
 import { MAX_ANIMALS } from '../../data/career/career.js';
 import { getRank } from '../../data/career/ranks.js';
-import { ensureBuilding } from '../processing.js';
-import { buildingLevel, buildingLevelData, getCareerInvestment } from './effects.js';
+import { capacityAt, ensureBuilding, productValueNow } from '../processing.js';
+import { productsFor, recipeActive } from '../../data/products.js';
+import { getCrop } from '../../data/crops.js';
+import { buildingLevel, buildingLevelData, buildingUpkeep, getCareerInvestment } from './effects.js';
+import { aboutFields } from '../../data/career/descriptions.js';
 import { careerAnimals } from './registry.js';
 
 export function rankLabel(rank) {
@@ -246,13 +249,51 @@ export function buildingInfo(state, buildingId) {
     nextEffects: level < max ? levelEffects(def, def.levels[level]) : null,
     lotId: b ? b.lotId : null,
     slot: b ? b.slot : null,
+    // « Ce que fait ce bâtiment » (fiche) : à quoi il sert, ce que donne ce niveau et chaque niveau, conseils.
+    ...aboutFields('building', buildingId, level),
   };
   if (def.category === 'shelter') {
     const count = state.investments[def.animal] || 0;
     out.animals = { id: def.animal, count, capacity: shelterCapacity(state, buildingId) };
     out.pending = b ? b.pending || 0 : 0;
   }
+  if (def.category === 'workshop') out.processing = workshopInfo(state, buildingId, level);
   return out;
+}
+
+/**
+ * Atelier de carrière (fiche) : même forme que `investments()[].processing` des niveaux, plus `source`
+ * ('harvest' | 'animal'), `basePlaces`, `extraPlaces` (artisan) et `upkeep` (entretien par jour). Places : niveau (2 à 6) + artisan.
+ */
+export function workshopInfo(state, buildingId, level) {
+  const def = BUILDINGS_BY_ID[buildingId];
+  const b = state.processing?.[buildingId];
+  const max = buildingMaxLevel(def);
+  const shown = Math.max(1, level);
+  const all = productsFor(buildingId);
+  const places = level > 0 ? capacityAt(state, buildingId, level) : 0;
+  return {
+    level,
+    places,
+    basePlaces: def.levels[shown - 1].places,
+    extraPlaces: level > 0 ? places - def.levels[level - 1].places : 0,
+    nextPlaces: level < max ? capacityAt(state, buildingId, level + 1) : null,
+    on: !!b && b.on,
+    used: b ? b.places.filter(Boolean).length : 0,
+    upkeep: level > 0 ? buildingUpkeep(state, buildingId) : def.upkeep || 0,
+    source: all[0]?.source || 'harvest',
+    recipes: all.map((pr) => ({
+      input: pr.input,
+      inputName: getCrop(pr.input)?.name ?? getCareerInvestment(pr.input)?.name ?? pr.input,
+      productId: pr.id,
+      productName: pr.name,
+      days: pr.days,
+      value: productValueNow(state, pr.id, 1),
+      active: recipeActive(pr, shown),
+      minLevel: pr.minLevel ?? 1,
+      maxLevel: pr.maxLevel ?? null,
+    })),
+  };
 }
 
 /**

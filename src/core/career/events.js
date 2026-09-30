@@ -349,7 +349,8 @@ function eventPossible(api, id, { seasonId, weather }) {
   const c = state.career;
   switch (id) {
     case 'visitor':
-      return seasonalCrops(api).length > 0;
+      // Une seule commande à la fois (et une quête de Joseph au plus : § 8.3).
+      return !c.events.offers.some((o) => o.kind === 'visitor') && visitorCrops(api).length > 0;
     case 'tourists':
       return attractiveness(state) > 0;
     case 'crows': {
@@ -372,6 +373,19 @@ function eventPossible(api, id, { seasonId, weather }) {
   }
 }
 
+/** Durée d'une commande de visiteur (jours). */
+export function visitorDays(state) {
+  return Math.max(VISITOR.days, Math.round(state.career.seasonLength * VISITOR.seasonShare));
+}
+
+/** Cultures qu'un visiteur peut commander : de saison, et qu'on peut avoir à temps (grenier, déjà semée, pousse courte). */
+function visitorCrops(api) {
+  const { state } = api;
+  const days = visitorDays(state);
+  const growing = new Set(fieldCrops(state).map((i) => state.plots[i].cropId));
+  return seasonalCrops(api).filter((cr) => cr.growDays <= days - 1 || growing.has(cr.id) || (state.career.stock[cr.id] || 0) > 0);
+}
+
 function newOffer(api, kind, data, days) {
   const e = ev(api.state);
   const today = dayIndex(api.state);
@@ -390,7 +404,7 @@ function startEvent(api, id, ctx) {
   let offer = null;
   switch (id) {
     case 'visitor': {
-      const crops = seasonalCrops(api);
+      const crops = visitorCrops(api);
       const growing = {};
       for (const i of fieldCrops(state)) growing[state.plots[i].cropId] = (growing[state.plots[i].cropId] || 0) + 1;
       const crop = pickWeighted(rng, crops, (cr) => 1 + 3 * (growing[cr.id] || 0) + (state.career.stock[cr.id] || 0));
@@ -399,7 +413,7 @@ function startEvent(api, id, ctx) {
       const name = VISITOR.names[rng.int(0, VISITOR.names.length - 1)];
       const basePrice = baseCropPrice(api, crop.id);
       const unitPrice = Math.round(basePrice * VISITOR.factor);
-      offer = newOffer(api, 'visitor', { name, cropId: crop.id, cropName: crop.name, n, unitPrice, basePrice, total: unitPrice * n, factor: VISITOR.factor }, VISITOR.days);
+      offer = newOffer(api, 'visitor', { name, cropId: crop.id, cropName: crop.name, n, unitPrice, basePrice, total: unitPrice * n, factor: VISITOR.factor }, visitorDays(state));
       active.endDay = offer.endDay;
       active.data = { offerId: offer.id, name, cropId: crop.id, n };
       break;
@@ -803,6 +817,14 @@ function dawnEvents(api, { seasonId, weather }) {
     e.calendarDone.push(fest.id);
     if (fest.joyful) cheerStaff(api); // employés joyeux 7 jours (CORE-B)
     api.push('festival', { id: fest.id, name: fest.name, text: fest.text, icon: fest.icon, seasonId: fest.seasonId, day: fest.day });
+  }
+  // Rappel la veille du dernier jour d'une commande acceptée pas encore livrée.
+  for (const o of e.offers) {
+    if (o.kind !== 'visitor' || !o.accepted || o.delivered >= o.data.n) continue;
+    const daysLeft = o.endDay - today;
+    if (!VISITOR.reminders.includes(daysLeft) || (o.reminded || []).includes(daysLeft)) continue;
+    o.reminded = [...(o.reminded || []), daysLeft];
+    api.push('offerReminder', { offerId: o.id, kind: o.kind, daysLeft, data: offerInfo(state, o), text: `${capital(o.data.name)} attend encore ${o.data.n - o.delivered} ${cropPlural(o.data.cropId, o.data.n - o.delivered)} : dernier jour demain.` });
   }
   // Tirage du jour.
   if (!e.active && !fest && today > RANDOM_EVENT_RULES.graceDays) {

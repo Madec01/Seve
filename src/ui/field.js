@@ -10,7 +10,8 @@
 import { el, fmt, plural, dec } from './dom.js';
 import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
 import { incomeProfile, season, seasonList, waterEffect } from './text.js';
-import { buildingContent, buildingSignature, isProcessing, processingOf } from './buildings.js';
+import { buildingContent, buildingSignature, confirmSellRaw, isProcessing, processingOf } from './buildings.js';
+import { aboutSection } from './career/util.js';
 
 const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
 
@@ -291,8 +292,11 @@ export function createField(app) {
     const inv = game.query.investments().find((i) => i.id === id);
     const maxed = inv.nextCost === null;
     const buyLabel = maxed ? (inv.kind === 'upgrade' ? 'Niveau max' : 'Complet') : inv.owned > 0 ? (inv.kind === 'upgrade' ? 'Améliorer' : 'Encore un') : 'Acheter';
+    // Carrière : « À quoi ça sert » (rôle, effet, conseils) en haut de la fiche.
+    const about = game.mode === 'career' && inv.role ? aboutSection(inv, { kind: inv.category === 'animal' ? 'animal' : 'item', levels: false }) : null;
     return el(
       'div.info-sheet',
+      about,
       investmentTip(id, { sheet: true }),
       !maxed && !inv.canBuy && inv.reason ? el('p.card-reason', inv.reason) : null,
       el(
@@ -320,21 +324,15 @@ export function createField(app) {
   // ── Fiche d'un atelier (src/ui/buildings.js) ──────────────────────────────────
   const buildingActions = {
     toggle: (id, on) => app.setProcessing(id, on),
-    sellRaw: async (id, proc) => {
-      const n = (proc.places || []).filter(Boolean).length;
-      const ok = await app.dialogs.confirm({
-        title: 'Vendre en l\'état ?',
-        text: `${plural(n, 'produit')} en cours ${n > 1 ? 'seront vendus' : 'sera vendu'} tout de suite au prix de la matière première : +${fmt(proc.rawValue)} pièces (au lieu de ${fmt(proc.value)} à l'aube).`,
-        ok: 'Vendre',
-      });
-      if (ok) app.sellProcessing(id);
-    },
+    sellRaw: (id, proc) => confirmSellRaw(app, id, proc),
     buy: (id) => app.buyInvestment(id),
     shop: (id) => app.panel.focusInvestment(id),
   };
 
   function openBuilding(id, silent = false) {
     const inv = app.game?.query.investments().find((i) => i.id === id);
+    // Carrière : les ateliers ne sont pas des « achats » (investments) ; leur fiche est celle de la carrière.
+    if (!inv && app.game?.mode === 'career') return app.careerUI?.open.building(id);
     if (!inv) return;
     show('building', { id }, { title: inv.name, icon: investmentIcon(id, 'sprite--md'), content: buildingContent(app, id, buildingActions) }, silent);
   }

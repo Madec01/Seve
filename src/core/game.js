@@ -147,6 +147,7 @@ import {
 import { awardContest, contestChanges, contestDueTonight, contestGoals, contestSnapshot, initialContest, prizeFor } from './contest.js';
 import { gameCrops, hasPerks, normalizeRunPerks, perkValue } from './perks.js';
 import { careerLevel } from './career/level.js';
+import { BUILDINGS_BY_ID } from '../data/career/buildings.js';
 import { createCareerRuntime } from './career/runtime.js';
 import './career/extensions.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
@@ -436,13 +437,19 @@ function wrap(state) {
     for (const c of contestChanges(state, level, before)) push('contestProgress', c);
   }
 
+  /** Argent d'une vente en l'état (statistique rawSales ; carrière : aussi le bilan de l'année, poste « other »). */
+  function rawSaleMoney(amount) {
+    addStat(state, 'rawSales', amount);
+    if (rt) rt.api.account('income', 'other', amount);
+    changeMoney(amount);
+  }
+
   /** Vend en l'état tout ce qui est en cours dans les ateliers (filets de sécurité). */
   function sellAllRaw(reason) {
     for (const id of PROCESSING_IDS) {
       const { amount, count } = sellRaw(state, id);
       if (count === 0) continue;
-      addStat(state, 'rawSales', amount);
-      changeMoney(amount);
+      rawSaleMoney(amount);
       push('processingSoldRaw', { buildingId: id, amount, count, reason });
     }
   }
@@ -792,8 +799,7 @@ function wrap(state) {
       if (bad) return bad;
       const { amount, count } = sellRaw(state, buildingId);
       if (count === 0) return fail('Rien à vendre : l\'atelier est vide.');
-      addStat(state, 'rawSales', amount);
-      changeMoney(amount);
+      rawSaleMoney(amount);
       push('processingSoldRaw', { buildingId, amount, count, reason: 'player' });
       return { ok: true, amount, count };
     }),
@@ -1086,7 +1092,9 @@ function wrap(state) {
           rawValue += place.rawValue;
           return { productId: place.productId, productName: product.name, input: place.input, daysLeft: place.daysLeft, days: product.days, value: v, rawValue: place.rawValue };
         });
-        return { buildingId: id, name: getInvestment(id).name, level: owned(state, id), on: b.on, capacity: capacity(state, id), places, value, rawValue };
+        // Carrière : nom du bâtiment de carrière (src/data/career/buildings.js), niveaux 1 à 5, places + artisan.
+        const name = rt ? (BUILDINGS_BY_ID[id]?.name ?? getInvestment(id).name) : getInvestment(id).name;
+        return { buildingId: id, name, level: owned(state, id), on: b.on, capacity: capacity(state, id), places, value, rawValue };
       });
     },
 

@@ -414,7 +414,11 @@ function updateSheetOverlay() {
   }
   if (revealLotId && app.sheets.current === revealLotId.sheet) {
     try {
-      s.focusLot(revealLotId.id, { margin: 14, animate: true });
+      // Terrain à vendre (carte 2D) : son panneau « À vendre » est en bas du bloc, c'est lui qu'on montre.
+      const sale = app.game?.mode === 'career' ? app.game.query.career.lot?.(revealLotId.id) : null;
+      const r = sale?.forSale && typeof s.focusRect === 'function' ? s.lotRect?.(revealLotId.id) : null;
+      if (r) s.focusRect({ x: r.x, y: r.y + r.h * 0.45, w: r.w, h: r.h * 0.55 }, { margin: 14 });
+      else s.focusLot(revealLotId.id, { margin: 14, animate: true });
     } catch (err) {
       console.warn('focusLot :', err);
     }
@@ -799,6 +803,15 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (app.inMenu || !app.game || app.dialogs.isOpen()) return;
+  // Carrière (carte 2D) : les flèches promènent la vue sur la ferme (pas quand une feuille est ouverte).
+  const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  if (ARROWS[e.key] && app.careerUI.active() && !app.sheets.isOpen() && app.scene?.careerMode) {
+    e.preventDefault();
+    const [kx, ky] = ARROWS[e.key];
+    const step = e.shiftKey ? 320 : 120;
+    app.scene.scrollBy(kx * step, ky * step);
+    return;
+  }
   if (e.key === ' ' || e.code === 'Space') {
     e.preventDefault();
     const g = app.game;
@@ -1732,6 +1745,7 @@ function frame(t) {
     }
   }
   if (g) app.scene.render(g, t);
+  app.careerUI.frame(); // mini-carte de la carrière (dessinée par la scène, cachée hors carrière)
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
   app.hints.frame();

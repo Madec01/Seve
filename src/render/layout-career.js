@@ -38,6 +38,20 @@
 //   sprinklers    { [lotId]: { heads: [{ x, y }] (tuiles), level } }
 //   route(a, b)   points (px) pour aller de a à b par les allées
 //   hitTestCareer(wx, wy, state, slop) → voir scene.hitTest
+//
+// Carte 2D (Carrière v2) : chaque terrain est un bloc de 14 × 11 tuiles aux coordonnées de grille
+// (lot.col, lot.row) : colonne 0 = la colonne d'origine (x 0 à 13), colonne c = x 14c à 14c + 13
+// (négatif à gauche : les coordonnées de la colonne 0 ne bougent jamais) ; ligne 1.. vers le haut,
+// ligne 0 = à côté de la basse-cour. La maison (basse-cour, champ de départ, maison) reste en
+// colonne 0 ligne 0, taille inchangée. Terrains à vendre voisins (query.career.grid(), option
+// `grid`) : forêt assombrie + grand panneau ; ailleurs, forêt dense. Chemins : épine verticale (x 12
+// du bloc) dans chaque colonne, allées prolongées d'un bloc à son voisin de la même ligne, chemin qui
+// descend jusqu'à la route pour les terrains de la ligne 0. Sans terrain de côté : exactement la
+// colonne d'avant (mêmes coordonnées, même décor).
+//   x0, x1        bords du monde (px ; x0 ≤ 0)
+//   grid          { cMin, cMax, rMax, rowTop, rowBottom, x0Tiles, colsTiles, rowY(r) }
+//   saleBands     terrains à vendre (bandes), saleBand = le premier (compatibilité)
+//   bandAt(wy, wx?) bloc sous un point (wx absent : colonne 0)
 
 import { TILE, SPRITES } from './atlas.js';
 import { seededRandom, tileHash, px, sprinklerHeads, decorSlot, inRect, distToRect, pickDeco } from './layout-common.js';
@@ -126,13 +140,64 @@ export function careerLayoutKey(state) {
   const c = state?.career;
   if (!c) return '';
   let k = `${c.lotsBought}|${state.plots?.length || 0}|`;
-  for (const l of c.lots || []) k += `${l.id}:${l.type}:${l.slots ? l.slots.join(',') : ''};`;
+  for (const l of c.lots || []) k += `${l.id}:${l.type}:${l.slots ? l.slots.join(',') : ''}${Number.isFinite(l.col) || Number.isFinite(l.row) ? `@${l.col},${l.row}` : ''};`;
   k += '|';
   for (const [id, b] of Object.entries(c.buildings || {})) k += `${id}:${b?.level || 0}:${b?.lotId}:${b?.slot};`;
   k += '|';
   for (const [key, m] of Object.entries(c.machines || {})) if (m) k += `${key}:${m.id}:${m.lotId}:${m.level || 1};`;
   k += `|${c.rank >= 6 ? 'D' : ''}`;
   return k;
+}
+
+/** Clé de la grille (query.career.grid()) : terrains à vendre et positions. '' sans grille. */
+export function careerGridKey(grid) {
+  if (!grid || !Array.isArray(grid.lots)) return '';
+  let k = '';
+  for (const e of grid.lots) if (e) k += `${e.id}@${e.col},${e.row}${e.owned ? 'o' : ''};`;
+  return k;
+}
+
+const FIXED_IDS = new Set(['home', 'start', 'yard']);
+const num = (v) => (Number.isFinite(v) ? v : null);
+
+/**
+ * Terrains possédés (avec leur case) et terrains à vendre, depuis l'état et la grille du cœur.
+ * Sans grille (cœur d'avant la carte 2D) : colonne 0, ligne = ordre d'achat, un terrain à vendre au-dessus.
+ */
+export function careerGridCells(career, grid) {
+  const lotsState = Array.isArray(career?.lots) ? career.lots : [];
+  const gl = grid && Array.isArray(grid.lots) ? grid.lots.filter(Boolean) : null;
+  const byId = new Map((gl || []).map((e) => [e.id, e]));
+  const taken = new Set(['0,0']);
+  const owned = [];
+  const bought = lotsState.filter((l) => l.index >= FIRST_LOT_INDEX).sort((a, b) => a.index - b.index);
+  for (const l of bought) {
+    const g = byId.get(l.id);
+    const col = num(l.col) ?? num(g?.col) ?? 0;
+    const row = num(l.row) ?? num(g?.row) ?? (l.index - FIRST_LOT_INDEX + 1);
+    const key = `${col},${row}`;
+    if (row < 0 || taken.has(key)) continue; // case invalide ou déjà prise : pas dessiné
+    taken.add(key);
+    owned.push({ lot: l, col, row });
+  }
+  const cands = [];
+  if (gl) {
+    for (const e of gl) {
+      if (e.owned || FIXED_IDS.has(e.id) || lotsState.some((l) => l.id === e.id)) continue;
+      const col = num(e.col);
+      const row = num(e.row);
+      if (col === null || row === null || row < 0) continue;
+      const key = `${col},${row}`;
+      if (taken.has(key)) continue;
+      taken.add(key);
+      cands.push({ id: e.id, col, row, name: e.name || '', price: num(e.price), buyable: e.buyable !== false, lockedReason: e.lockedReason || null, lockedByRank: e.lockedByRank ?? null, index: num(e.index) });
+    }
+  } else if (bought.length < MAX_LOTS) {
+    const n = bought.length;
+    const top = owned.filter((o) => o.col === 0).reduce((m, o) => Math.max(m, o.row), 0);
+    if (!taken.has(`0,${top + 1}`)) cands.push({ id: lotIdFor(FIRST_LOT_INDEX + n), col: 0, row: top + 1, name: LOT_NAMES[n] || '', price: LOT_PRICES[n] ?? null, buyable: true, lockedReason: null, lockedByRank: null, index: FIRST_LOT_INDEX + n });
+  }
+  return { owned, cands };
 }
 
 /**
@@ -145,45 +210,81 @@ export function createCareerLayout(level, opts = {}) {
   const lotsState = Array.isArray(career.lots) ? career.lots : [];
   const buildingsState = career.buildings || {};
   const machinesState = career.machines || {};
-  const bought = lotsState.filter((l) => l.index >= FIRST_LOT_INDEX).sort((a, b) => a.index - b.index);
-  const nBought = bought.length;
-  const forSale = nBought < MAX_LOTS;
+  const { owned: ownedCells, cands } = careerGridCells(career, opts.grid || null);
 
-  // ── Bandes (de haut en bas) ─────────────────────────────────────────────────────────
+  // ── Grille : colonnes et lignes couvertes ───────────────────────────────────────────
+  let cMin = 0;
+  let cMax = 0;
+  let rMax = 0;
+  for (const o of [...ownedCells, ...cands]) {
+    cMin = Math.min(cMin, o.col);
+    cMax = Math.max(cMax, o.col);
+    rMax = Math.max(rMax, o.row);
+  }
+  const X0 = cMin * COLS; // première colonne de tuiles du monde (≤ 0)
+  const WT = (cMax - cMin + 1) * COLS; // largeur du monde (tuiles)
+  const topExtra = cands.some((c) => c.row === rMax) ? 0 : 1; // lisière au-dessus du dernier terrain
+  const rowTop = TOP_FOREST + topExtra;
+  const rowY = (r) => rowTop + (rMax - r) * LOT_ROWS;
+
+  // ── Bandes (blocs), de haut en bas puis de gauche à droite ──────────────────────────
   const bands = [];
-  let y = TOP_FOREST;
-  let saleBand = null;
-  if (forSale) {
-    const index = FIRST_LOT_INDEX + nBought;
-    saleBand = { id: lotIdFor(index), index, type: 'forSale', name: LOT_NAMES[nBought] || '', y0: y, rows: LOT_ROWS, forSale: true };
-    bands.push(saleBand);
-    y += LOT_ROWS;
-  } else {
-    y += 1; // lisière au-dessus du dernier terrain
-  }
-  for (let k = nBought - 1; k >= 0; k--) {
-    const l = bought[k];
-    bands.push({ id: l.id, index: l.index, type: l.type || 'wild', name: l.name || '', y0: y, rows: LOT_ROWS, lot: l });
-    y += LOT_ROWS;
-  }
+  const cell = new Map(); // « col,row » → bande
+  const cellsAt = new Map();
+  for (const o of ownedCells) cellsAt.set(`${o.col},${o.row}`, { owned: o });
+  for (const c of cands) cellsAt.set(`${c.col},${c.row}`, { cand: c });
   const yardLot = lotsState.find((l) => l.id === 'yard') || { id: 'yard', index: 2, type: 'yard', slots: [null, null], name: 'La basse-cour' };
-  const yard = { id: 'yard', index: 2, type: 'yard', name: yardLot.name, y0: y, rows: LOT_ROWS, lot: yardLot };
-  bands.push(yard);
-  y += LOT_ROWS;
+  const yard = { id: 'yard', index: 2, type: 'yard', name: yardLot.name, y0: rowY(0), rows: LOT_ROWS, lot: yardLot, col: 0, row: 0, ox: 0 };
+  const saleBands = [];
+  for (let r = rMax; r >= 0; r--) {
+    for (let c = cMin; c <= cMax; c++) {
+      let band = null;
+      if (r === 0 && c === 0) band = yard;
+      else {
+        const at = cellsAt.get(`${c},${r}`);
+        if (!at) continue;
+        if (at.cand) {
+          const k = at.cand;
+          band = { id: k.id, index: k.index ?? -1, type: 'forSale', name: k.name, y0: rowY(r), rows: LOT_ROWS, forSale: true, col: c, row: r, ox: c * COLS, cand: k };
+          saleBands.push(band);
+        } else {
+          const l = at.owned.lot;
+          band = { id: l.id, index: l.index, type: l.type || 'wild', name: l.name || '', y0: rowY(r), rows: LOT_ROWS, lot: l, col: c, row: r, ox: c * COLS };
+        }
+      }
+      bands.push(band);
+      cell.set(`${c},${r}`, band);
+    }
+  }
+  const saleBand = saleBands.find((b) => b.col === 0) || saleBands[0] || null;
+  let y = yard.y0 + LOT_ROWS;
   const startLot = lotsState.find((l) => l.id === 'start') || { id: 'start', index: 1, type: 'field', name: 'Le champ de départ' };
-  const start = { id: 'start', index: 1, type: 'field', name: startLot.name, y0: y, rows: START_ROWS, lot: startLot, start: true };
+  const start = { id: 'start', index: 1, type: 'field', name: startLot.name, y0: y, rows: START_ROWS, lot: startLot, start: true, col: 0, row: 0, ox: 0 };
   bands.push(start);
   y += START_ROWS;
   const homeLot = lotsState.find((l) => l.id === 'home') || { id: 'home', index: 0, type: 'home', name: 'La maison' };
-  const home = { id: 'home', index: 0, type: 'home', name: homeLot.name, y0: y, rows: HOME_ROWS, lot: homeLot };
+  const home = { id: 'home', index: 0, type: 'home', name: homeLot.name, y0: y, rows: HOME_ROWS, lot: homeLot, col: 0, row: 0, ox: 0 };
   bands.push(home);
   y += HOME_ROWS;
   const ROWS = y;
-  const WORLD_W = COLS * T;
+  const WORLD_W = WT * T;
   const WORLD_H = ROWS * T;
   for (const b of bands) b.lane = b.type === 'home' ? b.y0 + 6 : b.y0 + b.rows - 1;
-  const bandById = new Map(bands.map((b) => [b.id, b]));
-  const bandAtRow = (ty) => bands.find((b) => ty >= b.y0 && ty < b.y0 + b.rows) || null;
+  const ownedAt = (c, r) => {
+    const b = cell.get(`${c},${r}`);
+    return !!b && !b.forSale;
+  };
+  const rowBottom = yard.y0 + LOT_ROWS; // bas de la ligne 0 (haut du champ de départ)
+  /** Bande sous une tuile (null : forêt, route, hors du monde). */
+  function bandAtTile(tx, ty) {
+    if (ty >= rowBottom) {
+      if (tx < 0 || tx >= COLS) return null;
+      return ty < home.y0 ? start : ty < ROWS ? home : null;
+    }
+    if (ty < rowY(rMax)) return null;
+    const r = rMax - Math.floor((ty - rowY(rMax)) / LOT_ROWS);
+    return cell.get(`${Math.floor(tx / COLS)},${r}`) || null;
+  }
 
   // ── Maison : bâtiments de la bande (taille selon le niveau) ──────────────────────────
   const H = home.y0;
@@ -217,12 +318,34 @@ export function createCareerLayout(level, opts = {}) {
   // ── Chemins (masque) ──────────────────────────────────────────────────────────────
   const pathSet = new Set();
   const addPath = (x, yy) => pathSet.add(`${x},${yy}`);
-  const topOwned = bands.find((b) => !b.forSale);
-  const spineTop = topOwned ? topOwned.y0 : yard.y0;
-  for (let yy = spineTop; yy < ROAD_Y; yy++) addPath(SPINE_X, yy);
+  // Épines : dans chaque colonne, une par suite de terrains possédés l'un au-dessus de l'autre, du haut
+  // du plus haut jusqu'à l'allée du plus bas — ou jusqu'à la route s'il est sur la ligne 0 (colonne 0 :
+  // la basse-cour, comme avant).
+  for (let c = cMin; c <= cMax; c++) {
+    let r = 0;
+    while (r <= rMax) {
+      if (!ownedAt(c, r)) { r++; continue; }
+      const low = r;
+      while (r + 1 <= rMax && ownedAt(c, r + 1)) r++;
+      const high = r;
+      r++;
+      if (low === high && low > 0) continue; // terrain seul : son allée suffit
+      const x = c * COLS + SPINE_X;
+      const yEnd = low === 0 ? ROAD_Y : cell.get(`${c},${low}`).lane + 1;
+      for (let yy = rowY(high); yy < yEnd; yy++) addPath(x, yy);
+    }
+  }
   for (const b of bands) {
     if (b.forSale || b.type === 'home') continue;
-    for (let x = 2; x <= SPINE_X; x++) addPath(x, b.lane);
+    for (let x = b.ox + 2; x <= b.ox + SPINE_X; x++) addPath(x, b.lane);
+  }
+  // Allées d'un terrain à son voisin de droite (même ligne) : à travers la lisière.
+  for (let r = 0; r <= rMax; r++) {
+    for (let c = cMin; c < cMax; c++) {
+      if (!ownedAt(c, r) || !ownedAt(c + 1, r)) continue;
+      const lane = cell.get(`${c},${r}`).lane;
+      for (const x of [c * COLS + 13, (c + 1) * COLS, (c + 1) * COLS + 1]) addPath(x, lane);
+    }
   }
   for (let yy = H; yy < ROAD_Y; yy++) addPath(7, yy); // champ de départ → route
   for (let yy = house.door.y + 1; yy < ROAD_Y; yy++) addPath(house.door.x, yy); // maison → route
@@ -235,20 +358,33 @@ export function createCareerLayout(level, opts = {}) {
     return pathSet.has(k) || extraPaths.has(k);
   }
 
+  const forestMemo = new Int8Array(WT * ROWS).fill(-1);
   function isForest(tx, ty) {
     if (ty === ROAD_Y || ty === ROAD_Y + 1) return false;
     if (ty < TOP_FOREST) return true;
     if (ty >= ROWS - 2) return true;
-    if (tx <= 0 || tx >= COLS - 1) return true;
-    if (saleBand && ty >= saleBand.y0 && ty < saleBand.y0 + saleBand.rows - 1) return true;
+    if (tx < X0 || tx >= X0 + WT) return true;
+    const m = (ty * WT) + tx - X0;
+    let v = forestMemo[m];
+    if (v < 0) v = forestMemo[m] = forestAt(tx, ty) ? 1 : 0;
+    return v === 1;
+  }
+  function forestAt(tx, ty) {
+    if (pathSet.has(`${tx},${ty}`)) return false; // allée qui traverse une lisière
+    const lx = tx - Math.floor(tx / COLS) * COLS;
+    if (lx <= 0 || lx >= COLS - 1) return true;
+    if (ty < rowTop) return !ownedAt(Math.floor(tx / COLS), rMax); // lisière du haut
+    const b = bandAtTile(tx, ty);
+    if (!b) return true;
+    if (b.forSale && ty < b.y0 + b.rows - 1) return true;
     return false;
   }
 
   // ── Occupation (décor) ────────────────────────────────────────────────────────────
-  const occ = new Uint8Array(COLS * ROWS);
+  const occ = new Uint8Array(WT * ROWS);
   const mark = (r) => {
     for (let yy = r.y; yy < r.y + r.h; yy++) {
-      for (let x = r.x; x < r.x + r.w; x++) if (x >= 0 && yy >= 0 && x < COLS && yy < ROWS) occ[yy * COLS + x] = 1;
+      for (let x = r.x; x < r.x + r.w; x++) if (x >= X0 && yy >= 0 && x < X0 + WT && yy < ROWS) occ[yy * WT + x - X0] = 1;
     }
   };
   const one = (x, yy) => mark({ x, y: yy, w: 1, h: 1 });
@@ -272,18 +408,19 @@ export function createCareerLayout(level, opts = {}) {
 
   function slotBuilding(band, slotIdx, buildingId) {
     const left = slotIdx === 0;
-    const penX = left ? 1 : 7;
+    const ox = band.ox;
+    const penX = ox + (left ? 1 : 7);
     const penW = left ? 6 : 5;
     const lvl = Math.max(1, buildingsState[buildingId]?.level || 1);
     const sprite = careerBuildingSprite(buildingId, lvl);
     const st = tilesOf(sprite);
     const bx = penX + Math.max(0, Math.floor((penW - st.w) / 2));
-    const building = { x: Math.min(bx, 12 - st.w), y: band.y0 + 3 - st.h, w: st.w, h: st.h };
+    const building = { x: Math.min(bx, ox + 12 - st.w), y: band.y0 + 3 - st.h, w: st.w, h: st.h };
     const guest = buildingId === 'guestHouse';
     const pen = guest ? null : { x: penX, y: band.y0 + 3, w: penW, h: 7 };
     const anchor = { x: (building.x + building.w / 2) * T, y: building.y * T };
     // Bulle de ramassage : à droite du toit (reste dans le terrain, ne cache pas celui du dessus).
-    const bubble = { x: Math.min((12 - 1) * T - 20, (building.x + building.w) * T - 6), y: building.y * T - 2 };
+    const bubble = { x: Math.min((ox + 12 - 1) * T - 20, (building.x + building.w) * T - 6), y: building.y * T - 2 };
     const entry = {
       building, pen, sign: { x: penX + Math.floor(penW / 2), y: band.y0 + 5 }, anchor, bubble, lotId: band.id, slot: slotIdx,
       kind: guest ? 'guest' : WORKSHOP_SPRITES[buildingId] ? 'workshop' : 'shelter', sprite, level: lvl, animal: SHELTER_ANIMAL[buildingId] || null,
@@ -319,7 +456,7 @@ export function createCareerLayout(level, opts = {}) {
   }
 
   function addLotSign(band) {
-    const s = { x: 1, y: band.lane };
+    const s = { x: band.ox + 1, y: band.lane };
     lotSigns.push({ lotId: band.id, ...s });
     one(s.x, s.y);
     return s;
@@ -350,112 +487,115 @@ export function createCareerLayout(level, opts = {}) {
 
   for (const band of bands) {
     const y0 = band.y0;
+    const ox = band.ox;
+    const cr = { col: band.col, row: band.row, ox };
     if (band.forSale) {
-      lotEntries.push({ id: band.id, index: band.index, type: null, name: band.name, forSale: true, rect: px({ x: 0, y: y0, w: COLS, h: band.rows }), sign: { x: 6, y: y0 + band.rows - 2 }, lane: band.lane, band });
+      const k = band.cand;
+      lotEntries.push({ id: band.id, index: band.index, type: null, name: band.name, forSale: true, rect: px({ x: ox, y: y0, w: COLS, h: band.rows }), sign: { x: ox + 6, y: y0 + band.rows - 2 }, lane: band.lane, ...cr, price: k.price, buyable: k.buyable, lockedReason: k.lockedReason, lockedByRank: k.lockedByRank, band });
       continue;
     }
     if (band.type === 'home') {
-      lotEntries.push({ id: band.id, index: 0, type: 'home', name: band.name, forSale: false, rect: px({ x: 0, y: y0, w: COLS, h: 10 }), sign: null, lane: band.lane, band });
+      lotEntries.push({ id: band.id, index: 0, type: 'home', name: band.name, forSale: false, rect: px({ x: 0, y: y0, w: COLS, h: 10 }), sign: null, lane: band.lane, ...cr, band });
       continue;
     }
     const sign = addLotSign(band);
-    lotEntries.push({ id: band.id, index: band.index, type: band.type, name: band.name, forSale: false, rect: px({ x: 0, y: y0, w: COLS, h: band.rows }), sign, lane: band.lane, band });
+    lotEntries.push({ id: band.id, index: band.index, type: band.type, name: band.name, forSale: false, rect: px({ x: ox, y: y0, w: COLS, h: band.rows }), sign, lane: band.lane, ...cr, band });
     const type = band.type;
     if (band.start) {
       // Champ de départ : clôture 10 × 12, marges haute et basse (arroseurs), portail en bas au milieu.
-      const fence = { x: 2, y: y0, w: 10, h: 12 };
-      const gate = { x: 7, y: y0 + 11 };
+      const fence = { x: ox + 2, y: y0, w: 10, h: 12 };
+      const gate = { x: ox + 7, y: y0 + 11 };
       fences.push({ rect: fence, gateX: gate.x, kind: 'field', field: true });
       band.fence = fence;
       band.gate = gate;
-      fieldPlots(band, 3, y0 + 2);
-      sprinklers.start = { heads: sprinklerHeads(3, y0 + 2, 8, 8, gate) };
-      hives.push({ x: 1, y: y0 + 3, lotId: 'start' }, { x: 1, y: y0 + 7, lotId: 'start' });
-      parkingSpots.start = { seeder: { x: 3, y: band.lane }, harvester: { x: 8, y: band.lane - 1 } };
-      mark({ x: 1, y: y0, w: 11, h: START_ROWS });
+      fieldPlots(band, ox + 3, y0 + 2);
+      sprinklers.start = { heads: sprinklerHeads(ox + 3, y0 + 2, 8, 8, gate) };
+      hives.push({ x: ox + 1, y: y0 + 3, lotId: 'start' }, { x: ox + 1, y: y0 + 7, lotId: 'start' });
+      parkingSpots.start = { seeder: { x: ox + 3, y: band.lane }, harvester: { x: ox + 8, y: band.lane - 1 } };
+      mark({ x: ox + 1, y: y0, w: 11, h: START_ROWS });
       continue;
     }
     if (type === 'field') {
-      const fence = { x: 2, y: y0, w: 10, h: 10 };
-      fences.push({ rect: fence, gateX: 7, kind: 'field', field: true });
+      const fence = { x: ox + 2, y: y0, w: 10, h: 10 };
+      fences.push({ rect: fence, gateX: ox + 7, kind: 'field', field: true });
       band.fence = fence;
-      band.gate = { x: 7, y: y0 + 9 };
-      fieldPlots(band, 3, y0 + 1);
-      sprinklers[band.id] = { heads: [{ x: 4, y: y0 }, { x: 9, y: y0 }, { x: 6, y: y0 + 9 }, { x: 6, y: y0 }, { x: 3, y: y0 + 9 }, { x: 10, y: y0 + 9 }], onFence: true };
-      hives.push({ x: 1, y: y0 + 2, lotId: band.id }, { x: 1, y: y0 + 6, lotId: band.id });
-      parkingSpots[band.id] = { seeder: { x: 3, y: band.lane }, harvester: { x: 8, y: band.lane - 1 } };
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      band.gate = { x: ox + 7, y: y0 + 9 };
+      fieldPlots(band, ox + 3, y0 + 1);
+      sprinklers[band.id] = { heads: [{ x: ox + 4, y: y0 }, { x: ox + 9, y: y0 }, { x: ox + 6, y: y0 + 9 }, { x: ox + 6, y: y0 }, { x: ox + 3, y: y0 + 9 }, { x: ox + 10, y: y0 + 9 }], onFence: true };
+      hives.push({ x: ox + 1, y: y0 + 2, lotId: band.id }, { x: ox + 1, y: y0 + 6, lotId: band.id });
+      parkingSpots[band.id] = { seeder: { x: ox + 3, y: band.lane }, harvester: { x: ox + 8, y: band.lane - 1 } };
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     } else if (type === 'orchard') {
-      const fence = { x: 1, y: y0, w: 11, h: 10 };
-      fences.push({ rect: fence, gateX: 7, kind: 'orchard' });
-      orchards.push({ rect: { x: 2, y: y0 + 1, w: 9, h: 8 }, lotId: band.id });
+      const fence = { x: ox + 1, y: y0, w: 11, h: 10 };
+      fences.push({ rect: fence, gateX: ox + 7, kind: 'orchard' });
+      orchards.push({ rect: { x: ox + 2, y: y0 + 1, w: 9, h: 8 }, lotId: band.id });
       for (const i of plotsByLot.get(band.id) || []) {
         const p = statePlots[i];
         const cell = Number.isInteger(p.cell) ? p.cell : 0;
         const col = cell % 3;
         const row = Math.floor(cell / 3) % 3;
-        placePlot(i, [2, 5, 8][col], y0 + [1, 4, 7][row], band, col, row);
+        placePlot(i, ox + [2, 5, 8][col], y0 + [1, 4, 7][row], band, col, row);
         if (p.env === null) plots[i].retired = true;
       }
-      parkingSpots[band.id] = { fruitPicker: { x: 9, y: band.lane - 1 } };
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      parkingSpots[band.id] = { fruitPicker: { x: ox + 9, y: band.lane - 1 } };
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     } else if (type === 'greenhouse') {
-      const gh = { x: 2, y: y0 + 1, w: 10, h: 7, lotId: band.id, level: Math.max(1, levelOf('greenhouse') || 1) };
+      const gh = { x: ox + 2, y: y0 + 1, w: 10, h: 7, lotId: band.id, level: Math.max(1, levelOf('greenhouse') || 1) };
       greenhouses.push(gh);
       for (const i of plotsByLot.get(band.id) || []) {
         const p = statePlots[i];
         const cell = Number.isInteger(p.cell) ? p.cell : 0;
         const col = cell % 4;
         const row = Math.floor(cell / 4) % 2;
-        placePlot(i, 3 + col * PLOT_TILES, y0 + 3 + row * PLOT_TILES, band, col, row);
+        placePlot(i, ox + 3 + col * PLOT_TILES, y0 + 3 + row * PLOT_TILES, band, col, row);
         if (p.env === null) plots[i].retired = true;
       }
-      slots.greenhouse = { building: { x: 2, y: y0 + 1, w: 10, h: 2 }, pen: null, sign: { x: 1, y: band.lane }, anchor: { x: 7 * T, y: (y0 + 1) * T }, lotId: band.id, slot: null, kind: 'greenhouse', sprite: null, level: gh.level };
-      sprinklers[band.id] = { heads: [{ x: 4, y: y0 + 7 }, { x: 9, y: y0 + 7 }, { x: 6, y: y0 + 7 }, { x: 8, y: y0 + 7 }], inGreenhouse: true };
-      parkingSpots[band.id] = { seeder: { x: 3, y: band.lane } };
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      slots.greenhouse = { building: { x: ox + 2, y: y0 + 1, w: 10, h: 2 }, pen: null, sign: { x: ox + 1, y: band.lane }, anchor: { x: (ox + 7) * T, y: (y0 + 1) * T }, lotId: band.id, slot: null, kind: 'greenhouse', sprite: null, level: gh.level };
+      sprinklers[band.id] = { heads: [{ x: ox + 4, y: y0 + 7 }, { x: ox + 9, y: y0 + 7 }, { x: ox + 6, y: y0 + 7 }, { x: ox + 8, y: y0 + 7 }], inGreenhouse: true };
+      parkingSpots[band.id] = { seeder: { x: ox + 3, y: band.lane } };
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     } else if (type === 'pond') {
-      const water = { x: 3, y: y0 + 2, w: 8, h: 5 };
-      const dock = { x: 6, y: y0 + 6, w: 3, h: 1 };
+      const water = { x: ox + 3, y: y0 + 2, w: 8, h: 5 };
+      const dock = { x: ox + 6, y: y0 + 6, w: 3, h: 1 };
       ponds.push({ water, dock, lotId: band.id });
       const lvl = Math.max(1, levelOf('duckPond') || 1);
-      slots.duckPond = { building: water, pen: water, sign: { x: 1, y: band.lane }, anchor: { x: (water.x + 2) * T, y: water.y * T }, bubble: { x: (water.x + 1) * T, y: (water.y - 1) * T - 8 }, lotId: band.id, slot: null, kind: 'pond', sprite: null, level: lvl, animal: 'duck', water, dock };
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      slots.duckPond = { building: water, pen: water, sign: { x: ox + 1, y: band.lane }, anchor: { x: (water.x + 2) * T, y: water.y * T }, bubble: { x: (water.x + 1) * T, y: (water.y - 1) * T - 8 }, lotId: band.id, slot: null, kind: 'pond', sprite: null, level: lvl, animal: 'duck', water, dock };
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     } else if (type === 'workshops') {
-      const area = { x: 1, y: y0 + 1, w: 11, h: 9 };
+      const area = { x: ox + 1, y: y0 + 1, w: 11, h: 9 };
       cobbles.push(area);
-      conveyors.push({ y: y0 + 8, x0: 1, x1: 11, lotId: band.id });
+      conveyors.push({ y: y0 + 8, x0: ox + 1, x1: ox + 11, lotId: band.id });
       const ls = band.lot?.slots || [null, null];
       for (let s = 0; s < 2; s++) {
         const bid = ls[s];
         if (bid) {
           const sprite = careerBuildingSprite(bid, buildingsState[bid]?.level || 1);
           const st = tilesOf(sprite);
-          const bx = s === 0 ? 2 : 8;
+          const bx = ox + (s === 0 ? 2 : 8);
           const building = { x: bx, y: y0 + 6 - st.h, w: st.w, h: st.h };
           const entry = { building, pen: null, sign: { x: bx + 1, y: y0 + 5 }, anchor: { x: (bx + st.w / 2) * T, y: building.y * T }, lotId: band.id, slot: s, kind: 'workshop', sprite, level: buildingsState[bid]?.level || 1 };
-          if (bid === 'mill') entry.bakery = { x: s === 0 ? 5 : 6, y: y0 + 4, w: 2, h: 2 };
+          if (bid === 'mill') entry.bakery = { x: ox + (s === 0 ? 5 : 6), y: y0 + 4, w: 2, h: 2 };
           slots[bid] = entry;
         } else {
-          emptySlots.push({ lotId: band.id, slot: s, rect: { x: s === 0 ? 1 : 7, y: y0 + 1, w: s === 0 ? 6 : 5, h: 7 }, sign: { x: s === 0 ? 3 : 9, y: y0 + 5 } });
+          emptySlots.push({ lotId: band.id, slot: s, rect: { x: ox + (s === 0 ? 1 : 7), y: y0 + 1, w: s === 0 ? 6 : 5, h: 7 }, sign: { x: ox + (s === 0 ? 3 : 9), y: y0 + 5 } });
         }
       }
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     } else if (type === 'meadow' || type === 'yard') {
       const ls = band.lot?.slots || [null, null];
       for (let s = 0; s < 2; s++) {
         const bid = ls[s];
         if (bid) slotBuilding(band, s, bid);
         else {
-          const r = { x: s === 0 ? 1 : 7, y: y0, w: s === 0 ? 6 : 5, h: 10 };
+          const r = { x: ox + (s === 0 ? 1 : 7), y: y0, w: s === 0 ? 6 : 5, h: 10 };
           emptySlots.push({ lotId: band.id, slot: s, rect: r, sign: { x: r.x + Math.floor(r.w / 2), y: y0 + 4 } });
           mark(r);
         }
       }
     } else {
       // Friche (ou type inconnu) : herbes hautes, souches, fleurs sauvages.
-      wilds.push({ rect: { x: 1, y: y0, w: 11, h: 10 }, lotId: band.id, seed: band.index });
-      mark({ x: 1, y: y0, w: 11, h: LOT_ROWS });
+      wilds.push({ rect: { x: ox + 1, y: y0, w: 11, h: 10 }, lotId: band.id, seed: band.index });
+      mark({ x: ox + 1, y: y0, w: 11, h: LOT_ROWS });
     }
   }
   // Parcelles sans terrain connu (sauvegarde étrange) : rangées à l'écart, jamais touchables.
@@ -476,10 +616,13 @@ export function createCareerLayout(level, opts = {}) {
     const [x, yy] = k.split(',').map(Number);
     one(x, yy);
   }
-  if (saleBand) mark({ x: 5, y: saleBand.y0 + saleBand.rows - 2, w: 4, h: 2 });
+  for (const sb of saleBands) mark({ x: sb.ox + 5, y: sb.y0 + sb.rows - 2, w: 4, h: 2 });
 
   // ── Emplacements de décoration (identifiants communs aux niveaux) ───────────────────
-  const free = (x, yy) => x >= 1 && x <= 11 && yy >= TOP_FOREST && yy < ROWS - 2 && yy !== ROAD_Y && yy !== ROAD_Y + 1 && !occ[yy * COLS + x] && !isForest(x, yy);
+  const free = (x, yy) => {
+    const lx = x - Math.floor(x / COLS) * COLS;
+    return lx >= 1 && lx <= 11 && x >= X0 && x < X0 + WT && yy >= TOP_FOREST && yy < ROWS - 2 && yy !== ROAD_Y && yy !== ROAD_Y + 1 && !occ[yy * WT + x - X0] && !isForest(x, yy);
+  };
   const signRect = { x: 4, y: H + 7, w: 3, h: 1 };
   const decorSlots = [];
   const addSlot = (id, x, yy, kind = 'small', w = 1, h = 1, force = false) => {
@@ -503,18 +646,24 @@ export function createCareerLayout(level, opts = {}) {
   // ── Décor fixe (graine du niveau) ─────────────────────────────────────────────────
   const deco = [];
   const rnd = seededRandom(0xca7ee + (career.farmName ? [...String(career.farmName)].reduce((a, ch) => a + ch.charCodeAt(0), 0) : 0));
-  const take = (x, yy) => { occ[yy * COLS + x] = 1; };
+  const take = (x, yy) => { occ[yy * WT + x - X0] = 1; };
+  // Colonne 0 d'abord (même tirage qu'avant la carte 2D), puis les colonnes de côté.
+  const decoCols = [0];
+  for (let c = cMin; c <= cMax; c++) if (c !== 0) decoCols.push(c);
+  for (const dc of decoCols) {
+  const dox = dc * COLS;
   for (let yy = TOP_FOREST; yy < ROWS - 2; yy++) {
-    for (const x of [1, 11]) {
+    for (const x0 of [1, 11]) {
+      const x = dox + x0;
       if (free(x, yy) && free(x, yy - 1) && rnd() < 0.45) {
-        deco.push({ kind: 'treeTall', x: x * T + (x === 1 ? -3 : 3), y: yy * T, tx: x, ty: yy });
+        deco.push({ kind: 'treeTall', x: x * T + (x0 === 1 ? -3 : 3), y: yy * T, tx: x, ty: yy });
         take(x, yy);
         take(x, yy - 1);
       }
     }
   }
   for (let yy = TOP_FOREST; yy < ROWS - 2; yy++) {
-    for (let x = 1; x <= 11; x++) {
+    for (let x = dox + 1; x <= dox + 11; x++) {
       if (!free(x, yy)) continue;
       const kind = pickDeco(rnd(), 'default', free(x, yy - 1) && yy > TOP_FOREST);
       if (!kind) continue;
@@ -524,6 +673,7 @@ export function createCareerLayout(level, opts = {}) {
       take(x, yy);
       if (kind === 'treeTall') take(x, yy - 1);
     }
+  }
   }
   const props = [
     { name: 'barrel', x: 6, y: H + 3, dy: 1 },
@@ -550,7 +700,7 @@ export function createCareerLayout(level, opts = {}) {
         collectors[sid] = key;
         const p = sl.pen || sl.building;
         spot = { x: sl.building.x + sl.building.w, y: sl.building.y + sl.building.h - 1 };
-        if (spot.x > 11) spot = { x: p.x + p.w - 2, y: p.y + 1 };
+        if (spot.x - Math.floor(spot.x / COLS) * COLS > 11) spot = { x: p.x + p.w - 2, y: p.y + 1 };
       }
     }
     if (!spot || !sprite) continue;
@@ -568,19 +718,14 @@ export function createCareerLayout(level, opts = {}) {
     { x: startGate.x * T + 8, y: (startGate.y - 1) * T + 12 },
   ];
 
-  /** Bande (terrain) d'un point du monde (px). */
-  function bandAt(wy) {
-    return bandAtRow(Math.floor(wy / T));
+  /** Bande (terrain) d'un point du monde (px) ; sans wx : colonne 0 (compatibilité). */
+  function bandAt(wy, wx) {
+    const tx = wx === undefined || wx === null ? 7 : Math.floor(wx / T);
+    return bandAtTile(tx, Math.floor(wy / T));
   }
 
-  /**
-   * Trajet (points px) de a à b par les allées : dans un même terrain, ligne droite ; sinon allée du
-   * terrain de départ → épine → allée du terrain d'arrivée. Le dernier point est b.
-   */
-  function route(a, b) {
-    const ba = bandAt(a.y);
-    const bb = bandAt(b.y);
-    if (!ba || !bb || ba === bb) return [{ x: b.x, y: b.y }];
+  /** Trajet d'avant la carte 2D (colonne 0) : allée du départ → épine → allée d'arrivée. */
+  function routeCol0(a, b, ba, bb) {
     const sx = SPINE_X * T + 8;
     const la = ba.lane * T + 10;
     const lb = bb.lane * T + 10;
@@ -589,6 +734,102 @@ export function createCareerLayout(level, opts = {}) {
     out.push({ x: sx, y: la });
     out.push({ x: sx, y: lb });
     if (Math.abs(b.y - lb) > 2) out.push({ x: b.x, y: lb });
+    out.push({ x: b.x, y: b.y });
+    return out;
+  }
+
+  /** Tuile de chemin la plus proche d'un point : sur l'allée de son terrain, sinon la plus proche. */
+  function pathTileNear(p, band) {
+    const tx = Math.floor(p.x / T);
+    if (band) {
+      const ly = band.lane;
+      for (let d = 0; d < COLS; d++) {
+        for (const x of d ? [tx - d, tx + d] : [tx]) if (isPath(x, ly) && x >= X0 && x < X0 + WT) return { x, y: ly };
+      }
+    }
+    const ty = Math.floor(p.y / T);
+    let best = null;
+    let bd = Infinity;
+    const scan = (k) => {
+      const [x, yy] = k.split(',').map(Number);
+      const d = Math.abs(x - tx) + Math.abs(yy - ty);
+      if (d < bd) { bd = d; best = { x, y: yy }; }
+    };
+    for (const k of pathSet) scan(k);
+    if (ty >= ROAD_Y - 1 && ty <= ROAD_Y + 2) scan(`${Math.max(X0, Math.min(X0 + WT - 1, tx))},${ROAD_Y}`);
+    return best;
+  }
+
+  /** Plus court chemin (tuiles) sur les allées, compressé aux virages. Cache par couple de tuiles. */
+  const routeCache = new Map();
+  function pathTiles(sa, sb) {
+    const key = `${sa.x},${sa.y}>${sb.x},${sb.y}`;
+    if (routeCache.has(key)) return routeCache.get(key);
+    const idx = (x, yy) => yy * WT + x - X0;
+    const prev = new Int32Array(WT * ROWS).fill(-1);
+    const start = idx(sa.x, sa.y);
+    const goal = idx(sb.x, sb.y);
+    prev[start] = start;
+    const queue = [start];
+    for (let qi = 0; qi < queue.length && prev[goal] < 0; qi++) {
+      const cur = queue[qi];
+      const cx = (cur % WT) + X0;
+      const cy = Math.floor(cur / WT);
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (nx < X0 || nx >= X0 + WT || ny < 0 || ny >= ROWS) continue;
+        const n = idx(nx, ny);
+        if (prev[n] >= 0 || !isPath(nx, ny)) continue;
+        prev[n] = cur;
+        queue.push(n);
+      }
+    }
+    let out = null;
+    if (prev[goal] >= 0) {
+      const tiles = [];
+      for (let k = goal; ; k = prev[k]) {
+        tiles.push({ x: (k % WT) + X0, y: Math.floor(k / WT) });
+        if (k === start) break;
+      }
+      tiles.reverse();
+      out = [tiles[0]];
+      for (let i = 1; i < tiles.length - 1; i++) {
+        const p0 = tiles[i - 1];
+        const p2 = tiles[i + 1];
+        if (p0.x !== p2.x && p0.y !== p2.y) out.push(tiles[i]); // virage
+      }
+      if (tiles.length > 1) out.push(tiles[tiles.length - 1]);
+    }
+    if (routeCache.size > 400) routeCache.clear();
+    routeCache.set(key, out);
+    return out;
+  }
+
+  /**
+   * Trajet (points px) de a à b par les allées : dans un même terrain, ligne droite ; dans la colonne 0,
+   * allée du terrain de départ → épine → allée du terrain d'arrivée ; sinon le plus court chemin sur les
+   * allées (épines, allées prolongées, route). Le dernier point est b.
+   */
+  function route(a, b) {
+    const ba = bandAt(a.y, a.x);
+    const bb = bandAt(b.y, b.x);
+    if (ba && bb && ba === bb) return [{ x: b.x, y: b.y }];
+    if (ba && bb && ba.col === 0 && bb.col === 0) return routeCol0(a, b, ba, bb);
+    // Hors de tout terrain (forêt, route) dans la colonne 0 : ligne droite, comme avant la carte 2D.
+    const inCol0 = (p) => p.x >= 0 && p.x < COLS * T;
+    if ((!ba || !bb) && ((cMin === 0 && cMax === 0) || (inCol0(a) && inCol0(b)))) return [{ x: b.x, y: b.y }];
+    const sa = pathTileNear(a, ba);
+    const sb = pathTileNear(b, bb);
+    const tiles = sa && sb ? pathTiles(sa, sb) : null;
+    if (!tiles) return [{ x: b.x, y: b.y }];
+    const pt = (t) => ({ x: t.x * T + 8, y: t.y * T + 10 });
+    const out = [];
+    const first = pt(tiles[0]);
+    if (Math.abs(a.y - first.y) > 2) out.push({ x: a.x, y: first.y });
+    for (const t of tiles) out.push(pt(t));
+    const last = out[out.length - 1];
+    if (Math.abs(b.y - last.y) > 2) out.push({ x: b.x, y: last.y });
     out.push({ x: b.x, y: b.y });
     return out;
   }
@@ -616,7 +857,7 @@ export function createCareerLayout(level, opts = {}) {
     }
     const s = slots[id];
     if (!s) return null;
-    if (s.kind === 'greenhouse') return { x: 2, y: s.building.y, w: 10, h: 7 };
+    if (s.kind === 'greenhouse') return { x: s.building.x, y: s.building.y, w: 10, h: 7 };
     return s.pen ? unionTiles(s.building, s.pen) : s.garden ? unionTiles(s.building, s.garden) : s.building;
   }
 
@@ -688,8 +929,8 @@ export function createCareerLayout(level, opts = {}) {
         continue;
       }
       if (s.kind === 'greenhouse') {
-        add(px({ x: 2, y: s.building.y, w: 10, h: 2 }), { type: 'building', buildingId: id });
-        add(px({ x: 2, y: s.building.y + 6, w: 10, h: 1 }), { type: 'building', buildingId: id });
+        add(px({ x: s.building.x, y: s.building.y, w: 10, h: 2 }), { type: 'building', buildingId: id });
+        add(px({ x: s.building.x, y: s.building.y + 6, w: 10, h: 1 }), { type: 'building', buildingId: id });
         continue;
       }
       const type = s.kind === 'shelter' ? 'shelter' : 'building';
@@ -708,8 +949,8 @@ export function createCareerLayout(level, opts = {}) {
     for (const e of emptySlots) add(px(e.rect), { type: 'lotSign', lotId: e.lotId, slot: e.slot });
     for (const w of wilds) add(px(w.rect), { type: 'lotSign', lotId: w.lotId });
     // Enclos du verger, champ (hors parcelles) : fiche du terrain
-    // 7. Terrain à vendre (toute la bande)
-    if (saleBand) add(px({ x: 0, y: saleBand.y0, w: COLS, h: saleBand.rows }), { type: 'lotForSale', lotId: saleBand.id });
+    // 7. Terrains à vendre (tout le bloc)
+    for (const sb of saleBands) add(px({ x: sb.ox, y: sb.y0, w: COLS, h: sb.rows }), { type: 'lotForSale', lotId: sb.id });
     let best = null;
     let bestD = Infinity;
     for (const c of cands) {
@@ -775,7 +1016,10 @@ export function createCareerLayout(level, opts = {}) {
         const s = lotSigns.find((l) => l.lotId === hit.lotId);
         return s ? px({ x: s.x, y: s.y, w: 1, h: 1 }) : null;
       }
-      case 'lotForSale': return saleBand ? px({ x: 5, y: saleBand.y0 + saleBand.rows - 2, w: 4, h: 2 }) : null;
+      case 'lotForSale': {
+        const sb = saleBands.find((b) => b.id === hit.lotId) || saleBand;
+        return sb ? px({ x: sb.ox + 5, y: sb.y0 + sb.rows - 2, w: 4, h: 2 }) : null;
+      }
       default: return null;
     }
   }
@@ -785,7 +1029,7 @@ export function createCareerLayout(level, opts = {}) {
 
   return {
     TILE,
-    cols: COLS,
+    cols: WT,
     rows: ROWS,
     width: WORLD_W,
     height: WORLD_H,
@@ -832,6 +1076,10 @@ export function createCareerLayout(level, opts = {}) {
     lots: lotEntries.map(({ band, ...l }) => l),
     bands,
     saleBand,
+    saleBands,
+    x0: X0 * T,
+    x1: X0 * T + WORLD_W,
+    grid: { cMin, cMax, rMax, rowTop, rowBottom, x0Tiles: X0, colsTiles: WT, rowY, roadY: ROAD_Y, homeBottom: ROWS },
     home: { house, storage, stand, well, solar, waterTower: waterTowerSpot, tractor: tractorSpot, y0: H, roadY: ROAD_Y, lane: home.lane },
     start,
     fences,

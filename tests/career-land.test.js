@@ -1,5 +1,5 @@
-// Mode Carrière — terrains : achat dans l'ordre, prix, limite par rang, aménagements, réaménagement,
-// parcelles (index stables), champ de départ, plan de culture.
+// Mode Carrière — terrains : achat (terrain proposé de la carte 2D ; cases, voisinage : career-map.test.js), prix,
+// limite par rang, aménagements, réaménagement, parcelles (index stables), champ de départ, plan de culture.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LOT_NAMES, LOT_PRICES } from '../src/data/career/lots.js';
@@ -9,45 +9,49 @@ function rich(g, money = 1e6) {
   g.state.money = money;
 }
 
-test('achat des terrains : dans l\'ordre, aux prix du § 2.2, limité par le rang (1, 3, 6, 9, 12)', () => {
+test('achat des terrains (carte 2D) : terrain proposé, prix selon le nombre possédé, limité par le rang (1, 3, 6, 9, 12, 16)', () => {
   const g = newCareer();
   const ev = record(g);
   const next = g.query.career.nextLot();
-  assert.deepEqual([next.id, next.index, next.name, next.price, next.chargeIncrease], ['lot3', 3, LOT_NAMES[0], 250, 15]);
+  assert.deepEqual([next.id, next.index, next.col, next.row, next.name, next.price, next.chargeIncrease], ['lot3', 3, 0, 1, LOT_NAMES[0], 250, 15]);
   assert.equal(next.canBuy, false, '200 pièces au départ');
+  assert.equal(next.buyable, true, 'achetable (l\'argent n\'est pas compté)');
   assert.match(next.reason, /Pas assez d'argent \(il manque 50 pièces\)/);
   rich(g);
   const r = g.actions.career.buyLot();
-  assert.deepEqual(r, { ok: true, lotId: 'lot3', index: 3, cost: 250 });
-  assert.equal(ev.of('lotBought')[0].lotId, 'lot3');
+  assert.deepEqual(r, { ok: true, lotId: 'lot3', index: 3, col: 0, row: 1, cost: 250 });
+  assert.deepEqual([ev.of('lotBought')[0].lotId, ev.of('lotBought')[0].col, ev.of('lotBought')[0].row], ['lot3', 0, 1]);
   const lot = g.state.career.lots[3];
   assert.equal(lot.type, 'wild', 'en friche');
   assert.equal(lot.pricePaid, 250);
   // Rang 1 : un seul terrain.
   const locked = g.query.career.nextLot();
   assert.equal(locked.canBuy, false);
+  assert.equal(locked.buyable, false);
   assert.equal(locked.lockedByRank, 2);
+  assert.match(locked.lockedReason, /Rang 2 requis/);
   assert.match(g.actions.career.buyLot().reason, /Rang 2 requis/);
   const expected = [250];
-  for (const [rank, total] of [[2, 3], [3, 6], [4, 9], [5, 12]]) {
+  for (const [rank, total] of [[2, 3], [3, 6], [4, 9], [5, 12], [6, 16]]) {
     setRank(g, rank);
     while (g.state.career.lotsBought < total) {
       const n = g.state.career.lotsBought;
       const res = g.actions.career.buyLot();
       assert.ok(res.ok, `terrain ${n + 1}`);
       assert.equal(res.cost, LOT_PRICES[n]);
-      assert.equal(res.lotId, `lot${3 + n}`);
       expected.push(LOT_PRICES[n]);
     }
     assert.equal(g.actions.career.buyLot().ok, false);
   }
   assert.equal(g.query.career.nextLot(), null);
-  assert.equal(g.state.career.lots.length, 15);
+  assert.equal(g.state.career.lots.length, 19);
   assert.deepEqual(g.state.career.lots.slice(3).map((l) => l.pricePaid), LOT_PRICES);
   assert.equal(g.state.career.yearStats.spentBy.lots, LOT_PRICES.reduce((a, b) => a + b, 0));
+  // Terrain proposé par défaut : la colonne d'origine d'abord (vers le haut), puis les côtés.
+  assert.deepEqual(g.state.career.lots.slice(3, 9).map((l) => [l.col, l.row]), [[0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6]]);
   const lots = g.query.career.lots();
-  assert.equal(lots.length, 15);
-  assert.ok(lots.every((l) => l.bought));
+  assert.equal(lots.length, 19, 'plus rien à vendre');
+  assert.ok(lots.every((l) => l.bought && l.owned));
 });
 
 test('aménager en champ : 16 parcelles ouvertes ajoutées à la fin, index jamais renumérotés', () => {
@@ -95,19 +99,21 @@ test('aménagements : prix, rang, maximum ; les terrains fixes ne se réaménage
   rich(g);
   setRank(g, 5);
   for (let k = 0; k < 12; k++) g.actions.career.buyLot();
+  const ids = g.state.career.lots.slice(3).map((l) => l.id);
+  assert.equal(ids.length, 12);
   const types = Object.fromEntries(g.query.career.lotTypes('lot3').map((t) => [t.type, t]));
   assert.deepEqual([types.field.cost, types.meadow.cost, types.orchard.cost, types.workshops.cost, types.pond.cost, types.greenhouse.cost], [150, 120, 100, 100, 400, 800]);
   assert.equal(types.field.count, 1, 'le champ de départ compte');
   assert.equal(types.field.max, 6);
   // Champs : 5 de plus au plus.
-  for (let k = 0; k < 5; k++) assert.ok(g.actions.career.developLot(`lot${3 + k}`, 'field').ok, `champ ${k}`);
-  assert.match(g.actions.career.developLot('lot8', 'field').reason, /Au plus 6 champs/);
-  assert.ok(g.actions.career.developLot('lot8', 'orchard').ok);
-  assert.ok(g.actions.career.developLot('lot9', 'orchard').ok);
-  assert.match(g.actions.career.developLot('lot10', 'orchard').reason, /Au plus 2/);
+  for (let k = 0; k < 5; k++) assert.ok(g.actions.career.developLot(ids[k], 'field').ok, `champ ${k}`);
+  assert.match(g.actions.career.developLot(ids[5], 'field').reason, /Au plus 6 champs/);
+  assert.ok(g.actions.career.developLot(ids[5], 'orchard').ok);
+  assert.ok(g.actions.career.developLot(ids[6], 'orchard').ok);
+  assert.match(g.actions.career.developLot(ids[7], 'orchard').reason, /Au plus 2/);
   assert.equal(g.actions.career.developLot('home', 'field').ok, false);
   assert.equal(g.actions.career.developLot('start', 'meadow').ok, false);
-  assert.equal(g.actions.career.developLot('lot10', 'castle').ok, false);
+  assert.equal(g.actions.career.developLot(ids[7], 'castle').ok, false);
   // Rang : verger (2), serre (3), mare (4).
   const h = newCareer();
   rich(h);
@@ -169,7 +175,7 @@ test('plan de culture : même culture, une culture de la saison, ou rien', () =>
 test('terrains : requête lots(), renommer', () => {
   const g = newCareer();
   const lots = g.query.career.lots();
-  assert.deepEqual(lots.map((l) => [l.id, l.type, l.bought, l.forSale]), [['home', 'home', true, false], ['start', 'field', true, false], ['yard', 'yard', true, false], ['lot3', null, false, true]]);
+  assert.deepEqual(lots.map((l) => [l.id, l.type, l.bought, l.forSale]), [['home', 'home', true, false], ['start', 'field', true, false], ['yard', 'yard', true, false], ['lot3', null, false, true], ['lot2w1', null, false, true], ['lot2e1', null, false, true]]);
   assert.deepEqual(lots[2].slots, [{ buildingId: 'coop', level: 1 }, null]);
   assert.deepEqual(lots[0].buildings, ['house']);
   assert.equal(lots[1].plots.length, 16);

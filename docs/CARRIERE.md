@@ -81,7 +81,7 @@ Un rang s'obtient **dès que** le patrimoine atteint le seuil **et** que les deu
 | 3 | **Belle ferme** | Fermier reconnu | 4 000 | Embaucher un employé · Vendre 15 produits transformés *(30 au départ, 20 après la simulation, 15 après l'intégration, § 13.4)* | Citrouille ; maison niv. 3 (4 employés) ; porcherie (cochons), clapier (lapins), écurie (chevaux) ; fromagerie, moulin ; chambre d'hôte ; **semoir** et **moissonneuse** niv. 1, cueilleuse, collecteur ; serre *(phase B)* ; **jusqu'à 6 terrains** ; ruches (6) |
 | 4 | **Grande ferme** | Maître fermier | 12 000 | 48 parcelles cultivables · Réussir 3 quêtes de Joseph | Maison niv. 4 (6 employés) ; **tracteur**, machines niv. 2 ; **silo** (grenier niv. 2) ; mare et canards, conserverie, filature *(phase B)* ; étal niv. 2 ; ateliers niv. 4 ; **jusqu'à 9 terrains** |
 | 5 | **Exploitation modèle** | Grand exploitant | 30 000 | 5 employés · 6 espèces d'animaux | Maison niv. 5 **Manoir** (8 employés) ; grand silo ; ateliers niv. 5 ; château d'eau, convoyeur, marché fermier (étal niv. 3), embellissements *(phase B)* ; **jusqu'à 12 terrains** |
-| 6 | **Domaine** | Seigneur du domaine | 100 000 *(70 000 avant la simulation, § 13.4)* | Maison au niveau Manoir · Réussir les 3 épreuves d'un comice | Panneau « Domaine des … », fanion doré sur la maison, objets de décor « Domaine » (écus), comice « régional » (prix doublés) ; jeu libre |
+| 6 | **Domaine** | Seigneur du domaine | 100 000 *(70 000 avant la simulation, § 13.4)* | Maison au niveau Manoir · Réussir les 3 épreuves d'un comice | Panneau « Domaine des … », fanion doré sur la maison, objets de décor « Domaine » (écus), comice « régional » (prix doublés) ; **jusqu'à 16 terrains** (carte 2D, § 2.2) ; jeu libre |
 
 - **Durée des saisons** (10 ou 14 jours) : seuils de patrimoine × 2 (10 jours) ou × 3,5 (14 jours) — et non × durée / 7 : dans une année plus longue, l'argent est réinvesti plus de fois et la croissance se compose ; objectifs **comptés au fil des jours** (récoltes, produits transformés) × durée / 7, arrondis à 5 (60 → 85 → 120 récoltes ; 15 → 20 → 30 produits) ; les autres objectifs (terrains, employés, parcelles, espèces, maison, une quête par saison, un comice par an) ne changent pas. Réglé par la simulation pour que les rangs arrivent la même année quelle que soit la durée (§ 13.4).
 - Passage de rang : fenêtre « Votre ferme devient une **Belle ferme** ! » (fanfare de victoire, confettis) avec la liste des déblocages (icônes) et **+20 × rang écus** ; conseil « première fois » sur le premier déblocage utile.
@@ -162,6 +162,13 @@ Garde-fou anti-spirale : les salaires et le carburant ne sont **jamais** prélev
 
 ### 2.1 Le monde en portrait
 
+> **Carrière v2 — carte 2D (2026-09-30, retour d'un joueur : « développer ma ferme sur les côtés »)** : les terrains sont
+> maintenant des **blocs d'une grille** autour de la ferme de départ — 5 colonnes (2 à gauche, 2 à droite de la colonne
+> d'origine) × 6 rangées vers le haut, plus des terrains de côté à gauche et à droite de la ferme de départ. Le zoom ne
+> change pas (une colonne = la largeur du téléphone) : on fait défiler la ferme dans les deux sens, avec une
+> **mini-carte**. Contrat et géométrie : `docs/ARCHITECTURE.md`, « Carrière v2 — carte 2D ». Le schéma ci-dessous
+> reste celui de la colonne d'origine (et des anciennes carrières, dont les terrains s'empilaient en colonne).
+
 Le monde reste une **colonne de 14 tuiles** de large (12 utiles, forêt sur les bords), comme dans les niveaux : même zoom, parcelles de 2 × 2 tuiles (≈ 61 CSS px sur le Pixel 7, ≥ 53 px sur 360 × 740). La ferme **grandit vers le haut** : la maison et la route restent en bas (près du pouce), chaque terrain acheté **repousse la forêt** d'une bande de 11 tuiles.
 
 ```
@@ -193,9 +200,10 @@ Le monde reste une **colonne de 14 tuiles** de large (12 utiles, forêt sur les 
 
 ### 2.2 Acheter un terrain
 
-- Les terrains s'achètent **dans l'ordre** (toujours celui juste au-dessus du dernier) : la colonne reste continue. Le nombre de terrains possédés est limité par le rang (§ 1.5 : 1, 3, 6, 9, 12).
-- Prix *(à régler)* : **250, 400, 600, 900, 1 300, 1 900, 2 700, 3 800, 5 300, 7 400, 10 000, 14 000** (total 48 550). Chaque terrain ajoute **+15 aux charges de saison** (Détente ; +25 en Classique).
-- Achat : toucher le panneau « À vendre » de la scène, ou la Carte → « Acheter ». Feuille : nom du terrain (« Le Haut-Champ », noms fixes par rang de terrain : « Le Pré du ruisseau », « La Combe », « Les Terres Joseph »…, liste en données), prix, « +15 de charges par saison », puis le choix de l'**aménagement** (§ 2.3) ; on peut laisser le terrain en **friche** et l'aménager plus tard.
+- **Carte 2D** : on achète n'importe quel bloc libre qui **touche par un côté** un terrain déjà à soi ou la ferme de départ (au départ : au-dessus, à gauche ou à droite de la ferme) ; les autres blocs de la lisière restent en forêt avec un panneau « À vendre » (ou un cadenas « Rang N requis »). *(Avant la v2 : toujours le terrain juste au-dessus du dernier.)* Le nombre de terrains possédés est limité par le rang (§ 1.5 : 1, 3, 6, 9, 12, **16** au Domaine).
+- Prix : selon le **nombre de terrains déjà possédés**, quelle que soit la place : **250, 400, 600, 900, 1 300, 1 900, 2 700, 3 800, 5 300, 7 400, 10 000, 14 000, 18 500, 24 000, 30 000, 37 000** (total 158 050 ; les 4 derniers, au rang 6, sont un « puits d'argent » de fin de partie, § 9.3). Chaque terrain ajoute **+15 aux charges de saison** (Détente ; +25 en Classique).
+- Achat : toucher le panneau « À vendre » de la scène, la mini-carte, ou la Carte → « Acheter ». Feuille : nom du terrain (noms fixes par case : colonne d'origine « Le Haut-Champ », « Le Pré du ruisseau », « La Combe », « Les Terres Joseph »… ; côtés « Le Petit Pré », « Les Coquelicots », « Les Saules »…, liste en données), prix, « +15 de charges par saison », puis le choix de l'**aménagement** (§ 2.3) ; on peut laisser le terrain en **friche** et l'aménager plus tard.
+- **Anciennes carrières** : leurs terrains restent en colonne (colonne d'origine, rangées 1, 2, 3… : même image) ; au Domaine, elles peuvent acheter jusqu'à 4 terrains de plus, sur les côtés.
 - Animation : les arbres de la bande tombent/s'effacent (poussière, feuilles), la friche apparaît (herbe haute, souches), puis l'aménagement se construit (clôture posée de gauche à droite, 1 s). Son : scie + cloche.
 - **Réaménager** : possible si le terrain est vide (aucune culture, aucun bâtiment, aucun animal) ; on paie le nouvel aménagement, pas le terrain.
 
@@ -230,7 +238,7 @@ Tous les terrains font **12 × 11 tuiles utiles** (x 1 à 12), bande de forêt e
 
 | Élément | Maximum |
 |---|---|
-| Terrains achetés | 12 (+ maison, champ de départ, basse-cour) |
+| Terrains achetés | **16** (carte 2D ; + maison, champ de départ, basse-cour) — grille de 5 colonnes × 6 rangées + 4 cases à côté de la ferme |
 | Parcelles (champs + serre + verger) | **128** (6 × 16 + 8 + 2 × 9 = 122) |
 | Animaux (toutes espèces) | 80 ; la scène en dessine **6 au plus par abri** (les autres sont « dans l'abri ») |
 | Employés | 8 |
@@ -460,6 +468,8 @@ Règles :
 
 ### 8.2 Événements au hasard
 
+> **Rythme tranquille (2026-09-30, retours de joueurs)** : tirage **15 %** par jour (au lieu de 30 %), poids du visiteur 20, des corbeaux 10, du marchand 8 ; commande d'un visiteur **5 jours** (7 en saisons de 14 jours), 3 à 5 récoltes (2 à 4 si chères), seulement d'une culture qu'on peut avoir à temps (au grenier, déjà semée ou qui pousse vite), **une seule commande à la fois**, rappel la veille du dernier jour. Mesuré : ≈ 1 sollicitation par semaine de jeu (§ 13.5). Le tableau ci-dessous garde les valeurs d'origine.
+
 Tirage **à l'aube** (flux `events`, carrière seulement) : **30 %** de chance par jour, jamais les 3 premiers jours de la carrière, jamais un jour de fête, jamais deux fois le même d'affilée ; **un seul** événement au hasard actif à la fois. Poids *(à régler)* :
 
 | Événement | Poids | Condition | Déroulé |
@@ -477,8 +487,14 @@ Aucun événement ne détruit une culture, un animal ou un bâtiment (grêle, in
 
 ### 8.3 Joseph : quêtes et amitié
 
-- Joseph (le voisin du tutoriel) propose **une quête au début de chaque saison** à partir du rang 2 (au plus une quête active). Elle dure **jusqu'à la fin de la saison**.
-- Modèles (données) : « Apporte-moi **N** <culture de saison> » (N = 6 + 2 × rang), « **N** <produit transformé> » (4 + rang), « **N** œufs » (8 × rang), « Un panier de **N** fruits » (4 + rang), « Plante **N** pommiers » (2, une fois). Livraison comme pour un visiteur (grenier ou prochaines récoltes / ventes mises de côté).
+- **Rythme tranquille (2026-09-30, retours de joueurs : « trop de quêtes en peu de temps », « une saison pour planter 10 patates, j'ai oublié d'appuyer sur pause, c'était déjà trop tard »)** :
+  - **une seule quête à la fois** ; à partir du rang 2, Joseph en propose une au début d'une saison **au plus toutes les deux saisons** ; on peut aussi lui **demander un service** dans le Carnet (une fois par jour) quand on en a envie ;
+  - la proposition **attend sans compte à rebours** jusqu'à la fin de la saison suivante ; pas acceptée, Joseph la retire gentiment (« Finalement, je me suis débrouillé. Merci quand même ! ») ;
+  - le **délai commence à l'acceptation** : au moins **deux saisons** de jours et **3 fois la pousse** de ce qu'il faut produire (+ 2 jours), jusqu'au soir du dernier jour d'une saison (« Rien ne presse : tu as jusqu'à la fin de l'hiver. ») ; en saisons de 7 jours : 14 à 20 jours ; le temps ne passe pas en pause ;
+  - **rappels** de Joseph à 3 jours puis à 1 jour de l'échéance ;
+  - **échec doux** : ce qui a été mis de côté est payé au prix normal, aucun cœur perdu (« Ce n'est pas grave du tout ! Merci d'avoir essayé, on remettra ça. »).
+  - Choix : c'est Joseph qui propose (rarement) plutôt que seulement sur demande, pour que le joueur tranquille qui n'ouvre jamais le Carnet ait quand même ses quêtes (objectif du rang 4) ; le délai ne court qu'après « Accepter », donc rien n'est jamais raté par inattention.
+- Modèles (données, taille selon le rang **et la ferme**) : « Apporte-moi **N** <culture semable cette saison et la suivante> » (N = 4 + 2 × (rang − 2) + 0 à 1, au plus la moitié des parcelles de champ : **4 ou 5 pommes de terre au rang 2**), « **N** <produit transformé> » (2 + (rang − 2) + 0 à 1), « **N** œufs » (6 + 4 × (rang − 2) + 0 à 2), « Un panier de **N** fruits » (3 + (rang − 2) + 0 à 1, au plus 2 par arbre), « Plante **N** pommiers » (2, une fois). *(Avant : 6 + 2 × rang, soit 10 au rang 2, en une saison.)* Livraison comme pour un visiteur (grenier ou prochaines récoltes / ventes mises de côté).
 - Récompense : **1,5 × valeur** des objets + **3 écus** + **1 ♥**. Refuser ou rater : rien ne se passe (Joseph : « Pas grave, une autre fois ! »).
 - **Amitié** (0 à 10 ♥, jamais perdue) : +1 par quête réussie, +1 quand un prêt est remboursé en entier.
 
@@ -739,6 +755,43 @@ la part des carrières au rang visé par la courbe du § 9.1 (an 1 → 2, an 3 �
 - **Événements vivants** (inchangé, lot CORE-C) : ≈ 10 à 16 % des revenus du joueur tranquille ; 3 à 4 quêtes réussies
   par an ; 10 ♥ vers l'an 5 ; comice réussi en médiane 5 fois en 10 ans.
 
+### 13.5 Résultats (carrière v2, 2026-09-30 : quêtes et commandes au rythme tranquille, carte 2D, 16 terrains)
+
+Mêmes robots et mêmes réglages que le § 13.4 (20 carrières × 10 ans par case), avec : quêtes de Joseph au plus toutes
+les deux saisons et délai à l'acceptation (§ 8.3), tirage des événements 15 %, commandes de 5 jours (§ 8.2), 16 terrains
+(les robots tranquille et débutant choisissent un terrain de la lisière au hasard, l'appliqué le terrain proposé ; au
+Domaine : un pré, une cour des ateliers, la serre et la mare de plus). Rang médian (part au rang visé) :
+
+| Réglage | Robot | An 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Domaine (méd.) | Faillites |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Détente 7 j | casual | 2 (85 %) | 2 | 3 (100 %) | 4 | 4 (100 %) | 5 | 5 (100 %) | 5 | 6 | 6 (100 %) | an 9 | 0 % |
+| Détente 7 j | novice | 1 | 2 | 2 | 2 | 3 | 4 | 5 | 5 | 5 | 5 | jamais | 0 % |
+| Détente 7 j | optimal | 2 | 3 | 4 | 5 | 5 | 6 | 6 | 6 | 6 | 6 | an 6 | 0 % |
+| Détente 10 j | casual | 2 (70 %) | 2 | 3 (100 %) | 4 | 4 (95 %) | 5 | 5 (100 %) | 5 | 6 | 6 (100 %) | an 9 | 0 % |
+| Détente 10 j | optimal | 2 | 3 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | 6 | an 7 | 0 % |
+| Détente 14 j | casual | 2 (95 %) | 2 | 3 (100 %) | 4 | 4 (100 %) | 5 | 5 (100 %) | 5 | 5 | 6 (100 %) | an 10 | 0 % |
+| Détente 14 j | optimal | 2 | 3 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | 6 | an 7 | 0 % |
+| Classique 7 j | casual | 1 | 2 | 2 | 3 | 4 | 4 | 4 | 5 | 5 | 5 | jamais | 20 % (13 % sur 40 carrières ; avant : 15 % sur 40) |
+| Classique 7 j | optimal | 2 | 3 | 4 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | an 8 | 0 % |
+| Classique 10 j | casual | 1 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | jamais | 5 % |
+| Classique 14 j | casual | 1 | 2 | 3 | 3 | 4 | 4 | 5 | 5 | 5 | 5 | jamais | 5 % |
+
+Rythme (Détente 7 j, `node tools/simulate-career.js`, ligne « Rythme ») :
+
+| Robot | Sollicitations / semaine | Événements au hasard / semaine | Quêtes proposées / an | Quêtes acceptées réussies | Jours pour finir (méd.) | Commandes / an | Commandes acceptées livrées | Rappels / an | Au plus ouvert |
+|---|---|---|---|---|---|---|---|---|---|
+| casual | 1,01 | 0,83 | 1,8 | **96 %** (255 acceptées, 8 ratées) | 5 | 0,9 | 91 % | 0,2 | 1 quête + 1 commande |
+| novice | 1,03 | 0,87 | 1,7 | 88 % | 5 | 1,1 | 80 % | 0,3 | 1 + 1 |
+| optimal | 0,79 | 0,86 | 1 (+ demandées) | 89 % (demande souvent) | 4 | 1,1 | 100 % | 0,6 | 1 + 1 |
+
+- **Avant** (même robot sur les règles d'avant) : casual **2,18** sollicitations par semaine, 1,85 événement au hasard,
+  **3,7 quêtes proposées par an** (une par saison, à finir dans la saison), **76 %** des quêtes acceptées réussies,
+  75 % des commandes (2 jours) livrées ; novice : 59 % et 55 %. Sollicitations = commandes, marchand, animal perdu, corbeaux, quêtes proposées
+  par Joseph (les fêtes du calendrier, inchangées, en plus).
+- La courbe des rangs (Détente) ne bouge pas : quêtes plus petites mais toujours réussies ; rang 4 (« 3 quêtes ») à l'an 4.
+- 16 terrains : le joueur tranquille en a 15 à l'an 10, l'appliqué 16 dès l'an 8 (≈ 110 000 pièces de terrains en plus :
+  un but de fin de partie). Les saisons de 10 et 14 jours et Classique restent dans les marges du § 13.4.
+
 ## 14. Plan de réalisation
 
 Les **contrats** (formes des données, de l'état, actions, requêtes, événements, API de scène, noms de sprites, propriété des fichiers) sont dans `docs/ARCHITECTURE.md`, section « Mode Carrière — contrats ». Chaque lot peut commencer tout de suite contre ces contrats (objets factices en attendant les autres).
@@ -771,7 +824,7 @@ Critères d'acceptation communs : `node --test tests/` vert (parité comprise), 
 | Crédit pour acheter la terre | Pas en phase A ; idée gardée (paiement en 4 saisons, +10 %) |
 | Faut-il un mode encore plus doux (« Zen », sans charges) ? | Non pour l'instant : Détente ne connaît déjà pas de fin de partie |
 | Progression hors ligne | **Non** (règle d'or 5) |
-| Terrains achetables dans le désordre / choix de la position | Non : toujours le suivant (colonne continue, rendu simple) |
+| Terrains achetables dans le désordre / choix de la position | ~~Non : toujours le suivant~~ → **Oui depuis la v2** (carte 2D : tout bloc qui touche la ferme ; retour d'un joueur, 2026-09-30) |
 | Animaux en unités individuelles (poule) plutôt qu'en « poulaillers » comme dans les niveaux | **Unités** (plus lisible quand l'abri grandit) ; les chiffres des niveaux ne changent pas |
 | Récolte « à la main » +10 % | Oui (garde l'envie de toucher) ; à confirmer par la mesure « le toucher compte » |
 
@@ -779,4 +832,5 @@ Critères d'acceptation communs : `node --test tests/` vert (parité comprise), 
 
 - **Pas de production hors jeu** : le temps s'arrête quand on quitte le jeu.
 - **Durée des saisons réglable** à la création de la ferme : 7, 10 ou 14 jours (7 par défaut). Les coûts et gains journaliers restent identiques ; les charges de saison et les paliers sont ajustés par jour de saison pour que l'année reste équilibrée quelle que soit la durée.
+- **Retours d'un joueur (2026-09-30)** : « très cool », mais trop de quêtes en peu de temps et des délais trop courts pour un joueur tranquille (→ § 8.2, § 8.3 : rythme tranquille) ; agrandir la ferme **sur les côtés** (→ § 2 : carte 2D) ; une **mini-carte** ; les fiches doivent dire **ce que fait chaque bâtiment** (→ rôle, effet de chaque niveau et conseils dans chaque fiche : `src/data/career/descriptions.js`).
 - **Création de la ferme** : nom de la ferme, **fermier ou fermière** (titre et apparence du personnage), tenue parmi celles débloquées, difficulté (Détente sans fin de partie / Classique où la faillite termine la carrière).

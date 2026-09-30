@@ -1,18 +1,36 @@
 // Mode Carrière — quêtes et amitié de Joseph (données pures). Conception : docs/CARRIERE.md § 8.3.
 // Moteur : src/core/career/quests.js (lot CORE-C). Rien de ce fichier n'est lu par une partie de niveau.
 
-/** Rang à partir duquel Joseph propose une quête au début de chaque saison. */
+/** Rang à partir duquel Joseph propose des quêtes. */
 export const QUEST_RANK = 2;
 
 /**
+ * Rythme des quêtes (retours de joueurs : « trop de quêtes en peu de temps », « une saison pour planter 10 patates,
+ * c'était déjà trop tard ») : une seule quête à la fois, proposée au plus toutes les deux saisons, et un délai
+ * large qui ne commence qu'à l'acceptation.
+ *   seasonsBetweenOffers  au plus une proposition de Joseph toutes les N saisons (début de saison) ; le joueur peut
+ *                         aussi lui demander un service dans le Carnet (askQuest), une fois par jour
+ *   offerSeasons          une proposition pas encore acceptée attend la fin de la saison SUIVANTE, puis Joseph la
+ *                         retire sans rien dire de fâché (questWithdrawn) ; aucun compte à rebours avant « Accepter »
+ *   minSeasons            délai après l'acceptation : au moins N saisons entières de jours…
+ *   growthFactor, marginDays  … et au moins 3 × la pousse la plus longue de ce qu'il faut produire + 2 jours ;
+ *                         l'échéance tombe toujours le soir du DERNIER jour d'une saison (« jusqu'à la fin de l'hiver »)
+ *   reminders             rappels (questReminder) quand il reste 3 jours puis 1 jour (échéance le soir du dernier)
+ */
+export const QUEST_PACE = { seasonsBetweenOffers: 2, offerSeasons: 2, minSeasons: 2, growthFactor: 3, marginDays: 2, reminders: [3, 1] };
+
+/**
  * Modèles de quête.
- *   type   'crop'    : N récoltes d'une culture de saison (mises de côté à la récolte, ou livrées du grenier)
+ *   type   'crop'    : N récoltes d'une culture (semable cette saison ET la suivante : la proposition attend
+ *                      jusqu'à la fin de la saison suivante) — mises de côté à la récolte, ou livrées du grenier
  *          'fruits'  : un panier de N fruits (récoltes d'arbres fruitiers ; mises de côté ou grenier)
  *          'product' : N produits transformés d'un atelier (comptés à la vente : ils sont payés normalement,
  *                      la récompense ajoute la moitié de leur valeur)
  *          'eggs'    : N œufs ramassés (poules, canes ; comptés au ramassage des abris ; ils sont payés normalement)
  *          'trees'   : planter N pommiers (une fois par carrière)
- *   n      : base + perRank × rang
+ *   n      : base + perRank × (rang − 2) + un tirage de 0 à jitter ; plafonné par la taille de la ferme
+ *            (capPerPlot × parcelles de champ ouvertes pour 'crop', capPerTree × arbres pour 'fruits',
+ *            poules et canes × jours du délai pour 'eggs') : au rang 2, 4 à 5 pommes de terre
  *   weight : poids du tirage (flux « events »)
  *   rewardFactor : récompense = rewardFactor × valeur des objets (prix de base × difficulté, sans le cours) ;
  *            'product' 0,5 : les produits sont déjà payés à la vente (total 1,5 × leur valeur) ;
@@ -21,11 +39,11 @@ export const QUEST_RANK = 2;
  *   text   : phrase de Joseph ({n}, {what} remplacés)
  */
 export const QUEST_TEMPLATES = [
-  { id: 'crop', type: 'crop', n: { base: 6, perRank: 2 }, weight: 40, rewardFactor: 1.5, text: 'Tu pourrais m\'apporter {n} {what} ? Ma sœur vient dîner.' },
-  { id: 'product', type: 'product', n: { base: 4, perRank: 1 }, weight: 20, rewardFactor: 0.5, needs: 'workshop', text: 'J\'aimerais goûter tes {what} : {n}, ce serait parfait.' },
-  { id: 'eggs', type: 'eggs', n: { base: 0, perRank: 8 }, weight: 15, rewardFactor: 1.5, needs: 'eggs', text: 'Mes poules boudent… Tu me mettrais de côté {n} œufs cette saison ?' },
-  { id: 'fruits', type: 'fruits', n: { base: 4, perRank: 1 }, weight: 15, rewardFactor: 1.5, needs: 'trees', text: 'Un panier de {n} fruits pour la fête de l\'école, ça te dit ?' },
-  { id: 'trees', type: 'trees', n: { base: 2, perRank: 0 }, weight: 10, rewardFactor: 1.5, needs: 'orchard', once: true, text: 'Plante donc {n} pommiers au verger : tu me remercieras dans trois ans !' },
+  { id: 'crop', type: 'crop', n: { base: 4, perRank: 2, jitter: 1, capPerPlot: 0.5, min: 3 }, weight: 40, rewardFactor: 1.5, text: 'Tu pourrais m\'apporter {n} {what} ? Ma sœur vient dîner, rien ne presse.' },
+  { id: 'product', type: 'product', n: { base: 2, perRank: 1, jitter: 1 }, weight: 20, rewardFactor: 0.5, needs: 'workshop', text: 'J\'aimerais goûter tes {what} : {n}, ce serait parfait.' },
+  { id: 'eggs', type: 'eggs', n: { base: 6, perRank: 4, jitter: 2 }, weight: 15, rewardFactor: 1.5, needs: 'eggs', text: 'Mes poules boudent… Tu me mettrais de côté {n} œufs ?' },
+  { id: 'fruits', type: 'fruits', n: { base: 3, perRank: 1, jitter: 1, capPerTree: 2, min: 2 }, weight: 15, rewardFactor: 1.5, needs: 'trees', text: 'Un panier de {n} fruits pour la fête de l\'école, ça te dit ?' },
+  { id: 'trees', type: 'trees', n: { base: 2, perRank: 0, jitter: 0 }, weight: 10, rewardFactor: 1.5, needs: 'orchard', once: true, text: 'Plante donc {n} pommiers au verger : tu me remercieras dans trois ans !' },
 ];
 
 export const QUEST_TEMPLATES_BY_ID = Object.fromEntries(QUEST_TEMPLATES.map((t) => [t.id, t]));
@@ -66,12 +84,17 @@ export const JOSEPH_CART = { priceBonus: 0.05, title: 'Ami de Joseph' };
 export const JOSEPH_LINES = {
   questOffer: 'Bonjour, voisin ! J\'ai un petit service à te demander…',
   questOfferFem: 'Bonjour, voisine ! J\'ai un petit service à te demander…',
-  questAccepted: 'Merci ! Rien ne presse : tu as jusqu\'à la fin de la saison.',
+  questAccepted: 'Merci ! Rien ne presse : tu as jusqu\'à {deadline}.',
   questDeclined: 'Pas grave, une autre fois !',
   questProgress: 'Ça avance ! Encore {left}.',
+  questReminder3: 'Petit rappel : plus que 3 jours pour mes {what}. Si tu n\'y arrives pas, ce n\'est pas grave !',
+  questReminder1: 'Demain soir, c\'est le dernier jour pour mes {what}. Et sinon, tant pis : on reste amis !',
+  questWithdrawn: 'Finalement, je me suis débrouillé. Merci quand même !',
+  questAsk: 'Un service ? Justement, j\'y pensais…',
+  questAskNone: 'Pour l\'instant, je n\'ai besoin de rien. Merci d\'avoir demandé !',
   questDone: 'Formidable ! Tiens, pour ta peine. Tu es un vrai voisin.',
   questDoneFem: 'Formidable ! Tiens, pour ta peine. Tu es une vraie voisine.',
-  questExpired: 'La saison est passée… Pas grave, une autre fois !',
+  questExpired: 'Ce n\'est pas grave du tout ! Merci d\'avoir essayé, on remettra ça.',
   heart: 'On s\'entend bien, tous les deux.',
   loanHeart: 'Merci d\'avoir tout remboursé. Entre voisins, on se fait confiance.',
   festivalHeart: 'Quelle belle fête ! Et merci de m\'aider pour ma commande.',

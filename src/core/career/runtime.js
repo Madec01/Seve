@@ -53,7 +53,8 @@ import { careerDailyCharges, careerDifficulty, careerIncomes, careerInvestments,
 import { careerFlag, hooksOf, providedFactor, careerExtensions } from './registry.js';
 import { updateCareerMarket, isOffSeason, marketInfo } from './market.js';
 import { animalCount, buildOnSlot, buildOptions, buildingInfo, careerNextCost, checkBuyCareer, itemMax, rankLabel, shelterCapacity, staffCapacity, storageCapacity, upgradeBuilding } from './buildings.js';
-import { buyLot, developLot, getLot, lotPlots, lotTypeName, lotTypesFor, nextLotInfo, setPlan } from './land.js';
+import { aboutFields, describe } from '../../data/career/descriptions.js';
+import { buyLot, developLot, getLot, gridInfo, lotPlots, lotTypeName, lotTypesFor, nextLotInfo, saleLots, setPlan } from './land.js';
 import { cropRank } from './level.js';
 import { checkRanks, patrimony, rankSummary } from './ranks.js';
 import { addStock, sellStock, sellStockFor, setStorageMode, stockInfo, stockUsed, wouldStore } from './storage.js';
@@ -655,7 +656,7 @@ export function createCareerRuntime(core) {
   }
 
   const careerActions = {
-    buyLot: guard(() => buyLot(api)),
+    buyLot: guard((lotId) => buyLot(api, lotId)),
     developLot: guard((lotId, type) => developLot(api, lotId, type)),
     build: guard((lotId, slot, buildingId) => buildOnSlot(api, lotId, slot, buildingId)),
     upgradeBuilding: guard((buildingId) => upgradeBuilding(api, buildingId)),
@@ -682,11 +683,18 @@ export function createCareerRuntime(core) {
     return {
       id: lot.id,
       index: lot.index,
+      col: lot.col,
+      row: lot.row,
+      fixed: lot.index < 3,
       type: lot.type,
       typeName: lotTypeName(lot.type),
       name: lot.name,
+      owned: true,
       bought: true,
       forSale: false,
+      buyable: false,
+      canBuy: false,
+      lockedReason: null,
       price: lot.pricePaid,
       developCost: lot.developPaid,
       lockedByRank: null,
@@ -697,6 +705,16 @@ export function createCareerRuntime(core) {
       staff: c().staff.filter((s) => s.lotId === lot.id).map((s) => s.id),
       plan: lot.plan ? { ...lot.plan } : null,
       special: lot.special || null,
+    };
+  }
+
+  /** Terrain à vendre de la lisière (même forme qu'un terrain possédé, champs de vente en plus). */
+  function saleEntry(next) {
+    return {
+      id: next.id, index: next.index, col: next.col, row: next.row, fixed: false, type: null, typeName: null, name: next.name,
+      owned: false, bought: false, forSale: true, buyable: next.buyable, canBuy: next.canBuy, reason: next.reason, lockedReason: next.lockedReason,
+      price: next.price, basePrice: next.basePrice, special: next.special, chargeIncrease: next.chargeIncrease, developCost: 0, lockedByRank: next.lockedByRank,
+      plots: [], slots: [], buildings: [], machines: [], staff: [], plan: null,
     };
   }
 
@@ -760,21 +778,29 @@ export function createCareerRuntime(core) {
       };
     },
     lots() {
-      const out = c().lots.map(lotEntry);
-      const next = nextLotInfo(state);
-      if (next) {
-        out.push({
-          id: next.id, index: next.index, type: null, typeName: null, name: next.name, bought: false, forSale: true, price: next.price, basePrice: next.basePrice,
-          special: next.special, chargeIncrease: next.chargeIncrease, canBuy: next.canBuy, reason: next.reason, developCost: 0, lockedByRank: next.lockedByRank,
-          plots: [], slots: [], buildings: [], machines: [], staff: [], plan: null,
-        });
-      }
-      return out;
+      // Terrains possédés (ordre d'achat : maison, champ de départ, basse-cour, puis les achats), puis les terrains
+      // à vendre de la lisière (carte 2D : cases libres qui touchent la ferme, achetables ou verrouillées par le rang).
+      return [...c().lots.map(lotEntry), ...saleLots(state).map(saleEntry)];
     },
     lot(id) {
       const lot = getLot(state, id);
       if (lot) return lotEntry(lot);
       return careerQueries.lots().find((l) => l.id === id) || null;
+    },
+    grid() {
+      return { ...gridInfo(state), lots: careerQueries.lots() };
+    },
+    // « Ce que fait ce bâtiment » : kind 'building' | 'machine' | 'animal' | 'item' | 'lotType' ; level : niveau
+    // montré (par défaut le niveau possédé, sinon 1).
+    about(kind, id, level) {
+      let lv = level;
+      if (lv === undefined) {
+        if (kind === 'building') lv = c().buildings[id]?.level || 0;
+        else if (kind === 'machine') lv = Math.max(0, ...Object.values(c().machines).filter((m) => m && m.id === id).map((m) => m.level));
+        else lv = 1;
+      }
+      const d = describe(kind, id, lv);
+      return d ? { ...d, level: lv } : null;
     },
     nextLot() {
       return nextLotInfo(state);
@@ -875,6 +901,7 @@ export function createCareerRuntime(core) {
         requiresAny: null,
         processing: null,
         collect: animal && careerFlag('collectAnimals'),
+        ...aboutFields(animal ? 'animal' : 'item', inv.id),
       };
     });
   }

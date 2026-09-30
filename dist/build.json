@@ -1,8 +1,8 @@
 {
-  "id": "4425d8827675",
+  "id": "09c0bb5db863",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.0139f824c0.js",
-  "css": "dist/game.85f90c30bf.css",
+  "js": "dist/game.fa20fae291.js",
+  "css": "dist/game.fafc621cce.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -140,28 +140,28 @@
     "assets/sprites/ui/slot-wood.png": "77631b56d79873e0",
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/fonts.css": "f6a60d8eb500f8f4",
-    "css/style.css": "6df471923df35031",
+    "css/style.css": "a01672c1ca85c35b",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
     "src/audio/audio.js": "ad3f4125ebc5f0e7",
     "src/audio/manifest.js": "bcd255827929807c",
     "src/core/calendar.js": "b34f33abf62266cd",
-    "src/core/career/animals.js": "be14648868da8203",
-    "src/core/career/buildings.js": "93d71478d54567fc",
+    "src/core/career/animals.js": "aae6cca42b4e187e",
+    "src/core/career/buildings.js": "ae8d8e2f5324ce3b",
     "src/core/career/career.js": "172c9c37b3d7ec6b",
     "src/core/career/crew.js": "896a32d6dfa49dc4",
     "src/core/career/effects.js": "d0c32e79d003a3c6",
-    "src/core/career/events.js": "ea2357226c257fa5",
+    "src/core/career/events.js": "ec8740e9ef74decc",
     "src/core/career/extensions.js": "811cd9ca9d997b34",
-    "src/core/career/land.js": "b7086fa149f19bca",
+    "src/core/career/land.js": "0b8b8714c274f8b6",
     "src/core/career/level.js": "369b1b4a616754a3",
-    "src/core/career/machines.js": "6c7096221e36599a",
+    "src/core/career/machines.js": "34baa9d15b62af6d",
     "src/core/career/market.js": "1ddd0ac42e554fb4",
-    "src/core/career/quests.js": "8e7a2ec851228c05",
+    "src/core/career/quests.js": "9aabd3a757953486",
     "src/core/career/ranks.js": "e57791b022bc99e3",
     "src/core/career/registry.js": "af2cc8625fa2b383",
-    "src/core/career/runtime.js": "24182d6091cceb34",
-    "src/core/career/save.js": "1e885052ba199892",
+    "src/core/career/runtime.js": "adc0345b99b5ec66",
+    "src/core/career/save.js": "2686424be2266b4e",
     "src/core/career/staff.js": "f5f46323c16fbd97",
     "src/core/career/storage.js": "afe0cd9374491826",
     "src/core/career/work.js": "2a3a95c4d2d0f90d",
@@ -169,7 +169,7 @@
     "src/core/economy.js": "5e63263fdfaa01f8",
     "src/core/events.js": "467b3069052f8d70",
     "src/core/farm.js": "55beb3a08637764b",
-    "src/core/game.js": "03ff7839763cfad8",
+    "src/core/game.js": "e27af75ed46bf722",
     "src/core/market.js": "b44b99ed21844017",
     "src/core/neighbour.js": "625c041def630a9b",
     "src/core/perks.js": "d4c235975cc3fe4a",
@@ -183,12 +183,13 @@
     "src/data/balance.js": "d3f28fc92ba51403",
     "src/data/career/animals.js": "bb0310114eec654b",
     "src/data/career/buildings.js": "5fb6613b2c72514e",
-    "src/data/career/career.js": "57474479826f1b74",
-    "src/data/career/events.js": "ddaa86847cc300d7",
-    "src/data/career/lots.js": "305cc6161edf2e9a",
+    "src/data/career/career.js": "55eb1999a41317d1",
+    "src/data/career/descriptions.js": "2f16f089847b93cb",
+    "src/data/career/events.js": "10c24b6bb8e56f2f",
+    "src/data/career/lots.js": "1f3552d0dd206410",
     "src/data/career/machines.js": "51e5f1ac005ee3bc",
     "src/data/career/names.js": "8ed1d9050dae373d",
-    "src/data/career/quests.js": "f226f6be9e61dc86",
+    "src/data/career/quests.js": "432ca817c2f8e4d3",
     "src/data/career/ranks.js": "b5930a5d8eef36d3",
     "src/data/career/staff.js": "0c7c7cd4ac8cb93d",
     "src/data/cosmetics.js": "f7d4eb5ebb95979a",
@@ -200,36 +201,37 @@
     "src/data/products.js": "ca4308ec37323ecd",
     "src/index.template.html": "481723bd863c8d56",
     "src/loader.js": "8cd0d03467331dd6",
-    "src/main.js": "71bc4b6c7a546299",
+    "src/main.js": "d530f44afd883f0c",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
     "src/render/atlas.js": "3576e9a2e9f5553c",
-    "src/render/career-actors.js": "317124ebe42aac00",
+    "src/render/career-actors.js": "fd9dbef7f8a232b9",
     "src/render/effects.js": "9d6a1f83cb39ff17",
-    "src/render/layout-career.js": "111c2e5717e5d7c1",
+    "src/render/layout-career.js": "7d89b09fcb6b3a97",
     "src/render/layout-common.js": "fbcb56de0f9abdb8",
     "src/render/layout-portrait.js": "5185ed16cf6502de",
     "src/render/layout.js": "391ef10dd8ea0e06",
-    "src/render/scene.js": "28853a79bdbed564",
+    "src/render/scene.js": "6d52407cf355cc9f",
     "src/storage.js": "985e0600c4000328",
-    "src/ui/buildings.js": "4c4e4ad2d0e9a7a5",
-    "src/ui/career/buildings.js": "caf593785d2f506e",
-    "src/ui/career/events.js": "2fcaa1e777b4fc93",
-    "src/ui/career/index.js": "3354002e8d70a954",
-    "src/ui/career/journal.js": "402dcfa7461d6bb1",
-    "src/ui/career/lots.js": "8bbf204a163f14c7",
+    "src/ui/buildings.js": "3935e0120d094ec7",
+    "src/ui/career/buildings.js": "0a54ec028e45533a",
+    "src/ui/career/events.js": "ae744376ff300e5e",
+    "src/ui/career/index.js": "33191f1b100256c1",
+    "src/ui/career/journal.js": "387b11b97278eab6",
+    "src/ui/career/lots.js": "baa04a60ce4c0538",
     "src/ui/career/menu.js": "6f058db96634d80a",
-    "src/ui/career/shop.js": "d9f198b0cfe0741f",
+    "src/ui/career/minimap.js": "93eceb467345bc24",
+    "src/ui/career/shop.js": "ac41c572d748cc12",
     "src/ui/career/staff.js": "f776694ac71b068b",
-    "src/ui/career/util.js": "7b248d3780111e0a",
-    "src/ui/career/windows.js": "134e373153c6a259",
+    "src/ui/career/util.js": "47786af8ea3bb220",
+    "src/ui/career/windows.js": "7552e1f1fe125b09",
     "src/ui/decor.js": "4e0ebdca91841de3",
     "src/ui/dialogs.js": "0e0de2e176ab9dd0",
     "src/ui/dom.js": "4ce9149d5d52a48f",
-    "src/ui/field.js": "044800509576b060",
-    "src/ui/gestures.js": "63c3b7ea0df7e607",
+    "src/ui/field.js": "354584dc7b4b3d77",
+    "src/ui/gestures.js": "2b989c12cbc53f2c",
     "src/ui/grange.js": "291f10fbeb707e40",
-    "src/ui/hints.js": "196bce63dd9bab1e",
+    "src/ui/hints.js": "a75dfa0a0439d8dc",
     "src/ui/hud.js": "b2593401418acad6",
     "src/ui/icons.js": "cd979dc037cdc49f",
     "src/ui/panel.js": "2ab835a5c0dc4fab",
@@ -246,43 +248,43 @@
   },
   "history": [
     {
+      "id": "09c0bb5db863",
+      "files": [
+        "dist/game.fa20fae291.js",
+        "dist/game.fa20fae291.js.map",
+        "dist/game.fafc621cce.css"
+      ]
+    },
+    {
+      "id": "bf41cf732e1d",
+      "files": [
+        "dist/game.95b9440cc1.js",
+        "dist/game.95b9440cc1.js.map",
+        "dist/game.a90bcc5376.css"
+      ]
+    },
+    {
+      "id": "36ce3b49c969",
+      "files": [
+        "dist/game.fd7ef181a4.js",
+        "dist/game.fd7ef181a4.js.map",
+        "dist/game.a90bcc5376.css"
+      ]
+    },
+    {
+      "id": "7a73da6224d8",
+      "files": [
+        "dist/game.edf28a990a.js",
+        "dist/game.edf28a990a.js.map",
+        "dist/game.85f90c30bf.css"
+      ]
+    },
+    {
       "id": "4425d8827675",
       "files": [
         "dist/game.0139f824c0.js",
         "dist/game.0139f824c0.js.map",
         "dist/game.85f90c30bf.css"
-      ]
-    },
-    {
-      "id": "0727fa509a8c",
-      "files": [
-        "dist/game.67db4c1ef7.js",
-        "dist/game.67db4c1ef7.js.map",
-        "dist/game.bef9d1e055.css"
-      ]
-    },
-    {
-      "id": "3f6f86fe7622",
-      "files": [
-        "dist/game.5cdc1f400e.js",
-        "dist/game.5cdc1f400e.js.map",
-        "dist/game.bef9d1e055.css"
-      ]
-    },
-    {
-      "id": "80f8149668fd",
-      "files": [
-        "dist/game.fedf7aa894.js",
-        "dist/game.fedf7aa894.js.map",
-        "dist/game.bef9d1e055.css"
-      ]
-    },
-    {
-      "id": "61e34a88376a",
-      "files": [
-        "dist/game.97729bec8e.js",
-        "dist/game.97729bec8e.js.map",
-        "dist/game.bef9d1e055.css"
       ]
     }
   ]

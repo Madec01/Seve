@@ -4,8 +4,9 @@
 import { el, fmt, plural } from '../dom.js';
 import { icon, seasonIncomes } from '../icons.js';
 import { getCrop } from '../../data/crops.js';
-import { animalIcon, animalProductIcon, bar, buyButton, cBtn, cropIcon, marketChip, pips } from './util.js';
+import { aboutSection, animalIcon, animalProductIcon, bar, buyButton, cBtn, cropIcon, marketChip, pips } from './util.js';
 import { buildingCard, buyInv, effectsText } from './shop.js';
+import { confirmSellRaw, processingOf, recipesOf, recipesSection, workshopControls } from '../buildings.js';
 
 export function buildingContent(ui, id) {
   const { app, q, game } = ui;
@@ -19,14 +20,21 @@ export function buildingContent(ui, id) {
       b.level > 0 ? pips(b.level, b.maxLevel) : null,
     ),
   );
-  if (b.level > 0 && b.effects) parts.push(el('p.c-bld-effects', effectsText(b.effects)));
+  // Ce que fait ce bâtiment : son rôle, l'effet du niveau actuel, tous les niveaux, des conseils.
+  const kind = b.category === 'shelter' ? 'shelter' : b.category === 'workshop' ? 'workshop' : 'building';
+  const about = b.role ? b : q('about', null, 'building', id);
+  const aboutNode = aboutSection(about, { app, kind, key: id, level: b.level, levels: true });
+  // Abri avec des produits à ramasser : le bouton « Ramasser » d'abord, l'explication juste après.
+  const urgent = b.category === 'shelter' && ((b.pending || 0) > 0 || b.full);
+  const aboutAt = parts.length;
+  if (!aboutNode && b.level > 0 && b.effects) parts.push(el('p.c-bld-effects', effectsText(b.effects)));
   if (b.category === 'shelter' && b.animals) {
     const a = game.query.investments().find((x) => x.id === b.animals.id);
     const pending = b.pending || 0;
     parts.push(
       el(
         'section.c-sec',
-        el('div.c-shelter', el('span.c-slot-icon', animalIcon(b.animals.id, 'sprite--card')), el('div.c-slot-main', el('b', `${b.animals.count} / ${b.animals.capacity} ${a?.name ? a.name.toLowerCase() : 'animaux'}${b.animals.count > 1 && a?.name && !/s$/.test(a.name) ? 's' : ''}`), bar(b.animals.count, b.animals.capacity))),
+        el('div.c-shelter', el('span.c-slot-icon', animalIcon(b.animals.id, 'sprite--card')), el('div.c-slot-main', el('b', `${b.animals.count} / ${b.animals.capacity} ${a?.name ? a.name.toLowerCase() : 'animaux'}${b.animals.count > 1 && a?.name && !/s$/.test(a.name) ? 's' : ''}`), bar(b.animals.count, b.animals.capacity), animalRole(ui, b, a) ? el('small.c-animal-role', animalRole(ui, b, a)) : null)),
         pending > 0 || b.full
           ? el(
               `div.c-collect${b.full ? '.is-full' : ''}`,
@@ -46,17 +54,66 @@ export function buildingContent(ui, id) {
       ),
     );
   }
+  // Atelier construit : interrupteur « Transformer », places en cours, « Vendre en l'état », recettes ; puis
+  // « Ce que fait ce bâtiment ». Pas encore construit : les recettes seulement.
+  const workshop = b.category === 'workshop' ? workshopParts(ui, b) : [];
+  parts.push(...workshop);
+  if (aboutNode) parts.splice(urgent || (workshop.length && b.level > 0) ? parts.length : aboutAt, 0, aboutNode);
   if (id === 'house') {
     const cands = q('candidates', null);
     parts.push(el('p.stats-note', b.effects?.staff ? `La maison loge jusqu'à ${plural(b.effects.staff, 'employé')}${cands ? ` (${cands.count} aujourd'hui)` : ''}.` : 'Améliorez la maison (rang 2) pour loger vos premiers employés.'));
   }
   if (id === 'roadsideStand' && b.level > 0) parts.push(el('p.stats-note', 'Les passants achètent un peu chaque jour (rien les jours d\'orage), et toutes vos ventes sont plus chères.'));
-  if (b.category === 'workshop' && b.level > 0) parts.push(cBtn(app, 'Ouvrir l\'atelier (recettes, interrupteur)', () => app.field.openBuilding(id), { id: 'c-open-workshop', cls: 'btn--wide', sound: 'page' }));
-  // Amélioration.
+  // Amélioration : ce que change le niveau suivant, juste au-dessus du bouton.
   if (b.level < b.maxLevel) {
-    parts.push(el('section.c-sec', el('h3.stats-title', b.level > 0 ? 'Niveau suivant' : 'Construire'), buildingCard(ui, b, { compact: false })));
+    parts.push(el('section.c-sec.c-upgrade', el('h3.stats-title', b.level > 0 ? 'Niveau suivant' : 'Construire'), buildingCard(ui, b, { compact: false, lines: true })));
   } else parts.push(el('p.stats-note.is-ok', 'Niveau maximal atteint.'));
   return el('div.info-sheet.c-building', parts);
+}
+
+/**
+ * Atelier de carrière (§ 4.7) : les commandes de la fiche d'atelier des niveaux (src/ui/buildings.js), lues sur
+ * query.processing() (places en cours) et building(id).processing (recettes du niveau, places, artisan).
+ */
+function workshopParts(ui, b) {
+  const { app, game } = ui;
+  const info = b.processing;
+  if (!info) return [];
+  const source = info.source || 'harvest';
+  const recipes = recipesOf(game, { id: b.id, owned: b.level, processing: info });
+  const out = [];
+  const proc = b.level > 0 ? processingOf(game, b.id) : null;
+  if (proc) {
+    const actions = {
+      toggle: (id, on) => {
+        app.setProcessing(id, on);
+        ui.schedule();
+      },
+      // La confirmation ferme la feuille (toute fenêtre le fait) : on rouvre la fiche de l'atelier ensuite.
+      sellRaw: async (id, p) => {
+        await confirmSellRaw(app, id, p);
+        if (!app.dialogs.isOpen()) ui.open.building(id);
+      },
+    };
+    out.push(...workshopControls(proc, source, b.id, actions, { sellHint: 'Vendus en l\'état, les produits rapportent le prix de la matière première. Utile avant les charges de saison.' }));
+  }
+  out.push(recipesSection(source, recipes));
+  const facts = [];
+  if (b.level > 0) {
+    const extra = info.extraPlaces > 0 ? ` (dont +${info.extraPlaces} avec l'artisan)` : '';
+    facts.push(el('span', icon('seed', 'xs'), `${plural(info.places, 'place')}${extra}`));
+  } else facts.push(el('span', icon('seed', 'xs'), plural(info.basePlaces, 'place')));
+  const upkeep = info.upkeep;
+  if (upkeep) facts.push(el('span.neg', `Entretien −${fmt(upkeep)} / jour`));
+  out.push(el('div.bld-facts', facts));
+  return out;
+}
+
+/** « Pond des œufs chaque jour » : le rôle de l'animal de l'abri (requête shelter().animalAbout, sinon about). */
+function animalRole(ui, b, a) {
+  if (a?.role) return a.role;
+  const sh = (ui.q('shelters', []) || []).find((x) => x.buildingId === b.id);
+  return sh?.animalAbout?.role || ui.q('about', null, 'animal', b.animals?.id)?.role || null;
 }
 
 const MODES = [

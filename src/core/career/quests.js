@@ -2,8 +2,12 @@
 // données : src/data/career/quests.js ; contrat : docs/ARCHITECTURE.md, « Mode Carrière — livraison CORE-C ».
 //
 // Extension enregistrée (id 'quests') :
-//   - une quête proposée au début de chaque saison à partir du rang 2 (seasonStart), jusqu'au soir du dernier
-//     jour de la saison ; acceptQuest / declineQuest / deliverQuest (depuis le grenier) ; les récoltes de la
+//   - rythme tranquille (QUEST_PACE) : une seule quête à la fois ; à partir du rang 2, Joseph en propose une au
+//     début d'une saison au plus toutes les deux saisons (le joueur peut aussi lui demander un service : askQuest) ;
+//     la proposition attend sans compte à rebours jusqu'à la fin de la saison suivante (puis questWithdrawn) ;
+//     le délai commence à l'acceptation : au moins 2 saisons de jours et 3 × la pousse nécessaire, jusqu'au soir
+//     du dernier jour d'une saison ; rappels (questReminder) à 3 jours et à 1 jour ; échec sans pénalité ;
+//   - acceptQuest / declineQuest / deliverQuest (depuis le grenier) ; les récoltes de la
 //     culture demandée sont mises de côté (harvest) ; produits, œufs et pommiers sont comptés ;
 //   - récompense : argent (poste « quests »), écus (à verser par l'interface : questDone.ecus), +1 ♥ ;
 //   - amitié (0 à 10 ♥, jamais perdue) : +1 par quête réussie, +1 par prêt remboursé en entier, +1 à la fête des
@@ -16,23 +20,25 @@ import { PRODUCTS, getProduct } from '../../data/products.js';
 import { WORKSHOPS } from '../../data/career/buildings.js';
 import { LOT_TYPES_BY_ID } from '../../data/career/lots.js';
 import {
-  EGG_VALUE, JOSEPH_CART, JOSEPH_HEARTS, JOSEPH_LINES, JOSEPH_ORCHARD, MAX_HEARTS, QUEST_RANK, QUEST_REWARD,
+  EGG_VALUE, JOSEPH_CART, JOSEPH_HEARTS, JOSEPH_LINES, JOSEPH_ORCHARD, MAX_HEARTS, QUEST_PACE, QUEST_RANK, QUEST_REWARD,
   QUEST_TEMPLATES, QUEST_TEMPLATES_BY_ID,
 } from '../../data/career/quests.js';
+import { SEASONS } from '../../data/balance.js';
 import { canBorrow, loanAmount, maxMissing, willLend } from '../neighbour.js';
 import { setTree } from '../trees.js';
 import { careerSeasonCharge } from './effects.js';
 import { ensureLotPlots } from './buildings.js';
 import { buyLot as buyLotBase, countType, getLot } from './land.js';
 import { registerCareerExtension } from './registry.js';
-import { baseCropPrice, cropPlural, dayIndex, eggsCountable, festivalToday, seasonEndIndex } from './events.js';
+import { baseCropPrice, cropPlural, dayIndex, eggsCountable, festivalToday } from './events.js';
+import { rankLabel } from './buildings.js';
 
 const J = (state) => state.career.joseph;
 const count = (state, id) => state.investments[id] || 0;
 const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : `{${k}}`));
 
 export function josephDefaults() {
-  return { hearts: 0, questsDone: 0, gifts: [], loansRepaid: 0, loanHearts: 0, festivalHeartYear: 0, onceDone: [], orchardDone: false, nextQuestId: 1, questsThisYear: 0, ecusThisYear: 0, heartLog: [] };
+  return { hearts: 0, questsDone: 0, gifts: [], loansRepaid: 0, loanHearts: 0, festivalHeartYear: 0, onceDone: [], orchardDone: false, nextQuestId: 1, questsThisYear: 0, ecusThisYear: 0, heartLog: [], lastOfferSeason: null, askedDay: 0 };
 }
 
 /** « confitures de fraises », « fromages de vache », « sacs de farine »… */
@@ -140,7 +146,7 @@ function templatePossible(api, t, n) {
     case 'workshop':
       return makeableProducts(api).length > 0;
     case 'eggs':
-      return eggsCountable() && (count(state, 'hen') + count(state, 'duck')) * L >= n;
+      return eggsCountable() && (count(state, 'hen') + count(state, 'duck')) * QUEST_PACE.minSeasons * L >= n;
     case 'trees':
       return treePlots(state) >= 2 && api.seasonId() !== 'winter';
     case 'orchard':
@@ -160,35 +166,118 @@ function pickWeighted(rng, items, weightOf) {
   return items[Number(rng.weighted(weights))];
 }
 
-/** Tire la quête de la saison (flux « events »). */
+// ── Dates (jours absolus : dayIndex ; saisons absolues : 0 = printemps de l'année 1) ─────────────────
+
+/** Saison absolue en cours. */
+export function absSeason(state) {
+  return (state.time.year - 1) * 4 + state.time.seasonIndex;
+}
+
+/** Jour absolu du dernier jour d'une saison absolue. */
+function absSeasonEnd(state, s) {
+  return (s + 1) * state.career.seasonLength;
+}
+
+/** « la fin de l'automne », « la fin de l'hiver de l'an prochain » : échéance (dernier jour d'une saison). */
+export function deadlineText(state, endDay) {
+  const L = state.career.seasonLength;
+  const s = Math.floor((endDay - 1) / L);
+  const sid = SEASONS[((s % 4) + 4) % 4];
+  const name = { spring: 'la fin du printemps', summer: 'la fin de l\'été', autumn: 'la fin de l\'automne', winter: 'la fin de l\'hiver' }[sid];
+  const year = Math.floor(s / 4) + 1;
+  return year > state.time.year ? `${name} de l'an prochain` : name;
+}
+
+/** Pousse la plus longue de ce qu'il faut produire (jours), pour le délai. */
+function growthDaysFor(state, q) {
+  const L = state.career.seasonLength;
+  switch (q.type) {
+    case 'crop':
+      return getCrop(q.need.id)?.growDays || L;
+    case 'fruits':
+      return Math.max(...CROPS.filter((c) => isTreeCrop(c)).map((c) => c.regrowDays || c.growDays || L));
+    case 'product': {
+      const p = getProduct(q.need.id);
+      if (!p) return L;
+      const input = p.source === 'harvest' ? getCrop(p.input) : null;
+      return (input && !isTreeCrop(input) ? input.growDays : 1) + (p.days || 1);
+    }
+    case 'eggs': {
+      const layers = count(state, 'hen') + count(state, 'duck');
+      return Math.ceil(q.need.n / Math.max(1, layers));
+    }
+    default:
+      return 1;
+  }
+}
+
+/**
+ * Échéance d'une quête acceptée aujourd'hui : au moins `minSeasons` saisons de jours et `growthFactor` × la pousse
+ * nécessaire + `marginDays`, arrondie au soir du dernier jour de la saison où elle tombe.
+ */
+export function questDeadline(state, q) {
+  const L = state.career.seasonLength;
+  const today = dayIndex(state);
+  const need = Math.max(QUEST_PACE.minSeasons * L, QUEST_PACE.growthFactor * growthDaysFor(state, q) + QUEST_PACE.marginDays);
+  const target = today + need;
+  return absSeasonEnd(state, Math.floor((target - 1) / L));
+}
+
+/** Joseph peut-il proposer une quête au début de cette saison (rythme : au plus une toutes les 2 saisons) ? */
+function canOffer(state) {
+  const j = J(state);
+  if (state.career.rank < QUEST_RANK || state.career.quest) return false;
+  return j.lastOfferSeason === null || j.lastOfferSeason === undefined || absSeason(state) - j.lastOfferSeason >= QUEST_PACE.seasonsBetweenOffers;
+}
+
+/** Taille d'une quête : base + perRank × (rang − 2) + tirage 0..jitter, plafonnée par la taille de la ferme. */
+function questSize(api, t, rng) {
+  const { state } = api;
+  const rank = state.career.rank;
+  const spec = t.n;
+  let n = spec.base + spec.perRank * Math.max(0, rank - QUEST_RANK) + (spec.jitter ? rng.int(0, spec.jitter) : 0);
+  if (spec.capPerPlot) {
+    const fieldPlots = state.plots.filter((p) => p.env === 'field' && p.unlocked).length;
+    n = Math.min(n, Math.max(spec.min || 1, Math.floor(fieldPlots * spec.capPerPlot)));
+  }
+  if (spec.capPerTree) n = Math.min(n, Math.max(spec.min || 1, treePlots(state) * spec.capPerTree));
+  return Math.max(1, n);
+}
+
+/** Cultures d'une quête « culture » : semables cette saison ET la suivante (la proposition attend une saison de plus). */
+function questCrops(api) {
+  const { state } = api;
+  const L = state.career.seasonLength;
+  const sid = api.seasonId();
+  const next = SEASONS[(SEASONS.indexOf(sid) + 1) % 4];
+  return api.crops.filter((c) => !isTreeCrop(c) && c.seasons.includes(sid) && c.seasons.includes(next) && c.growDays <= L);
+}
+
+/** Tire une quête (flux « events »). */
 function drawQuest(api) {
   const { state } = api;
   const j = J(state);
-  const rank = state.career.rank;
   const rng = api.rng('events');
-  const L = state.career.seasonLength;
-  const sid = api.seasonId();
   const candidates = [];
   for (const t of QUEST_TEMPLATES) {
     if (t.once && (j.onceDone || []).includes(t.id)) continue;
-    const n = t.n.base + t.n.perRank * rank;
-    if (t.type === 'crop') {
-      const crops = api.crops.filter((c) => !isTreeCrop(c) && c.seasons.includes(sid) && c.growDays < L);
-      if (!crops.length) continue;
-    }
-    if (!templatePossible(api, t, n)) continue;
-    candidates.push({ t, n });
+    if (t.type === 'crop' && !questCrops(api).length) continue;
+    const nMax = t.n.base + t.n.perRank * Math.max(0, state.career.rank - QUEST_RANK) + (t.n.jitter || 0);
+    if (!templatePossible(api, t, nMax)) continue;
+    candidates.push({ t });
   }
   const pick = pickWeighted(rng, candidates, (x) => x.t.weight);
   if (!pick) return null;
-  const { t, n } = pick;
-  const q = { id: `quest${j.nextQuestId++}`, templateId: t.id, type: t.type, need: { type: t.type, id: null, n }, progress: 0, accepted: false, offeredDay: dayIndex(state), endDay: seasonEndIndex(state), base: 0, value: 0, reward: null };
+  const { t } = pick;
+  const n = questSize(api, t, rng);
+  const today = dayIndex(state);
+  const offerEndDay = absSeasonEnd(state, absSeason(state) + QUEST_PACE.offerSeasons - 1);
+  const q = { id: `quest${j.nextQuestId++}`, templateId: t.id, type: t.type, need: { type: t.type, id: null, n }, progress: 0, accepted: false, offeredDay: today, offerEndDay, endDay: offerEndDay, acceptedDay: null, reminded: [], base: 0, value: 0, reward: null };
   let what = '';
   if (t.type === 'crop') {
     const growing = {};
     for (const p of state.plots) if (p.cropId && p.env === 'field') growing[p.cropId] = (growing[p.cropId] || 0) + 1;
-    const crops = api.crops.filter((c) => !isTreeCrop(c) && c.seasons.includes(sid) && c.growDays < L);
-    const crop = pickWeighted(rng, crops, (c) => 1 + 2 * (growing[c.id] || 0));
+    const crop = pickWeighted(rng, questCrops(api), (c) => 1 + 2 * (growing[c.id] || 0));
     q.need.id = crop.id;
     what = cropPlural(crop.id, n);
     q.value = baseCropPrice(api, crop.id) * n;
@@ -215,6 +304,18 @@ function drawQuest(api) {
   q.what = what;
   q.text = fill(t.text, { n, what });
   q.reward = { money: Math.round(q.value * t.rewardFactor), ecus: QUEST_REWARD.ecus, hearts: QUEST_REWARD.hearts };
+  return q;
+}
+
+/** Joseph propose une quête (début de saison ou demande du joueur). */
+function offerQuest(api, { asked = false } = {}) {
+  const { state } = api;
+  const q = drawQuest(api);
+  if (!q) return null;
+  state.career.quest = q;
+  J(state).lastOfferSeason = absSeason(state);
+  const line = asked ? JOSEPH_LINES.questAsk : state.career.farmerGender === 'fermiere' ? JOSEPH_LINES.questOfferFem : JOSEPH_LINES.questOffer;
+  api.push('questOffered', { quest: questInfo(state, q), line, asked });
   return q;
 }
 
@@ -280,11 +381,22 @@ function expireQuest(api) {
   api.push('questExpired', { quest: questInfo(state, q), accepted: q.accepted, amount, line: JOSEPH_LINES.questExpired });
 }
 
+/** Proposition jamais acceptée : Joseph la retire gentiment (rien n'avait commencé, aucun message fâché). */
+function withdrawQuest(api) {
+  const { state } = api;
+  const q = state.career.quest;
+  state.career.quest = null;
+  api.push('questWithdrawn', { quest: questInfo(state, q), line: JOSEPH_LINES.questWithdrawn });
+}
+
 /** Quête pour l'interface. */
 export function questInfo(state, q = state.career.quest) {
   if (!q) return null;
   const inStock = q.type === 'crop' ? state.career.stock[q.need.id] || 0 : q.type === 'fruits' ? fruitStock(state) : 0;
   const today = dayIndex(state);
+  // Pas encore acceptée : le délai qu'on aurait en acceptant aujourd'hui (le compte à rebours ne tourne pas encore).
+  const endDay = q.accepted ? q.endDay : questDeadline(state, q);
+  const offerEndDay = q.offerEndDay ?? q.endDay;
   return {
     id: q.id,
     templateId: q.templateId,
@@ -295,7 +407,12 @@ export function questInfo(state, q = state.career.quest) {
     progress: q.progress,
     left: Math.max(0, q.need.n - q.progress),
     reward: { ...q.reward },
-    daysLeft: Math.max(0, q.endDay - today),
+    daysLeft: Math.max(0, endDay - today),
+    endDay,
+    deadline: deadlineText(state, endDay),
+    deadlineText: `Jusqu'à ${deadlineText(state, endDay)}`,
+    offerDaysLeft: q.accepted ? null : Math.max(0, offerEndDay - today),
+    offerEndDay: q.accepted ? null : offerEndDay,
     accepted: q.accepted,
     canDeliver: (q.type === 'crop' || q.type === 'fruits') && inStock > 0 && q.progress < q.need.n,
     inStock,
@@ -314,10 +431,28 @@ function acceptQuest(api) {
   if (!q) return api.fail('Joseph n\'a pas de quête pour vous en ce moment.');
   if (q.accepted) return api.fail('Quête déjà acceptée.');
   q.accepted = true;
+  q.acceptedDay = dayIndex(state);
+  q.endDay = questDeadline(state, q);
+  q.reminded = [];
   q.base = isPassive(q) ? passiveCounter(state, q) : 0;
   q.progress = 0;
-  api.push('questProgress', { quest: questInfo(state, q), accepted: true, line: JOSEPH_LINES.questAccepted });
-  return { ok: true, quest: questInfo(state, q), line: JOSEPH_LINES.questAccepted };
+  const line = fill(JOSEPH_LINES.questAccepted, { deadline: deadlineText(state, q.endDay) });
+  api.push('questProgress', { quest: questInfo(state, q), accepted: true, line });
+  return { ok: true, quest: questInfo(state, q), line };
+}
+
+/** Le joueur demande un service à Joseph (Carnet) : une quête s'il n'y en a pas déjà une (une demande par jour). */
+function askQuest(api) {
+  const { state } = api;
+  const j = J(state);
+  if (state.career.rank < QUEST_RANK) return api.fail(rankLabel(QUEST_RANK));
+  if (state.career.quest) return api.fail(state.career.quest.accepted ? 'Une quête de Joseph est déjà en cours.' : 'Joseph attend déjà votre réponse.');
+  const today = dayIndex(state);
+  if (j.askedDay === today) return api.fail('Joseph n\'a pas d\'autre idée aujourd\'hui : repassez demain.');
+  j.askedDay = today;
+  const q = offerQuest(api, { asked: true });
+  if (!q) return { ok: true, quest: null, line: JOSEPH_LINES.questAskNone };
+  return { ok: true, quest: questInfo(state, q), line: JOSEPH_LINES.questAsk };
 }
 
 function declineQuest(api) {
@@ -351,7 +486,12 @@ function deliverQuest(api) {
     }
   }
   if (k === 0) return api.fail('Rien de ce qu\'il faut au grenier.');
-  q.accepted = true;
+  if (!q.accepted) {
+    q.accepted = true;
+    q.acceptedDay = dayIndex(state);
+    q.endDay = questDeadline(state, q);
+    q.reminded = [];
+  }
   setProgress(api, q.progress + k);
   return { ok: true, delivered: k, done: !state.career.quest };
 }
@@ -359,13 +499,21 @@ function deliverQuest(api) {
 // ── Points d'accroche ───────────────────────────────────────────────────────────────────────────
 
 function seasonStart(api) {
+  if (canOffer(api.state)) offerQuest(api);
+}
+
+/** Rappels à 3 jours et à 1 jour de l'échéance (quête acceptée, pas finie). */
+function remind(api) {
   const { state } = api;
-  const c = state.career;
-  if (c.rank < QUEST_RANK || c.quest) return;
-  const q = drawQuest(api);
-  if (!q) return;
-  c.quest = q;
-  api.push('questOffered', { quest: questInfo(state, q), line: c.farmerGender === 'fermiere' ? JOSEPH_LINES.questOfferFem : JOSEPH_LINES.questOffer });
+  const q = state.career.quest;
+  if (!q || !q.accepted || q.progress >= q.need.n) return;
+  const daysLeft = q.endDay - dayIndex(state);
+  if (!QUEST_PACE.reminders.includes(daysLeft)) return;
+  q.reminded = q.reminded || [];
+  if (q.reminded.includes(daysLeft)) return;
+  q.reminded.push(daysLeft);
+  const line = fill(daysLeft <= 1 ? JOSEPH_LINES.questReminder1 : JOSEPH_LINES.questReminder3, { what: q.what });
+  api.push('questReminder', { quest: questInfo(state, q), daysLeft, line });
 }
 
 function dawnEvents(api) {
@@ -379,6 +527,7 @@ function dawnEvents(api) {
   }
   checkPassive(api);
   checkLoanHearts(api);
+  remind(api);
 }
 
 function tick(api) {
@@ -392,9 +541,13 @@ function tick(api) {
   }
 }
 
-function evening(api, { lastDayOfSeason }) {
+function evening(api) {
   checkPassive(api);
-  if (lastDayOfSeason && api.state.career.quest) expireQuest(api);
+  const q = api.state.career.quest;
+  if (!q) return;
+  const today = dayIndex(api.state);
+  if (q.accepted && today >= q.endDay) expireQuest(api);
+  else if (!q.accepted && today >= (q.offerEndDay ?? q.endDay)) withdrawQuest(api);
 }
 
 function harvest(api, { cropId }) {
@@ -431,6 +584,22 @@ function loanInfo(api) {
   };
 }
 
+/** « Demander un service » (Carnet) : possible ? et quand Joseph proposera-t-il de lui-même ? */
+function askInfo(state) {
+  const j = J(state);
+  const c = state.career;
+  let reason = null;
+  if (c.rank < QUEST_RANK) reason = rankLabel(QUEST_RANK);
+  else if (c.quest) reason = c.quest.accepted ? 'Une quête de Joseph est déjà en cours.' : 'Joseph attend déjà votre réponse.';
+  else if (j.askedDay === dayIndex(state)) reason = 'Joseph n\'a pas d\'autre idée aujourd\'hui : repassez demain.';
+  let nextOfferInSeasons = null;
+  if (c.rank >= QUEST_RANK && !c.quest) {
+    const since = j.lastOfferSeason === null || j.lastOfferSeason === undefined ? Infinity : absSeason(state) - j.lastOfferSeason;
+    nextOfferInSeasons = Math.max(1, QUEST_PACE.seasonsBetweenOffers - (Number.isFinite(since) ? since : QUEST_PACE.seasonsBetweenOffers));
+  }
+  return { canAsk: reason === null, reason, nextOfferInSeasons, seasonsBetweenOffers: QUEST_PACE.seasonsBetweenOffers };
+}
+
 function josephInfo(api) {
   const { state } = api;
   const j = J(state);
@@ -448,6 +617,7 @@ function josephInfo(api) {
     portrait: 'portrait.joseph',
     quest: questInfo(state),
     loan: loanInfo(api),
+    ask: askInfo(state),
   };
 }
 
@@ -463,6 +633,25 @@ function migrate(state) {
   // Prêts remboursés avant cette version : pas de cœur rétroactif.
   if (j.loanHearts === undefined) j.loanHearts = j.loansRepaid || 0;
   for (const [k, v] of Object.entries(d)) if (j[k] === undefined) j[k] = v;
+  // Quête d'une ancienne version (échéance à la fin de la saison) : même échéance, jamais plus courte que celle d'une
+  // quête acceptée aujourd'hui ; proposition pas encore acceptée : elle attend la fin de la saison suivante.
+  const q = state.career.quest;
+  if (q && typeof q === 'object' && q.offerEndDay === undefined && state.time && Number.isInteger(q.endDay)) {
+    const L = state.career.seasonLength;
+    const today = (state.time.year - 1) * 4 * L + state.time.day;
+    const s0 = (state.time.year - 1) * 4 + state.time.seasonIndex;
+    q.offerEndDay = (s0 + QUEST_PACE.offerSeasons) * L;
+    q.reminded = [];
+    q.acceptedDay = q.accepted ? today : null;
+    if (q.accepted) {
+      try {
+        q.endDay = Math.max(q.endDay, questDeadline(state, q));
+      } catch {
+        q.endDay = Math.max(q.endDay, (s0 + 1 + QUEST_PACE.minSeasons) * L);
+      }
+    } else q.endDay = q.offerEndDay;
+    if (j.lastOfferSeason === null) j.lastOfferSeason = s0;
+  }
 }
 
 function check(state) {
@@ -472,6 +661,8 @@ function check(state) {
   const q = state.career.quest;
   if (q !== null) {
     if (typeof q !== 'object' || !QUEST_TEMPLATES_BY_ID[q.templateId] || !q.need || !int(q.need.n) || q.need.n < 1 || !int(q.progress) || q.progress > q.need.n || typeof q.accepted !== 'boolean' || !int(q.endDay) || !q.reward) return 'quête de Joseph';
+    if (q.offerEndDay !== undefined && !int(q.offerEndDay)) return 'quête de Joseph';
+    if (q.reminded !== undefined && !Array.isArray(q.reminded)) return 'quête de Joseph';
     if (q.type === 'crop' && !getCrop(q.need.id)) return 'quête de Joseph';
     if (q.type === 'product' && !getProduct(q.need.id)) return 'quête de Joseph';
   }
@@ -506,9 +697,11 @@ export const questsExtension = {
     acceptQuest: () => acceptQuest(api),
     declineQuest: () => declineQuest(api),
     deliverQuest: () => deliverQuest(api),
-    // Achat du terrain suivant (CORE-A) ; « Le verger de Joseph » : aménagé tout de suite, pommiers adultes.
-    buyLot: () => {
-      const r = buyLotBase(api);
+    askQuest: () => askQuest(api),
+    // Achat d'un terrain de la lisière (CORE-A, carte 2D : buyLot(lotId?)) ; « Le verger de Joseph » : aménagé tout
+    // de suite, pommiers adultes.
+    buyLot: (lotId) => {
+      const r = buyLotBase(api, lotId);
       if (r.ok) {
         const lot = getLot(api.state, r.lotId);
         if (lot && lot.special === JOSEPH_ORCHARD.label && !J(api.state).orchardDone) {

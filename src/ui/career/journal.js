@@ -10,7 +10,7 @@ import { icon, cropIcon } from '../icons.js';
 import { season, difficultyName } from '../text.js';
 import { bar, cBtn, cIcon, CHARGE_LABELS, INCOME_LABELS, SPENT_LABELS, joseph, josephSays, line, rankIcon, animalIcon, lotIcon, buildingIcon, machineIcon, inDays } from './util.js';
 import { marketSection } from './buildings.js';
-import { offerCard, questCard } from './events.js';
+import { askJosephBlock, offerCard, questCard } from './events.js';
 
 const TABS = [
   { id: 'farm', label: 'Ferme' },
@@ -252,6 +252,7 @@ function agendaTab(ui) {
   if (ev.today) parts.push(el('div.c-today', cIcon('event', 'sprite--md', 'star'), el('div', el('b', `Aujourd'hui : ${ev.today.name}`), ev.today.text || ev.today.description ? el('small', ev.today.text || ev.today.description) : null)));
   if (ev.active) parts.push(el('div.c-today.is-active', cIcon(ev.active.kind === 'crows' ? 'crow' : 'event', 'sprite--md', 'star'), el('div', el('b', ev.active.name || ev.active.data?.name || 'Événement en cours'), el('small', ev.active.text || ev.active.data?.text || ''))));
   if (quest) parts.push(el('section.c-sec', el('h3.stats-title', cIcon('quest', 'sprite--sm', 'star'), 'Quête de Joseph'), questCard(ui, quest)));
+  else if ((q('joseph', null)?.ask?.canAsk)) parts.push(el('section.c-sec', el('h3.stats-title', cIcon('quest', 'sprite--sm', 'star'), 'Quête de Joseph'), askJosephBlock(ui)));
   if (ev.offers?.length) parts.push(el('section.c-sec', el('h3.stats-title', 'Propositions'), ev.offers.map((o) => offerCard(ui, o))));
   if (ev.contest) parts.push(contestSection(ev.contest));
   const cal = ev.calendar || [];
@@ -312,6 +313,10 @@ function josephTab(ui) {
     ),
   ];
   if (quest) parts.push(el('section.c-sec', el('h3.stats-title', 'Sa demande'), questCard(ui, quest)));
+  else {
+    const ask = askJosephBlock(ui);
+    if (ask) parts.push(el('section.c-sec', el('h3.stats-title', cIcon('quest', 'sprite--sm', 'star'), 'Un service ?'), el('p.stats-note', 'Joseph a toujours une petite idée : une quête à la fois, avec un délai tranquille qui ne commence qu\'à « Accepter ».'), ask));
+  }
   if (loan) {
     if (loan.debt > 0) {
       parts.push(

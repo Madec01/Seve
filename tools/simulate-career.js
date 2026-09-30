@@ -31,6 +31,12 @@
 //   automator comme optimal, mais aucun geste à partir de l'année 3 (seulement des décisions : achats,
 //             embauches, plans, congés) : part « idle » de la fin de partie.
 //
+// Carte 2D (carrière v2) : l'appliqué achète le terrain proposé (colonne d'origine d'abord) ; les autres
+// choisissent au hasard un terrain de la lisière (même prix). Quête « culture » acceptée : le premier champ la met
+// dans son plan (le joueur lit la demande de Joseph). L'appliqué demande parfois un service à Joseph (askQuest).
+// Rythme (paceSummary, imprimé avant les tableaux) : sollicitations par semaine (commandes, marchand, animal perdu,
+// corbeaux, quêtes proposées par Joseph), réussite des quêtes et commandes acceptées, rappels, au plus ouvert.
+//
 // Un module du lot CORE-B, tools/sim-career-staff.js, peut fournir des décisions (embauche, machines) : s'il
 // existe et exporte `staffDecisions(game, me)`, elles sont appliquées en plus des envies (voir loadStaffHelper).
 
@@ -73,7 +79,7 @@ export const CAREER_PROFILES = {
   optimal: {
     taps: [40, 40], skipDay: 0, harvestProb: 1, maxDelay: 0, plantProb: 1, water: [1, 1], avoidFreeze: 1, rentAware: 1,
     buyProb: 1, buyBuffer: [20, 20], reserveSeasons: 2, collectProb: 1, acceptVisitor: 1, acceptQuest: 1, chaseCrow: 1, fish: 1,
-    winterLeave: 'smart', merchant: 'smart', pet: 1, contestAware: 1, plan: 'best', hirePick: 'best', smart: true,
+    winterLeave: 'smart', merchant: 'smart', pet: 1, contestAware: 1, plan: 'best', hirePick: 'best', smart: true, askQuest: 0.2,
   },
 };
 CAREER_PROFILES.idle = { ...CAREER_PROFILES.casual, idleFrom: 2 };
@@ -214,6 +220,11 @@ const CASUAL_WISHES = [
   { kind: 'lot', type: 'field' },
   { kind: 'lot', type: 'orchard' },
   { kind: 'upgrade', id: 'storage', level: 3 },
+  // rang 6 (carte 2D : jusqu'à 16 terrains)
+  { kind: 'lot', type: 'meadow' },
+  { kind: 'lot', type: 'workshops' },
+  { kind: 'lot', type: 'greenhouse' },
+  { kind: 'lot', type: 'pond' },
 ];
 
 const OPTIMAL_WISHES = [
@@ -280,6 +291,11 @@ const OPTIMAL_WISHES = [
   { kind: 'lot', type: 'orchard' },
   { kind: 'lot', type: 'orchard' },
   { kind: 'upgrade', id: 'storage', level: 3 },
+  // rang 6 (carte 2D : jusqu'à 16 terrains)
+  { kind: 'lot', type: 'meadow' },
+  { kind: 'lot', type: 'workshops' },
+  { kind: 'lot', type: 'greenhouse' },
+  { kind: 'lot', type: 'pond' },
 ];
 
 // Le novice : surtout des animaux et des champs, sans ordre ni calcul, jamais de congé.
@@ -324,7 +340,7 @@ const NOVICE_WISHES = [
 
 const WISHES = { casual: CASUAL_WISHES, novice: NOVICE_WISHES, optimal: OPTIMAL_WISHES, idle: CASUAL_WISHES, automator: OPTIMAL_WISHES };
 
-const TYPE_INFO = { field: { cost: 150, rank: 1 }, meadow: { cost: 120, rank: 1 }, orchard: { cost: 100, rank: 2 }, workshops: { cost: 100, rank: 2 } };
+const TYPE_INFO = { field: { cost: 150, rank: 1 }, meadow: { cost: 120, rank: 1 }, orchard: { cost: 100, rank: 2 }, workshops: { cost: 100, rank: 2 }, greenhouse: { cost: 800, rank: 3 }, pond: { cost: 400, rank: 4 } };
 function getTypeInfo(type) {
   return TYPE_INFO[type] || { cost: 0, rank: 9 };
 }
@@ -383,16 +399,19 @@ function wishState(game, w, me) {
         if (t && /Rang|Au plus/.test(t.reason || '')) return { locked: true };
         return { cost: t ? t.cost : 0, run: () => A.career.developLot(wild.id, w.type) };
       }
-      const next = Q.nextLot();
+      // Carte 2D : l'appliqué prend le terrain proposé (colonne d'origine d'abord) ; les autres choisissent au
+      // hasard parmi les terrains de la lisière (à gauche, à droite, au-dessus) : même prix, autre place.
+      const sale = Q.lots().filter((l) => l.forSale && l.buyable);
+      const next = me && !me.profile.smart && sale.length ? sale[Math.floor(me.rnd() * sale.length)] : Q.nextLot();
       if (!next || next.lockedByRank) return { locked: true };
       const typeInfo = getTypeInfo(w.type);
       if (typeInfo.rank > c.rank) return { locked: true };
       // « Le verger de Joseph » : le terrain devient un verger (déjà aménagé).
-      if (next.special && w.type !== 'orchard') return { cost: next.price, run: () => A.career.buyLot() };
+      if (next.special && w.type !== 'orchard') return { cost: next.price, run: () => A.career.buyLot(next.id) };
       return {
         cost: next.price + (next.special ? 0 : typeInfo.cost),
         run: () => {
-          const r = A.career.buyLot();
+          const r = A.career.buyLot(next.id);
           if (!r.ok) return r;
           if (r.lotType) return r;
           const d = A.career.developLot(r.lotId, w.type);
@@ -488,6 +507,12 @@ function setLotPlan(game, me, lotId) {
     const crop = cropId && getCrop(cropId);
     if (crop) for (const sid of ['summer', 'autumn']) if (crop.seasons.includes(sid)) plan[sid] = cropId;
   }
+  // Quête « culture » de Joseph acceptée : le premier champ la sème (le joueur lit la demande et ajuste son plan).
+  const qc = questCrop(game);
+  if (qc && fieldLots(game)[0]?.id === lotId) {
+    const crop = getCrop(qc);
+    if (crop) for (const sid of Object.keys(plan)) if (crop.seasons.includes(sid)) plan[sid] = qc;
+  }
   for (const [sid, cropId] of Object.entries(plan)) {
     const ok = game.query.career.lot(lotId)?.plan;
     if (!ok) return;
@@ -497,7 +522,13 @@ function setLotPlan(game, me, lotId) {
 }
 
 function planKey(game, me) {
-  return `${game.state.career.rank}/${game.state.career.buildings.jamWorkshop ? 'jam' : ''}/${contestCropGoals(game, me).join(',')}`;
+  return `${game.state.career.rank}/${game.state.career.buildings.jamWorkshop ? 'jam' : ''}/${contestCropGoals(game, me).join(',')}/${questCrop(game) || ''}`;
+}
+
+/** Culture d'une quête de Joseph acceptée et pas finie (ou null). */
+function questCrop(game) {
+  const q = game.state.career.quest;
+  return q && q.accepted && q.type === 'crop' && q.progress < q.need.n ? q.need.id : null;
 }
 
 /** Cultures des épreuves du comice pas encore réussies (si le joueur s'y intéresse cette année). */
@@ -592,6 +623,8 @@ function handleEvents(game, me, spend) {
     }
   }
   if (q && q.accepted && q.canDeliver && spend(1)) A.deliverQuest();
+  // Carnet → « Demander un service à Joseph » : seul le joueur appliqué le fait (le tranquille attend Joseph).
+  if (!q && P.askQuest && Q.joseph().ask?.canAsk && rnd() < P.askQuest && spend(2)) A.askQuest();
   // Arbres demandés par Joseph (quête « pommiers ») : on les plante au verger.
   if (q && q.accepted && q.type === 'trees') {
     for (const [, list] of plotsByLot(game)) {
@@ -851,6 +884,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     rnd: humanRng(humanSeed(seed, strategy)), profile, strategy, matureSince: {}, day: 0, wishes: numberWishes(WISHES[strategy]),
     planned: {}, seenOffers: new Set(), seenQuests: new Set(), contestFocus: false, contestKey: null, lastSeasonKey: null,
     stats: { visitorsAccepted: 0, questsAccepted: 0, crowsChased: 0, collects: 0, handHarvests: 0 },
+    pace: { questsOffered: 0, questsAsked: 0, questsAccepted: 0, questsDone: 0, questsFailed: 0, questsWithdrawn: 0, questDays: [], visitors: 0, visitorsAccepted: 0, visitorsDelivered: 0, asks: 0, events: 0, festivals: 0, reminders: 0, days: 0, maxOpen: 0, sideLots: 0 },
     staffHelper: helper && typeof helper.staffDecisions === 'function' ? (g, m) => helper.staffDecisions(g, m) : null,
   };
   game.actions.career.setStorageMode('low');
@@ -876,7 +910,48 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     y.contest = e.amount;
     if (e.all) out.contests++;
   });
-  game.on('careerEvent', () => y.events++);
+  game.on('careerEvent', (e) => {
+    y.events++;
+    me.pace.events++;
+    // Sollicitations : ce qui demande une réponse ou un geste (commande, marchand, animal perdu, corbeaux).
+    if (['visitor', 'merchant', 'lostPet', 'crows'].includes(e.kind)) me.pace.asks++;
+    if (e.kind === 'visitor') me.pace.visitors++;
+  });
+  game.on('festival', () => me.pace.festivals++);
+  game.on('questOffered', (e) => {
+    if (e.asked) me.pace.questsAsked++;
+    else {
+      me.pace.questsOffered++;
+      me.pace.asks++;
+    }
+  });
+  game.on('questProgress', (e) => {
+    if (e.accepted) {
+      me.pace.questsAccepted++;
+      me.questAcceptedDay = me.day;
+    }
+  });
+  game.on('questDone', () => {
+    me.pace.questsDone++;
+    if (me.questAcceptedDay != null) me.pace.questDays.push(me.day - me.questAcceptedDay);
+    me.questAcceptedDay = null;
+  });
+  game.on('questExpired', (e) => {
+    if (e.accepted && !e.declined) me.pace.questsFailed++;
+    me.questAcceptedDay = null;
+  });
+  game.on('questWithdrawn', () => me.pace.questsWithdrawn++);
+  game.on('questReminder', () => me.pace.reminders++);
+  game.on('offerReminder', () => me.pace.reminders++);
+  game.on('offerAccepted', (e) => {
+    if (e.kind === 'visitor') me.pace.visitorsAccepted++;
+  });
+  game.on('offerResolved', (e) => {
+    if (e.kind === 'visitor' && e.outcome === 'delivered') me.pace.visitorsDelivered++;
+  });
+  game.on('lotBought', (e) => {
+    if (e.col) me.pace.sideLots++;
+  });
   game.on('harvested', (e) => {
     const by = e.by === 'player' ? 'player' : e.by === 'machine' ? 'machine' : 'staff';
     y.harvestsBy[by] = (y.harvestsBy[by] || 0) + 1;
@@ -902,6 +977,9 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   });
   while (game.state.time.year <= years && game.state.status === 'playing') {
     me.day++;
+    me.pace.days++;
+    const open = (game.state.career.quest ? 1 : 0) + game.state.career.events.offers.filter((o) => o.kind === 'visitor').length;
+    me.pace.maxOpen = Math.max(me.pace.maxOpen, open);
     const t = playDay(game, me);
     y.taps += t.spent;
     y.days++;
@@ -955,6 +1033,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   out.bankrupt = game.state.status === 'bankrupt';
   out.hearts = game.state.career.joseph.hearts;
   out.me = me.stats;
+  out.pace = me.pace;
   return out;
 }
 
@@ -1024,9 +1103,42 @@ export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10,
       contests: median(careers.map((c) => c.contests)),
       quests: median(careers.map((c) => c.quests)),
       hearts: median(careers.map((c) => c.hearts)),
+      pace: paceSummary(careers),
     };
   }
   return table;
+}
+
+/** Rythme des sollicitations et réussite des quêtes (retours de joueurs « trop de quêtes, trop court »). */
+export function paceSummary(careers) {
+  const sum = (k) => careers.reduce((s, c) => s + (c.pace?.[k] || 0), 0);
+  const days = Math.max(1, sum('days'));
+  const accepted = sum('questsAccepted');
+  const questDays = careers.flatMap((c) => c.pace?.questDays || []);
+  const vAcc = sum('visitorsAccepted');
+  return {
+    asksPerWeek: Math.round((sum('asks') / days) * 7 * 100) / 100,
+    eventsPerWeek: Math.round((sum('events') / days) * 7 * 100) / 100,
+    questsOfferedPerYear: Math.round((sum('questsOffered') / careers.length / Math.max(1, careers[0]?.years.length || 1)) * 10) / 10,
+    questsAccepted: accepted,
+    questSuccess: accepted ? pct(sum('questsDone'), accepted) : null,
+    questsFailed: sum('questsFailed'),
+    questsWithdrawn: sum('questsWithdrawn'),
+    questDaysMedian: median(questDays),
+    visitorsPerYear: Math.round((sum('visitors') / careers.length / Math.max(1, careers[0]?.years.length || 1)) * 10) / 10,
+    visitorSuccess: vAcc ? pct(sum('visitorsDelivered'), vAcc) : null,
+    remindersPerYear: Math.round((sum('reminders') / careers.length / Math.max(1, careers[0]?.years.length || 1)) * 10) / 10,
+    maxOpen: Math.max(0, ...careers.map((c) => c.pace?.maxOpen || 0)),
+    sideLotShare: pct(sum('sideLots'), careers.reduce((s, c) => s + (c.years.at(-1)?.lots || 0), 0)),
+  };
+}
+
+function printPace(table) {
+  console.log('\n  Rythme (toutes carrières) : sollicitations/semaine (commandes, marchand, animal perdu, corbeaux, quêtes proposées) · événements au hasard/semaine · quêtes proposées/an · réussite des quêtes acceptées · jours pour la finir (méd.) · commandes/an · réussite des commandes acceptées · rappels/an · au plus ouvert (quête + commande) · terrains de côté');
+  for (const [strategy, t] of Object.entries(table)) {
+    const p = t.pace;
+    console.log(`  ${strategy.padEnd(9)} ${String(p.asksPerWeek).padStart(5)} · ${String(p.eventsPerWeek).padStart(5)} · ${String(p.questsOfferedPerYear).padStart(4)} · ${p.questSuccess === null ? '  —' : `${p.questSuccess} %`} (${p.questsAccepted} acceptées, ${p.questsFailed} ratées, ${p.questsWithdrawn} retirées) · ${p.questDaysMedian} j · ${p.visitorsPerYear} · ${p.visitorSuccess === null ? '—' : `${p.visitorSuccess} %`} · ${p.remindersPerYear} · ${p.maxOpen} · ${p.sideLotShare} %`);
+  }
 }
 
 function printTable(table, title) {
@@ -1048,7 +1160,8 @@ function printMatrix(results) {
   for (const { label, table } of results) {
     for (const [strategy, t] of Object.entries(table)) {
       const cells = t.rows.map((r) => `${r.rankMedian}(${String(r.rankAtLeast[target[r.year] || 6]).padStart(3)}%)`).join(' ');
-      console.log(`  ${label.padEnd(18)} ${strategy.padEnd(9)} ${cells}  · Domaine ${Number.isFinite(t.domaineYear) ? `an ${t.domaineYear}` : 'jamais'} · faillites ${t.bankrupt} %`);
+      const p = t.pace;
+      console.log(`  ${label.padEnd(18)} ${strategy.padEnd(9)} ${cells}  · Domaine ${Number.isFinite(t.domaineYear) ? `an ${t.domaineYear}` : 'jamais'} · faillites ${t.bankrupt} % · sollic./sem. ${p.asksPerWeek} · quêtes ${p.questSuccess ?? '—'} % · commandes ${p.visitorSuccess ?? '—'} %`);
     }
   }
 }
@@ -1089,6 +1202,7 @@ async function run() {
     console.log(JSON.stringify(table, null, 2));
     return;
   }
+  printPace(table);
   printTable(table, `Carrière — ${opts.difficulty}, saisons de ${opts.seasonLength} jours, ${opts.runs} carrières × ${opts.years} ans${opts.assumeObjectives ? ' (objectifs supposés remplis)' : ''}${helper ? ' (aide CORE-B : sim-career-staff.js)' : ''}`);
 }
 
