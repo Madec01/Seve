@@ -31,6 +31,12 @@
 //   automator comme optimal, mais aucun geste à partir de l'année 3 (seulement des décisions : achats,
 //             embauches, plans, congés) : part « idle » de la fin de partie.
 //
+// Carte 2D (carrière v2) : l'appliqué achète le terrain proposé (colonne d'origine d'abord) ; les autres
+// choisissent au hasard un terrain de la lisière (même prix). Quête « culture » acceptée : le premier champ la met
+// dans son plan (le joueur lit la demande de Joseph). L'appliqué demande parfois un service à Joseph (askQuest).
+// Rythme (paceSummary, imprimé avant les tableaux) : sollicitations par semaine (commandes, marchand, animal perdu,
+// corbeaux, quêtes proposées par Joseph), réussite des quêtes et commandes acceptées, rappels, au plus ouvert.
+//
 // Un module du lot CORE-B, tools/sim-career-staff.js, peut fournir des décisions (embauche, machines) : s'il
 // existe et exporte `staffDecisions(game, me)`, elles sont appliquées en plus des envies (voir loadStaffHelper).
 
@@ -878,7 +884,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     rnd: humanRng(humanSeed(seed, strategy)), profile, strategy, matureSince: {}, day: 0, wishes: numberWishes(WISHES[strategy]),
     planned: {}, seenOffers: new Set(), seenQuests: new Set(), contestFocus: false, contestKey: null, lastSeasonKey: null,
     stats: { visitorsAccepted: 0, questsAccepted: 0, crowsChased: 0, collects: 0, handHarvests: 0 },
-    pace: { questsOffered: 0, questsAsked: 0, questsAccepted: 0, questsDone: 0, questsFailed: 0, questsWithdrawn: 0, questDays: [], visitors: 0, visitorsAccepted: 0, visitorsDelivered: 0, visitorsFailed: 0, asks: 0, events: 0, festivals: 0, reminders: 0, days: 0, maxOpen: 0, sideLots: 0 },
+    pace: { questsOffered: 0, questsAsked: 0, questsAccepted: 0, questsDone: 0, questsFailed: 0, questsWithdrawn: 0, questDays: [], visitors: 0, visitorsAccepted: 0, visitorsDelivered: 0, asks: 0, events: 0, festivals: 0, reminders: 0, days: 0, maxOpen: 0, sideLots: 0 },
     staffHelper: helper && typeof helper.staffDecisions === 'function' ? (g, m) => helper.staffDecisions(g, m) : null,
   };
   game.actions.career.setStorageMode('low');
@@ -941,9 +947,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     if (e.kind === 'visitor') me.pace.visitorsAccepted++;
   });
   game.on('offerResolved', (e) => {
-    if (e.kind !== 'visitor') return;
-    if (e.outcome === 'delivered') me.pace.visitorsDelivered++;
-    if (e.outcome === 'expired' && game.state.career) me.pace.visitorsFailed++;
+    if (e.kind === 'visitor' && e.outcome === 'delivered') me.pace.visitorsDelivered++;
   });
   game.on('lotBought', (e) => {
     if (e.col) me.pace.sideLots++;
