@@ -1193,3 +1193,23 @@ src/ui/career/util.js      icônes (icon.career.*, portraits, blasons), boutons 
   `careerEvent(id)` (→ `actions.career.triggerEvent`), `lotPoint(id)`.
 - Pas encore fait : ferme de carrière derrière le menu, « Suivre le tutoriel » en carrière, décor propre à la carrière
   (`career.cosmetics.decor` : pas d'action du cœur), ramassage en série (`collectAll`).
+
+## Mode Carrière — livraison RENDER (scène, 2026-09-30)
+
+- `src/render/layout-career.js` (pur) : `createCareerLayout(level, { career, plots, investments })`, choisi par la scène
+  quand `game.state.mode === 'career'` (pas par `createLayout`). Même forme que les dispositions des niveaux (`plots`
+  à l'index du cœur, `plotRect`, `fieldRect` = champ de départ, `house`, `decorSlots` aux ids v3…) + `lots` (de haut en
+  bas : terrain à vendre, terrains achetés, `yard`, `start`, `home` ; `rect` px, `sign` tuiles, `lane`), `slots[buildingId]`
+  (`building`, `pen`, `anchor`, `bubble`, `kind`, `sprite`), `emptySlots`, `machineParking[key]`, `hives`, `sprinklers`,
+  `route(a, b)`, `hitTestCareer(wx, wy, state, slop)`, `hitRect(hit)`. `careerLayoutKey(state)` : la scène reconstruit
+  quand elle change (terrains, bâtiments, niveaux, machines, parcelles, rang 6) ; `careerWorldRows(n)` = 53 + 11 n.
+- `src/render/career-actors.js` : lit `state.career.staff[].task` (cibles `{ type: 'plot'|'building'|'lot'|'home' }`),
+  `state.career.work.runs` (passages, `puller`), `state.plots[].crow`, `state.career.quest`, `events.offers`,
+  `events.active`, `events.today`, `pets`, `buildings[].pending`. Rien n'est modifié.
+- Scène : `focusLot(lotId, { animate, align })`, `focusHouse(opts)`, `focusBuilding(id, opts)`, `lotRect(id)`,
+  `lotScreenRect(id)`, `setCareer(on)` (facultatif : la reconstruction est automatique), `careerStats()`, `careerMode` ;
+  `hitTest` → `lotSign` (+ `slot` : emplacement libre), `lotForSale`, `shelter` (abri, enclos ou bulle), `building`,
+  `machine` (garée), `employee`, `pond`, `crow` (prioritaire sur la parcelle), `joseph`, `visitor { offerId, kind }`,
+  `investment` (ruche, panneau), `plot`. Les événements de carrière passés à `onEvent` sont traités après la
+  reconstruction de la disposition (positions à jour).
+- Tampon fenêtré en carrière (vue = écran, couche fixe = tout le monde) ; mode Niveaux inchangé au pixel près.

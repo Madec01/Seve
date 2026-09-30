@@ -251,6 +251,44 @@ Bug signalé : sur le téléphone, le jeu restait **bloqué sur l'écran de char
 - Vérifié avec Playwright au doigt (Pixel 7 et 360 × 640) : création (fermière, saisons de 10 jours), semis, achat et aménagement d'un terrain, plan de culture, étal, maison niv. 2, grenier, embauche et affectation, arroseurs, visiteur, quête, comice, fin d'année, passage de rang, coup dur, faillite en Classique, rechargement puis « Continuer » ; toucher du poulailler (ramassage) et du panneau « À vendre » dans la scène ; mode Niveaux inchangé (niveau 1, onglets, reprise). Cibles ≥ 48 px, textes ≥ 12 px, aucun débordement, aucune erreur de console.
 - Idées : ferme de carrière derrière le menu principal ; « Suivre le tutoriel » en carrière si le niveau 1 n'a jamais été gagné ; ramasser en série en glissant sur les abris (`collectAll` existe) ; décor propre à la carrière (`career.cosmetics.decor`, pas encore d'action du cœur).
 
+### 2026-09-30 — Mode Carrière : rendu de la scène (lot RENDER)
+
+- **Monde en colonne** (`src/render/layout-career.js`, pur, testé : `tests/career-render-layout.test.js`) : 14 tuiles
+  de large, qui grandit vers le haut (forêt, terrain à vendre assombri avec grand panneau « À vendre » et son prix,
+  terrains achetés de 11 lignes, basse-cour, champ de départ 4 × 4, maison, route, étal, château d'eau, forêt).
+  Chemins : une « épine » verticale (x 12) de la route au dernier terrain et une allée par terrain (panneau du
+  terrain, machines garées) ; `route(a, b)` fait passer employés, fermier et machines par les allées.
+  Aménagements dessinés : champ (clôture au style choisi, arroseurs sur la clôture, ruches), pré et basse-cour (abri
+  selon son niveau + enclos, abreuvoir, foin ; chambre d'hôte avec jardin et banc), verger, cour des ateliers (pavés,
+  ateliers niv. 1 à 5 avec enseigne dorée et annexe, convoyeur), serre (vitres à travers lesquelles on voit les
+  cultures, cheminée au niveau 3), mare (eau autotuile, reflets, nénuphars, roseaux, ponton), friche. Maison 1 → 5
+  (manoir au fanion doré au rang 6), grenier / silo 1 → 3, étal 1 → 3, panneaux solaires, emplacements libres en
+  pointillés.
+- **Acteurs** (`src/render/career-actors.js`) : employés qui suivent leurs tâches du cœur (`task.from` → `target`,
+  heures `startAt` / `doneAt`) en marchant puis en travaillant (pose de travail + outil par-dessus), flânerie devant
+  la maison le soir ; machines qui suivent les passages (`state.career.work.runs`) parcelle par parcelle, tirées par
+  le tracteur ou le cheval, puis rentrent au garage ; cochons, lapins, chevaux, canards (images de marche), poules,
+  moutons, vaches, chèvres (6 au plus par abri) ; corbeaux (arrivée, envol) ; Joseph qui vient au perron avec sa
+  quête ; visiteurs, marchand, animal perdu devant l'étal (bulle) ; touristes et villageois ; chat et chien.
+- **Scène** (`scene.js`) : mode Carrière détecté à chaque image (`game.state.mode`), disposition reconstruite quand
+  terrains / bâtiments / machines changent, sans perdre ce qu'on regardait (tout ce qui est en coordonnées du monde
+  descend, effets compris : `effects.shift`). **Tampon fenêtré** : la vue ne couvre que l'écran, la couche fixe tout
+  le monde (tranche recopiée à chaque image), parcelles et sprites hors de la vue ignorés. Zoom portrait inchangé ;
+  ordinateur : colonne centrée, zoom par la hauteur (≈ 22 tuiles). Bulles de ramassage (icône + nombre net, clignote
+  quand l'abri est plein), défrichage animé à l'achat, clôture qui se pose à l'aménagement, étincelles des
+  constructions, décor des fêtes (guirlandes, lampions allumés le soir, stand, ballons, citrouilles, chalet et sapin
+  de Noël), arc-en-ciel, cocarde du comice. API : `focusLot`, `focusHouse`, `focusBuilding`, `lotRect`,
+  `lotScreenRect`, `setCareer`, `careerStats` ; `hitTest` : `lotSign` (+ `slot`), `lotForSale`, `shelter`, `building`,
+  `machine`, `employee`, `pond`, `crow`, `joseph`, `visitor`, `investment`.
+- `effects.js` : ramassage, stock vendu, mise au grenier (l'icône vole au grenier), truffes, pêche, naissances,
+  passage de rang (confettis), arrosage des machines, achat d'un terrain.
+- Aperçu : `tools/scene-preview.html?career=1&stage=start|1|3|8|12|manor&event=…&sim=…` (`tools/scene-preview-career.js`).
+- Vérifié (Playwright) : captures Pixel 7, 360 × 640, 1280 × 720, quatre saisons, fêtes et événements ; parcelles
+  61 / 48 / 53 / 64 px CSS ; 46 touchers vérifiés par écran sur tous les terrains défilés ; image du manoir (8
+  employés, 12 machines, 44 animaux) 6,6 ms avec le processeur ralenti ×4 (le niveau 8 : 27,8 ms dans les mêmes
+  conditions) ; mode Niveaux identique au pixel près (22 captures avant / après) ; aucune erreur de console.
+- À faire côté interface : réagir au toucher `visitor` (offre du visiteur / marchand / animal perdu).
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).

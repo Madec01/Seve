@@ -1,7 +1,7 @@
 {
-  "id": "61e34a88376a",
+  "id": "80f8149668fd",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.97729bec8e.js",
+  "js": "dist/game.fedf7aa894.js",
   "css": "dist/game.bef9d1e055.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -204,7 +204,7 @@
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
     "src/render/atlas.js": "3576e9a2e9f5553c",
-    "src/render/career-actors.js": "5711e2972c243c79",
+    "src/render/career-actors.js": "317124ebe42aac00",
     "src/render/effects.js": "9d6a1f83cb39ff17",
     "src/render/layout-career.js": "111c2e5717e5d7c1",
     "src/render/layout-common.js": "fbcb56de0f9abdb8",
@@ -246,6 +246,14 @@
   },
   "history": [
     {
+      "id": "80f8149668fd",
+      "files": [
+        "dist/game.fedf7aa894.js",
+        "dist/game.fedf7aa894.js.map",
+        "dist/game.bef9d1e055.css"
+      ]
+    },
+    {
       "id": "61e34a88376a",
       "files": [
         "dist/game.97729bec8e.js",
@@ -274,14 +282,6 @@
       "files": [
         "dist/game.bed37be153.js",
         "dist/game.bed37be153.js.map",
-        "dist/game.cf5821b84d.css"
-      ]
-    },
-    {
-      "id": "ab892b587d41",
-      "files": [
-        "dist/game.f7c432db1b.js",
-        "dist/game.f7c432db1b.js.map",
         "dist/game.cf5821b84d.css"
       ]
     }

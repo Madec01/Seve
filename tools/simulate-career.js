@@ -473,21 +473,36 @@ function shop(game, me, reserve) {
   return false;
 }
 
-/** Plan de culture d'un champ selon le profil. */
+/** Plan de culture d'un champ selon le profil (avec un atelier de confitures : des fraises au printemps). */
 function setLotPlan(game, me, lotId) {
-  const plan = PLANS[me.profile.plan];
-  if (!plan) return;
+  const base = PLANS[me.profile.plan];
+  if (!base) return;
+  const plan = { ...base };
+  if (game.state.career.buildings.jamWorkshop) plan.spring = 'strawberry';
   for (const [sid, cropId] of Object.entries(plan)) {
     const ok = game.query.career.lot(lotId)?.plan;
     if (!ok) return;
     game.actions.career.setPlan(lotId, sid, game.level.crops.includes(cropId) ? cropId : 'same');
   }
-  me.planned[lotId] = game.state.career.rank;
+  me.planned[lotId] = planKey(game);
+}
+
+function planKey(game) {
+  return `${game.state.career.rank}/${game.state.career.buildings.jamWorkshop ? 'jam' : ''}`;
 }
 
 // ── Événements, quêtes, comice ─────────────────────────────────────────────────────────────
 function priorityCrops(game, me) {
   const out = [];
+  // Objectif « produits transformés » du Carnet : des cultures pour les ateliers (le joueur le lit).
+  const wantsProducts = (game.query.career.summary().nextRank?.objectives || []).some((ob) => ob.id === 'products' && !ob.done);
+  if (wantsProducts && me.rnd() < Math.max(0.5, me.profile.contestAware)) {
+    for (const w of game.query.processing()) {
+      if (!w.on || !w.places.some((x) => x === null)) continue;
+      if (w.buildingId === 'jamWorkshop') out.push('strawberry');
+      if (w.buildingId === 'mill') out.push('wheat');
+    }
+  }
   const q = game.state.career.quest;
   if (q && q.accepted && q.type === 'crop') out.push(q.need.id);
   for (const o of game.state.career.events.offers) if (o.kind === 'visitor' && o.accepted) out.push(o.data.cropId);
@@ -714,7 +729,7 @@ function seasonalDecisions(game, me) {
   if (me.lastSeasonKey === key) return;
   me.lastSeasonKey = key;
   // Plans des champs (au changement de rang : nouvelles cultures).
-  for (const lot of fieldLots(game)) if (me.planned[lot.id] !== game.state.career.rank) setLotPlan(game, me, lot.id);
+  for (const lot of fieldLots(game)) if (me.planned[lot.id] !== planKey(game)) setLotPlan(game, me, lot.id);
   // Congés d'hiver.
   if (!game.state.career.staff.length) return;
   if (cal.seasonId === 'winter') {
