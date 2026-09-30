@@ -1907,6 +1907,113 @@ body.layout-wide.in-decor .decorbar { left: 12px; right: auto; bottom: 12px; wid
 #hints .hint-bubble { z-index: 1; }
 #hints:not(.is-active) .hint-bubble { visibility: hidden; }
 
+/* ─── Modes de difficulté et prêt du voisin (Joseph) ─────────────────────────── */
+/* Choix du mode : deux grandes options côte à côte (≥ 56 px de haut), Détente recommandée. */
+.diff-box { display: flex; flex-direction: column; gap: 6px; margin: 0 0 8px; padding: 6px 6px 8px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.options .diff-box { margin: 2px 0 0; }
+.options .diff-head { display: none; } /* le titre de section « Difficulté » suffit */
+.diff-head { font-weight: 700; font-size: 1rem; }
+.diff-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.diff-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 60px;
+  padding: 6px 8px;
+  border: 0;
+  background: var(--parch);
+  box-shadow: 0 0 0 var(--u) var(--parch-3), 0 var(--u) 0 var(--u) var(--parch-3);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--t-fast) ease, box-shadow var(--t-fast) ease;
+}
+.diff-opt:active { transform: translateY(var(--u)); }
+.diff-opt:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: 2px; }
+.diff-opt.is-on.is-detente { background: #e3f3d6; box-shadow: 0 0 0 var(--u) var(--green-dark), 0 var(--u) 0 var(--u) var(--green-dark); }
+.diff-opt.is-on.is-classique { background: #fbe3cf; box-shadow: 0 0 0 var(--u) var(--wood), 0 var(--u) 0 var(--u) var(--wood); }
+.diff-radio {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  background: var(--parch);
+  box-shadow: 0 0 0 var(--u) var(--outline);
+  display: grid;
+  place-items: center;
+}
+.diff-opt.is-on .diff-radio::after { content: ''; width: 10px; height: 10px; background: var(--outline); }
+.diff-opt.is-on.is-detente .diff-radio::after { background: var(--green-dark); }
+.diff-opt.is-on.is-classique .diff-radio::after { background: var(--wood-dark); }
+.diff-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.diff-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; font-size: 1.0625rem; }
+.diff-tag { font-size: 0.8125rem; font-weight: 600; color: var(--green-text); }
+.diff-sub { font-size: 0.875rem; color: var(--text-soft); }
+.diff-desc { margin: 0; font-size: 0.875rem; line-height: 1.3; color: var(--text-soft); }
+@media (max-width: 370px) {
+  .diff-opt { padding: 6px; gap: 6px; }
+  .diff-radio { width: 16px; height: 16px; }
+  .diff-opt.is-on .diff-radio::after { width: 8px; height: 8px; }
+}
+.opt-note { margin: 2px 0 0; font-size: 0.875rem; color: var(--warn); }
+
+/* Étiquette du mode d'une partie (pause, bilan). */
+.mode-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px 1px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  vertical-align: 0.1em;
+  white-space: nowrap;
+  background: #e3f3d6;
+  box-shadow: 0 0 0 var(--u) #a8d28c;
+  color: var(--green-text);
+}
+.mode-badge.is-classique { background: #fbe3cf; box-shadow: 0 0 0 var(--u) #e0b48a; color: var(--wood-dark); }
+.mode-line { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: 0 0 8px; font-size: 0.875rem; color: var(--text-soft); line-height: 1.3; }
+.mode-line .mode-badge { margin-left: 0; }
+
+/* Cartes des niveaux : fermages et objectifs du mode. */
+.level-rents, .level-goals { white-space: nowrap; }
+
+/* Barre du haut : fermage que Joseph couvrira (orange calme, jamais le rouge). */
+.hud-bill.is-loan .bill-days { color: var(--warn); font-weight: 700; }
+.tip-row.tip-debt b, .tip-row b.warn, b.warn, .stats-value.warn { color: var(--warn); }
+
+/* Bilan : Joseph. */
+.neighbour-card { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
+.neighbour-avatar { flex: none; display: grid; place-items: center; width: 52px; height: 52px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.neighbour-avatar .sprite { --sk: 2; }
+.neighbour-text { margin: 0; font-size: 0.9375rem; line-height: 1.3; }
+.neighbour-section.has-debt { padding: 6px 8px 8px; background: #fff6e0; box-shadow: 0 0 0 var(--u) var(--gold-2); }
+.stats-section.is-focus { animation: card-focus 1.2s ease; }
+.repay-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: 6px; margin: 8px 0 2px; }
+.btn--repay { width: 100%; font-size: 1rem; gap: 8px; }
+
+/* Fenêtre « Joseph vous dépanne » et message « Le jeu est plus doux ». */
+.dialog.dialog--loan, .dialog.dialog--notice { max-width: 30rem; }
+.loan-screen, .notice { display: flex; flex-direction: column; gap: 10px; }
+.loan-head { display: flex; align-items: center; gap: 10px; }
+.loan-avatar { flex: none; display: grid; place-items: center; }
+.loan-speech { position: relative; flex: 1; min-width: 0; padding: 6px 9px 7px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.loan-speech::before { content: ''; position: absolute; left: -9px; top: 50%; margin-top: -6px; border: 6px solid transparent; border-right: 3px solid var(--parch-3); border-left: 0; }
+.loan-speech .tuto-name { padding-right: 0; font-size: 0.8125rem; }
+.loan-quote { margin: 2px 0 0; font-size: 1rem; line-height: 1.3; }
+.loan-facts { display: flex; flex-direction: column; gap: 3px; padding: 6px 9px; background: var(--parch); box-shadow: 0 0 0 var(--u) var(--parch-3); font-size: 1.0625rem; }
+.loan-facts .sum-line span { color: var(--text); }
+.loan-owe { padding-top: 3px; border-top: var(--u) dashed var(--parch-3); }
+.loan-small { margin: 0; font-size: 0.875rem; color: var(--text-soft); }
+.loan-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 0.9375rem; line-height: 1.3; }
+.loan-list li { display: flex; align-items: flex-start; gap: 8px; }
+.loan-list li > .ico, .loan-list li > .sprite { flex: none; margin-top: 1px; }
+.next-warn.is-loan { background: #fff6e0; box-shadow: 0 0 0 var(--u) var(--gold-2); color: var(--text); align-items: center; }
+.next-warn.is-loan .sprite { flex: none; }
+
+/* Faillite et fin d'année : Joseph. */
+.end-why { display: flex; align-items: center; gap: 7px; margin: 0; padding: 5px 8px; background: #fff6e0; box-shadow: 0 0 0 var(--u) var(--gold-2); font-size: 0.9375rem; text-align: left; }
+.end-loan { display: flex; align-items: flex-start; gap: 10px; width: 100%; max-width: 26rem; padding: 6px 9px; background: #fff6e0; box-shadow: 0 0 0 var(--u) var(--gold-2); text-align: left; font-size: 0.9375rem; }
+.end-loan > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
 /* ─── Animations réduites ───────────────────────────────────────────────────── */
 .reduced-motion *,
 .reduced-motion *::before,

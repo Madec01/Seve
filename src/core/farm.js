@@ -67,11 +67,18 @@ export function isMature(plot) {
  * true si arroser aujourd'hui fait une différence pour cette culture : jamais pour un arbre ;
  * pomme de terre (dryGrowth ≥ 1) : seulement un jour de canicule.
  */
-export function needsWaterToday(crop, weatherId) {
+export function needsWaterToday(crop, weatherId, level = null) {
   if (!crop || isTreeCrop(crop) || crop.needsWater === false) return false;
-  const heatwave = !!WEATHER_TYPES[weatherId]?.noDryGrowth;
-  const dry = heatwave ? (crop.dryHeatwaveGrowth ?? GROWTH.dryHeatwave) : (crop.dryGrowth ?? GROWTH.dry);
-  return dry < GROWTH.watered;
+  return dryGrowthOf(crop, !!WEATHER_TYPES[weatherId]?.noDryGrowth, level) < GROWTH.watered;
+}
+
+/**
+ * Pousse d'un jour sans arrosage : valeur propre à la culture (pomme de terre), sinon celle du niveau
+ * (mode de difficulté : level.dryGrowth / level.dryHeatwaveGrowth), sinon GROWTH (classique).
+ */
+export function dryGrowthOf(crop, heatwave, level = null) {
+  if (heatwave) return crop.dryHeatwaveGrowth ?? level?.dryHeatwaveGrowth ?? GROWTH.dryHeatwave;
+  return crop.dryGrowth ?? level?.dryGrowth ?? GROWTH.dry;
 }
 
 /** Vitesse de pousse d'une parcelle arrosée (1 + bonus des ruches). */
@@ -89,8 +96,9 @@ export function stageOf(growth, growDays) {
  * Pousse de l'aube, d'après l'arrosage et la météo de la veille, puis remise à zéro de l'arrosage.
  * @param {number} seasonIndex saison du jour écoulé (bonus des ruches)
  * @param {string} weatherId   météo du jour écoulé (canicule)
+ * @param {object} level       niveau (pousse sans arrosage du mode de difficulté ; défaut : GROWTH)
  */
-export function growPlots(state, seasonIndex, weatherId) {
+export function growPlots(state, seasonIndex, weatherId, level = null) {
   const bonus = 1 + growthBonus(state, seasonIndex);
   const heatwave = !!WEATHER_TYPES[weatherId]?.noDryGrowth;
   const season = SEASONS[seasonIndex];
@@ -99,8 +107,7 @@ export function growPlots(state, seasonIndex, weatherId) {
     if (crop && isTreeCrop(crop)) {
       growTree(state, p, season, bonus);
     } else if (crop && !isMature(p)) {
-      const dry = heatwave ? (crop.dryHeatwaveGrowth ?? GROWTH.dryHeatwave) : (crop.dryGrowth ?? GROWTH.dry);
-      const base = p.watered ? GROWTH.watered : dry;
+      const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, heatwave, level);
       p.growth = Math.min(crop.growDays, p.growth + base * bonus);
     }
     p.watered = false;
@@ -148,11 +155,11 @@ export function rainWater(state) {
  * Arrosage automatique : arrose jusqu'à `capacity` parcelles plantées, non mûres et non arrosées,
  * dans l'ordre des index. Renvoie la liste des index arrosés.
  */
-export function sprinklerWater(state, capacity, weatherId = null) {
+export function sprinklerWater(state, capacity, weatherId = null, level = null) {
   const done = [];
   for (let i = 0; i < state.plots.length && done.length < capacity; i++) {
     const p = state.plots[i];
-    if (p.cropId && !p.watered && !isMature(p) && needsWaterToday(getCrop(p.cropId), weatherId)) {
+    if (p.cropId && !p.watered && !isMature(p) && needsWaterToday(getCrop(p.cropId), weatherId, level)) {
       p.watered = true;
       done.push(i);
     }
@@ -184,9 +191,12 @@ export function currentUnitPrice(state, crop) {
   return crop.sellPrice * marketMultiplier(state, crop.id) * (1 + priceBonus(state));
 }
 
-/** Prix de vente brut courant (× rawPriceFactor du niveau), sans rendement. */
+/**
+ * Prix de vente brut courant (× rawPriceFactor du niveau × cropPriceFactor du mode de difficulté),
+ * sans rendement. Les produits transformés n'ont ni l'un ni l'autre.
+ */
 export function rawUnitPrice(state, level, crop) {
-  return currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor;
+  return currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
 }
 
 /** Rendement de la récolte d'une parcelle : fatigue du sol × pollinisation (arbres). */

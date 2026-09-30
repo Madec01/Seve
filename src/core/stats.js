@@ -74,10 +74,15 @@ export function buildSummary(state, seasonId, extra = {}) {
     s.harvestIncome + s.investmentIncome + s.productIncome + s.rawSales + s.frostRefund + s.contestPrize
     - s.charges - s.waterSpent - s.loanPaid - s.rentsPaid - s.seedsSpent - s.investmentsSpent - s.plotsSpent;
   const season = copy(state.stats.season);
+  // Mode détente : prêt du voisin (absent du résumé en mode classique). Le bilan de l'année en tient
+  // compte (prêté − remboursé) ; celui de la saison non.
+  const loan = state.neighbourLoan;
+  const loanNet = loan ? loan.borrowed - loan.repaid : 0; // (le supplément et l'effacé sont dans l'écart)
   return {
     ...year,
     totalHarvested: Object.values(year.cropsHarvested).reduce((a, b) => a + b, 0),
-    net: net(year),
+    net: net(year) + loanNet,
+    ...(loan ? { neighbourLoan: { ...loan } } : {}),
     season: { ...season, net: net(season), totalHarvested: Object.values(season.cropsHarvested).reduce((a, b) => a + b, 0) },
     seasonId,
     day: state.time.day,

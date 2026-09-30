@@ -37,7 +37,7 @@ function logEvents(g) {
 
 test('serialize → loadGame : la partie continue à l’identique', () => {
   for (const levelId of [1, 3, 6, 7, 8]) {
-    const a = createGame({ levelId, seed: 2024 });
+    const a = createGame({ levelId, seed: 2024 , difficulty: 'classique' });
     for (let d = 0; d < 9; d++) {
       playDay(a);
       a.update(DAY_SECONDS);
@@ -55,18 +55,18 @@ test('serialize → loadGame : la partie continue à l’identique', () => {
 });
 
 test('même graine et mêmes actions → même partie', () => {
-  const a = createGame({ levelId: 2, seed: 'abc' });
-  const b = createGame({ levelId: 2, seed: 'abc' });
+  const a = createGame({ levelId: 2, seed: 'abc' , difficulty: 'classique' });
+  const b = createGame({ levelId: 2, seed: 'abc' , difficulty: 'classique' });
   playUntilEnd(a, []);
   playUntilEnd(b, []);
   assert.deepEqual(a.serialize(), b.serialize());
-  const c = createGame({ levelId: 2, seed: 'abd' });
+  const c = createGame({ levelId: 2, seed: 'abd' , difficulty: 'classique' });
   playUntilEnd(c, []);
   assert.notDeepEqual(c.state.weather, a.state.weather);
 });
 
 test("l'état est du JSON pur et serialize en fait une copie indépendante", () => {
-  const g = createGame({ levelId: 1, seed: 1 });
+  const g = createGame({ levelId: 1, seed: 1 , difficulty: 'classique' });
   playDay(g);
   g.update(DAY_SECONDS * 3);
   assert.deepEqual(JSON.parse(JSON.stringify(g.state)), g.state);
@@ -86,14 +86,14 @@ test("l'état est du JSON pur et serialize en fait une copie indépendante", () 
 test('loadGame refuse les sauvegardes invalides', () => {
   assert.throws(() => loadGame(null));
   assert.throws(() => loadGame('texte'));
-  const g = createGame({ levelId: 1, seed: 1 });
+  const g = createGame({ levelId: 1, seed: 1 , difficulty: 'classique' });
   assert.throws(() => loadGame({ ...g.serialize(), version: 999 }));
   assert.throws(() => loadGame({ ...g.serialize(), levelId: 42 }));
-  assert.throws(() => createGame({ levelId: 42 }));
+  assert.throws(() => createGame({ levelId: 42 , difficulty: 'classique' }));
 });
 
 test('une partie terminée se recharge terminée', () => {
-  const g = createGame({ levelId: 1, seed: 1 });
+  const g = createGame({ levelId: 1, seed: 1 , difficulty: 'classique' });
   g.state.money = 0;
   g.update(DAY_SECONDS * 10);
   assert.equal(g.state.status, 'bankrupt');
@@ -104,7 +104,7 @@ test('une partie terminée se recharge terminée', () => {
 });
 
 test('loadGame refuse une sauvegarde abîmée au lieu de planter plus tard', () => {
-  const g = createGame({ levelId: 1, seed: 7 });
+  const g = createGame({ levelId: 1, seed: 7 , difficulty: 'classique' });
   g.update(DAY_SECONDS * 2.5);
   const good = g.serialize();
   const broken = (patch) => {
@@ -137,7 +137,7 @@ test('loadGame refuse une sauvegarde abîmée au lieu de planter plus tard', () 
 });
 
 test('update ignore un dt infini ou invalide', () => {
-  const g = createGame({ levelId: 1, seed: 7 });
+  const g = createGame({ levelId: 1, seed: 7 , difficulty: 'classique' });
   for (const dt of [Infinity, -Infinity, NaN, -5, 0, undefined]) g.update(dt);
   assert.equal(g.state.time.day, 1);
   assert.equal(g.state.time.elapsed, 0);
@@ -148,7 +148,7 @@ test('loadGame accepte tout état atteint en jouant (tous niveaux, en cours de j
   let checked = 0;
   for (const level of LEVELS) {
     for (let seed = 1; seed <= 4; seed++) {
-      const g = createGame({ levelId: level.id, seed });
+      const g = createGame({ levelId: level.id, seed , difficulty: 'classique' });
       let r = seed * 7919;
       const rnd = () => (r = (r * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
       for (let step = 0; step < 200 && g.state.status === 'playing'; step++) {

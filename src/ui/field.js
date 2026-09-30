@@ -9,7 +9,7 @@
 
 import { el, fmt, plural, dec } from './dom.js';
 import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
-import { incomeProfile, season, seasonList } from './text.js';
+import { incomeProfile, season, seasonList, waterEffect } from './text.js';
 import { buildingContent, buildingSignature, isProcessing, processingOf } from './buildings.js';
 
 const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
@@ -158,7 +158,7 @@ export function createField(app) {
         ? [
             el('div.seed-list', rows),
             everywhere,
-            el('p.sheet-hint', 'Une culture arrosée pousse deux fois plus vite. Gain par jour = bénéfice ÷ jours de pousse.'),
+            el('p.sheet-hint', `Une culture arrosée pousse ${waterEffect(game.level).faster}. Gain par jour = bénéfice ÷ jours de pousse.`),
           ]
         : el('p.sheet-empty', `Rien ne se plante ${season(cal.seasonId, 'in')}.`),
     );
@@ -380,7 +380,7 @@ export function createField(app) {
           ? el('div.tip-ok', icon('water', 'xs'), 'Arrosée aujourd\'hui')
           : p.needsWater === false
             ? el('div.tip-ok', icon('water', 'xs'), 'Pousse sans arrosage (sauf en canicule)')
-            : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? 'Pas arrosée : ne poussera pas (canicule) !' : 'Pas arrosée : pousse deux fois moins vite'),
+            : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? ((game.level.dryHeatwaveGrowth ?? 0) > 0 ? 'Pas arrosée : pousse à peine (canicule) !' : 'Pas arrosée : ne poussera pas (canicule) !') : `Pas arrosée : pousse ${waterEffect(game.level).slower}`),
       );
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
       if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));

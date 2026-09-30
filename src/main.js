@@ -15,7 +15,7 @@
 //
 // Débogage (seulement avec ?debug=1 dans l'adresse) : window.__game (partie en cours),
 // window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId),
-// progress(), setProgress(p), grange(tab), decor() }.
+// progress(), setProgress(p), grange(tab), decor(), setMoney(n) }.
 
 import { SHEETS } from './render/atlas.js';
 import { loadImage, loadImages } from './render/assets.js';
@@ -25,12 +25,13 @@ import { DAY_SECONDS, SEASONS } from './data/balance.js';
 import { getLevel, LEVELS } from './data/levels.js';
 import { getInvestment } from './data/investments.js';
 import { getCrop } from './data/crops.js';
+import { DIFFICULTIES, LEGACY_DIFFICULTY } from './data/difficulty.js';
 import { AUDIO } from './audio/manifest.js';
 import { ambienceFor, createAudio } from './audio/audio.js';
 import * as storage from './storage.js';
 import * as pwa from './pwa.js';
 import { $, el, fmt, plural } from './ui/dom.js';
-import { initSprites, investmentIcon, cropIcon, icon } from './ui/icons.js';
+import { initSprites, investmentIcon, cropIcon, icon, sprite } from './ui/icons.js';
 import { createTooltip } from './ui/tooltip.js';
 import { createSheets } from './ui/sheets.js';
 import { createTabbar } from './ui/tabbar.js';
@@ -41,7 +42,7 @@ import { createPanel } from './ui/panel.js';
 import { createField } from './ui/field.js';
 import { createDialogs } from './ui/dialogs.js';
 import { createTutorial } from './ui/tutorial.js';
-import { season, seasonArrives, cropName, incomePhrase } from './ui/text.js';
+import { season, seasonArrives, cropName, cropCount, incomePhrase, difficultyName } from './ui/text.js';
 import { loadV3, v3 } from './ui/v3.js';
 import { createProgress } from './ui/progress.js';
 import { createGrange } from './ui/grange.js';
@@ -80,7 +81,7 @@ window.addEventListener('pointerdown', () => {
 let images = null;
 let attract = null; // ferme de démonstration derrière le menu
 let unwire = null;
-let pending = { billPaid: null, frost: null, end: null, contest: null };
+let pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
 let queuedBanner = null;
 const pauseReasons = new Set();
 let resumeSpeed = 1;
@@ -178,6 +179,9 @@ app.toggleFullscreen = () => {
 };
 
 app.saveTutorial = (t) => storage.saveTutorial(t);
+// Mode de difficulté des nouvelles parties (progression permanente).
+app.difficulty = () => app.progression.difficulty();
+app.setDifficulty = (id) => app.progression.setDifficulty(id);
 app.progress = () => app.progression.get();
 app.isLevelUnlocked = (id) => app.progression.isLevelUnlocked(id);
 
@@ -445,6 +449,29 @@ app.sellProcessing = (id) => {
   const g = app.game;
   if (!g || typeof g.actions.sellProcessing !== 'function') return null;
   return report(g.actions.sellProcessing(id));
+};
+
+/** Mode détente : rembourse Joseph (au plus `amount` pièces). `explain` : bouton grisé touché. */
+app.repayNeighbour = (amount, { explain = false } = {}) => {
+  const g = app.game;
+  if (!g || typeof g.actions.repayNeighbour !== 'function') return null;
+  if (explain) {
+    audio.play('error');
+    app.toasts.show({ kind: 'error', text: `Il vous faut ${plural(amount, 'pièce')} pour rendre cette somme (vous en avez ${fmt(Math.max(0, g.state.money))}).` });
+    return null;
+  }
+  const res = report(g.actions.repayNeighbour(amount));
+  if (res?.ok) {
+    audio.play('coin');
+    app.vibrate(12);
+  }
+  return res;
+};
+
+/** Ouvre le bilan sur la section de Joseph (dette, remboursement). */
+app.openNeighbour = () => {
+  app.openTab('stats');
+  requestAnimationFrame(() => app.panel.focusNeighbour?.());
 };
 
 /** Sème la même culture sur la parcelle choisie puis sur toutes les parcelles libres. */
@@ -764,6 +791,9 @@ function wire(game) {
       case 'contestAwarded':
         pending.contest = ev;
         break;
+      case 'neighbourLoan':
+        pending.loan = ev;
+        break;
       case 'purchased':
         if (isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
           // Premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur.
@@ -796,7 +826,7 @@ function queueAchievementCheck(game) {
 
 // Messages groupés : les récoltes parties à l'atelier (un glissé peut en envoyer plusieurs) et
 // les produits vendus à l'aube font un seul message par image.
-const grouped = { toWorkshop: new Map(), sold: [] };
+const grouped = { toWorkshop: new Map(), sold: [], loan: null };
 function flushGrouped() {
   const t = app.toasts;
   if (grouped.toWorkshop.size) {
@@ -812,6 +842,22 @@ function flushGrouped() {
     const names = [...new Set(grouped.sold.map((x) => productName(x.productId).toLowerCase()))];
     t.show({ kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
     grouped.sold = [];
+  }
+  // Remboursements automatiques de Joseph : un seul message discret, mis à jour tant qu'il est
+  // affiché (un glissé sur tout le champ ne fait pas dix messages).
+  if (grouped.loan && grouped.loan.pendingSince && performance.now() - grouped.loan.pendingSince > 450) {
+    const L = grouped.loan;
+    L.pendingSince = 0;
+    if (L.remaining > 0) {
+      t.show({
+        key: 'neighbour-repay',
+        kind: 'info',
+        sprite: sprite('farmer', 'sprite--sm'),
+        title: `−${fmt(L.total)} pour Joseph`,
+        text: `Remboursement automatique · reste ${plural(L.remaining, 'pièce')}`,
+        duration: 3000,
+      });
+    }
   }
 }
 
@@ -955,6 +1001,27 @@ function reactMessages(ev, game) {
     case 'treeRemoved':
       t.show({ kind: 'info', icon: 'seed', text: 'Pommier arraché : la parcelle est libre.' });
       break;
+    case 'loanRepayment':
+      if (ev.source === 'harvest' || ev.source === 'product') {
+        // Cumul tant que le message est affiché (voir flushGrouped).
+        const now = performance.now();
+        const L = grouped.loan && now - grouped.loan.last < 3000 ? grouped.loan : { total: 0 };
+        L.total += ev.amount;
+        L.remaining = ev.remaining;
+        L.last = now;
+        L.pendingSince = L.pendingSince || now;
+        grouped.loan = L;
+      } else if (ev.source === 'player') {
+        t.show({ kind: 'money', sprite: sprite('farmer', 'sprite--sm'), title: `${plural(ev.amount, 'pièce')} rendue${ev.amount > 1 ? 's' : ''} à Joseph`, text: ev.remaining > 0 ? `Reste à lui rendre : ${plural(ev.remaining, 'pièce')}.` : 'C\'est tout bon !', duration: 3000 });
+      }
+      break;
+    case 'loanRepaid':
+      if (ev.source !== 'yearEnd') {
+        grouped.loan = null;
+        audio.play('unlock', { volume: 0.6, delay: 0.2 });
+        t.show({ kind: 'success', sprite: sprite('farmer', 'sprite--sm'), title: 'Dette remboursée, merci !', text: 'Joseph pourra encore vous dépanner si besoin.', duration: 4200 });
+      }
+      break;
     case 'contestProgress':
       if (ev.done) {
         const goal = game.query.contest?.()?.goals.find((x) => x.id === ev.goalId);
@@ -971,12 +1038,40 @@ function reactMessages(ev, game) {
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
       if (loan) t.show({ kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
       if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
+      maybeLowMoneyHint(game);
       break;
     }
     default:
       break;
   }
 }
+
+/**
+ * Conseil doux quand l'argent risque de manquer au fermage (une fois par saison, à l'aube, 3 jours
+ * avant au plus) : quoi faire concrètement, sans alarme ni pause.
+ */
+let lowMoneyHint = null; // saison du dernier conseil
+function maybeLowMoneyHint(game) {
+  if (game.state.status !== 'playing' || app.tutorial.active) return;
+  const p = app.hud.projection();
+  if (p.state === 'ok' || p.daysLeft > 3 || p.daysLeft < 1) return;
+  const key = `${game.state.time.seasonIndex}`;
+  if (lowMoneyHint === key) return;
+  if (p.state === 'warn' && p.projected - p.amount > 15) return; // les récoltes prévues suffiront largement
+  lowMoneyHint = key;
+  const plots = game.query.plots();
+  const mature = plots.filter((x) => x.action === 'harvest').length;
+  const empty = plots.filter((x) => x.action === 'plant').length;
+  const c = game.query.calendar();
+  const fast = game.query.plantableCrops().filter((x) => x.kind !== 'tree' && !x.willFreeze && x.canAfford && x.daysToMature <= p.daysLeft).sort((a, b) => a.daysToMature - b.daysToMature || a.seedCost - b.seedCost)[0];
+  let text;
+  if (mature) text = `${plural(mature, 'culture est mûre', 'cultures sont mûres')} : récoltez-les, l'argent arrive tout de suite.`;
+  else if (empty && fast) text = `Des parcelles sont vides : semez des ${cropCount(fast.id, 2).replace(/^2 /, '')}, ${fast.daysToMature <= 2 ? 'ça pousse vite' : `récolte dans ${plural(fast.daysToMature, 'jour')}`}.`;
+  else text = 'Arrosez vos cultures pour qu\'elles soient mûres avant le soir du fermage.';
+  if (p.state === 'loan') text += ' Et pas de panique : Joseph peut vous avancer le reste.';
+  t0().show({ kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
+}
+const t0 = () => app.toasts;
 
 function frostHardy(cropId) {
   return !!getCrop(cropId)?.frostHardy;
@@ -989,7 +1084,7 @@ function processPending() {
   flushGrouped();
   if (pending.end) {
     const ev = pending.end;
-    pending = { billPaid: null, frost: null, end: null, contest: null };
+    pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
     queuedBanner = null;
     app.sheets.close('silent');
     app.tooltip.hide();
@@ -1012,14 +1107,26 @@ function processPending() {
     return;
   }
   if (pending.billPaid && app.dialogs.top() === 'contest') return;
+  // Mode détente : Joseph avance l'argent du fermage — sa fenêtre passe avant le bilan de saison.
+  if (pending.loan && !pending.loan.shown && !app.dialogs.isOpen()) {
+    pending.loan.shown = true;
+    app.sheets.close('silent');
+    app.vibrate([10, 60, 10]);
+    app.dialogs.neighbourLoan(pending.loan, { onClose: () => processPending() });
+    return;
+  }
+  if (pending.billPaid && app.dialogs.top() === 'neighbour-loan') return;
   if (pending.billPaid) {
     const ev = pending.billPaid;
     const frost = pending.frost;
+    const loan = pending.loan;
     pending.billPaid = null;
     pending.frost = null;
+    pending.loan = null;
     // Le bandeau de la nouvelle saison s'affiche quand on referme le bilan.
     app.dialogs.seasonEnd(ev, {
       frost,
+      loan,
       onClose: () => {
         if (queuedBanner) app.toasts.banner(queuedBanner);
         queuedBanner = null;
@@ -1112,9 +1219,12 @@ app.savedRunInfo = () => {
     return null;
   }
   const sid = SEASONS[data.state.time?.seasonIndex] || 'spring';
+  // Sauvegarde d'avant les modes : elle continue en classique (règles du début de la partie).
+  const mode = DIFFICULTIES[data.state.difficulty] ? data.state.difficulty : LEGACY_DIFFICULTY;
   return {
     levelId: lvl.id,
-    label: `Niveau ${lvl.id} · Jour ${data.state.time?.day ?? 1} · ${season(sid)}`,
+    difficulty: mode,
+    label: `Niveau ${lvl.id} · Jour ${data.state.time?.day ?? 1} · ${season(sid)} · ${difficultyName(mode)}`,
     data,
   };
 };
@@ -1145,9 +1255,11 @@ function startRun(game, { resumed = false } = {}) {
   app.tutorial.stop();
   app.hints.clear();
   pauseReasons.clear();
-  pending = { billPaid: null, frost: null, end: null, contest: null };
+  pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
   grouped.toWorkshop.clear();
   grouped.sold = [];
+  grouped.loan = null;
+  lowMoneyHint = null;
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
@@ -1176,12 +1288,13 @@ function startRun(game, { resumed = false } = {}) {
 
   const lvl = game.level;
   const farm = app.progression.available() ? `${app.progression.farmName()} · ` : '';
+  const modeName = difficultyName(game.difficulty);
   if (resumed) {
-    app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()}.` });
+    app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()} (mode ${modeName}).` });
   } else if (lvl.contest) {
-    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${modeName} · jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
   } else {
-    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${modeName} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
   }
 
   const tuto = storage.loadTutorial();
@@ -1225,7 +1338,9 @@ app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
   storage.clearRun();
   // Bonus permanents copiés dans la partie au lancement ({} si l'interrupteur est éteint).
   const perks = app.progression.runPerks();
-  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks });
+  // Mode choisi pour les nouvelles parties (Détente par défaut).
+  const difficulty = app.difficulty();
+  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks, difficulty });
   startRun(game);
 };
 
@@ -1467,6 +1582,7 @@ async function boot() {
     setTimeout(() => loading.remove(), 500);
     audio.playMusic('menu', { fade: 1 });
     app.dialogs.mainMenu();
+    maybeDetenteNotice();
     if (legacyAchievements.length) {
       app.audio.play('unlock', { delay: 0.4, volume: 0.7 });
       app.toasts.show({ kind: 'achievement', icon: 'star', title: 'Grange aux souvenirs', text: `${plural(legacyAchievements.length, 'succès débloqué', 'succès débloqués')} grâce à vos anciennes parties !`, duration: 5200 });
@@ -1475,6 +1591,23 @@ async function boot() {
   };
   startBtn.addEventListener('click', go, { once: true });
   if (DEBUG && params.has('autostart')) go();
+}
+
+/**
+ * Premier lancement depuis l'arrivée des modes de difficulté : un joueur qui avait déjà joué est
+ * prévenu une fois que le jeu est plus doux (mode Détente). Un nouveau joueur n'a rien à apprendre :
+ * la sélection des niveaux montre le choix du mode.
+ */
+function maybeDetenteNotice() {
+  const m = uiMemo.read();
+  if (m.detenteNotice) return;
+  m.detenteNotice = 1;
+  uiMemo.write(m);
+  const p = app.progression.get();
+  const saved = app.savedRunInfo();
+  const played = Object.values(p.levels || {}).some((l) => l?.played || l?.completed || l?.bestMoney != null) || storage.loadTutorial().done || !!saved;
+  if (!played) return;
+  app.dialogs.detenteNotice({ savedClassique: saved?.difficulty === 'classique' });
 }
 
 // Tout geste du joueur (re)déverrouille l'audio si le navigateur l'a suspendu (Chrome Android :
@@ -1519,6 +1652,15 @@ if (DEBUG) {
       return app.startLevel(levelId, { skipConfirm: true });
     },
     insets: () => ({ ...insets }),
+    /** Change l'argent de la partie (tests : provoquer le prêt du voisin). */
+    setMoney(n) {
+      const g = app.game;
+      if (!g) return null;
+      g.state.money = n;
+      app.hud.bind(g);
+      app.panel.refresh();
+      return n;
+    },
     levels: LEVELS.map((l) => l.id),
     /** Progression permanente (objet normalisé). */
     progress: () => app.progression.get(),

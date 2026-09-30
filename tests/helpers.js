@@ -5,9 +5,13 @@ import { DAY_SECONDS } from '../src/data/balance.js';
 
 export { DAY_SECONDS };
 
-/** Nouvelle partie ; par défaut le 1er jour est ensoleillé (tests indépendants de la météo tirée). */
-export function newGame(levelId = 1, seed = 42, { rawWeather = false, perks } = {}) {
-  const game = perks ? createGame({ levelId, seed, perks }) : createGame({ levelId, seed });
+/**
+ * Nouvelle partie ; par défaut le 1er jour est ensoleillé (tests indépendants de la météo tirée).
+ * Mode « classique » par défaut : les tests des règles d'origine portent sur les nombres de la v3 ;
+ * les tests du mode détente le demandent explicitement ({ difficulty: 'detente' }).
+ */
+export function newGame(levelId = 1, seed = 42, { rawWeather = false, perks, difficulty = 'classique' } = {}) {
+  const game = perks ? createGame({ levelId, seed, perks, difficulty }) : createGame({ levelId, seed, difficulty });
   if (!rawWeather) game.state.weather.today = 'sunny';
   return game;
 }

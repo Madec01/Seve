@@ -51,7 +51,7 @@ test("contenu de l'événement dawn", () => {
 
 test('les moneyChanged racontent toute l’évolution de l’argent', () => {
   for (const levelId of [1, 2, 7]) {
-    const g = createGame({ levelId, seed: 31 });
+    const g = createGame({ levelId, seed: 31 , difficulty: 'classique' });
     const start = g.state.money;
     let sum = 0;
     let last = start;
@@ -75,7 +75,7 @@ test('les moneyChanged racontent toute l’évolution de l’argent', () => {
 });
 
 test('le bilan est cohérent avec l’argent', () => {
-  const g = createGame({ levelId: 3, seed: 8 });
+  const g = createGame({ levelId: 3, seed: 8 , difficulty: 'classique' });
   let summary = null;
   g.on('victory', (e) => (summary = e.summary));
   g.on('bankrupt', (e) => (summary = e.summary));
@@ -112,10 +112,17 @@ test('la simulation tourne (fumée)', () => {
   for (const lv of out) {
     assert.deepEqual(
       lv.rows.map((r) => r.strategy),
-      ['careless', 'balanced', 'investor', 'optimal'],
+      ['careless', 'balanced', 'investor', 'casual', 'novice', 'idle', 'optimal'],
     );
-    for (const r of lv.rows) assert.ok(r.winRate >= 0 && r.winRate <= 1);
+    assert.equal(lv.difficulty, 'detente');
+    for (const r of lv.rows) assert.ok(r.winRate >= 0 && r.winRate <= 1 && r.loanRate >= 0 && r.loanRate <= 1);
   }
+  const m = spawnSync(process.execPath, [script, '--seeds', '1', '--level', '1', '--compare-modes', '--json'], { encoding: 'utf8' });
+  assert.equal(m.status, 0, m.stderr);
+  const modes = JSON.parse(m.stdout);
+  assert.equal(modes.detente[0].difficulty, 'detente');
+  assert.equal(modes.classique[0].difficulty, 'classique');
+  assert.deepEqual(modes.classique[0].thresholds, [500, 900]);
 });
 
 test('la simulation : --perks, --levels et --compare-perks (fumée)', () => {
@@ -129,7 +136,7 @@ test('la simulation : --perks, --levels et --compare-perks (fumée)', () => {
   assert.equal(b.status, 0, b.stderr);
   const cmp = JSON.parse(b.stdout);
   assert.equal(cmp.none[0].level, 10);
-  assert.equal(cmp.all[0].rows.length, 4);
+  assert.equal(cmp.all[0].rows.length, 7);
   const c = spawnSync(process.execPath, [script, '--seeds', '1', '--level', '1', '--perks', 'dragon'], { encoding: 'utf8' });
   assert.notEqual(c.status, 0, 'bonus inconnu refusé');
 });

@@ -13,6 +13,9 @@
 //
 // tests/parity.test.js importe `playParity` et `PARITY_CASES` d'ici et vérifie l'égalité exacte,
 // sans bonus permanent (`perks = {}`), après les changements de la v3.
+// Depuis les modes de difficulté (2026-09-30), la parité porte sur le mode « classique » (les nombres de
+// la v3) : `playParity` et `playSim` le demandent explicitement ; le mode « détente » (défaut des nouvelles
+// parties) change volontairement l'équilibre.
 //
 // L'empreinte ne porte que sur les champs de l'état et des événements qui existaient en v2 : les
 // champs ajoutés par la v3 (bonus, fruits, ateliers, concours, nouvelles statistiques…) sont retirés
@@ -155,10 +158,13 @@ export const BOTS = {
 
 /**
  * Joue une partie de parité. Renvoie { money, status, stars, day, stats, days: [argent], hashes: [empreinte/jour], final }.
- * @param {object} opts { levelId, bot, seed, perks } — perks transmis à createGame (absent en v2)
+ * @param {object} opts { levelId, bot, seed, perks, difficulty } — perks transmis à createGame (absent en v2) ;
+ *   difficulty : 'classique' par défaut (parité)
  */
-export function playParity({ levelId, bot, seed, perks }) {
-  const g = perks === undefined ? createGame({ levelId, seed }) : createGame({ levelId, seed, perks });
+export function playParity({ levelId, bot, seed, perks, difficulty = 'classique' }) {
+  // Mode « classique » : les nombres de la v3 (le mode détente, défaut des nouvelles parties, a
+  // volontairement changé l'équilibre et n'est pas couvert par la parité).
+  const g = perks === undefined ? createGame({ levelId, seed, difficulty }) : createGame({ levelId, seed, perks, difficulty });
   const rnd = lcg(seed + levelId * 1000);
   let events = [];
   g.on('*', (e) => events.push(JSON.stringify(stripV3(e))));
@@ -199,7 +205,7 @@ export const SIM_SEEDS = Array.from({ length: 30 }, (_, i) => i + 1);
 /** Résultat d'une partie d'un robot de la simulation, réduit aux champs v2. */
 export async function playSim(levelId, seed, strategy) {
   const { playOne } = await import('./simulate.js');
-  const r = playOne(levelId, seed, strategy);
+  const r = playOne(levelId, seed, strategy, {}, 'classique');
   return {
     win: r.win,
     money: r.money,

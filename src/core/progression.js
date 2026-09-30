@@ -10,7 +10,11 @@
 //   lifetime: { harvests, cropsHarvested: { [cropId]: n }, productsSold: { [productId]: n }, yearsWon, yearsLost, rentsPaid },
 //   ecus: 0,
 //   cosmetics: { farmName, outfit, path, fence, decor: { [slotId]: itemId }, owned: [itemId] },
-//   hintsSeen: [hintId] }
+//   hintsSeen: [hintId],
+//   difficulty: 'detente' | 'classique' }   mode choisi pour les NOUVELLES parties (défaut : détente,
+//                                           y compris pour une progression d'avant les modes)
+//
+// Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
 import { ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
@@ -18,6 +22,7 @@ import { getCrop } from '../data/crops.js';
 import { LEVELS, getLevel } from '../data/levels.js';
 import { PERKS, PERK_TIERS, getPerk, perkMaxRank } from '../data/perks.js';
 import { getProduct } from '../data/products.js';
+import { DEFAULT_DIFFICULTY, isDifficulty } from '../data/difficulty.js';
 
 export const PROGRESS_SCHEMA = 2;
 
@@ -46,6 +51,7 @@ export function defaultProgress() {
     ecus: 0,
     cosmetics: defaultCosmetics(),
     hintsSeen: [],
+    difficulty: DEFAULT_DIFFICULTY,
   };
 }
 
@@ -125,6 +131,7 @@ export function normalizeProgress(raw) {
     }
   }
   if (Array.isArray(raw.hintsSeen)) p.hintsSeen = [...new Set(raw.hintsSeen.filter((h) => typeof h === 'string' && h.length > 0 && h.length < 64))];
+  if (isDifficulty(raw.difficulty)) p.difficulty = raw.difficulty;
   return p;
 }
 
@@ -235,6 +242,19 @@ export function setPerksEnabled(p, enabled) {
 /** Bonus à passer à createGame({ perks }) : {} si l'interrupteur est éteint. */
 export function runPerks(p) {
   return p.perksEnabled === false ? {} : { ...(p.perks || {}) };
+}
+
+/** Mode de difficulté des nouvelles parties (à passer à createGame({ difficulty })). */
+export function runDifficulty(p) {
+  return isDifficulty(p?.difficulty) ? p.difficulty : DEFAULT_DIFFICULTY;
+}
+
+/** Change le mode des nouvelles parties. → { ok: true, progress } | { ok: false, reason } */
+export function setDifficulty(p, difficulty) {
+  if (!isDifficulty(difficulty)) return { ok: false, reason: 'Difficulté inconnue.' };
+  const progress = clone(p);
+  progress.difficulty = difficulty;
+  return { ok: true, progress };
 }
 
 /** Le niveau 1 est toujours ouvert ; le niveau n s'ouvre quand le niveau n − 1 est terminé. */

@@ -1,6 +1,6 @@
 // Messages temporaires (toasts) et grand bandeau (changement de saison, avertissements).
 
-import { el, clear } from './dom.js';
+import { el, clear, typo } from './dom.js';
 import { icon } from './icons.js';
 
 const KIND_ICON = { info: 'info', error: 'lock', success: 'star', warn: 'bill', money: 'coin', frost: 'winter', rot: 'rain' };
@@ -23,19 +23,31 @@ export function createToasts(stack, bannerNode) {
   }
 
   /**
-   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick? }
+   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick?, key? }
+   *   key : un message déjà affiché avec la même clé est mis à jour (titre, texte) au lieu d'en
+   *         empiler un nouveau (ex. remboursements successifs du voisin).
    */
   function show(opts) {
     const o = typeof opts === 'string' ? { text: opts } : opts;
     const kind = o.kind || 'info';
-    const key = `${kind}|${o.title || ''}|${o.text}`;
+    const key = o.key ? `key|${o.key}` : `${kind}|${o.title || ''}|${o.text}`;
     const prev = recent.get(key);
     if (prev && prev.node.isConnected && !prev.node.classList.contains('is-leaving')) {
+      if (o.key) {
+        const t = prev.node.querySelector('.toast-text');
+        if (t) t.textContent = typo(o.text);
+        const h = prev.node.querySelector('.toast-title');
+        if (h && o.title) h.textContent = typo(o.title);
+      }
       clearTimeout(prev.timer);
       prev.node.classList.remove('is-bump');
       void prev.node.offsetWidth; // relance l'animation
       prev.node.classList.add('is-bump');
       prev.timer = setTimeout(() => dismiss(prev.node), o.duration || 3200);
+      clearTimeout(prev.forget);
+      prev.forget = setTimeout(() => {
+        if (recent.get(key) === prev) recent.delete(key);
+      }, (o.duration || 3200) + 400);
       return prev.node;
     }
     const node = el(
@@ -60,7 +72,7 @@ export function createToasts(stack, bannerNode) {
     setTimeout(trim, 320);
     const entry = { node, timer: setTimeout(() => dismiss(node), o.duration || 3200) };
     recent.set(key, entry);
-    setTimeout(() => {
+    entry.forget = setTimeout(() => {
       if (recent.get(key) === entry) recent.delete(key);
     }, (o.duration || 3200) + 400);
     return node;

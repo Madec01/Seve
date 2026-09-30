@@ -2,6 +2,8 @@
 
 Document de référence du gameplay. Les chiffres marqués *(équilibré)* ont été réglés avec la simulation (`tools/simulate.js`) ; la version qui fait foi vit dans `src/data/`, et ce document est mis à jour en conséquence.
 
+> **Deux modes de difficulté (2026-09-30)** : les chiffres des § 3 à § 12 sont ceux du mode **classique**. Les nouvelles parties se jouent par défaut en mode **détente** (charges, fermages, départ, prix des récoltes, pousse sans arrosage et prêt du voisin) : voir **§ 13**.
+
 ## 1. Intention
 
 - Jeu de gestion **relaxant** : pas de réflexes, pas de combat, pas de punition brutale.
@@ -80,7 +82,7 @@ Revente : impossible (on assume ses choix — cohérent avec l'arbitrage).
 
 - **Charges quotidiennes** : entretien de la ferme (**5/jour**) + entretien des investissements − panneaux solaires (minimum 0).
 - **Fermage de fin de saison** : payé automatiquement le dernier soir de chaque saison. Niveau 1 : **60 / 120 / 170 / 240** (printemps → hiver) ; les autres niveaux au § 8.
-- L'argent peut devenir **négatif** à cause des charges quotidiennes, de l'arrosage automatique payant ou du prêt (petite dette tolérée, affichée en rouge), mais **si, au moment du fermage, l'argent est insuffisant, c'est la faillite** : écran de fin, bilan, recommencer. Les achats (graines, parcelles, investissements) exigent d'avoir la somme.
+- L'argent peut devenir **négatif** à cause des charges quotidiennes, de l'arrosage automatique payant ou du prêt (petite dette tolérée, affichée en rouge), mais **si, au moment du fermage, l'argent est insuffisant, c'est la faillite** : écran de fin, bilan, recommencer. Les achats (graines, parcelles, investissements) exigent d'avoir la somme. *(Mode détente : Joseph, le voisin, avance d'abord ce qui manque, § 13.5.)*
 - Un **indicateur de prévision** montre en permanence : prochain fermage, jours restants, revenu quotidien net estimé.
 
 ## 6. Victoire et étoiles
@@ -592,3 +594,128 @@ Trois lots menés **en parallèle** par trois agents, sur les contrats de `docs/
 3. Scène : arbres selon la saison, chèvres qui se promènent, ateliers (places occupées, fumée, panneau éteint), vol du produit vers l'atelier, décorations, styles d'allée et de clôture, nom sur le panneau, tenue du fermier, repères du mode décoration.
 
 Intégration par le chef de projet : `node --test tests/`, `node tools/simulate.js --compare-perks`, `node tools/build.js`, journal, sauvegarde `backup/…` avant fusion.
+
+---
+
+# 13. Difficulté et équilibre « détente » (2026-09-30)
+
+## 13.1 Pourquoi
+
+Retour du joueur (téléphone Android, niveau 1, vitesse ×1) : **faillite presque inévitable, dès le premier fermage**. Cause : tout l'équilibrage (§ 8, § 12.10) avait été réglé avec des robots qui arrosent, récoltent et replantent **chaque parcelle chaque jour**. Au niveau 1 classique, on part avec 100 pièces et le printemps coûte 35 de charges + 60 de fermage : il fallait regagner presque tout en 7 jours de 20 secondes, en jouant parfaitement — et le tutoriel occupe une partie du printemps (une seule carotte le 1er jour, puis le poulailler conseillé dès 70 pièces). Un joueur simulé « tranquille » (§ 13.4) fait faillite dans **100 %** des parties au niveau 1 classique.
+
+Intention retenue (demande du joueur) : **facile et relaxant** — on gagne presque toujours en jouant normalement ; les étoiles récompensent le bon jeu ; la faillite n'arrive que si l'on fait vraiment n'importe quoi.
+
+## 13.2 Deux modes
+
+- **Détente** (défaut de toute nouvelle partie) : l'équilibre ci-dessous.
+- **Classique** : exactement les chiffres d'avant (§ 3 à § 12), pour qui veut le défi d'origine. Les parties sauvegardées avant l'arrivée des modes continuent en classique (pas de surprise en cours de partie).
+- Le mode se choisit pour les nouvelles parties (progression : `difficulty`) ; une seule fiche d'étoiles par niveau, qui garde le meilleur résultat, quel que soit le mode.
+- Un mode ne change que des **nombres** : chaque niveau garde sa contrainte (sécheresse et arrosage payant, maladie, petit lopin, hiver de 14 jours, marché fou, crédit, bio, atelier, verger, montagne, concours).
+
+## 13.3 Les leviers du mode détente
+
+| Levier | Classique | Détente | Effet recherché |
+|---|---|---|---|
+| Charges de la ferme | 5 / jour | **2 / jour** | moins de pression fixe pour qui joue peu |
+| Pousse d'un jour **non arrosé** | 0,5 jour | **0,75 jour** | oublier d'arroser ralentit un peu, sans tout bloquer ; arroser reste utile (1 jour) |
+| Canicule, non arrosée | 0 | **0,25 jour** | idem pendant les canicules (niveau 2) |
+| Prix de vente des récoltes brutes | × 1 | **× 1,25** | meilleures marges sur les cultures (pas sur les produits transformés, déjà rentables) |
+| Fermages | § 8 / § 12.6 | **printemps 20 partout**, puis ~50 à 75 % | le premier fermage ne peut plus ruiner un débutant qui suit le tutoriel |
+| Argent de départ | § 8 / § 12.6 | **+ 60** | de quoi semer tout le champ **et** acheter le poulailler du tutoriel |
+| Niveau 7 : mensualité | 150 | **120** (description adaptée) | le crédit reste la contrainte, sans étrangler le joueur tranquille |
+| Filet de sécurité | faillite immédiate | **le prêt du voisin** (§ 13.5) | un faux pas (achat juste avant le fermage, saison ratée) se rattrape |
+
+Pourquoi pas seulement « tout moins cher » : les coûts fixes (charges, fermages) sont ce qui tue le joueur tranquille ; les baisser l'aide beaucoup plus que le robot parfait. Le prix des récoltes (× 1,25) et la pousse sans arrosage (0,75) donnent de la marge à qui plante sans optimiser. Le prêt du voisin couvre les accidents sans rendre la faillite impossible.
+
+### Niveaux en mode détente *(équilibré)*
+
+| # | Départ | Fermages (printemps → hiver) | ★★ / ★★★ | Réglage propre |
+|---|---|---|---|---|
+| 1 | 160 | 20 / 60 / 90 / 130 | 300 / 490 | tutoriel |
+| 2 | 180 | 20 / 60 / 80 / 120 | 130 / 420 | arrosage 1 pièce |
+| 3 | 160 | 20 / 50 / 100 / 170 | 150 / 360 | maladie 5 % |
+| 4 | 260 | 20 / 60 / 90 / 120 | 320 / 510 | 6 parcelles |
+| 5 | 160 | 20 / 80 / 140 / 500 | 180 / 380 | hiver de 14 jours |
+| 6 | 160 | 20 / 70 / 130 / 300 | 150 / 360 | marché fou |
+| 7 | 660 | 50 / 150 / 230 / 360 | 90 / 310 | crédit : **120** aux jours 4, 11, 18, 25 |
+| 8 | 160 | 20 / 80 / 130 / 240 | 190 / 380 | bio |
+| 9 | 360 | 20 / 60 / 120 / 260 | 100 / 250 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
+| 10 | 240 | 20 / 90 / 200 / 420 | 440 / 620 | pommiers sans ruche : demi-récolte |
+| 11 | 340 | 20 / 80 / 160 / 440 | 200 / 360 | montagne |
+| 12 | 310 | 20 / 100 / 190 / 480 | 190 / 420 | concours |
+
+Seuils d'étoiles : ★★ ≈ argent final médian du joueur tranquille (la moitié l'obtient) ; ★★★ ≈ ses 12 % meilleures parties — un joueur appliqué (qui arrose tout, comme les robots) l'obtient à coup sûr.
+
+## 13.4 Joueurs humains simulés (`tools/simulate.js`)
+
+Les robots d'origine (careless, balanced, investor, optimal) jouent parfaitement. Trois modèles de joueurs humains s'y ajoutent, avec leur propre tirage (déterministe : graine × niveau × stratégie, sans jamais consommer les tirages du jeu), par l'API publique seulement :
+
+| | casual (joueur tranquille, ×1, téléphone) | novice (débutant) | idle |
+|---|---|---|---|
+| Gestes par jour | 7 à 11 (glisser pour arroser / récolter : 1 geste + ¼ par parcelle ; « semer partout » : 3) | 4 à 8 | — |
+| Jours sans rien faire | 10 % | 15 % | tous sauf le 1er |
+| Arrosage | 50 à 70 % des parcelles qui en ont besoin | 20 à 40 % | une fois |
+| Récolte | le jour même 70 %, sinon le lendemain ; tout le soir du fermage | 50 %, jusqu'à 2 jours de retard | jamais |
+| Replantation | 75 % des jours, « semer partout » une culture tirée au hasard parmi celles qu'on peut payer (surtout bon marché et rapides ; ×2 pour celle que l'atelier transforme) | 60 % des jours ; carottes et navets, sinon la moins chère | une fois, la moins chère |
+| Gel annoncé | en tient compte 80 % du temps | 30 % | — |
+| Achats | 1 regard par jour sur deux : liste d'envies (poulailler, puis ce que suggère le niveau : atelier, chèvre, ruches, arrosage automatique…), marge de 0 à 40 pièces ; n'achète pas ce qui mettrait le fermage « dans le rouge » (70 % du temps) ; parcelle rarement | surtout des poulaillers, **sans regarder le fermage** (peut acheter juste avant) | rien |
+| Niveau 1 | tutoriel : une seule carotte le 1er jour ; poulailler conseillé dès 70 pièces (80 %) | idem (100 %) | — |
+| Prévisions météo | ignorées | ignorées | — |
+
+## 13.5 Le prêt du voisin (mode détente)
+
+Joseph, le voisin du tutoriel, avance l'argent d'un fermage manqué. Règles exactes (`src/core/neighbour.js`, déterministes, sauvegardées dans `state.neighbourLoan`) :
+
+1. Le soir d'un fermage, après la vente en l'état des ateliers, si l'argent ne suffit pas **et** qu'on ne doit rien à Joseph **et** qu'il manque au plus **max(60 pièces, la moitié du fermage)**, Joseph prête automatiquement **ce qui manque + 30 pièces** pour ressemer (pas de supplément au dernier fermage de l'année). Le fermage est payé normalement.
+2. On lui doit la somme prêtée **+ 10 %** (arrondi à la pièce supérieure).
+3. Remboursement automatique : **la moitié de chaque vente** (récolte vendue, produit transformé vendu à l'aube ; arrondi supérieur, au plus ce qui reste dû) lui revient tant que la dette n'est pas réglée. On peut aussi le rembourser quand on veut.
+4. Une fois remboursé, Joseph peut aider à nouveau. Un fermage manqué **alors qu'on lui doit encore de l'argent**, ou avec un manque au-delà du plafond → **faillite**.
+5. Fin d'année : après le fermage d'hiver, Joseph reprend ce qui lui est dû dans la limite de l'argent restant et **efface le reste** (l'argent final n'est jamais négatif à cause de lui) ; les étoiles se comptent ensuite.
+
+Garde-fous vérifiés : semer une fois puis ne plus rien faire (« idle ») fait faillite dans **100 %** des parties, à tous les niveaux ; le prêt sert à 10–50 % des parties des joueurs humains simulés, jamais aux robots appliqués (0–4 %).
+
+## 13.6 Résultats *(équilibré, 2026-09-30, 200 parties par niveau et par stratégie, sans bonus)*
+
+### Victoires, détente / classique
+
+| # | novice | casual | careless | balanced | investor | optimal | idle |
+|---|---|---|---|---|---|---|---|
+| 1 | **98 %** / 0 % | **100 %** / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 2 | **99 %** / 0 % | **98 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 3 | **98 %** / 0 % | **99 %** / 0 % | 100 % / 31 % | 100 % / 89 % | 100 % / 95 % | 100 % / 95 % | 0 % / 0 % |
+| 4 | **100 %** / 0 % | **100 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 5 | **91 %** / 0 % | **98 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 6 | **90 %** / 0 % | **96 %** / 0 % | 100 % / 9 % | 100 % / 89 % | 100 % / 86 % | 100 % / 89 % | 0 % / 0 % |
+| 7 | **88 %** / 0 % | **92 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 98 % | 0 % / 0 % |
+| 8 | **89 %** / 0 % | **99 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 9 | **100 %** / 0 % | **97 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 10 | **100 %** / 0 % | **100 %** / 22 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 11 | **100 %** / 0 % | **100 %** / 0 % | 100 % / 0 % | 100 % / 98 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+| 12 | **100 %** / 0 % | **100 %** / 0 % | 100 % / 0 % | 100 % / 100 % | 100 % / 100 % | 100 % / 100 % | 0 % / 0 % |
+
+Cibles (détente) : niveau 1 novice ≥ 95 %, casual ≥ 99 % ; niveaux 2 à 4 casual ≥ 95 %, novice ≥ 80 % ; 5 à 8 casual ≥ 90 %, novice ≥ 65 % ; 9 à 12 casual ≥ 90 %, novice ≥ 60 % : **toutes tenues**. Le mode classique est inchangé (colonnes de droite identiques aux § 8 et § 12.10 ; test de parité).
+
+Le robot « careless » (graines les moins chères, aucun investissement) gagne partout en détente : il arrose et replante tout, chaque jour — c'est un joueur appliqué, pas un joueur négligent ; les joueurs humains simulés sont désormais la référence du « jouer mal ».
+
+### Étoiles et argent final (détente)
+
+| # | casual : argent médian · ★ / ★★ / ★★★ · prêt | novice : argent médian · ★ / ★★ / ★★★ · prêt | balanced · optimal (★★★) |
+|---|---|---|---|
+| 1 | 309 · 47 / 42 / 12 % · 12 % | 300 · 48 / 45 / 5 % · 33 % | 2484 · 2438 (100 %) |
+| 2 | 139 · 44 / 51 / 3 % · 31 % | 324 · 5 / 79 / 16 % · 46 % | 1791 · 1831 (100 %) |
+| 3 | 156 · 47 / 40 / 12 % · 21 % | 244 · 18 / 65 / 16 % · 39 % | 1984 · 2026 (100 %) |
+| 4 | 326 · 48 / 41 / 12 % · 1 % | 362 · 27 / 74 / 0 % · 14 % | 1149 · 1243 (100 %) |
+| 5 | 190 · 48 / 39 / 12 % · 23 % | 131 · 55 / 35 / 2 % · 49 % | 2545 · 2757 (100 %) |
+| 6 | 157 · 44 / 40 / 12 % · 20 % | 123 · 50 / 34 / 6 % · 53 % | 2173 · 2336 (100 %) |
+| 7 | 101 · 41 / 40 / 11 % · 21 % | 0 · 78 / 10 / 0 % · 52 % | 2761 · 2951 (100 %) |
+| 8 | 197 · 47 / 40 / 12 % · 11 % | 138 · 55 / 34 / 0 % · 47 % | 1998 · 2059 (100 %) |
+| 9 | 112 · 45 / 39 / 14 % · 23 % | 124 · 39 / 60 / 2 % · 9 % | 1448 · 1712 (100 %) |
+| 10 | 447 · 48 / 41 / 12 % · 2 % | 311 · 92 / 9 / 0 % · 9 % | 2005 · 2140 (100 %) |
+| 11 | 206 · 49 / 39 / 13 % · 5 % | 163 · 72 / 28 / 0 % · 7 % | 1435 · 1486 (100 %) |
+| 12 | 194 · 49 / 38 / 13 % · 14 % | 249 · 36 / 50 / 15 % · 11 % | 2565 · 2750 (100 %) |
+
+(★ / ★★ / ★★★ : parts de TOUTES les parties, faillites non comprises.) Le joueur tranquille obtient ★★ ou mieux dans ~52 % des parties et ★★★ dans ~12 % (3 % au niveau 2) ; tous les robots appliqués ont ★★★. Au niveau 2, le novice fait mieux que le casual : l'arrosage y est payant (1 pièce) et, avec la pousse à 0,75 sans eau, arroser peu et semer des carottes est un choix raisonnable ; le seuil ★★★ (420) est placé pour qu'il reste rare pour lui (16 %).
+
+Les robots appliqués finissent l'année avec beaucoup plus d'argent qu'en classique (1 100 à 2 900 pièces) : c'est voulu, la détente pardonne tout ; seuls les seuils d'étoiles de ce mode en tiennent compte.
+
+Commandes : `node tools/simulate.js` (détente, toutes les stratégies), `--difficulty classique`, `--compare-modes` (tableau des victoires côte à côte), `--strategy casual --trace --level 1 --seed 3` (une partie jour par jour).

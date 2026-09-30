@@ -1,8 +1,8 @@
 {
-  "id": "77aeb8050373",
+  "id": "ab892b587d41",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.dba3132c49.js",
-  "css": "dist/game.ac322645b8.css",
+  "js": "dist/game.f7c432db1b.js",
+  "css": "dist/game.cf5821b84d.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -139,36 +139,38 @@
     "assets/sprites/ui/slot-wood.png": "77631b56d79873e0",
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/fonts.css": "f6a60d8eb500f8f4",
-    "css/style.css": "eae1456f28ff1276",
+    "css/style.css": "d47e1db94ed10c34",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
     "src/audio/audio.js": "ad3f4125ebc5f0e7",
     "src/audio/manifest.js": "bcd255827929807c",
     "src/core/calendar.js": "adf7ac06b4e95cec",
     "src/core/contest.js": "ece98131e7c91d99",
-    "src/core/economy.js": "d6b3320a2c12bdb5",
+    "src/core/economy.js": "f8c874d7d8d5ef4b",
     "src/core/events.js": "467b3069052f8d70",
-    "src/core/farm.js": "9b17a26dd96ead3e",
-    "src/core/game.js": "37658f2ae9b850e3",
+    "src/core/farm.js": "fc8fb4c1ea25b322",
+    "src/core/game.js": "8c058259b693f99b",
     "src/core/market.js": "b44b99ed21844017",
+    "src/core/neighbour.js": "625c041def630a9b",
     "src/core/perks.js": "d4c235975cc3fe4a",
     "src/core/processing.js": "10c857ea3dcc0a8f",
-    "src/core/progression.js": "bd72ed3ef3ba45a4",
+    "src/core/progression.js": "728067606fd12072",
     "src/core/rng.js": "025e534f65322939",
-    "src/core/stats.js": "c3acd1b0bc177056",
+    "src/core/stats.js": "603e27780c761f31",
     "src/core/trees.js": "7b5d36eb1d128ce5",
     "src/core/weather.js": "875f3410fa4564a6",
     "src/data/achievements.js": "e07e9c4ce24347dd",
     "src/data/balance.js": "d3f28fc92ba51403",
     "src/data/cosmetics.js": "f7d4eb5ebb95979a",
     "src/data/crops.js": "b95f14be6d5a8267",
+    "src/data/difficulty.js": "781c96df9342bb46",
     "src/data/investments.js": "9e5e2af7cf191542",
-    "src/data/levels.js": "bdaa9d92f6e4a280",
+    "src/data/levels.js": "845dce7aaa606262",
     "src/data/perks.js": "64d88e2fd12b657e",
     "src/data/products.js": "ca4308ec37323ecd",
     "src/index.template.html": "481723bd863c8d56",
     "src/loader.js": "8cd0d03467331dd6",
-    "src/main.js": "4d83ef2487dae1d4",
+    "src/main.js": "88ced4cba762d524",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
     "src/render/atlas.js": "ed6f2163488bf9b7",
@@ -180,27 +182,51 @@
     "src/storage.js": "244c76548a28d4b7",
     "src/ui/buildings.js": "4c4e4ad2d0e9a7a5",
     "src/ui/decor.js": "4e0ebdca91841de3",
-    "src/ui/dialogs.js": "f22da3f29fd6f62b",
+    "src/ui/dialogs.js": "5c88213758e58058",
     "src/ui/dom.js": "4ce9149d5d52a48f",
-    "src/ui/field.js": "840b591010bb0ce6",
+    "src/ui/field.js": "eafba1b7dbf8c036",
     "src/ui/gestures.js": "aabe612e54d7430f",
     "src/ui/grange.js": "823ba0c43f918d9f",
     "src/ui/hints.js": "0955a7047c7be627",
-    "src/ui/hud.js": "bdcca80764c6346b",
+    "src/ui/hud.js": "b595e5c353e3051e",
     "src/ui/icons.js": "cd979dc037cdc49f",
-    "src/ui/panel.js": "5d1b2d58876f7915",
-    "src/ui/progress.js": "407be8cd975f38ef",
+    "src/ui/panel.js": "2ab835a5c0dc4fab",
+    "src/ui/progress.js": "16b4f663eb18d417",
     "src/ui/sheets.js": "69f0e66f53f93bcf",
     "src/ui/tabbar.js": "df6fca62dd05cf4e",
-    "src/ui/text.js": "c08166c9b956236e",
-    "src/ui/toasts.js": "28c7c5fbb525b73e",
+    "src/ui/text.js": "73be0d7712db668e",
+    "src/ui/toasts.js": "b83a5885e6ff20de",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
-    "src/ui/tutorial.js": "d7ef47041f84272f",
+    "src/ui/tutorial.js": "cbd3eda91252626e",
     "src/ui/v3.js": "45edf2a4853e4468",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "96604599f3e50f75"
   },
   "history": [
+    {
+      "id": "ab892b587d41",
+      "files": [
+        "dist/game.f7c432db1b.js",
+        "dist/game.f7c432db1b.js.map",
+        "dist/game.cf5821b84d.css"
+      ]
+    },
+    {
+      "id": "bf5331e86e12",
+      "files": [
+        "dist/game.a9301562a2.js",
+        "dist/game.a9301562a2.js.map",
+        "dist/game.ac322645b8.css"
+      ]
+    },
+    {
+      "id": "402b341524d6",
+      "files": [
+        "dist/game.ec6b652543.js",
+        "dist/game.ec6b652543.js.map",
+        "dist/game.ac322645b8.css"
+      ]
+    },
     {
       "id": "77aeb8050373",
       "files": [
@@ -214,30 +240,6 @@
       "files": [
         "dist/game.cf13ddf930.js",
         "dist/game.cf13ddf930.js.map",
-        "dist/game.ac322645b8.css"
-      ]
-    },
-    {
-      "id": "b9c279ddb9cd",
-      "files": [
-        "dist/game.f342515777.js",
-        "dist/game.f342515777.js.map",
-        "dist/game.ac322645b8.css"
-      ]
-    },
-    {
-      "id": "807c502eb2d5",
-      "files": [
-        "dist/game.f342515777.js",
-        "dist/game.f342515777.js.map",
-        "dist/game.ac322645b8.css"
-      ]
-    },
-    {
-      "id": "49a6eacac62b",
-      "files": [
-        "dist/game.52695bd29b.js",
-        "dist/game.52695bd29b.js.map",
         "dist/game.ac322645b8.css"
       ]
     }
