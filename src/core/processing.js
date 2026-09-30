@@ -15,6 +15,9 @@ import { INVESTMENTS, getInvestment } from '../data/investments.js';
 import { getProduct, recipeFor } from '../data/products.js';
 import { owned, priceBonus } from './economy.js';
 import { perkValue } from './perks.js';
+import { BUILDINGS_BY_ID } from '../data/career/buildings.js';
+import { providedSum } from './career/registry.js';
+import { careerProductFactor } from './career/market.js';
 
 /** Ateliers (investissements avec l'effet `processing`), dans l'ordre des données. */
 export const PROCESSING_IDS = INVESTMENTS.filter((i) => i.effects.processing).map((i) => i.id);
@@ -26,6 +29,11 @@ export function isProcessingBuilding(id) {
 /** Nombre de places d'un atelier à un niveau donné (« Artisan » : +1). 0 si non possédé. */
 export function capacityAt(state, buildingId, level) {
   if (level <= 0) return 0;
+  if (state.mode === 'career') {
+    // Carrière : 5 niveaux (places 2 à 6, src/data/career/buildings.js) + artisan (fournisseur extraPlaces).
+    const levels = BUILDINGS_BY_ID[buildingId].levels;
+    return levels[Math.min(level, levels.length) - 1].places + providedSum('extraPlaces', state, buildingId);
+  }
   const places = getInvestment(buildingId).effects.processing.places;
   return places[Math.min(level, places.length) - 1] + perkValue(state, 'extraPlaces');
 }
@@ -45,6 +53,9 @@ export function ensureBuilding(state, buildingId) {
 /** Prix de vente d'une place (calculé à la vente : étal et bonus de ce moment). */
 export function productSaleValue(state, place) {
   const product = getProduct(place.productId);
+  if (state.mode === 'career') {
+    return Math.round(product.value * (1 + priceBonus(state)) * place.yieldFactor * careerProductFactor(state, product.id));
+  }
   return Math.round(product.value * (1 + perkValue(state, 'productBonus')) * (1 + priceBonus(state)) * place.yieldFactor);
 }
 

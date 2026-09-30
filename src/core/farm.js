@@ -8,6 +8,8 @@
 //   fatigued      la culture en place a été replantée juste après la même (rendement réduit)
 //   fruit         (v3) arbres : jours de fruits accumulés (0 pour une culture) — voir src/core/trees.js
 //   insured       (v3) « Assurance gel » : semée quand elle avait le temps de mûrir avant le gel (remboursée si elle gèle)
+//   (carrière seulement) lot, env ('field' | 'orchard' | 'greenhouse' | null = parcelle retirée), cell, crow, crowPenalty
+//     — voir src/core/career/land.js. La serre : ni gel, ni pluie, ni canicule ; pousse du niveau de la serre.
 
 import { EPSILON, GROWTH, PLOT_COST, SEASONS, WEATHER_TYPES } from '../data/balance.js';
 import { perkValue } from './perks.js';
@@ -15,6 +17,9 @@ import { getCrop, isTreeCrop } from '../data/crops.js';
 import { growthBonus, priceBonus } from './economy.js';
 import { marketMultiplier } from './market.js';
 import { growTree, isFruitReady, pollinationFactor } from './trees.js';
+import { buildingLevelData } from './career/effects.js';
+import { careerCropPrice } from './career/market.js';
+import { START_FIELD } from '../data/career/lots.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -50,6 +55,12 @@ export function unlockedCount(state) {
 
 /** Prix de la prochaine parcelle achetée, ou null si le champ ne peut plus s'agrandir. */
 export function plotUnlockCost(state, level) {
+  if (state.mode === 'career') {
+    // Carrière : seules les 4 parcelles fermées du champ de départ s'achètent (40 + 10 × déjà achetées).
+    const closed = START_FIELD.cols * START_FIELD.rows - START_FIELD.open;
+    if (state.plotsBought >= closed) return null;
+    return START_FIELD.plotCost.base + START_FIELD.plotCost.step * state.plotsBought;
+  }
   if (unlockedCount(state) >= level.maxPlots) return null;
   const pc = level.plotCost || PLOT_COST;
   return Math.max(0, pc.base + pc.step * state.plotsBought - perkValue(state, 'plotDiscount'));
@@ -86,6 +97,27 @@ export function wateredRate(state, seasonIndex) {
   return GROWTH.watered * (1 + growthBonus(state, seasonIndex));
 }
 
+/** Carrière : true si la parcelle est dans la serre. */
+export function inGreenhouse(plot) {
+  return plot.env === 'greenhouse';
+}
+
+/**
+ * Carrière : multiplicateur de pousse de la serre pour une saison (niveau 1-2 : × 0,5 en hiver ;
+ * niveau 3 « chauffée » : × 1,1 toute l'année). 1 hors de la serre.
+ */
+export function greenhouseFactor(state, plot, seasonIndex) {
+  if (!inGreenhouse(plot)) return 1;
+  const gh = buildingLevelData(state, 'greenhouse');
+  if (!gh) return 1;
+  return SEASONS[seasonIndex] === 'winter' ? gh.winterGrowth : gh.growth;
+}
+
+/** Vitesse de pousse d'une parcelle arrosée, serre comprise (carrière ; ailleurs = wateredRate). */
+export function plotWateredRate(state, plot, seasonIndex) {
+  return wateredRate(state, seasonIndex) * greenhouseFactor(state, plot, seasonIndex);
+}
+
 /** Étape visuelle 0..4 : 0 = vient d'être plantée, 4 = mûre. */
 export function stageOf(growth, growDays) {
   if (growth >= growDays - EPSILON) return 4;
@@ -102,13 +134,20 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
   const bonus = 1 + growthBonus(state, seasonIndex);
   const heatwave = !!WEATHER_TYPES[weatherId]?.noDryGrowth;
   const season = SEASONS[seasonIndex];
+  const career = state.mode === 'career';
   for (const p of state.plots) {
     const crop = p.cropId ? getCrop(p.cropId) : null;
     if (crop && isTreeCrop(crop)) {
       growTree(state, p, season, bonus);
     } else if (crop && !isMature(p)) {
-      const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, heatwave, level);
-      p.growth = Math.min(crop.growDays, p.growth + base * bonus);
+      if (career && inGreenhouse(p)) {
+        // Serre : la météo n'y entre pas (pas de canicule) ; pousse du niveau de la serre.
+        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, false, level);
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex));
+      } else {
+        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, heatwave, level);
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus);
+      }
     }
     p.watered = false;
   }
@@ -118,7 +157,7 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
 export function applyFrost(state) {
   const lost = [];
   state.plots.forEach((p, i) => {
-    if (p.cropId && !getCrop(p.cropId).frostHardy) {
+    if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p)) {
       lost.push({ plotIndex: i, cropId: p.cropId });
       clearPlot(p);
     }
@@ -148,7 +187,7 @@ export function applyRot(state, rotChance, rng) {
 
 /** La pluie arrose toutes les parcelles plantées (pas les arbres, qui ne s'arrosent pas). */
 export function rainWater(state) {
-  for (const p of state.plots) if (p.cropId && !isTreeCrop(getCrop(p.cropId))) p.watered = true;
+  for (const p of state.plots) if (p.cropId && !isTreeCrop(getCrop(p.cropId)) && !inGreenhouse(p)) p.watered = true;
 }
 
 /**
@@ -196,6 +235,7 @@ export function currentUnitPrice(state, crop) {
  * sans rendement. Les produits transformés n'ont ni l'un ni l'autre.
  */
 export function rawUnitPrice(state, level, crop) {
+  if (state.mode === 'career') return careerCropPrice(state, level, crop);
   return currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
 }
 

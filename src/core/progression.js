@@ -11,12 +11,18 @@
 //   ecus: 0,
 //   cosmetics: { farmName, outfit, path, fence, decor: { [slotId]: itemId }, owned: [itemId] },
 //   hintsSeen: [hintId],
-//   difficulty: 'detente' | 'classique' }   mode choisi pour les NOUVELLES parties (défaut : détente,
+//   difficulty: 'detente' | 'classique',    mode choisi pour les NOUVELLES parties (défaut : détente,
 //                                           y compris pour une progression d'avant les modes)
+//   career: { started, bestRank, bestYear, years,          mode Carrière (docs/CARRIERE.md § 1.6 et § 1.8) :
+//             archive: [{ farmName, years, rank, patrimony, endedBy: 'bankrupt'|'restart' }] } (5 dernières, la plus récente d'abord)
+// }
+// Les succès parcourent ALL_ACHIEVEMENTS (niveaux + carrière) ; ceux de la carrière (category 'career') ne
+// donnent que des écus.
 //
 // Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
-import { ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { CAREER_ARCHIVE_MAX, CAREER_ECUS } from '../data/career/career.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
 import { getCrop } from '../data/crops.js';
 import { LEVELS, getLevel } from '../data/levels.js';
@@ -33,6 +39,11 @@ const nonNegInt = (v) => (Number.isFinite(v) && v > 0 ? Math.floor(v) : 0);
 function defaultCosmetics() {
   // owned : toujours dans l'ordre du catalogue (COSMETICS).
   return { ...clone(DEFAULT_COSMETICS), decor: {}, owned: COSMETICS.filter((i) => DEFAULT_COSMETICS.owned.includes(i.id)).map((i) => i.id) };
+}
+
+/** Progression de la carrière (vide). */
+export function defaultCareerProgress() {
+  return { started: false, bestRank: 0, bestYear: 0, years: 0, archive: [] };
 }
 
 function defaultLifetime() {
@@ -52,6 +63,7 @@ export function defaultProgress() {
     cosmetics: defaultCosmetics(),
     hintsSeen: [],
     difficulty: DEFAULT_DIFFICULTY,
+    career: defaultCareerProgress(),
   };
 }
 
@@ -132,6 +144,25 @@ export function normalizeProgress(raw) {
   }
   if (Array.isArray(raw.hintsSeen)) p.hintsSeen = [...new Set(raw.hintsSeen.filter((h) => typeof h === 'string' && h.length > 0 && h.length < 64))];
   if (isDifficulty(raw.difficulty)) p.difficulty = raw.difficulty;
+  if (isObj(raw.career)) {
+    const c = raw.career;
+    p.career.started = c.started === true;
+    p.career.bestRank = Math.min(6, nonNegInt(c.bestRank));
+    p.career.bestYear = nonNegInt(c.bestYear);
+    p.career.years = nonNegInt(c.years);
+    if (Array.isArray(c.archive)) {
+      p.career.archive = c.archive
+        .filter((e) => isObj(e))
+        .map((e) => ({
+          farmName: cleanFarmName(e.farmName),
+          years: nonNegInt(e.years),
+          rank: Math.max(1, Math.min(6, nonNegInt(e.rank) || 1)),
+          patrimony: Number.isFinite(e.patrimony) ? Math.round(e.patrimony) : 0,
+          endedBy: e.endedBy === 'bankrupt' ? 'bankrupt' : 'restart',
+        }))
+        .slice(0, CAREER_ARCHIVE_MAX);
+    }
+  }
   return p;
 }
 
@@ -361,6 +392,39 @@ function evaluate(check, p, f) {
       const n = Object.keys(p.cosmetics?.decor || {}).length;
       return counter(n, check.n);
     }
+    // ── Carrière (ctx.career = query.career.achievementContext()) ──
+    case 'careerStarted':
+      return { done: !!p.career?.started || !!ctx?.career, progress: null };
+    case 'careerLots':
+      return ctx?.career ? counter(ctx.career.lots || 0, check.n) : { done: false, progress: null };
+    case 'careerRank':
+      return counter(Math.max(p.career?.bestRank || 0, ctx?.career?.rank || 0), check.n);
+    case 'careerStaff':
+      return ctx?.career ? counter(ctx.career.staffCount || 0, check.n) : { done: false, progress: null };
+    case 'careerStaffLevel':
+      return ctx?.career ? counter(ctx.career.maxStaffLevel || 0, check.n) : { done: false, progress: null };
+    case 'careerMachine': {
+      const ids = ctx?.career?.machines || [];
+      return { done: check.id ? ids.includes(check.id) : ids.length > 0, progress: null };
+    }
+    case 'careerCropInSeason':
+      return { done: !!ctx?.career?.cropsInSeason?.includes(`${check.cropId}@${check.seasonId}`), progress: null };
+    case 'careerSpecies':
+      return ctx?.career ? counter(ctx.career.species || 0, check.n) : { done: false, progress: null };
+    case 'careerTruffles':
+      return ctx?.career ? counter(ctx.career.truffles || 0, check.n) : { done: false, progress: null };
+    case 'careerHearts':
+      return ctx?.career ? counter(ctx.career.hearts || 0, check.n) : { done: false, progress: null };
+    case 'careerContestAll':
+      return { done: !!ctx?.career?.contestAll, progress: null };
+    case 'careerYear':
+      return counter(Math.max(p.career?.bestYear || 0, ctx?.career?.year || 0), check.n);
+    case 'careerStock':
+      return ctx?.career ? counter(ctx.career.stock || 0, check.n) : { done: false, progress: null };
+    case 'careerYearNet': {
+      const v = Math.max(ctx?.career?.yearNet ?? 0, ctx?.career?.bestYearNet ?? 0);
+      return ctx?.career ? counter(Math.max(0, v), check.n) : { done: false, progress: null };
+    }
     default:
       return { done: false, progress: null };
   }
@@ -391,16 +455,29 @@ export function unlockAchievements(p, ids, now = Date.now()) {
   return { progress, rewards };
 }
 
-/** Liste pour l'onglet « Succès » : [{ id, name, description, reward, done, at, progress }]. */
+/** Liste pour l'onglet « Succès » (succès des niveaux) : [{ id, name, description, reward, done, at, progress }]. */
 export function achievementList(p, ctx) {
+  return listOf(LEVEL_ACHIEVEMENTS, p, ctx, false);
+}
+
+/**
+ * Liste pour la section « Carrière » de la grange : succès de carrière (écus seulement), même forme que
+ * achievementList + category: 'career'. ctx : game.query.achievementContext() d'une carrière, ou null.
+ */
+export function careerAchievementList(p, ctx) {
+  return listOf(CAREER_ACHIEVEMENTS, p, ctx, true);
+}
+
+function listOf(list, p, ctx, withCategory) {
   const f = facts(p, ctx);
-  return ACHIEVEMENTS.map((a) => {
+  return list.map((a) => {
     const got = p.achievements?.[a.id];
     const ev = evaluate(a.check, p, f);
     return {
       id: a.id,
       name: a.name,
       description: a.description,
+      ...(withCategory ? { category: a.category } : {}),
       reward: { ...a.reward },
       done: !!got,
       at: got ? got.at : null,
@@ -482,6 +559,106 @@ export function recordRunEnd(p, run, now = Date.now()) {
   rewards.achievementStars = unlocked.rewards.stars;
   rewards.achievementEcus = unlocked.rewards.ecus;
   return { progress: unlocked.progress, rewards, achievements: ids };
+}
+
+// ── Carrière ───────────────────────────────────────────────────────────────────────────
+
+/** Écus du bilan annuel : 10 + 3 × rang + min(20, ⌊bénéfice / 1 000⌋) (+10 avec le Manoir). */
+export function ecusForCareerYear({ rank = 1, net = 0, houseLevel = 1 } = {}) {
+  const e = CAREER_ECUS;
+  const profit = Math.min(e.yearProfitMax, Math.max(0, Math.floor((Number(net) || 0) / e.yearProfitStep)));
+  return e.yearBase + e.yearPerRank * rank + profit + (houseLevel >= 5 ? e.manorBonus : 0);
+}
+
+/**
+ * Une carrière commence (createCareer) : progress.career.started, succès « Première pierre ».
+ * → { progress, rewards: { ecus }, achievements: [id] }
+ */
+export function recordCareerStart(p, now = Date.now()) {
+  const progress = clone(p);
+  if (!progress.career) progress.career = defaultCareerProgress();
+  progress.career.started = true;
+  progress.career.bestYear = Math.max(progress.career.bestYear || 0, 1);
+  progress.career.bestRank = Math.max(progress.career.bestRank || 0, 1);
+  const ids = checkAchievements(progress, null);
+  const res = unlockAchievements(progress, ids, now);
+  return { progress: res.progress, rewards: { ecus: res.rewards.ecus }, achievements: ids };
+}
+
+/**
+ * Bilan d'une année de carrière (événement yearEnd) : écus du bilan, cumuls (récoltes, produits de l'année
+ * ajoutés à lifetime : « Cent paniers », « Artisan du terroir »…), meilleurs rang et année, succès.
+ * @param run { year, rank, net, report, career? } — report : celui de yearEnd ; career : query.career.achievementContext()
+ * → { progress, rewards: { ecus, achievementEcus }, achievements: [id] }
+ * Ne passer ensuite à checkAchievements que des contextes de l'année SUIVANTE (sinon l'année compterait deux fois).
+ */
+export function recordCareerYear(p, { year, rank, net, report = null, career = null } = {}, now = Date.now()) {
+  const progress = clone(p);
+  if (!progress.career) progress.career = defaultCareerProgress();
+  const pc = progress.career;
+  pc.started = true;
+  pc.years += 1;
+  pc.bestRank = Math.max(pc.bestRank || 0, rank || 0);
+  pc.bestYear = Math.max(pc.bestYear || 0, (year || 0) + 1);
+  if (report) {
+    const l = progress.lifetime;
+    for (const [id, n] of Object.entries(report.cropsHarvested || {})) {
+      if (!getCrop(id) || !(n > 0)) continue;
+      l.cropsHarvested[id] = (l.cropsHarvested[id] || 0) + n;
+      l.harvests += n;
+    }
+    for (const [id, n] of Object.entries(report.productsSold || {})) {
+      if (!getProduct(id) || !(n > 0)) continue;
+      l.productsSold[id] = (l.productsSold[id] || 0) + n;
+    }
+  }
+  const ecus = ecusForCareerYear({ rank, net, houseLevel: report?.houseLevel ?? career?.houseLevel ?? 1 });
+  progress.ecus += ecus;
+  const ctx = {
+    counted: true,
+    levelId: 'career',
+    status: 'playing',
+    stats: report ? { year: { cropsHarvested: report.cropsHarvested || {}, productsSold: report.productsSold || {}, cropsLost: {} }, season: null } : null,
+    career: { ...(career || {}), rank: Math.max(rank || 0, career?.rank || 0), year: Math.max((year || 0) + 1, career?.year || 0), yearNet: net, bestYearNet: Math.max(net || 0, career?.bestYearNet || 0) },
+  };
+  const ids = checkAchievements(progress, ctx);
+  const res = unlockAchievements(progress, ids, now);
+  return { progress: res.progress, rewards: { ecus, achievementEcus: res.rewards.ecus }, achievements: ids };
+}
+
+/**
+ * Passage de rang (événement rankUp) : + 20 × rang écus, meilleur rang, succès (« Belle ferme », « Le domaine »).
+ * → { progress, rewards: { ecus, achievementEcus }, achievements: [id] }
+ */
+export function recordCareerRank(p, rank, now = Date.now()) {
+  const progress = clone(p);
+  if (!progress.career) progress.career = defaultCareerProgress();
+  progress.career.started = true;
+  progress.career.bestRank = Math.max(progress.career.bestRank || 0, rank);
+  const ecus = CAREER_ECUS.rankUpPerRank * rank;
+  progress.ecus += ecus;
+  const ids = checkAchievements(progress, null);
+  const res = unlockAchievements(progress, ids, now);
+  return { progress: res.progress, rewards: { ecus, achievementEcus: res.rewards.ecus }, achievements: ids };
+}
+
+/**
+ * Archive une carrière terminée (faillite en Classique, ou « Recommencer une ferme ») : 5 dernières gardées,
+ * la plus récente d'abord. entry = { farmName, years, rank, patrimony, endedBy: 'bankrupt' | 'restart' }.
+ */
+export function archiveCareer(p, entry) {
+  const progress = clone(p);
+  if (!progress.career) progress.career = defaultCareerProgress();
+  const e = {
+    farmName: cleanFarmName(entry?.farmName),
+    years: nonNegInt(entry?.years),
+    rank: Math.max(1, Math.min(6, nonNegInt(entry?.rank) || 1)),
+    patrimony: Number.isFinite(entry?.patrimony) ? Math.round(entry.patrimony) : 0,
+    endedBy: entry?.endedBy === 'bankrupt' ? 'bankrupt' : 'restart',
+  };
+  progress.career.archive = [e, ...(progress.career.archive || [])].slice(0, CAREER_ARCHIVE_MAX);
+  progress.career.bestRank = Math.max(progress.career.bestRank || 0, e.rank);
+  return progress;
 }
 
 // ── Cosmétiques ────────────────────────────────────────────────────────────────────────
