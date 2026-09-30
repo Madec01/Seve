@@ -66,7 +66,7 @@ test('refus : argent, niveau, identifiant', () => {
 test('query.investments : champs', () => {
   const g = newGame(3);
   const inv = g.query.investments().find((i) => i.id === 'guestHouse');
-  assert.deepEqual(Object.keys(inv).sort(), ['canBuy', 'description', 'effects', 'id', 'income', 'incomeBySeason', 'kind', 'max', 'name', 'nextCost', 'owned', 'reason', 'upkeep'].sort());
+  assert.deepEqual(Object.keys(inv).sort(), ['canBuy', 'category', 'description', 'effects', 'id', 'income', 'incomeBySeason', 'kind', 'max', 'name', 'nextCost', 'owned', 'processing', 'reason', 'requiresAny', 'upkeep'].sort());
   assert.equal(inv.income, getInvestment('guestHouse').income.spring);
   assert.equal(inv.max, 1);
 });

@@ -31,6 +31,22 @@
 //   scene.setHover(hit)                 surbrillance (résultat de hitTest, ou null)
 //   scene.onEvent(type, payload)        = effects.onEvent(type, payload, scene.layout)
 //   scene.setLevel(level)               change de niveau (nouvelle disposition)
+//   scene.setCosmetics({ farmName, outfit, path, fence, decor })   (v3) personnalisation : nom sur le
+//                                       panneau, tenue du fermier, style des allées ('path.dirt' |
+//                                       'path.stone'), clôture du champ ('fence.wood' | 'fence.picket' |
+//                                       'fence.stone' | 'fence.hedge'), décor = { [slotId]: itemId | null }
+//                                       (`slots` accepté comme synonyme de `decor`) ; champs absents :
+//                                       inchangés. Relu à chaque appel (couche fixe reconstruite).
+//   scene.setDecorMode(on)              (v3) mode décoration : repères « + » sur les emplacements vides,
+//                                       emplacements soulignés, le reste légèrement assombri ; hitTest
+//                                       renvoie alors { type:'decorSlot', id } | { type:'sign' } |
+//                                       { type:'farmer' } | null (seulement ces trois types)
+//   scene.decorSlotRect(id)             (v3) rectangle (px du monde) d'un emplacement, ou null
+//   scene.focusDecorSlot(id, opts?)     (v3) défile pour voir l'emplacement (ou 'sign', 'farmer') au-dessus
+//                                       de la feuille ouverte ; opts { margin, animate }
+//   scene.focusDecorArea(animate?)      (v3) défile sur la cour (fait aussi à l'entrée en mode décoration)
+//   scene.focusRect(r, opts?)           (v3) défile pour voir le rectangle r (px du monde) au-dessus de la feuille
+//   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
 //
 // Rendu : tout est dessiné à l'échelle 1 dans un tampon « vue » (le monde + la forêt autour, sur
@@ -44,7 +60,11 @@
 //
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
-import { TILE, drawSprite, cropSprite, soilSprite, spriteRect } from './atlas.js';
+import {
+  TILE, SPRITES, drawSprite, cropSprite, soilSprite, spriteRect, treeSprite, productSprite, decorSprite, outfitSprite,
+  FARM_SIGN_WIDE_TEXT_RECT, WINDMILL_FRAMES, drawWideFarmSign,
+} from './atlas.js';
+import { getCrop } from '../data/crops.js';
 import { buildSeasonSheets } from './assets.js';
 import { createLayout, tileHash } from './layout.js';
 import { createEffects } from './effects.js';
@@ -54,11 +74,13 @@ const MIN_ZOOM = 2;
 const PORTRAIT_RATIO = 1.05; // portrait si hauteur > largeur × 1,05
 const MAX_TILE_CSS = 40; // portrait : une tuile ne dépasse pas ~40 px CSS (tablettes)
 const TOUCH_SLOP_CSS = 8; // tolérance du toucher autour des parcelles
-const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7 };
-const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5 };
+const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7, goat: 11 };
+const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5, goat: 7 };
 const FARMER_SPEED = 44;
 const POP_TIME = 0.55;
-const ANIMAL_KINDS = ['chicken', 'sheep', 'cow'];
+const ANIMAL_KINDS = ['chicken', 'sheep', 'cow', 'goat'];
+const PROCESSING_IDS = ['jamWorkshop', 'dairy', 'mill'];
+const DEFAULT_COSMETICS = { farmName: 'Ferme des Tilleuls', outfit: 'outfit.classic', path: 'path.dirt', fence: 'fence.wood', decor: {} };
 const SEASON_INDEX = { spring: 0, summer: 1, autumn: 2, winter: 3 };
 
 function makeCanvas(w, h) {
@@ -142,14 +164,23 @@ export function createScene(canvas, images, level, opts = {}) {
   let prevGrowth = [];
   let prevWatered = [];
   let prevUnlocked = [];
+  let prevFruit = [];
   let unlockedCount = -1;
+
+  // ── (v3) Personnalisation et mode décoration ──────────────────────────────────────
+  const cosmetics = { ...DEFAULT_COSMETICS, decor: {} };
+  let cosVersion = 0;
+  let decorMode = false;
+  let contestForce = null;
+  let millPhase = 0; // ailes du moulin (images, fractionnaire)
+  const signText = { key: '', size: 0, text: '' }; // mesure du nom de la ferme (cache)
   let visualIndex = null; // « vcol,vrow » → index de parcelle (portrait)
   const prevOwned = {};
   const pops = new Map(); // clé → temps de départ
   const recentCrops = []; // cagettes de l'étal (plus récentes en premier)
 
   // Animaux
-  const animals = { chicken: [], cow: [], sheep: [] };
+  const animals = { chicken: [], cow: [], sheep: [], goat: [] };
 
   // Fermier
   const farmer = {
@@ -160,8 +191,9 @@ export function createScene(canvas, images, level, opts = {}) {
   const entries = [];
   let entryCount = 0;
   function entry() {
-    if (entryCount >= entries.length) entries.push({ sortY: 0, name: '', x: 0, y: 0, flipX: false, scale: 1, set: null, alpha: 1, tool: null, toolFlip: false });
+    if (entryCount >= entries.length) entries.push({ sortY: 0, name: '', x: 0, y: 0, flipX: false, scale: 1, set: null, alpha: 1, tool: null, toolFlip: false, img: null });
     const e = entries[entryCount++];
+    e.img = null;
     e.flipX = false;
     e.scale = 1;
     e.alpha = 1;
@@ -175,6 +207,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const n = layout.plots.length;
     plotViews = new Array(n).fill(null);
     prevCrop = new Array(n).fill(undefined);
+    prevFruit = new Array(n).fill(0);
     prevGrowth = new Array(n).fill(-1);
     prevWatered = new Array(n).fill(false);
     prevUnlocked = new Array(n).fill(false);
@@ -186,6 +219,7 @@ export function createScene(canvas, images, level, opts = {}) {
     animals.chicken.length = 0;
     animals.cow.length = 0;
     animals.sheep.length = 0;
+    animals.goat.length = 0;
     farmer.x = layout.farmerHome.x;
     farmer.y = layout.farmerHome.y;
     farmer.path.length = 0;
@@ -427,6 +461,79 @@ export function createScene(canvas, images, level, opts = {}) {
     return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
   }
 
+  /** Rectangle (px du monde) englobant les emplacements de la cour (portail, maison, route, panneau). */
+  function decorAreaRect() {
+    let r = null;
+    for (const d of layout.decorSlots || []) {
+      if (d.id === 'field.corner' || d.id === 'pond') continue;
+      const q = { x: d.x, y: d.kind === 'small' ? d.y - TILE : d.y, w: d.w, h: d.kind === 'small' ? d.h + TILE : d.h };
+      r = r ? { x: Math.min(r.x, q.x), y: Math.min(r.y, q.y), w: Math.max(r.x + r.w, q.x + q.w) - Math.min(r.x, q.x), h: Math.max(r.y + r.h, q.y + q.h) - Math.min(r.y, q.y) } : q;
+    }
+    return r;
+  }
+
+  /**
+   * (v3) Mode décoration : fait défiler pour montrer la cour (la plupart des emplacements). Si elle
+   * ne tient pas, son bas (maison, route, panneau) est prioritaire.
+   * @returns défilement visé (px CSS)
+   */
+  function focusDecorArea(animate = true) {
+    const r = decorAreaRect();
+    if (!r) return scrollDev / dpr;
+    flingV = 0;
+    userScrolled = true;
+    const m = 12 * dpr;
+    const visH = band.h - overlayDev;
+    let target;
+    if (r.h * zoom + 2 * m <= visH) target = baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
+    else target = baseY + (r.y + r.h) * zoom + m - (band.y + visH);
+    if (animate) animateScrollDev(target);
+    else {
+      scrollAnim = null;
+      setScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
+  }
+
+  /**
+   * (v3) Fait défiler le moins possible pour voir l'emplacement `id` (au-dessus de la feuille ouverte).
+   * opts : { margin (px CSS, 24), animate (true) }. Renvoie le défilement visé (px CSS).
+   */
+  function focusDecorSlot(id, opts = {}) {
+    const d = id === 'farmer' ? { ...farmerRect(), kind: 'small' } : (layout.decorSlots || []).find((s0) => s0.id === id);
+    if (!d) return scrollDev / dpr;
+    // Les petits objets dépassent d'une tuile vers le haut.
+    return focusRect(d.kind === 'small' ? { x: d.x, y: d.y - TILE, w: d.w, h: d.h + TILE } : d, opts);
+  }
+
+  /**
+   * (v3) Fait défiler le moins possible pour voir le rectangle `r` (px du monde) au-dessus de la
+   * feuille ouverte. opts : { margin (px CSS, 24), animate (true) }. Renvoie le défilement visé (px CSS).
+   */
+  function focusRect(r, opts = {}) {
+    if (!r) return scrollDev / dpr;
+    const d = r;
+    flingV = 0;
+    userScrolled = true;
+    const top0 = d.y;
+    const m = (opts.margin ?? 24) * dpr;
+    const cur = scrollAnim ? scrollAnim.to : scrollDev;
+    const top = baseY - cur + top0 * zoom;
+    const bottom = baseY - cur + (d.y + d.h) * zoom;
+    const visTop = band.y + m;
+    const visBottom = band.y + band.h - overlayDev - m;
+    let target = cur;
+    if (bottom > visBottom) target = cur + (bottom - visBottom);
+    if (top - (target - cur) < visTop) target = cur - (visTop - top);
+    if (target !== cur) {
+      if (opts.animate === false) {
+        scrollAnim = null;
+        setScrollDev(target);
+      } else animateScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
+  }
+
   function screenToWorld(x, y) {
     return {
       x: (x * dpr - blitX) / zoom - ox,
@@ -448,11 +555,55 @@ export function createScene(canvas, images, level, opts = {}) {
     return out;
   }
 
+  /** Rectangle du fermier (px du monde), tel qu'il est dessiné. */
+  function farmerRect() {
+    return { x: Math.round(farmer.x) - 8, y: Math.round(farmer.y) - 15, w: 16, h: 16 };
+  }
+
+  function distRect(r, x, y) {
+    const dx = x < r.x ? r.x - x : x >= r.x + r.w ? x - (r.x + r.w) : 0;
+    const dy = y < r.y ? r.y - y : y >= r.y + r.h ? y - (r.y + r.h) : 0;
+    return Math.hypot(dx, dy);
+  }
+
+  /**
+   * Mode décoration : emplacement, panneau ou fermier sous le point (px du monde). Tolérant : la cible
+   * la plus proche à moins de `slop` px (au moins de quoi faire ~48 px CSS au doigt).
+   */
+  function decorHit(wx, wy, slop) {
+    let best = null;
+    let bestD = Infinity;
+    const consider = (r, hit) => {
+      const d = distRect(r, wx, wy);
+      if (d <= slop && d < bestD - 1e-6) { bestD = d; best = hit; }
+    };
+    // Le fermier d'abord (il peut passer devant un emplacement) : à égalité, il l'emporte.
+    consider(farmerRect(), { type: 'farmer' });
+    for (const d of layout.decorSlots || []) {
+      // Un grand sprite (réverbère, épouvantail, nichoir) dépasse vers le haut : zone agrandie.
+      const item = cosmetics.decor[d.id];
+      const sp = item ? decorSprite(item) : null;
+      const tall = sp && SPRITES[sp] && (SPRITES[sp].h || 1) > 1 && d.kind === 'small';
+      const r = tall ? { x: d.x, y: d.y - TILE, w: d.w, h: d.h + TILE } : d;
+      consider(r, d.kind === 'sign' ? { type: 'sign' } : { type: 'decorSlot', id: d.id });
+    }
+    return best;
+  }
+
   function hitTest(x, y, hitOpts) {
     const w = screenToWorld(x, y);
+    if (decorMode) {
+      // Au doigt : ~16 px CSS de tolérance autour des cibles de 16 px du monde (≥ 48 px CSS au total).
+      const slop = hitOpts && hitOpts.touch ? Math.max(3, (16 * dpr) / zoom) : 1;
+      return decorHit(w.x, w.y, slop);
+    }
     const owned = lastGame ? lastGame.state.investments : undefined;
     if (hitOpts && hitOpts.touch) return layout.hitTestNear(w.x, w.y, owned, (TOUCH_SLOP_CSS * dpr) / zoom);
     return layout.hitTest(w.x, w.y, owned);
+  }
+
+  function hasSlot(id) {
+    return (layout.decorSlots || []).some((d) => d.id === id);
   }
 
   // ── Couche fixe : sol, chemins, forêt, clôtures, décor ────────────────────────────
@@ -473,6 +624,72 @@ export function createScene(canvas, images, level, opts = {}) {
     drawQuad(c, sheets, n && e ? (P(tx + 1, ty - 1) ? 'path.c' : 'path.inner.tr') : n ? 'path.r' : e ? 'path.t' : 'path.tr', 1, 0, dx, dy);
     drawQuad(c, sheets, s && w ? (P(tx - 1, ty + 1) ? 'path.c' : 'path.inner.bl') : s ? 'path.l' : w ? 'path.b' : 'path.bl', 0, 1, dx, dy);
     drawQuad(c, sheets, s && e ? (P(tx + 1, ty + 1) ? 'path.c' : 'path.inner.br') : s ? 'path.r' : e ? 'path.b' : 'path.br', 1, 1, dx, dy);
+  }
+
+  // (v3) Allées en pavés : même découpage en quarts de tuile que la terre, à partir des tuiles
+  // « deco.path.stone » (plein), « .h » / « .v » (bords) et « .single » (coins extérieurs).
+  function drawStonePathTile(c, sheets, tx, ty, dx, dy) {
+    const n = P(tx, ty - 1);
+    const s2 = P(tx, ty + 1);
+    const w = P(tx - 1, ty);
+    const e = P(tx + 1, ty);
+    const C = 'deco.path.stone';
+    drawQuad(c, sheets, n && w ? C : n ? 'deco.path.stone.v' : w ? 'deco.path.stone.h' : 'deco.path.stone.single', 0, 0, dx, dy);
+    drawQuad(c, sheets, n && e ? C : n ? 'deco.path.stone.v' : e ? 'deco.path.stone.h' : 'deco.path.stone.single', 1, 0, dx, dy);
+    drawQuad(c, sheets, s2 && w ? C : s2 ? 'deco.path.stone.v' : w ? 'deco.path.stone.h' : 'deco.path.stone.single', 0, 1, dx, dy);
+    drawQuad(c, sheets, s2 && e ? C : s2 ? 'deco.path.stone.v' : e ? 'deco.path.stone.h' : 'deco.path.stone.single', 1, 1, dx, dy);
+  }
+
+  // (v3) Styles de la clôture du champ : pièces de chaque kit (null = rien, ex. ouverture de la haie).
+  const FENCE_KITS = {
+    'fence.picket': { tl: 'deco.fence.picket.tl', t: 'deco.fence.picket.t', tr: 'deco.fence.picket.tr', l: 'deco.fence.picket.l', r: 'deco.fence.picket.r', bl: 'deco.fence.picket.bl', b: 'deco.fence.picket.t', br: 'deco.fence.picket.br', gate: 'deco.fence.picket.gate' },
+    'fence.stone': { tl: 'deco.wall.stone.tl', t: 'deco.wall.stone.t', tr: 'deco.wall.stone.tr', l: 'deco.wall.stone.l', r: 'deco.wall.stone.r', bl: 'deco.wall.stone.bl', b: 'deco.wall.stone.b', br: 'deco.wall.stone.br', gate: 'deco.wall.stone.gate' },
+    'fence.hedge': { tl: 'deco.hedge', t: 'deco.hedge.h.mid', tr: 'deco.hedge', l: 'deco.hedge.v.mid', r: 'deco.hedge.v.mid', bl: 'deco.hedge', b: 'deco.hedge.h.mid', br: 'deco.hedge', gate: null, gateL: 'deco.hedge.h.right', gateR: 'deco.hedge.h.left' },
+  };
+
+  function drawFieldFence(c, sheets, r, gateX) {
+    const kit = FENCE_KITS[cosmetics.fence];
+    if (!kit) {
+      drawFence(c, sheets, r, gateX);
+      return;
+    }
+    const x1 = r.x + r.w - 1;
+    const y1 = r.y + r.h - 1;
+    for (let y = r.y; y <= y1; y++) {
+      for (let x = r.x; x <= x1; x++) {
+        let name = null;
+        if (y === r.y) name = x === r.x ? kit.tl : x === x1 ? kit.tr : kit.t;
+        else if (y === y1) {
+          if (x === r.x) name = kit.bl;
+          else if (x === x1) name = kit.br;
+          else if (x === gateX) name = kit.gate;
+          else if (kit.gateL && x === gateX - 1) name = kit.gateL;
+          else if (kit.gateR && x === gateX + 1) name = kit.gateR;
+          else name = kit.b;
+        } else if (x === r.x) name = kit.l;
+        else if (x === x1) name = kit.r;
+        if (name) drawSprite(c, sheets, name, x * TILE, y * TILE);
+      }
+    }
+  }
+
+  // (v3) Forêt de montagne : les tuiles de forêt couvertes de sapins serrés, en quinconce.
+  function drawPineForest(c, sheets, tx0, ty0, tx1, ty1) {
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let row = 0; row < 2; row++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+          if (!layout.isForest(tx, ty)) continue;
+          for (let col = 0; col < 2; col++) {
+            const h = tileHash(tx * 2 + col, ty * 2 + row, 31);
+            const px2 = tx * TILE + col * 8 + ((row & 1) ? 4 : 0) - 4 + Math.floor(h * 3) - 1;
+            const py = ty * TILE + row * 8 - 8 + Math.floor(h * 2);
+            // Pas de sapin qui déborde sur la route, ni sous la lisière du bas de la forêt du haut.
+            if (!layout.isForest(tx, ty + 1) && row === 1) continue;
+            drawSprite(c, sheets, h < 0.12 ? 'tree.pine.tall' : 'tree.pine', px2, h < 0.12 ? py - TILE : py);
+          }
+        }
+      }
+    }
   }
 
   function drawFence(c, sheets, r, gateX) {
@@ -505,6 +722,10 @@ export function createScene(canvas, images, level, opts = {}) {
         if (season === 'winter') return h < 0.7 ? 'tree.pine.tall' : 'tree.dead.tall';
         if (evergreen) return 'tree.pine.tall';
         return season === 'autumn' ? (h < 0.75 ? 'tree.autumn.tall' : 'tree.green.tall') : 'tree.green.tall';
+      case 'pine': return 'tree.pine';
+      case 'pineTall': return 'tree.pine.tall';
+      case 'appleTree':
+        return season === 'spring' ? 'tree.apple.spring' : season === 'summer' ? 'tree.apple.summer.ripe' : season === 'autumn' ? 'tree.apple.autumn.ripe' : 'tree.apple.winter';
       case 'bush': return 'bush';
       case 'berry': return season === 'spring' || season === 'summer' ? 'bush.berry' : 'bush';
       case 'rocks': return 'rocks.small';
@@ -542,7 +763,9 @@ export function createScene(canvas, images, level, opts = {}) {
     pathWithGuest = layout.available.has('guestHouse') && (owned.guestHouse || 0) > 0;
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        if (P(tx, ty)) drawPathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
+        if (!P(tx, ty)) continue;
+        if (cosmetics.path === 'path.stone') drawStonePathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
+        else drawPathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
       }
     }
     // Parterre de fleurs des ruches
@@ -568,8 +791,10 @@ export function createScene(canvas, images, level, opts = {}) {
       }
     }
 
+    if (layout.theme === 'mountain') drawPineForest(c, sheets, tx0, ty0, tx1, ty1);
+
     // Lisières verticales : arbres isolés à cheval sur la coupe nette des tuiles de forêt.
-    const edgeGreen = season === 'autumn' ? 'tree.autumn' : season === 'winter' ? 'tree.pine' : 'tree.green';
+    const edgeGreen = layout.theme === 'mountain' || season === 'winter' ? 'tree.pine' : season === 'autumn' ? 'tree.autumn' : 'tree.green';
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         if (!layout.isForest(tx, ty)) continue;
@@ -585,9 +810,13 @@ export function createScene(canvas, images, level, opts = {}) {
 
     // 4. Clôtures
     const f = layout.field;
-    drawFence(c, sheets, f.fence, f.gate.x);
+    drawFieldFence(c, sheets, f.fence, f.gate.x);
     const sl = layout.slots;
     const A = layout.available;
+    if (A.has('goat') && sl.goat && (owned.goat || 0) > 0) drawFence(c, sheets, sl.goat.fence, null);
+    // (v3) Petite mare (grand emplacement) : au sol, sous le reste du décor.
+    const pond = (layout.decorSlots || []).find((d) => d.id === 'pond');
+    if (pond && decorSprite(cosmetics.decor.pond) === 'deco.pond') drawSprite(c, sheets, 'deco.pond', pond.x, pond.y);
     if (A.has('chickenCoop') && (owned.chickenCoop || 0) > 0) drawFence(c, sheets, sl.chickenCoop.fence, null);
     if (A.has('cow') && (owned.cow || 0) > 0) drawFence(c, sheets, sl.cow.fence, null);
     if (A.has('sheep') && (owned.sheep || 0) > 0) drawFence(c, sheets, sl.sheep.fence, null);
@@ -606,6 +835,8 @@ export function createScene(canvas, images, level, opts = {}) {
     // Accessoires de la ferme
     for (const p of layout.props) drawSprite(c, sheets, p.name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
     drawSprite(c, sheets, 'well', layout.well.x * TILE, layout.well.y * TILE);
+    // (v3) Panneau de la ferme (le nom est écrit à l'échelle de l'écran : drawSignText).
+    if (layout.sign && hasSlot('sign')) drawWideFarmSign(c, sheets, layout.sign.x * TILE, layout.sign.y * TILE);
     if (guest) {
       for (const b of layout.garden.bushes) drawSprite(c, sheets, season === 'winter' ? 'bush' : 'bush.berry', b.x * TILE, b.y * TILE);
       // Tournesols du jardin (printemps / été) ; sinon un banc de pierres.
@@ -659,10 +890,12 @@ export function createScene(canvas, images, level, opts = {}) {
       chicken: layout.available.has('chickenCoop') ? Math.min(9, (owned.chickenCoop || 0) * sl.chickenCoop.perUnit) : 0,
       cow: layout.available.has('cow') ? Math.min(3, owned.cow || 0) : 0,
       sheep: layout.available.has('sheep') ? Math.min(3, owned.sheep || 0) : 0,
+      goat: layout.available.has('goat') && sl.goat ? Math.min(3, owned.goat || 0) : 0,
     };
-    const pens = { chicken: sl.chickenCoop.pen, cow: sl.cow.pen, sheep: sl.sheep.pen };
+    const pens = { chicken: sl.chickenCoop.pen, cow: sl.cow.pen, sheep: sl.sheep.pen, goat: sl.goat?.pen };
     for (const kind of ANIMAL_KINDS) {
       const list = animals[kind];
+      if (!pens[kind]) { list.length = 0; continue; }
       while (list.length < want[kind]) list.push(spawnAnimal(kind, pens[kind], pop));
       if (list.length > want[kind]) list.length = want[kind];
     }
@@ -709,7 +942,8 @@ export function createScene(canvas, images, level, opts = {}) {
     for (let i = 0; i < n; i++) {
       const p = plots[i];
       const crop = p.cropId || null;
-      if (plotViews[i] && crop === prevCrop[i] && p.growth === prevGrowth[i] && p.watered === prevWatered[i] && p.unlocked === prevUnlocked[i]) continue;
+      const fruit = p.fruit || 0;
+      if (plotViews[i] && crop === prevCrop[i] && p.growth === prevGrowth[i] && p.watered === prevWatered[i] && p.unlocked === prevUnlocked[i] && fruit === prevFruit[i]) continue;
       const was = plotViews[i];
       const view = game.query.plot(i);
       if (initialized && was) {
@@ -717,10 +951,13 @@ export function createScene(canvas, images, level, opts = {}) {
         if (!prevUnlocked[i] && p.unlocked) tool = 'tool.hoe';
         else if (!prevCrop[i] && crop) tool = 'tool.shovel';
         else if (prevCrop[i] && !crop) {
-          if (was.mature) {
+          if (was.mature && prevCrop[i] !== 'apple') {
             tool = 'tool.sickle';
             noteHarvest(prevCrop[i]);
-          }
+          } else if (prevCrop[i] === 'apple') tool = 'tool.axe'; // pommier arraché
+        } else if (crop === 'apple' && crop === prevCrop[i] && fruit < prevFruit[i] && treeInfo(was, p).fruitReady) {
+          tool = 'tool.sickle'; // cueillette
+          noteHarvest('apple');
         } else if (crop && !prevWatered[i] && p.watered && !raining) tool = 'tool.wateringcan';
         if (tool) {
           changed++;
@@ -730,6 +967,7 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       plotViews[i] = view;
       prevCrop[i] = crop;
+      prevFruit[i] = fruit;
       prevGrowth[i] = p.growth;
       prevWatered[i] = p.watered;
       prevUnlocked[i] = p.unlocked;
@@ -899,6 +1137,28 @@ export function createScene(canvas, images, level, opts = {}) {
     return false;
   }
 
+  /**
+   * (v3) Étape d'un pommier : query.plot(i).tree du cœur si présent, sinon calculée depuis l'état
+   * (growth = maturité de l'arbre, fruit = jours de fruits).
+   */
+  function treeInfo(pv, p) {
+    if (pv && pv.tree) return pv.tree;
+    const crop = getCrop('apple') || { growDays: 6, fruitDays: 3 };
+    const growth = p ? p.growth || 0 : (pv?.progress || 0) * crop.growDays;
+    const fruit = p ? p.fruit || 0 : 0;
+    const stage = growth >= crop.growDays - 1e-6 ? 'adult' : growth >= crop.growDays / 2 - 1e-6 ? 'young' : 'sapling';
+    const fruitDays = crop.fruitDays || 3;
+    const fruitReady = stage === 'adult' && fruit >= fruitDays - 1e-6;
+    return { stage, growth, fruit, fruitDays, fruitReady, fruitStage: stage === 'adult' ? Math.min(3, Math.floor((fruit / fruitDays) * 3 + 1e-6)) : 0 };
+  }
+
+  /** (v3) Sprite d'un pommier selon son étape, la saison et ses fruits. */
+  function appleTreeSprite(info, season) {
+    if (info.stage === 'sapling') return 'tree.apple.sapling';
+    if (info.stage === 'young') return 'tree.apple.young';
+    return treeSprite(3, season, (info.fruitStage || 0) >= 2 || !!info.fruitReady);
+  }
+
   function drawPlots(sheetsEnv, raining, season) {
     const L = layout;
     const k = L.plotScale || 1; // ×2 en portrait : terre et cultures dessinées en grand
@@ -950,6 +1210,10 @@ export function createScene(canvas, images, level, opts = {}) {
       const pv = plotViews[i];
       if (!pv || !pv.cropId) continue;
       const r = L.plots[i];
+      if (pv.cropId === 'apple' || pv.kind === 'tree') {
+        drawTree(c, i, pv, r, k, sc, season, sheetsEnv);
+        continue;
+      }
       const stage = Math.max(0, Math.min(4, pv.stage | 0));
       let dy = 1;
       if (pv.mature) {
@@ -973,6 +1237,169 @@ export function createScene(canvas, images, level, opts = {}) {
             c.fillRect(sx, sy - k, k, k);
             c.fillRect(sx, sy + k, k, k);
           }
+        }
+      }
+    }
+  }
+
+  // ── (v3) Ateliers ────────────────────────────────────────────────────────────────
+  const EMPTY_PROC = { on: true, places: [] };
+  /** État d'un atelier : state.processing[id] (contrat v3), sinon vide. */
+  function procOf(id) {
+    const st = lastGame?.state?.processing?.[id];
+    if (!st) return EMPTY_PROC;
+    return { on: st.on !== false, places: Array.isArray(st.places) ? st.places : [] };
+  }
+  function working(id) {
+    const p = procOf(id);
+    return p.on && p.places.some(Boolean);
+  }
+
+  // Petites images générées une fois : panneau gris (atelier éteint), bulle (atelier au travail).
+  let grayPanel = null;
+  let bubble = null;
+  function extraImages() {
+    if (grayPanel) return;
+    grayPanel = makeCanvas(16, 16);
+    const g = grayPanel.getContext('2d');
+    drawSprite(g, images, 'sign', 0, 0);
+    const d = g.getImageData(0, 0, 16, 16);
+    for (let i = 0; i < d.data.length; i += 4) {
+      if (!d.data[i + 3]) continue;
+      const r = d.data[i]; const gg = d.data[i + 1]; const b = d.data[i + 2];
+      if (r === 63 && gg === 38 && b === 49) continue; // contour
+      const l = Math.round(0.3 * r + 0.55 * gg + 0.15 * b);
+      const v = Math.round(90 + l * 0.55);
+      d.data[i] = v - 4; d.data[i + 1] = v - 2; d.data[i + 2] = v + 8;
+    }
+    g.putImageData(d, 0, 0);
+    // Bulle 18 × 20 (queue en bas au centre), bord sombre, fond crème.
+    bubble = makeCanvas(18, 20);
+    const bc = bubble.getContext('2d');
+    bc.fillStyle = OUTLINE;
+    bc.fillRect(2, 0, 14, 1); bc.fillRect(2, 17, 14, 1); bc.fillRect(0, 2, 1, 14); bc.fillRect(17, 2, 1, 14);
+    bc.fillRect(1, 1, 1, 1); bc.fillRect(16, 1, 1, 1); bc.fillRect(1, 16, 1, 1); bc.fillRect(16, 16, 1, 1);
+    bc.fillStyle = '#fff8ea';
+    bc.fillRect(2, 1, 14, 16); bc.fillRect(1, 2, 16, 14);
+    bc.fillStyle = '#e8dcc6';
+    bc.fillRect(2, 15, 14, 1);
+    // queue
+    bc.fillStyle = OUTLINE;
+    bc.fillRect(7, 18, 4, 1); bc.fillRect(8, 19, 2, 1);
+    bc.fillStyle = '#fff8ea';
+    bc.fillRect(8, 17, 2, 1); bc.fillRect(8, 18, 2, 1);
+  }
+
+  // Accessoires ajoutés par les niveaux 2 et 3 d'un atelier : [niveau, sprite, côté ('l' | 'r')].
+  const UPGRADE_PROPS = {
+    jamWorkshop: [[2, 'crate.strawberry', 'r'], [3, 'barrel', 'l']],
+    dairy: [[2, 'bucket.milk', 'r'], [3, 'milk.bottle', 'l']],
+    mill: [[2, 'sack.wheat', 'l']],
+  };
+
+  function pushWorkshop(id, owned, objSet) {
+    const s0 = layout.slots[id];
+    const lvl = Math.min(3, owned[id] || 0);
+    if (!s0 || lvl <= 0) return;
+    const b = s0.building;
+    const bottom = (b.y + b.h) * TILE;
+    if (id === 'mill') {
+      const e = pushBuilding('building.windmill.body', b.x, b.y, b.w, b.h, objSet, 'mill.main');
+      const frame = Math.floor(millPhase) % WINDMILL_FRAMES;
+      pushSprite(`building.windmill.sails.${frame}`, e.x, e.y, e.sortY + 0.01, objSet, e.scale !== 1 ? { scale: e.scale } : undefined);
+      if (lvl >= 3 && s0.bakery) {
+        const k = s0.bakery;
+        pushBuilding('building.bakery', k.x, k.y, k.w, k.h, objSet, 'mill.2');
+      }
+    } else {
+      pushBuilding(id === 'dairy' ? 'building.dairy' : 'building.jamworkshop', b.x, b.y, b.w, b.h, objSet, `${id}.main`);
+    }
+    for (const [need, name, side] of UPGRADE_PROPS[id] || []) {
+      if (lvl < need || (id === 'mill' && lvl >= 3 && s0.bakery)) continue;
+      const tx = side === 'l' ? b.x - 1 : b.x + b.w;
+      const e = pushBuilding(name, tx, b.y + b.h - 1, 1, 1, objSet, `${id}.${need - 1}`);
+      e.x += side === 'l' ? 4 : -4;
+      e.y += 1;
+    }
+    // Places occupées : un produit posé devant le bâtiment par place (le lait n'a pas d'icône avant).
+    if (pops.has(`${id}.main`)) return;
+    const pr = procOf(id);
+    const n = Math.max(pr.places.length, 1);
+    const step = 9;
+    const x0 = Math.round(b.x * TILE + (b.w * TILE - ((n - 1) * step + 16)) / 2);
+    for (let j = 0; j < pr.places.length; j++) {
+      const pl = pr.places[j];
+      if (!pl) continue;
+      const e = pushSprite(productSprite(pl.productId), x0 + j * step, bottom - 13, bottom + 0.5 + j * 0.01, images);
+      void e;
+    }
+    if (!pr.on) {
+      extraImages();
+      const e = pushSprite('sign', b.x * TILE + (id === 'mill' ? 30 : b.w * TILE - 14), bottom - 15, bottom + 0.4, images);
+      e.img = grayPanel;
+    }
+  }
+
+  // Bulles au-dessus des ateliers qui travaillent : l'icône d'un produit en cours, par intermittence.
+  function drawWorkBubbles(owned) {
+    const c = vctx;
+    for (let k = 0; k < PROCESSING_IDS.length; k++) {
+      const id = PROCESSING_IDS[k];
+      const s0 = layout.slots[id];
+      if (!s0 || !(owned[id] > 0) || !working(id)) continue;
+      const cyc = (time + k * 1.1) % 3.4;
+      if (cyc > 2.0) continue;
+      const pl = procOf(id).places.filter(Boolean);
+      const item = pl[Math.floor((time + k * 1.1) / 3.4) % pl.length];
+      if (!item) continue;
+      extraImages();
+      const b = s0.building;
+      const appear = cyc < 0.18 ? cyc / 0.18 : cyc > 1.8 ? (2.0 - cyc) / 0.2 : 1;
+      const bob = Math.sin(time * 3 + k) > 0.3 ? -1 : 0;
+      const bx = Math.round(b.x * TILE + (b.w * TILE) / 2 - 9 + (id === 'mill' ? 14 : 0));
+      const by = Math.round(b.y * TILE - 14 + bob + (1 - appear) * 3 + (id === 'mill' ? 10 : 0));
+      c.globalAlpha = Math.max(0, Math.min(1, appear));
+      c.drawImage(bubble, bx, by);
+      drawSprite(c, images, productSprite(item.productId), bx + 1, by + 1);
+      c.globalAlpha = 1;
+    }
+  }
+
+  // Pommes restées sur l'arbre en hiver (le sprite d'hiver est nu) : quelques pixels rouges.
+  const WINTER_APPLES = [[4, 6], [10, 5], [7, 9], [11, 9], [5, 10]];
+
+  function drawTree(c, i, pv, r, k, sc, season, sheetsEnv) {
+    const info = treeInfo(pv, lastGame?.state.plots[i]);
+    const name = appleTreeSprite(info, season);
+    // Les arbres prennent la neige en hiver (planche d'hiver : « chapeaux » blancs).
+    const set = season === 'winter' ? sheetsEnv : images;
+    let dy = 1;
+    if (info.stage === 'adult' && season !== 'winter') dy += Math.sin(time * 1.1 + i * 1.3) > 0.85 ? -1 : 0;
+    const x = r.x;
+    const y = r.y + dy * k - (k > 1 ? 2 : 0);
+    drawSprite(c, set, name, x, y, sc);
+    if (season === 'winter' && info.stage === 'adult' && info.fruitReady) {
+      for (const [ax, ay] of WINTER_APPLES) {
+        c.fillStyle = OUTLINE;
+        c.fillRect(x + (ax - 1) * k, y + ay * k, k, k);
+        c.fillStyle = '#d43d3d';
+        c.fillRect(x + ax * k, y + ay * k, k, k);
+        c.fillStyle = '#ff8a7a';
+        c.fillRect(x + ax * k, y + (ay - 1) * k, k, k);
+      }
+    }
+    if (info.fruitReady) {
+      const ph = (time * 0.55 + i * 0.37) % 1;
+      if (ph < 0.18) {
+        const cell = Math.floor(time * 0.55 + i * 0.37);
+        const sx = x + (3 + Math.floor(tileHash(i, cell, 3) * 10)) * k;
+        const sy = y + (2 + Math.floor(tileHash(i, cell, 4) * 8)) * k;
+        c.fillStyle = '#ffffff';
+        c.fillRect(sx, sy, k, k);
+        if (ph > 0.05 && ph < 0.13) {
+          c.fillStyle = '#fff3b0';
+          c.fillRect(sx - k, sy, k, k); c.fillRect(sx + k, sy, k, k);
+          c.fillRect(sx, sy - k, k, k); c.fillRect(sx, sy + k, k, k);
         }
       }
     }
@@ -1020,7 +1447,8 @@ export function createScene(canvas, images, level, opts = {}) {
         for (let k = 0; k < s.crates.length; k++) {
           const t = s.crates[k];
           const cropId = recentCrops[k];
-          const name = cropId ? `crate.${cropId}` : k === 0 ? 'crate.empty' : k === 1 ? 'sack.empty' : null;
+          const crate = cropId && (SPRITES[`crate.${cropId}`] ? `crate.${cropId}` : cropId === 'apple' ? 'perk.basket' : 'crate.empty');
+          const name = cropId ? crate : k === 0 ? 'crate.empty' : k === 1 ? 'sack.empty' : null;
           if (name) pushSprite(name, t.x * TILE, t.y * TILE + 1, (t.y + 1) * TILE, images);
         }
       }
@@ -1045,6 +1473,25 @@ export function createScene(canvas, images, level, opts = {}) {
         const popKey = `sprinkler.${unitLevel}`;
         pushBuilding('sprinkler', t.x, t.y, 1, 1, objSet, popKey);
       }
+    }
+
+    // (v3) Ateliers
+    for (const id of PROCESSING_IDS) if (A.has(id)) pushWorkshop(id, owned, objSet);
+
+    // (v3) Décorations posées sur les emplacements (la mare est au sol, dans la couche fixe)
+    for (const d of layout.decorSlots || []) {
+      if (d.kind !== 'small') continue;
+      const name = decorSprite(cosmetics.decor[d.id]);
+      if (!name || name === 'deco.pond') continue;
+      const tall = (SPRITES[name].h || 1) > 1;
+      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
+    }
+    // (v3) Coupe du concours posée sur le panneau de la ferme
+    const cres = lastGame?.state?.contest?.result;
+    const met = cres && Array.isArray(cres.goalsMet) ? cres.goalsMet.length : 0;
+    if (met > 0 && layout.sign && hasSlot('sign')) {
+      const trophy = met >= 3 ? 'icon.trophy.gold' : met === 2 ? 'icon.trophy.silver' : 'icon.trophy.bronze';
+      pushSprite(trophy, layout.sign.x * TILE + 32, layout.sign.y * TILE - 12, (layout.sign.y + 1) * TILE + 0.2, images);
     }
 
     // Animaux
@@ -1075,7 +1522,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
       const x = Math.round(farmer.x) - 8;
       const y = Math.round(farmer.y) - 15 + hop + workBob;
-      pushSprite('farmer', x, y, farmer.y + 1, images, {
+      pushSprite(outfitSprite(cosmetics.outfit), x, y, farmer.y + 1, images, {
         flipX: farmer.facing < 0,
         tool: farmer.tool,
         toolFlip: farmer.facing < 0,
@@ -1091,6 +1538,10 @@ export function createScene(canvas, images, level, opts = {}) {
     drawList.sort(byDepth);
     const c = vctx;
     for (const e of drawList) {
+      if (e.img) {
+        c.drawImage(e.img, e.x, e.y);
+        continue;
+      }
       if (e.scale !== 1) {
         drawSprite(c, e.set, e.name, e.x, e.y, { scale: e.scale, flipX: e.flipX });
       } else {
@@ -1132,6 +1583,7 @@ export function createScene(canvas, images, level, opts = {}) {
   // Cheminées et arroseurs : émissions régulières de particules.
   let smokeT = 0;
   let sprayT = 0;
+  let bakeT = 0;
   function emitAmbient(dt, owned, season, weather, dayProgress) {
     smokeT -= dt;
     if (smokeT <= 0) {
@@ -1141,6 +1593,28 @@ export function createScene(canvas, images, level, opts = {}) {
       if (layout.available.has('guestHouse') && owned.guestHouse > 0 && Math.random() < 0.6) {
         const g = layout.slots.guestHouse.house;
         effects.smoke((g.x + 1) * TILE + 7, g.y * TILE + 1);
+      }
+    }
+    // (v3) Moulin : ailes lentes au repos, plus vives quand il moud ; four à pain : fumée.
+    if (layout.slots.mill && owned.mill > 0) {
+      const busy = working('mill');
+      millPhase = (millPhase + dt / (busy ? 0.13 : 0.42)) % (WINDMILL_FRAMES * 1000);
+      const k = layout.slots.mill.bakery;
+      if (k && owned.mill >= 3 && busy) {
+        bakeT -= dt;
+        if (bakeT <= 0) {
+          bakeT = rnd(0.35, 0.6);
+          effects.smoke(k.x * TILE + 22, k.y * TILE + 1);
+        }
+      }
+    }
+    // Fromagerie et atelier au travail : petite vapeur par la porte, de temps en temps.
+    for (const id of ['dairy', 'jamWorkshop']) {
+      const s0 = layout.slots[id];
+      if (!s0 || !(owned[id] > 0) || !working(id)) continue;
+      if (Math.random() < dt * 0.9) {
+        const b = s0.building;
+        effects.smoke(b.x * TILE + (id === 'dairy' ? 10 : 36), b.y * TILE + 3);
       }
     }
     const lvl = layout.available.has('sprinkler') ? Math.min(3, owned.sprinkler || 0) : 0;
@@ -1190,6 +1664,197 @@ export function createScene(canvas, images, level, opts = {}) {
     c.globalAlpha = 1;
   }
 
+  // ── (v3) Concours : fanions ; réverbères ; mode décoration ; nom de la ferme ─────────
+  function contestDay(cal) {
+    if (contestForce !== null) return contestForce;
+    const c = layout.level?.contest;
+    return !!c && cal.day === c.deadlineDay;
+  }
+
+  const BUNTING = ['#e04a4a', '#fdbe53', '#5aa0e8', '#72c85a', '#ffffff'];
+  /** Guirlande de fanions entre deux points (px du monde), qui se balance doucement. */
+  function drawGarland(x0, y0, x1, sag, seed) {
+    const c = vctx;
+    const w = x1 - x0;
+    const sway = Math.sin(time * 1.4 + seed) * 1.2;
+    let prevY = null;
+    for (let x = 0; x <= w; x++) {
+      const t = x / w;
+      const y = Math.round(y0 + (sag + sway) * 4 * t * (1 - t));
+      c.fillStyle = '#6b4a3a';
+      c.fillRect(x0 + x, y, 1, 1);
+      if (prevY !== null && Math.abs(y - prevY) > 1) c.fillRect(x0 + x, Math.min(y, prevY) + 1, 1, Math.abs(y - prevY) - 1);
+      prevY = y;
+      if (x % 6 === 2 && x > 1 && x < w - 2) {
+        const col = BUNTING[((x / 6) | 0) % BUNTING.length];
+        const flap = Math.sin(time * 3 + x * 0.5 + seed) > 0.6 ? 1 : 0;
+        c.fillStyle = OUTLINE;
+        c.fillRect(x0 + x - 1, y + 1, 5, 1);
+        c.fillRect(x0 + x - 1, y + 2, 1, 2);
+        c.fillRect(x0 + x + 3, y + 2, 1, 2);
+        c.fillRect(x0 + x, y + 4, 1, 1 + flap);
+        c.fillRect(x0 + x + 2, y + 4, 1, 1 + flap);
+        c.fillRect(x0 + x + 1, y + 5 + flap, 1, 1);
+        c.fillStyle = col;
+        c.fillRect(x0 + x, y + 2, 3, 2);
+        c.fillRect(x0 + x + 1, y + 4, 1, 1 + flap);
+      }
+    }
+  }
+
+  function drawBunting() {
+    const f = layout.field.fence;
+    const T = TILE;
+    // Au-dessus des clôtures haute et basse du champ, et entre la maison et le chemin.
+    drawGarland(f.x * T + 4, f.y * T + 3, (f.x + f.w) * T - 4, 7, 0);
+    const g = layout.field.gate;
+    drawGarland(f.x * T + 4, (f.y + f.h - 1) * T + 3, g.x * T - 1, 5, 1.7);
+    drawGarland((g.x + 1) * T + 1, (f.y + f.h - 1) * T + 3, (f.x + f.w) * T - 4, 5, 3.1);
+    // Entre la maison et la chambre d'hôte (si elle est construite), par-dessus le chemin.
+    const h = layout.house;
+    const gh = layout.slots.guestHouse?.house;
+    if (gh && (lastGame?.state.investments.guestHouse || 0) > 0 && layout.available.has('guestHouse') && gh.x > h.x + h.w) {
+      drawGarland((h.x + h.w) * T - 3, (h.y + 1) * T + 2, gh.x * T + 3, 9, 4.2);
+    }
+  }
+
+  function drawLampGlow(dayProgress, weather) {
+    const dark = weather === 'storm' ? 0.8 : weather === 'rain' ? 0.5 : 0;
+    const k = Math.max(dark, dayProgress > 0.72 ? Math.min(1, (dayProgress - 0.72) / 0.12) : 0);
+    if (k <= 0.02) return;
+    const c = vctx;
+    let any = false;
+    for (const d of layout.decorSlots || []) {
+      if (decorSprite(cosmetics.decor[d.id]) !== 'deco.lamppost') continue;
+      if (!any) {
+        c.save();
+        c.translate(ox, oy);
+        c.globalCompositeOperation = 'lighter';
+        any = true;
+      }
+      const cx = d.x + 8;
+      const cy = d.y - TILE + 5;
+      const flick = 0.9 + 0.1 * Math.sin(time * 9 + d.x);
+      for (const [r, a] of [[11, 0.07], [7, 0.1], [4, 0.16]]) {
+        c.globalAlpha = a * k * flick;
+        c.fillStyle = '#ffcf6a';
+        c.beginPath();
+        // Disque « en escalier » : rectangles empilés (pas d'anticrénelage).
+        for (let yy = -r; yy <= r; yy++) {
+          const hw = Math.floor(Math.sqrt(r * r - yy * yy));
+          c.rect(cx - hw, cy + yy, hw * 2 + 1, 1);
+        }
+        c.fill();
+      }
+      c.globalAlpha = k;
+      c.fillStyle = '#fff3b0';
+      c.fillRect(cx - 1, cy - 1, 3, 2);
+    }
+    if (any) {
+      c.globalAlpha = 1;
+      c.restore();
+    }
+  }
+
+  /** Mode décoration : le reste assombri, emplacements, panneau et fermier au premier plan. */
+  function drawDecorOverlay(objSet) {
+    const c = vctx;
+    c.fillStyle = 'rgba(28,20,40,0.34)';
+    c.fillRect(-ox, -oy, viewW, viewH);
+    const pulse = 0.55 + 0.45 * Math.sin(time * 3.2);
+    for (const d of layout.decorSlots || []) {
+      if (d.kind === 'sign') {
+        drawWideFarmSign(c, objSet, d.x, d.y);
+        cornerMarks(c, d, pulse);
+        continue;
+      }
+      const name = decorSprite(cosmetics.decor[d.id]);
+      if (name) {
+        const tall = (SPRITES[name].h || 1) > 1 && d.kind === 'small';
+        drawSprite(c, objSet, name, d.x, tall ? d.y - TILE : d.y);
+        // Objet posé : souligné d'un trait clair.
+        c.globalAlpha = 0.6 + 0.4 * pulse;
+        c.fillStyle = '#fff3b0';
+        c.fillRect(d.x + 2, d.y + d.h - 1, d.w - 4, 1);
+        c.globalAlpha = 1;
+      } else {
+        // Repère « + » qui respire.
+        const bob = pulse > 0.8 ? -1 : 0;
+        c.globalAlpha = 0.7 + 0.3 * pulse;
+        drawSprite(c, images, 'deco.slot', d.x + (d.w - TILE) / 2, d.y + (d.h - TILE) / 2 + bob);
+        c.globalAlpha = 1;
+      }
+      cornerMarks(c, d, pulse);
+    }
+    // Fermier (touchable : choix de la tenue), sans outil.
+    const fr = farmerRect();
+    drawSprite(c, images, outfitSprite(cosmetics.outfit), fr.x, fr.y, farmer.facing < 0 ? { flipX: true } : undefined);
+    cornerMarks(c, fr, pulse);
+  }
+
+  function cornerMarks(c, r, pulse) {
+    const arm = 3;
+    const x0 = r.x - 1;
+    const y0 = r.y - 1;
+    const x1 = r.x + r.w;
+    const y1 = r.y + r.h;
+    c.globalAlpha = 0.5 + 0.5 * pulse;
+    for (const [color, o] of [[OUTLINE, 1], ['#ffffff', 0]]) {
+      c.fillStyle = color;
+      const ax = x0 - o; const ay = y0 - o; const bx = x1 + o; const by = y1 + o;
+      c.fillRect(ax, ay, arm, 1); c.fillRect(ax, ay, 1, arm);
+      c.fillRect(bx - arm + 1, ay, arm, 1); c.fillRect(bx, ay, 1, arm);
+      c.fillRect(ax, by, arm, 1); c.fillRect(ax, by - arm + 1, 1, arm);
+      c.fillRect(bx - arm + 1, by, arm, 1); c.fillRect(bx, by - arm + 1, 1, arm);
+    }
+    c.globalAlpha = 1;
+  }
+
+  /**
+   * Nom de la ferme sur le panneau : police « Ferme » grasse, dessinée à la résolution de l'écran
+   * (net), centrée dans FARM_SIGN_TEXT_RECT, réduite pour tenir, sinon tronquée avec « … ».
+   */
+  const signPt = { x: 0, y: 0 };
+  function drawSignText() {
+    if (!layout.sign || !hasSlot('sign')) return;
+    const name = String(cosmetics.farmName || DEFAULT_COSMETICS.farmName).trim() || DEFAULT_COSMETICS.farmName;
+    const R = FARM_SIGN_WIDE_TEXT_RECT;
+    worldToDevice(layout.sign.x * TILE + R.x, layout.sign.y * TILE + R.y, signPt);
+    const w = R.w * zoom;
+    const h = R.h * zoom;
+    if (signPt.x > devW || signPt.y > devH || signPt.x + w < 0 || signPt.y + h < 0) return;
+    const key = `${name}|${zoom}`;
+    if (signText.key !== key) {
+      // La plus grande taille (px entiers) qui tient ; en dessous d'un plancher lisible, « … ».
+      let size = Math.max(6, Math.floor(h * 1.3));
+      const minSize = Math.max(6, Math.floor(h * 0.5));
+      let text = name;
+      const fits = (sz, t) => {
+        ctx.font = `700 ${sz}px "Ferme", "Trebuchet MS", monospace`;
+        return ctx.measureText(t).width <= w;
+      };
+      while (size > minSize && !fits(size, text)) size--;
+      if (!fits(size, text)) {
+        while (text.length > 1 && !fits(size, `${text}…`)) text = text.slice(0, -1).trimEnd();
+        text = `${text}…`;
+      }
+      signText.key = key;
+      signText.size = size;
+      signText.text = text;
+    }
+    ctx.save();
+    ctx.font = `700 ${signText.size}px "Ferme", "Trebuchet MS", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const cx = Math.round(signPt.x + w / 2);
+    const cy = Math.round(signPt.y + h / 2 + zoom * 0.35);
+    ctx.fillStyle = 'rgba(255,241,210,0.55)';
+    ctx.fillText(signText.text, cx, cy + Math.max(1, Math.round(zoom / 3)));
+    ctx.fillStyle = decorMode ? '#4a2c24' : '#5a3527';
+    ctx.fillText(signText.text, cx, cy);
+    ctx.restore();
+  }
+
   // ── Image ───────────────────────────────────────────────────────────────────────
   const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
@@ -1224,12 +1889,8 @@ export function createScene(canvas, images, level, opts = {}) {
     initialized = true;
 
     // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
-    let key = SEASON_INDEX[season] ?? 0;
-    let bit = 4;
-    for (const id of layout.available) {
-      if ((owned[id] || 0) > 0) key += bit;
-      bit *= 2;
-    }
+    let key = `${SEASON_INDEX[season] ?? 0}|${cosVersion}|`;
+    for (const id of layout.available) key += (owned[id] || 0) > 0 ? '1' : '0';
     if (key !== staticKey) {
       buildStatic(season, owned);
       staticKey = key;
@@ -1260,17 +1921,22 @@ export function createScene(canvas, images, level, opts = {}) {
     drawEntries();
     effects.drawSmoke(c);
     drawBees(owned, season, weather, dayProgress);
+    if (contestDay(cal)) drawBunting();
+    drawWorkBubbles(owned);
     effects.drawWorld(c);
+    if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
     c.setTransform(1, 0, 0, 1, 0, 0);
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
+    drawLampGlow(dayProgress, weather);
     effects.postProcess(c, view, scratch);
 
     // Canvas final
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
+    drawSignText();
     effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
   }
 
@@ -1302,9 +1968,57 @@ export function createScene(canvas, images, level, opts = {}) {
       hover = hit || null;
     },
     onEvent(type, payload) {
+      if (type === 'treeRemoved' && payload) {
+        // L'arbre s'enfonce dans la terre (sprite d'avant l'arrachage).
+        const r = layout.plotRect(payload.plotIndex);
+        const pv = plotViews[payload.plotIndex];
+        if (r) {
+          const season = lastGame ? lastGame.query.calendar().seasonId : 'summer';
+          const i = payload.plotIndex;
+          const info = treeInfo(pv, { growth: prevGrowth[i], fruit: prevFruit[i] });
+          const name = pv ? appleTreeSprite(info, season) : 'tree.apple.young';
+          effects.sinkTree(r, name, season === 'winter' ? seasonSheets.winter : images, layout.plotScale || 1);
+        }
+      }
       effects.onEvent(type, payload, layout);
     },
     setLevel,
+    setCosmetics(c = {}) {
+      if (!c || typeof c !== 'object') return;
+      for (const k of ['farmName', 'outfit', 'path', 'fence']) if (c[k] !== undefined && c[k] !== null) cosmetics[k] = c[k];
+      const decor = c.decor || c.slots;
+      if (decor && typeof decor === 'object') cosmetics.decor = { ...decor };
+      cosVersion++;
+      signText.key = '';
+    },
+    get cosmetics() {
+      return { ...cosmetics, decor: { ...cosmetics.decor } };
+    },
+    setDecorMode(on) {
+      const was = decorMode;
+      decorMode = !!on;
+      if (decorMode) hover = null;
+      // Entrée en mode décoration : la vue se pose sur la cour (portail → panneau), où se trouvent
+      // la plupart des emplacements. À la sortie, retour au champ.
+      if (decorMode && !was) focusDecorArea(true);
+      else if (!decorMode && was) {
+        userScrolled = false;
+        animateScrollDev(centerOnDev(layout.fieldRect));
+      }
+    },
+    focusDecorSlot,
+    focusDecorArea,
+    focusRect,
+    get decorMode() {
+      return decorMode;
+    },
+    decorSlotRect(id) {
+      const d = (layout.decorSlots || []).find((s0) => s0.id === id);
+      return d ? { x: d.x, y: d.y, w: d.w, h: d.h } : null;
+    },
+    setContestDay(on) {
+      contestForce = on === null || on === undefined ? null : !!on;
+    },
     setInsets,
     scrollBy,
     setScroll,

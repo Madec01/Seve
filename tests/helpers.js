@@ -6,8 +6,8 @@ import { DAY_SECONDS } from '../src/data/balance.js';
 export { DAY_SECONDS };
 
 /** Nouvelle partie ; par défaut le 1er jour est ensoleillé (tests indépendants de la météo tirée). */
-export function newGame(levelId = 1, seed = 42, { rawWeather = false } = {}) {
-  const game = createGame({ levelId, seed });
+export function newGame(levelId = 1, seed = 42, { rawWeather = false, perks } = {}) {
+  const game = perks ? createGame({ levelId, seed, perks }) : createGame({ levelId, seed });
   if (!rawWeather) game.state.weather.today = 'sunny';
   return game;
 }
@@ -47,4 +47,9 @@ export function record(game) {
 /** Beaucoup d'argent, pour isoler une règle des problèmes de trésorerie. */
 export function rich(game, amount = 100000) {
   game.state.money = amount;
+}
+
+/** Joue jusqu'au soir du jour `day` (inclus : la journée `day` est commencée, pas finie). */
+export function goToDay(game, day, weather = 'sunny') {
+  while (game.state.time.day < day && game.state.status === 'playing') nextDay(game, weather);
 }

@@ -168,6 +168,7 @@ export function createHud(root, app) {
       el('div.tip-title', `Aujourd'hui : ${weatherName(w.today)}`),
       el('div', WEATHER_HINTS[w.today] || ''),
       el('div.tip-sub', `Demain : ${weatherName(w.tomorrow)}. ${WEATHER_HINTS[w.tomorrow] || ''}`),
+      w.afterTomorrow ? el('div.tip-sub', `Après-demain : ${weatherName(w.afterTomorrow)} (almanach).`) : null,
     );
   }
 
@@ -182,6 +183,7 @@ export function createHud(root, app) {
     if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
     if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
     if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
+    if (p.products > 0) nodes.push(row('Produits en cours (vendus aux prochaines aubes)', signed(p.products), 'pos'));
     nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : 'neg'}`, fmt(p.projected))));
     nodes.push(
       el(
@@ -193,7 +195,15 @@ export function createHud(root, app) {
             : 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !',
       ),
     );
-    nodes.push(el('div.tip-sub', 'Prévision = argent actuel + solde des matins à venir + cultures qui seront mûres d\'ici là.'));
+    if (p.rentAutoSell && p.daysLeft === 0) {
+      nodes.push(el('div.tip-note.warn', `Il manque ${fmt(Math.max(0, p.amount - p.money))} pièces : vos produits seront vendus en l'état ce soir.`));
+    }
+    nodes.push(el('div.tip-sub', `Prévision = argent actuel + solde des matins à venir + cultures qui seront mûres d'ici là${p.products ? ' + produits des ateliers' : ''}.`));
+    const contest = typeof game.query.contest === 'function' ? game.query.contest() : null;
+    if (contest && !contest.awarded) {
+      const done = contest.goals.filter((g) => g.done).length;
+      nodes.push(el('div.tip-sub', `Concours du village : ${done}/${contest.goals.length} épreuves réussies, jugement ${contest.daysLeft === 0 ? 'ce soir' : `dans ${plural(contest.daysLeft, 'jour')}`}.`));
+    }
     return el('div.tip-rows', nodes);
   }
 
@@ -223,9 +233,20 @@ export function createHud(root, app) {
     }
     // Estimation des récoltes : prix des cultures plantables ; celles qui ne le sont plus cette
     // saison ne sont pas comptées (prudence).
-    const projected = f.money + netTotal - loanTotal + crops;
+    // Produits des ateliers : vendus à l'aube où ils sont prêts (avant le soir du fermage), sinon
+    // vendus en l'état ce soir-là si l'argent manque (filet de sécurité du cœur).
+    let products = 0;
+    if (typeof game.query.processing === 'function') {
+      for (const b of game.query.processing()) {
+        for (const pl of b.places || []) {
+          if (!pl) continue;
+          products += pl.daysLeft <= daysLeft ? pl.value || 0 : pl.rawValue || 0;
+        }
+      }
+    }
+    const projected = f.money + netTotal - loanTotal + crops + products;
     const state = f.money >= bill.amount + loanTotal - Math.min(0, netTotal) ? 'ok' : projected >= bill.amount ? 'warn' : 'danger';
-    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, projected, state };
+    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, projected, state, rentAutoSell: !!f.rentAutoSell };
   }
 
   // ── Mises à jour ──────────────────────────────────────────────────────────────
@@ -327,7 +348,7 @@ export function createHud(root, app) {
   }
 
   function onEvent(ev) {
-    if (app.sheets?.current?.startsWith('info-') && ['moneyChanged', 'dawn', 'weather'].includes(ev.type)) refreshInfo();
+    if (app.sheets?.current?.startsWith('info-') && ['moneyChanged', 'dawn', 'weather', 'productSold', 'processingStarted', 'processingSoldRaw', 'contestProgress'].includes(ev.type)) refreshInfo();
     if (ev.type === 'moneyChanged') {
       targetMoney = ev.money;
       if (ev.delta) popDelta(ev.delta);

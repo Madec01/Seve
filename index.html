@@ -18,111 +18,514 @@
   <link rel="icon" type="image/png" sizes="48x48" href="assets/icons/favicon-48.png">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
-  <link rel="preload" href="assets/fonts/JerseyFerme-Regular.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="assets/fonts/JerseyFerme-Bold.woff2" as="font" type="font/woff2" crossorigin>
-  <!-- Garde-fou de démarrage (script classique, indépendant des modules du jeu) : si le jeu ne
-       démarre pas (erreur pendant le chargement, ou rien au bout de 12 s) alors qu'une version
-       plus récente du service worker existe, on l'active et on recharge une seule fois (repère
-       dans sessionStorage : jamais de boucle). Sinon, un bouton « Réparer le jeu » apparaît :
-       il désinscrit le service worker du jeu et vide ses caches ; la progression (localStorage)
-       est conservée. main.js appelle window.__bootOk() quand le jeu est prêt, __bootFail(err)
-       si le chargement échoue ; window.__repairGame() sert aussi au bouton des options. -->
+  <!-- Fichier généré par tools/build.js depuis src/index.template.html (ne pas modifier à la main). -->
+  <link rel="preload" href="assets/fonts/JerseyFerme-Regular.woff2?v=921e5a900c" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="assets/fonts/JerseyFerme-Bold.woff2?v=5a0b3c6fc3" as="font" type="font/woff2" crossorigin>
+  <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
+       tools/build.js) : télécharge le jeu en montrant la progression, réessaie en cas d'échec,
+       affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
+  <script>window.__FERME_BUILD__ = {"id":"77aeb8050373","js":{"src":"dist/game.dba3132c49.js","sha":"9553ad5a5e287209","size":354675},"css":["dist/game.ac322645b8.css"]};</script>
   <script>
-  (function () {
-    var KEY = 'ferme.bootRecovery';
-    var BASE = new URL('./', location.href).href;
-    var ok = false;
-    var busy = false;
-    var shown = false;
-    function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) { /* stockage bloqué */ } }
-    function tried() { try { return !!sessionStorage.getItem(KEY); } catch (e) { return true; } }
-    function reload() { if (!ok) location.reload(); }
+/* Chargeur et garde-fou de démarrage de « Une année à la ferme ».
+ *
+ * Script CLASSIQUE (pas un module), recopié tel quel dans index.html et dev.html par tools/build.js
+ * (jamais chargé comme fichier séparé : rien qui puisse manquer ou dater d'une autre version).
+ * Écrit en JavaScript prudent (var, pas de fonctions fléchées) : il doit pouvoir s'exécuter et
+ * afficher une erreur lisible même sur un navigateur ancien.
+ *
+ * Il lit window.__FERME_BUILD__ (écrit juste avant par tools/build.js) :
+ *   { id, js: { src, sha, size }, css: [...] }      jeu empaqueté (index.html)
+ *   { id: 'dev', dev: true, module: 'src/main.js' }  modules non empaquetés (dev.html)
+ *
+ * Rôle :
+ *  1. Télécharge le paquet du jeu (dist/game.<empreinte>.js) en montrant la progression dans la
+ *     jauge, vérifie son empreinte SHA-256, puis l'exécute. En cas d'échec (réseau coupé, fichier
+ *     tronqué ou altéré) : jusqu'à 3 nouveaux essais espacés (1 s, 2,5 s, 5 s), en contournant le
+ *     cache (« ?r=n », cache: 'reload').
+ *  2. Feuille de style : nouveaux essais de la même façon si elle ne se charge pas ; le jeu ne
+ *     démarre qu'une fois le style en place (les mesures de mise en page en dépendent).
+ *  3. Garde-fou : erreur de script, ou plus aucun progrès pendant 20 s → si une version plus
+ *     récente du service worker attend, on l'active et on recharge une seule fois (repère dans
+ *     sessionStorage : jamais de boucle) ; sinon, bouton « Réparer le jeu » et zone « Détails »
+ *     (le vrai message d'erreur, à photographier).
+ *  4. window.__repairGame() (bouton « Réparer le jeu », ici et dans les options) : désinscrit le
+ *     service worker, vide les caches ferme-*, retélécharge la page et chaque fichier qu'elle
+ *     désigne en contournant le cache HTTP (fetch cache: 'reload'), puis recharge la page avec
+ *     « ?r=<heure> » (retiré de l'adresse au chargement suivant). localStorage (progression,
+ *     partie) n'est jamais touché.
+ *
+ * Interface pour le jeu (src/main.js) : window.__bootProgress(0..1) (suite du chargement, après
+ * le paquet), window.__bootOk() (écran « Prêt ! »), window.__bootFail(err).
+ */
+(function () {
+  'use strict';
+  var BUILD = window.__FERME_BUILD__ || { id: 'inconnue', dev: true, module: 'src/main.js' };
+  var KEY = 'ferme.bootRecovery';
+  var BASE = new URL('./', location.href).href;
+  var JS_SHARE = BUILD.dev ? 0.1 : 0.4; // part de la jauge pour le téléchargement du paquet
+  var STALL_MS = 20000;
+  var BACKOFF = [1000, 2500, 5000];
+  var t0 = Date.now();
 
-    window.__repairGame = function () {
-      var jobs = [];
-      if ('serviceWorker' in navigator) {
-        jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
-          return Promise.all(regs.filter(function (r) { return r.scope.indexOf(BASE) === 0; }).map(function (r) { return r.unregister(); }));
-        }).catch(function () {}));
-      }
-      if (window.caches) {
-        jobs.push(caches.keys().then(function (names) {
-          return Promise.all(names.filter(function (n) { return n.indexOf('ferme-') === 0; }).map(function (n) { return caches.delete(n); }));
-        }).catch(function () {}));
-      }
-      store(null);
-      return Promise.all(jobs).then(function () {
-        // Adresse sans « ?… » ni « #… » : vraie page du réseau (le service worker est parti).
-        location.replace(location.pathname + location.search);
-      });
-    };
+  var ok = false;
+  var failed = false;
+  var busy = false;
+  var shown = false;
+  var progress = 0;
+  var log = [];
 
-    function showRepair() {
-      if (ok || shown) return;
+  // ── Adresse : « ?r=… » (rechargement forcé) est retiré ; « ?dev=1 » ouvre dev.html ────────
+  try {
+    var params = new URLSearchParams(location.search);
+    if (params.get('dev') === '1' && !BUILD.dev) {
+      params.delete('dev');
+      var qs = params.toString();
+      location.replace(BASE + 'dev.html' + (qs ? '?' + qs : '') + location.hash);
+      return;
+    }
+    if (params.has('r')) {
+      params.delete('r');
+      var rest = params.toString();
+      history.replaceState(history.state, '', location.pathname + (rest ? '?' + rest : '') + location.hash);
+    }
+  } catch (e) { /* navigateur ancien : sans importance */ }
+
+  function store(v) { try { if (v) sessionStorage.setItem(KEY, v); else sessionStorage.removeItem(KEY); } catch (e) { /* stockage bloqué */ } }
+  function tried() { try { return !!sessionStorage.getItem(KEY); } catch (e) { return true; } }
+  // Étapes normales : console.info ; échecs et nouveaux essais : console.warn (une partie qui démarre
+  // bien ne laisse aucun avertissement dans la console).
+  function note(msg, problem) {
+    var line = '[' + ((Date.now() - t0) / 1000).toFixed(1) + ' s] ' + msg;
+    log.push(line);
+    if (log.length > 40) log.shift();
+    if (problem === undefined) problem = /ÉCHEC|essai|introuvable|aucun progrès|rejetée|erreur/i.test(msg);
+    try { (problem ? console.warn : console.info)('[chargement] ' + msg); } catch (e) { /* console absente */ }
+    renderDetails();
+  }
+  function errText(err) {
+    if (!err) return 'erreur inconnue';
+    if (typeof err === 'string') return err;
+    var m = err.message || String(err);
+    if (err.filename) m += ' (' + err.filename.replace(BASE, '') + ':' + (err.lineno || 0) + ':' + (err.colno || 0) + ')';
+    return m;
+  }
+
+  // ── DOM : l'écran de chargement n'existe qu'une fois la page lue ─────────────────────
+  var domReady = document.readyState !== 'loading';
+  var domWaiters = [];
+  function whenDom(fn) { if (domReady) fn(); else domWaiters.push(fn); }
+  if (!domReady) {
+    document.addEventListener('DOMContentLoaded', function () {
+      domReady = true;
+      var list = domWaiters;
+      domWaiters = [];
+      for (var i = 0; i < list.length; i++) list[i]();
+    });
+  }
+  function $(sel) { return document.querySelector(sel); }
+
+  function paint() {
+    whenDom(function () {
+      var fill = $('#loading .loading-fill');
+      var gauge = $('#loading .loading-gauge');
+      if (fill) fill.style.transform = 'scaleX(' + progress.toFixed(3) + ')';
+      if (gauge) gauge.setAttribute('aria-valuenow', String(Math.round(progress * 100)));
+    });
+  }
+  function setProgress(v) {
+    v = Math.max(0, Math.min(1, v));
+    if (v > progress + 0.0005) {
+      progress = v;
+      lastProgress = Date.now();
+      paint();
+    }
+  }
+  function setText(msg) {
+    whenDom(function () {
+      var t = $('#loading .loading-text');
+      if (t && !ok) t.textContent = msg;
+    });
+  }
+
+  // ── Zone « Détails » (repliée) : ce qui s'est passé, à photographier ─────────────────
+  function details() {
+    var sw = 'aucun';
+    try { if (navigator.serviceWorker && navigator.serviceWorker.controller) sw = 'actif'; } catch (e) { /* */ }
+    var lines = [
+      'Version : ' + BUILD.id + (BUILD.dev ? ' (développement)' : ''),
+      'Adresse : ' + location.href,
+      'Service worker : ' + sw + ' — en ligne : ' + (navigator.onLine === false ? 'non' : 'oui'),
+      'Navigateur : ' + navigator.userAgent,
+      'Écran : ' + window.innerWidth + ' × ' + window.innerHeight + ' (×' + (window.devicePixelRatio || 1) + ')',
+      '',
+    ];
+    return lines.concat(log).join('\n');
+  }
+  function renderDetails() {
+    if (!shown) return;
+    whenDom(function () {
+      var pre = $('#boot-details-text');
+      if (pre) pre.textContent = details();
+    });
+  }
+
+  function showHelp(message) {
+    if (ok) return;
+    whenDom(function () {
+      if (ok) return;
+      var box = $('#loading .loading-box') || document.body;
+      if (message) {
+        var err = $('#loading .loading-error');
+        if (err) { err.hidden = false; err.textContent = message; }
+      }
+      if (shown) { renderDetails(); return; }
       shown = true;
-      var box = document.querySelector('#loading .loading-box') || document.body;
       var p = document.createElement('p');
       p.className = 'loading-error boot-help';
-      p.textContent = 'Le jeu ne démarre pas ? Réparer le jeu vide le cache hors ligne et recharge la page (votre progression est conservée).';
+      p.textContent = 'Le jeu ne démarre pas ? « Réparer le jeu » retélécharge le jeu et recharge la page (votre progression est conservée).';
       var b = document.createElement('button');
       b.type = 'button';
       b.id = 'boot-repair';
       b.className = 'btn btn--small boot-repair';
       b.textContent = 'Réparer le jeu';
       b.onclick = function () { b.disabled = true; b.textContent = 'Réparation…'; window.__repairGame(); };
+      var d = document.createElement('details');
+      d.className = 'boot-details boot-help';
+      var s = document.createElement('summary');
+      s.textContent = 'Détails';
+      var pre = document.createElement('pre');
+      pre.id = 'boot-details-text';
+      d.appendChild(s);
+      d.appendChild(pre);
       box.appendChild(p);
       box.appendChild(b);
-    }
+      box.appendChild(d);
+      renderDetails();
+    });
+  }
 
-    // Une version plus récente attend (ou s'installe) : on l'active, puis on recharge une fois.
-    function recover() {
-      if (ok || busy) return;
-      busy = true;
-      if (tried() || !('serviceWorker' in navigator)) { showRepair(); return; }
-      navigator.serviceWorker.getRegistration(BASE).then(function (reg) {
-        if (!reg || ok) { showRepair(); return; }
-        return reg.update().catch(function () {}).then(function () {
-          var w = reg.waiting || reg.installing;
-          if (!w) { showRepair(); return; }
-          var activate = function (worker) {
-            if (ok) return;
-            store(String(Date.now()));
-            navigator.serviceWorker.addEventListener('controllerchange', reload);
-            worker.postMessage({ type: 'SKIP_WAITING' });
-            setTimeout(reload, 5000);
-          };
-          if (w.state === 'installed') { activate(w); return; }
-          // En cours d'installation : on attend qu'elle se termine (au plus 60 s).
-          var done = false;
-          var t = setTimeout(function () { if (!done) { done = true; showRepair(); } }, 60000);
-          w.addEventListener('statechange', function () {
-            if (done) return;
-            if (w.state === 'installed' || w.state === 'activated') { done = true; clearTimeout(t); activate(w); }
-            else if (w.state === 'redundant') { done = true; clearTimeout(t); showRepair(); }
-          });
+  // ── Réparation ────────────────────────────────────────────────────────────────────
+  function refetch(url) {
+    return fetch(url, { cache: 'reload', credentials: 'same-origin' }).then(function (r) {
+      return r.ok ? r.text() : '';
+    }).catch(function () { return ''; });
+  }
+
+  window.__repairGame = function () {
+    store(null);
+    setText('Réparation…');
+    var jobs = [];
+    if ('serviceWorker' in navigator) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.filter(function (r) { return r.scope.indexOf(BASE) === 0; }).map(function (r) { return r.unregister(); }));
+      }).catch(function () {}));
+    }
+    if (window.caches) {
+      jobs.push(caches.keys().then(function (names) {
+        return Promise.all(names.filter(function (n) { return n.indexOf('ferme-') === 0; }).map(function (n) { return caches.delete(n); }));
+      }).catch(function () {}));
+    }
+    var work = Promise.all(jobs).then(function () {
+      // La page elle-même (sous ses deux adresses), puis chaque fichier qu'elle désigne : le cache
+      // HTTP du navigateur est rafraîchi, plus aucune vieille copie ne peut resservir.
+      var page = location.pathname;
+      var pages = [page, BASE, BASE + 'index.html'];
+      return Promise.all(pages.map(refetch)).then(function (texts) {
+        var html = texts.join('\n');
+        var urls = {};
+        var re = /(?:src|href)\s*=\s*"([^"#]+)"|"src"\s*:\s*"([^"]+)"/g;
+        var m;
+        while ((m = re.exec(html))) {
+          var u = m[1] || m[2];
+          if (/^(data:|blob:|mailto:|javascript:)/.test(u)) continue;
+          var abs = new URL(u, BASE).href;
+          if (abs.indexOf(BASE) === 0) urls[abs] = true;
+        }
+        urls[BASE + 'sw.js'] = true;
+        urls[BASE + 'manifest.webmanifest'] = true;
+        return Promise.all(Object.keys(urls).map(refetch));
+      });
+    });
+    var timeout = new Promise(function (resolve) { setTimeout(resolve, 20000); });
+    return Promise.race([work, timeout]).then(function () {
+      var p = new URLSearchParams(location.search);
+      p.set('r', String(Date.now()));
+      location.replace(location.pathname + '?' + p.toString() + location.hash);
+    });
+  };
+
+  // ── Garde-fou : nouvelle version du service worker, sinon « Réparer » ────────────────
+  function reload() { if (!ok) location.reload(); }
+  function recover(message) {
+    if (ok) return;
+    if (busy) { showHelp(message); return; }
+    busy = true;
+    if (tried() || !('serviceWorker' in navigator)) { showHelp(message); return; }
+    navigator.serviceWorker.getRegistration(BASE).then(function (reg) {
+      if (!reg || ok) { showHelp(message); return; }
+      return reg.update().catch(function () {}).then(function () {
+        var w = reg.waiting || reg.installing;
+        if (!w) { showHelp(message); return; }
+        note('nouvelle version du service worker trouvée : activation');
+        var activate = function (worker) {
+          if (ok) return;
+          store(String(Date.now()));
+          navigator.serviceWorker.addEventListener('controllerchange', reload);
+          worker.postMessage({ type: 'SKIP_WAITING' });
+          setTimeout(reload, 5000);
+        };
+        if (w.state === 'installed') { activate(w); return; }
+        var done = false;
+        var t = setTimeout(function () { if (!done) { done = true; showHelp(message); } }, 60000);
+        w.addEventListener('statechange', function () {
+          if (done) return;
+          if (w.state === 'installed' || w.state === 'activated') { done = true; clearTimeout(t); activate(w); }
+          else if (w.state === 'redundant') { done = true; clearTimeout(t); showHelp(message); }
         });
-      }).catch(showRepair);
-    }
+      });
+    }).catch(function () { showHelp(message); });
+  }
 
-    window.__bootOk = function () {
-      ok = true;
-      store(null);
-      clearTimeout(timer);
+  function fail(err, where) {
+    if (ok) return;
+    var msg = errText(err);
+    var e = err && err.error ? err.error : err;
+    var where2 = '';
+    if (e && e.stack && where !== 'paquet' && where !== 'style') { // (erreurs du jeu : où ?)
+      var frames = String(e.stack).split('\n');
+      for (var i = 0; i < frames.length; i++) if (/:\d+:\d+/.test(frames[i])) { where2 = ' — ' + frames[i].trim().replace(BASE, ''); break; }
+    }
+    note('ÉCHEC' + (where ? ' (' + where + ')' : '') + ' : ' + msg + where2);
+    failed = true;
+    setText('Impossible de charger le jeu.');
+    recover(msg);
+  }
+
+  window.__bootProgress = function (v) {
+    setProgress(JS_SHARE + (1 - JS_SHARE) * (Number(v) || 0));
+  };
+  window.__bootOk = function () {
+    if (ok) return;
+    ok = true;
+    store(null);
+    clearInterval(watch);
+    setProgress(1);
+    note('jeu prêt');
+    whenDom(function () {
       var nodes = document.querySelectorAll('.boot-help, .boot-repair');
-      for (var i = 0; i < nodes.length; i++) nodes[i].remove();
-    };
-    window.__bootFail = function () { if (!ok) recover(); };
-    window.addEventListener('error', function (e) {
-      if (ok) return;
-      var t = e.target;
-      // Erreur de script (ErrorEvent) ou script du jeu introuvable ; pas les images ni les sons.
-      if (e instanceof ErrorEvent || (t && t.tagName === 'SCRIPT')) recover();
-    }, true);
-    var timer = setTimeout(function () { if (!ok) recover(); }, 12000);
-  })();
+      for (var i = 0; i < nodes.length; i++) nodes[i].parentNode.removeChild(nodes[i]);
+      var err = $('#loading .loading-error');
+      if (err && failed) { err.hidden = true; err.textContent = ''; }
+    });
+  };
+  window.__bootFail = function (err) { fail(err || 'échec du démarrage', 'jeu'); };
+
+  window.addEventListener('error', function (e) {
+    if (ok) return;
+    var t = e.target;
+    if (e instanceof ErrorEvent || e.error) { fail(e.error && e.error.message ? e : (e.message || e.error), 'script'); return; }
+    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais.)
+    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry')) fail('script introuvable : ' + (t.src || ''), 'script');
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) {
+    if (ok) return;
+    note('promesse rejetée : ' + errText(e.reason));
+  });
+
+  // Plus aucun progrès pendant STALL_MS → garde-fou (sans rien interrompre : si le chargement
+  // repart, le jeu démarre normalement et l'aide disparaît).
+  var lastProgress = Date.now();
+  var watch = setInterval(function () {
+    if (ok) { clearInterval(watch); return; }
+    if (Date.now() - lastProgress > STALL_MS && !busy) {
+      note('aucun progrès depuis ' + Math.round(STALL_MS / 1000) + ' s (' + Math.round(progress * 100) + ' %)');
+      recover('Le chargement semble bloqué.');
+    }
+  }, 1000);
+
+  // ── Feuilles de style (liens <link data-boot-css>, qui appellent __bootCss) ───────────
+  var cssPending = 0;
+  var cssBroken = false; // plus d'essai possible : le jeu ne démarre pas sans style
+  var cssWaiters = [];
+  var cssTries = {};
+  function cssDone() {
+    if (cssPending > 0 || cssBroken) return;
+    var list = cssWaiters;
+    cssWaiters = [];
+    for (var i = 0; i < list.length; i++) list[i]();
+  }
+  function whenCss(fn) { cssWaiters.push(fn); whenDom(checkCss); }
+  function checkCss() {
+    var links = document.querySelectorAll('link[data-boot-css]');
+    var pending = 0;
+    for (var i = 0; i < links.length; i++) {
+      var l = links[i];
+      if (l.__bootDone) continue;
+      if (l.sheet) { l.__bootDone = true; continue; }
+      pending++;
+    }
+    cssPending = pending;
+    cssDone();
+  }
+  window.__bootCss = function (link, success) {
+    if (link.__bootDone) return;
+    var key = link.getAttribute('data-boot-css') || link.href;
+    if (success) {
+      link.__bootDone = true;
+      whenDom(checkCss);
+      return;
+    }
+    var n = (cssTries[key] || 0) + 1;
+    cssTries[key] = n;
+    link.__bootDone = true; // remplacé par un nouveau lien
+    if (n > BACKOFF.length) {
+      cssBroken = true;
+      fail('feuille de style introuvable : ' + key, 'style');
+      return;
+    }
+    note('style ' + key + ' : échec, nouvel essai ' + n + '/' + BACKOFF.length);
+    setTimeout(function () {
+      var l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.setAttribute('data-boot-css', key);
+      l.onload = function () { window.__bootCss(l, true); };
+      l.onerror = function () { window.__bootCss(l, false); };
+      l.href = key + (key.indexOf('?') < 0 ? '?' : '&') + 'r=' + n;
+      document.head.appendChild(l);
+      if (link.parentNode) link.parentNode.removeChild(link);
+    }, BACKOFF[n - 1]);
+  };
+
+  // ── Paquet du jeu ─────────────────────────────────────────────────────────────────
+  function hex16(buf) {
+    var b = new Uint8Array(buf, 0, 8);
+    var s = '';
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? '0' : '') + b[i].toString(16);
+    return s;
+  }
+
+  function download(url, attempt) {
+    var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    var stallTimer = null;
+    function arm() {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    }
+    arm();
+    var opts = { credentials: 'same-origin', cache: attempt ? 'reload' : 'default' };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch(url, opts).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status + ' pour ' + url.replace(BASE, ''));
+      var size = BUILD.js.size || Number(res.headers.get('Content-Length')) || 0;
+      if (!res.body || !res.body.getReader) return res.arrayBuffer();
+      var reader = res.body.getReader();
+      var chunks = [];
+      var got = 0;
+      function pump() {
+        return reader.read().then(function (r) {
+          if (r.done) return;
+          chunks.push(r.value);
+          got += r.value.length;
+          arm();
+          if (size) setProgress(0.02 + (JS_SHARE - 0.02) * Math.min(1, got / size));
+          return pump();
+        });
+      }
+      return pump().then(function () {
+        var all = new Uint8Array(got);
+        var off = 0;
+        for (var i = 0; i < chunks.length; i++) { all.set(chunks[i], off); off += chunks[i].length; }
+        return all.buffer;
+      });
+    }).then(function (buf) {
+      clearTimeout(stallTimer);
+      return buf;
+    }, function (err) {
+      clearTimeout(stallTimer);
+      if (err && err.name === 'AbortError') throw new Error('téléchargement bloqué (plus rien reçu pendant 15 s)');
+      throw err;
+    });
+  }
+
+  function verify(buf) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle || !BUILD.js.sha) return Promise.resolve(buf);
+    return subtle.digest('SHA-256', buf).then(function (d) {
+      var got = hex16(d);
+      if (got !== BUILD.js.sha) throw new Error('fichier du jeu incomplet ou altéré (empreinte ' + got + ' au lieu de ' + BUILD.js.sha + ')');
+      return buf;
+    });
+  }
+
+  function run(buf, url) {
+    var code = new TextDecoder('utf-8').decode(buf);
+    whenDom(function () {
+      whenCss(function () {
+        if (ok) return;
+        note('paquet reçu (' + Math.round(buf.byteLength / 1024) + ' Ko), démarrage');
+        setProgress(JS_SHARE);
+        var s = document.createElement('script');
+        // sourceURL : les erreurs et le débogueur désignent le vrai fichier (et sa carte des sources).
+        s.textContent = code + '\n//# sourceURL=' + new URL(url.split('?')[0], BASE).href;
+        document.head.appendChild(s);
+      });
+    });
+  }
+
+  function loadBundle(attempt) {
+    var src = BUILD.js.src;
+    var url = attempt ? src + '?r=' + attempt : src;
+    return download(url, attempt).then(verify).then(function (buf) { run(buf, src); }, function (err) {
+      if (attempt < BACKOFF.length) {
+        note('paquet : ' + errText(err) + ' — nouvel essai ' + (attempt + 1) + '/' + BACKOFF.length);
+        setText('Connexion difficile… nouvel essai (' + (attempt + 1) + '/' + BACKOFF.length + ')');
+        return new Promise(function (resolve) { setTimeout(resolve, BACKOFF[attempt]); }).then(function () {
+          setText('Chargement…');
+          return loadBundle(attempt + 1);
+        });
+      }
+      fail(err, 'paquet');
+    });
+  }
+
+  // Sans fetch en flux (navigateur ancien) : simple balise <script>, avec les mêmes essais.
+  function loadByTag(src, attempt, type) {
+    whenDom(function () {
+      var s = document.createElement('script');
+      if (type) s.type = type;
+      s.setAttribute('data-boot-retry', '1');
+      s.onerror = function () {
+        if (attempt < BACKOFF.length) {
+          note('script ' + src + ' introuvable — nouvel essai ' + (attempt + 1) + '/' + BACKOFF.length);
+          setTimeout(function () { loadByTag(src, attempt + 1, type); }, BACKOFF[attempt]);
+        } else fail('script introuvable : ' + src, 'paquet');
+      };
+      s.src = attempt ? src + '?r=' + attempt : src;
+      whenCss(function () { document.head.appendChild(s); });
+    });
+  }
+
+  // Mode développement (dev.html) : modules non empaquetés, chargés par import() pour obtenir le
+  // vrai message d'erreur (fichier manquant, export introuvable…).
+  function loadDev(src) {
+    whenDom(function () {
+      whenCss(function () {
+        setProgress(JS_SHARE);
+        var dynImport;
+        try { dynImport = new Function('u', 'return import(u)'); } catch (e) { dynImport = null; }
+        if (!dynImport) { loadByTag(src, 0, 'module'); return; }
+        dynImport(new URL(src, BASE).href).catch(function (err) { fail(err, 'modules'); });
+      });
+    });
+  }
+
+  setProgress(0.02);
+  if (BUILD.dev) loadDev(BUILD.module || 'src/main.js');
+  else if (window.fetch && window.TextDecoder && window.Promise) loadBundle(0);
+  else loadByTag(BUILD.js.src, 0);
+})();
   </script>
-  <link rel="stylesheet" href="css/fonts.css">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="dist/game.ac322645b8.css" data-boot-css="dist/game.ac322645b8.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
 </head>
 <body class="is-loading">
   <!-- Scène de la ferme (canvas pixel art), sous toute l'interface : plein écran -->
@@ -177,7 +580,5 @@
   <noscript>
     <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
   </noscript>
-
-  <script type="module" src="src/main.js" onerror="window.__bootFail && window.__bootFail('script')"></script>
 </body>
 </html>

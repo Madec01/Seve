@@ -8,10 +8,25 @@
 // onglet est visible, au plus une fois par image.
 
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
-import { CROPS } from '../data/crops.js';
+import { gameCrops } from '../core/perks.js';
 import { clear, dec, el, fmt, gain, loss, plural, signed } from './dom.js';
-import { cropIcon, icon, investmentIcon, seasonIncomes } from './icons.js';
+import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
 import { cropCount, incomePhrase, incomeProfile, season } from './text.js';
+import { isProcessing, nextLevelLabel, processingOf, recipeLine, recipesOf } from './buildings.js';
+import { v3 } from './v3.js';
+
+// Sections de l'onglet « Acheter » (seulement quand le niveau propose un atelier).
+const SECTIONS = [
+  { id: 'animal', title: 'Animaux' },
+  { id: 'processing', title: 'Ateliers' },
+  { id: 'utility', title: 'Aménagements' },
+];
+const sectionOf = (inv) => (inv.category === 'animal' || inv.category === 'processing' ? inv.category : isProcessing(inv) ? 'processing' : 'utility');
+
+/** Nom d'un produit (src/data/products.js). */
+export function productName(id) {
+  return v3.products?.getProduct?.(id)?.name || v3.products?.PRODUCTS?.find((p) => p.id === id)?.name || id;
+}
 
 const capitalize = (t) => t.charAt(0).toUpperCase() + t.slice(1);
 
@@ -41,7 +56,15 @@ export function createPanel(app) {
         'Les investissements rapportent chaque matin, à l\'aube. Achetés tôt, ils rapportent gros ; achetés tard, ils n\'ont plus le temps de se rembourser.',
       ),
     );
-    for (const inv of list) {
+    const sectioned = list.some(isProcessing);
+    const ordered = sectioned ? SECTIONS.flatMap((sec) => list.filter((inv) => sectionOf(inv) === sec.id)) : list;
+    let lastSection = null;
+    for (const inv of ordered) {
+      if (sectioned && sectionOf(inv) !== lastSection) {
+        lastSection = sectionOf(inv);
+        shopList.append(el('h3.shop-section', { id: `shop-sec-${lastSection}` }, SECTIONS.find((x) => x.id === lastSection).title));
+      }
+      const proc = isProcessing(inv);
       const name = el('div.card-name', inv.name);
       const owned = el('span.card-owned', '');
       const desc = el('div.card-desc', inv.description);
@@ -55,15 +78,19 @@ export function createPanel(app) {
         el('span.buy-cost', icon('coin', 'sm'), price),
       );
       const reason = el('p.card-reason', '');
+      const recipes = proc ? el('div.card-recipes') : null;
+      const view = proc
+        ? el('button.btn.btn--view', { type: 'button', id: `view-${inv.id}`, hidden: true, onclick: () => { app.audio.play('page', { volume: 0.7 }); app.field.openBuilding(inv.id); } }, 'Voir')
+        : null;
       const node = el(
-        'article.card',
+        `article.card${proc ? '.card--workshop' : ''}`,
         { dataset: { id: inv.id }, id: `card-${inv.id}` },
         el('div.card-icon', investmentIcon(inv.id, 'sprite--card')),
-        el('div.card-main', el('div.card-top', name, owned), desc, stats),
-        el('div.card-foot', buy, reason),
+        el('div.card-main', el('div.card-top', name, owned), desc, stats, recipes),
+        el('div.card-foot', el('div.card-buttons', view, buy), reason),
       );
       shopList.append(node);
-      cards.set(inv.id, { node, owned, stats, price, buy, buyLabel, reason });
+      cards.set(inv.id, { node, owned, stats, price, buy, buyLabel, reason, recipes, view, proc });
     }
   }
 
@@ -95,6 +122,13 @@ export function createPanel(app) {
       parts.push({ label: 'Arrose', value: lvl > 0 ? label(cur) : label(next), cls: 'pos' });
       if (lvl > 0 && lvl < inv.max) parts.push({ label: 'Niveau suivant', value: label(next) });
     }
+    if (e.processing) {
+      const lv = inv.owned;
+      const places = e.processing.places || [];
+      const now = inv.processing?.places ?? places[Math.max(0, lv - 1)];
+      parts.push({ label: 'Places', value: lv > 0 ? `${now}` : `${places[0] ?? '?'}`, cls: 'pos', tip: 'Une place reçoit une récolte (ou le lait du matin) et la transforme en quelques jours. Atelier plein : la récolte se vend normalement.' });
+      if (lv > 0 && lv < inv.max) parts.push({ label: 'Niveau suivant', value: inv.id === 'mill' && lv === 2 ? 'four à pain' : `${places[lv] ?? now + 1} places` });
+    }
     if (inv.upkeep) parts.push({ label: 'Entretien', value: `−${inv.upkeep} / jour${inv.kind === 'upgrade' ? '' : ' chacun'}`, cls: 'neg' });
     return parts;
   }
@@ -115,6 +149,18 @@ export function createPanel(app) {
       }
       c.price.textContent = maxed ? '' : fmt(inv.nextCost);
       c.buyLabel.textContent = maxed ? (inv.kind === 'upgrade' ? 'Niveau max' : 'Complet') : inv.owned > 0 ? (inv.kind === 'upgrade' ? 'Améliorer' : 'Encore un') : 'Acheter';
+      if (c.proc) {
+        if (!maxed) c.buyLabel.textContent = nextLevelLabel(inv);
+        c.owned.textContent = inv.owned ? `Niveau ${inv.owned}/${inv.max}` : `${inv.max} niveaux`;
+        clear(c.recipes);
+        c.recipes.append(...recipesOf(game, inv).map((r) => recipeLine(r, { compact: true })));
+        const pr = inv.owned ? processingOf(game, inv.id) : null;
+        if (pr) {
+          const used = (pr.places || []).filter(Boolean).length;
+          c.recipes.append(el(`p.card-proc${pr.on ? '' : '.is-off'}`, pr.on ? `En marche · ${used}/${pr.places.length} places occupées` : 'Interrupteur éteint'));
+        }
+        c.view.hidden = !inv.owned;
+      }
       c.buy.querySelector('.buy-cost').hidden = maxed;
       c.buy.classList.toggle('is-disabled', !inv.canBuy);
       c.buy.setAttribute('aria-disabled', inv.canBuy ? 'false' : 'true');
@@ -161,6 +207,60 @@ export function createPanel(app) {
     return n;
   }
 
+  /** Concours du niveau 12 : trois épreuves avec leur barre de progression. */
+  function contestSection() {
+    const c = typeof game.query.contest === 'function' ? game.query.contest() : null;
+    if (!c) return null;
+    let when;
+    if (c.awarded) when = 'Le jury est passé.';
+    else if (c.daysLeft === 0) when = 'Jugement ce soir !';
+    else when = `Jugement dans ${plural(c.daysLeft, 'jour')} (soir du ${c.deadlineDay}ᵉ jour).`;
+    const rows = c.goals.map((g) =>
+      el(
+        `div.contest-goal${g.done ? '.is-done' : ''}`,
+        el('div.contest-top', el('span.contest-name', g.done ? '✓ ' : '', g.label), el('b', `${fmt(Math.min(g.progress, g.target))} / ${fmt(g.target)}`)),
+        el('span.contest-bar', el('span.contest-bar-fill', { style: { width: `${Math.round(Math.min(1, g.progress / Math.max(1, g.target)) * 100)}%` } })),
+      ),
+    );
+    const res = game.state.contest?.result;
+    return section(
+      'Concours du village',
+      el(`p.stats-note${!c.awarded && c.daysLeft <= 2 ? '.is-warn' : ''}`, icon('calendar', 'xs'), when),
+      rows,
+      c.awarded && res
+        ? el('p.stats-note.is-ok', `Prix remporté : ${fmt(res.amount)} pièces (${plural(res.goalsMet.length, 'épreuve réussie', 'épreuves réussies')}).`)
+        : el('p.stats-note', `${fmt(c.prizePerGoal)} pièces par épreuve réussie, +${fmt(c.bonusAll)} si les trois le sont. Prix possible : ${fmt(c.potentialPrize ?? 0)}.`),
+    );
+  }
+
+  /** Transformation : produits en cours, vendus par type, ventes en l'état. */
+  function processingSection(sum, f) {
+    const invs = game.query.investments();
+    const hasWorkshop = invs.some((i) => isProcessing(i));
+    if (!hasWorkshop) return null;
+    const sold = Object.entries(sum.productsSold || {}).filter(([, n]) => n > 0);
+    const procs = typeof game.query.processing === 'function' ? game.query.processing() : [];
+    const running = procs.reduce((s, b) => s + (b.places || []).filter(Boolean).length, 0);
+    return section(
+      'Transformation',
+      procs.length
+        ? procs.map((b) =>
+            line(
+              `${b.name}${b.on ? '' : ' (éteint)'}`,
+              `${(b.places || []).filter(Boolean).length}/${(b.places || []).length} places`,
+              b.on ? '' : 'mid',
+            ),
+          )
+        : el('p.stats-empty', 'Aucun atelier pour l\'instant : voir l\'onglet « Acheter ».'),
+      running ? line('Produits en cours (vendus aux prochaines aubes)', gain(f.processingValue ?? procs.reduce((s, b) => s + (b.value || 0), 0)), 'pos') : null,
+      line('Produits vendus', gain(sum.productIncome || 0), 'pos'),
+      sum.rawSales ? line('Ventes en l\'état', gain(sum.rawSales), 'pos', 'Produits vendus au prix de la matière première (bouton « Vendre en l\'état », ou avant un fermage si l\'argent manquait).') : null,
+      sold.length
+        ? el('div.harvest-list', sold.map(([id, n]) => el('span.harvest-chip', { title: productName(id) }, productIcon(id, 'sprite--sm'), el('b', `×${n}`))))
+        : el('p.stats-empty', 'Aucun produit vendu pour l\'instant.'),
+    );
+  }
+
   function buildStats() {
     clear(statsBody);
     const q = game.query;
@@ -169,6 +269,9 @@ export function createPanel(app) {
     const lvl = q.level();
     const invs = q.investments();
     const sum = q.summary();
+
+    const contest = contestSection();
+    if (contest) statsBody.append(contest);
 
     // Aujourd'hui : revenus et charges
     const incomeLines = [];
@@ -241,7 +344,7 @@ export function createPanel(app) {
     // Marché
     if (lvl.modifiers.priceVolatility) {
       const crops = q.plantableCrops();
-      const all = CROPS.filter((c) => !lvl.crops || lvl.crops.includes(c.id));
+      const all = gameCrops(lvl, game.state.perks || {});
       statsBody.append(
         section(
           'Cours du marché aujourd\'hui',
@@ -271,6 +374,9 @@ export function createPanel(app) {
         'Depuis le début de l\'année',
         line('Récoltes vendues', gain(sum.harvestIncome), 'pos'),
         line('Revenus des investissements', gain(sum.investmentIncome), 'pos'),
+        sum.productIncome || sum.rawSales ? line('Produits transformés', gain((sum.productIncome || 0) + (sum.rawSales || 0)), 'pos') : null,
+        sum.contestPrize ? line('Prix du concours', gain(sum.contestPrize), 'pos') : null,
+        sum.frostRefund ? line('Assurance gel', gain(sum.frostRefund), 'pos') : null,
         line('Charges quotidiennes', loss(sum.charges), 'neg'),
         sum.waterSpent ? line('Arrosage', loss(sum.waterSpent), 'neg') : null,
         sum.loanPaid ? line('Prêt remboursé', loss(sum.loanPaid), 'neg') : null,
@@ -293,6 +399,9 @@ export function createPanel(app) {
           : null,
       ),
     );
+
+    const proc = processingSection(sum, f);
+    if (proc) statsBody.append(proc);
 
     // Objectifs du niveau
     const [t2, t3] = lvl.starThresholds;
@@ -340,7 +449,7 @@ export function createPanel(app) {
 
   function onEvent(ev) {
     // Toute modification d'argent ou de saison peut changer l'état des boutons et le bilan.
-    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory'].includes(ev.type)) refresh();
+    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'contestProgress', 'contestAwarded', 'treeRemoved'].includes(ev.type)) refresh();
   }
 
   return {

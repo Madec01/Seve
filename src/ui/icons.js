@@ -1,7 +1,7 @@
 // Icônes de l'interface : planche assets/sprites/ui/icons.png (générée par generate-icons.py)
 // et sprites de l'atlas (cultures, animaux, bâtiments) convertis en petites images.
 
-import { drawSprite, spriteSize } from '../render/atlas.js';
+import { decorSprite, drawSprite, outfitSprite, productSprite, spriteSize, SPRITES } from '../render/atlas.js';
 import { el } from './dom.js';
 
 const POS = {
@@ -79,6 +79,10 @@ export function sprite(name, cls = 'sprite--md', opts = {}) {
 
 // Sprites représentatifs des investissements et des cultures.
 export const INVESTMENT_SPRITES = {
+  goat: 'animal.goat',
+  jamWorkshop: 'building.jamworkshop',
+  dairy: 'building.dairy',
+  mill: 'building.windmill',
   chickenCoop: 'animal.chicken',
   beehive: 'beehive',
   roadsideStand: 'stall.cart',
@@ -90,11 +94,93 @@ export const INVESTMENT_SPRITES = {
 };
 
 export function cropIcon(cropId, cls = 'sprite--md') {
-  return sprite(`crop.${cropId}.icon`, cls);
+  return spriteAny([`crop.${cropId}.icon`, `tree.${cropId}.icon`, `crop.${cropId}.4`], cls, 'seed');
 }
 
 export function investmentIcon(id, cls = 'sprite--md') {
-  return sprite(INVESTMENT_SPRITES[id] || 'sign', cls);
+  const fallback = { goat: ['animal.sheep'], jamWorkshop: ['product.jam', 'product.strawberryJam', 'building.shed'], dairy: ['product.cheese', 'product.cowCheese', 'building.shed'], mill: ['product.flour', 'sack.wheat', 'building.shed'] }[id] || [];
+  return spriteAny([INVESTMENT_SPRITES[id], ...fallback, 'sign'], cls, 'coin');
+}
+
+// ── Sprites v3 (noms encore susceptibles de bouger : on essaie plusieurs noms) ─────
+/** Le sprite existe-t-il dans l'atlas (planche chargée) ? */
+export function hasSprite(name) {
+  return !!name && Object.prototype.hasOwnProperty.call(SPRITES, name) && (!images || !SPRITES[name].sheet || !!images[SPRITES[name].sheet] || !!SPRITES[name].layers);
+}
+
+/**
+ * Premier sprite connu d'une liste de noms ; sinon, une icône de la planche de l'interface
+ * (`fallbackIcon`), pour que l'interface reste lisible même sans le dessin attendu.
+ */
+export function spriteAny(names, cls = 'sprite--md', fallbackIcon = 'info', opts = {}) {
+  for (const n of names) if (hasSprite(n)) return sprite(n, cls, opts);
+  const size = /--(xs|sm)\b/.test(cls) ? 'sm' : /--(card|deco|avatar|hero|lg)\b/.test(cls) ? 'lg' : 'md';
+  return icon(fallbackIcon, size, `ico--fallback ${cls.replace(/sprite--/g, 'ico-as-')}`);
+}
+
+/** Icône d'un produit transformé (confiture, jus, fromage, farine, pain) : nom donné par l'atlas. */
+export function productIcon(productId, cls = 'sprite--md') {
+  const name = productSprite(productId);
+  const img = spriteAny([name, 'product.flour' === name ? 'sack.wheat' : null].filter(Boolean), cls, 'harvest');
+  // Fromage de chèvre : même meule que le fromage de vache, teintée.
+  if (productId === 'goatCheese' && name === productSprite('cowCheese')) img.classList.add('is-goat-tint');
+  return img;
+}
+
+/** Icône de l'entrée d'une recette : culture (récolte) ou animal (lait). */
+export function inputIcon(input, cls = 'sprite--sm') {
+  if (input === 'cow' || input === 'goat') return spriteAny([`product.milk.${input}`, input === 'cow' ? 'milk.bottle' : 'product.milk.goat', INVESTMENT_SPRITES[input]], cls, 'harvest');
+  return cropIcon(input, cls);
+}
+
+const PERK_SPRITES = {
+  almanac: ['perk.book'],
+  startPurse: ['perk.coin'],
+  goodSeeds: ['perk.seeds'],
+  goodNeighbor: ['perk.barn'],
+  greenThumb: ['perk.clover', 'perk.wateringcan'],
+  haggler: ['perk.coin'],
+  surveyor: ['perk.compost'],
+  frugal: ['perk.coin'],
+  grandmaRecipes: ['perk.book', 'product.jam'],
+  famousStand: ['perk.basket', 'stall.cart'],
+  artisan: ['product.jam', 'perk.barn'],
+  orchardist: ['tree.apple.icon', 'crop.apple.icon'],
+  frostInsurance: ['perk.wateringcan'],
+  seedMerchant: ['perk.seeds'],
+};
+const PERK_FALLBACK = { almanac: 'sunny', startPurse: 'coin', goodNeighbor: 'bill', frugal: 'coin', frostInsurance: 'winter', haggler: 'coin' };
+
+export function perkIcon(perkId, cls = 'sprite--md') {
+  return spriteAny([`icon.perk.${perkId}`, `perk.${perkId}`, ...(PERK_SPRITES[perkId] || [])], cls, PERK_FALLBACK[perkId] || 'star');
+}
+
+/** Icône d'un succès ; `done` = faux : version grisée (classe CSS). */
+export function achievementIcon(achId, done = true, cls = 'sprite--md', stars = 0) {
+  const metal = stars ? 'gold' : 'silver';
+  const img = spriteAny([`icon.ach.${achId}`, `icon.trophy.${metal}`, 'icon.trophy.gold', 'icon.medal'], cls, 'star');
+  if (!done) img.classList.add('is-locked-icon');
+  return img;
+}
+
+/** Petite pièce d'écu (monnaie décorative). */
+export function ecuIcon(cls = 'sprite--sm') {
+  return spriteAny(['icon.ecu'], cls, 'coin');
+}
+
+/** Icône d'un objet de personnalisation (décor, allée, clôture, tenue) : noms donnés par l'atlas. */
+export function cosmeticIcon(item, cls = 'sprite--md') {
+  const id = typeof item === 'string' ? item : item?.id;
+  if (!id) return icon('info', 'md');
+  if (id.startsWith('outfit.')) return outfitIcon(id, cls);
+  const fb = id.startsWith('flowers') ? 'spring' : id.startsWith('path') ? 'seed' : 'star';
+  // Allées et clôtures : aperçus « decor.path.* » / « decor.fence.* » de l'atlas ; objets : decorSprite.
+  return spriteAny([decorSprite(id), `decor.${id}`].filter(Boolean), cls, fb);
+}
+
+/** Aperçu d'une tenue du fermier (outfitSprite de l'atlas). */
+export function outfitIcon(outfitId, cls = 'sprite--md') {
+  return spriteAny([outfitSprite(outfitId), 'farmer'], cls, 'star');
 }
 
 /**

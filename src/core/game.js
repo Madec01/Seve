@@ -7,33 +7,50 @@
 // l'ordre, autant de fois que nécessaire (un grand dt traite plusieurs jours d'affilée).
 //
 // Fin de journée (le soir) :
-//   si c'est le dernier jour de la saison → fermage :
-//     argent < fermage  → faillite (status 'bankrupt', événement bankrupt), plus rien ne bouge ;
-//     sinon on paie      → billPaid ; après le fermage d'hiver → victory (status 'victory').
+//   (v3) jour limite du concours (niveau 12) → remise des prix (contestAwarded), avant le fermage ;
+//   si c'est le dernier jour de la saison :
+//     (v3) filets de sécurité des ateliers : dernier jour de l'année → tout ce qui est en cours est
+//          vendu en l'état (processingSoldRaw, raison 'yearEnd') ; sinon, si l'argent manque pour le
+//          fermage → vendu en l'état (raison 'rent') ;
+//     fermage : argent < fermage  → faillite (status 'bankrupt', événement bankrupt), plus rien ne bouge ;
+//               sinon on paie      → billPaid ; après le fermage d'hiver → victory (status 'victory').
 //
 // Aube (dans cet ordre) :
-//   1. pousse des cultures d'après l'arrosage et la météo de la veille (ruches : bonus hors hiver,
-//      canicule : 0 si non arrosée), puis remise à zéro de l'arrosage de toutes les parcelles ;
+//   1. pousse des cultures d'après l'arrosage et la météo de la veille (ruches et « Main verte » :
+//      bonus hors hiver ; canicule : 0 si non arrosée ; pomme de terre : dryGrowth / dryHeatwaveGrowth),
+//      (v3) pousse des arbres (croissance, puis fruits ; dormance en hiver),
+//      puis remise à zéro de l'arrosage de toutes les parcelles ;
 //   2. passage au jour suivant ; si une saison commence → seasonStart ;
-//      si c'est le 1er jour d'hiver → gel des cultures non résistantes (frost) ;
+//      si c'est le 1er jour d'hiver → gel des cultures non résistantes (frost ; les arbres ne gèlent pas ;
+//      « Assurance gel » : prix des graines gelées remboursé) ;
 //   3. nouvelle météo : aujourd'hui = la prévision d'hier, nouvelle prévision pour demain ;
-//   4. maladie (si aube pluvieuse et rotChance > 0) : chaque culture peut pourrir (rot) ;
-//   5. pluie / orage : toutes les parcelles plantées sont arrosées ;
+//   4. maladie (si aube pluvieuse et rotChance > 0) : chaque culture peut pourrir, et les pommes mûres (rot) ;
+//   5. pluie / orage : toutes les parcelles plantées sont arrosées (pas les arbres) ;
 //   6. nouveau cours du marché (niveau « marché fou ») ;
-//   7. arrosage automatique : N parcelles plantées, non mûres, non arrosées (coût d'arrosage éventuel) ;
-//   8. revenus des investissements (valeurs de la saison du jour ; orage : pas de revenu de l'étal ;
+//   7. arrosage automatique : N parcelles plantées, non mûres, non arrosées, qui en ont besoin
+//      aujourd'hui (ni arbres, ni pommes de terre hors canicule) ; coût d'arrosage éventuel ;
+//   8. (v3) ateliers : chaque place avance d'une aube ; les produits prêts sont vendus (productSold) ;
+//   9. revenus des investissements (valeurs de la saison du jour ; orage : pas de revenu de l'étal ;
 //      tonte des moutons à l'aube du dernier jour de printemps, d'été et d'automne) ;
-//   9. charges quotidiennes (ferme + entretien − panneaux solaires, minimum 0) ;
-//  10. mensualité du prêt (aube du jour loan.first, puis tous les loan.every jours) ;
-//  11. événements : weather, dawn, moneyChanged, puis seasonWarning (2 jours avant un changement).
+//      (v3) le lait des vaches puis des chèvres remplit les places libres de la fromagerie allumée
+//      (ces unités ne rapportent rien aujourd'hui : processingStarted) ;
+//  10. charges quotidiennes (ferme − « Ferme économe » + entretien − panneaux solaires, minimum 0) ;
+//  11. mensualité du prêt (aube du jour loan.first, puis tous les loan.every jours) ;
+//  12. événements : (contestProgress,) weather, dawn, moneyChanged, puis seasonWarning (2 jours avant un changement).
 //
 // L'argent peut devenir négatif uniquement par les charges de l'aube (charges, arrosage
 // automatique, prêt). Les achats et plantations exigent d'avoir la somme.
+//
+// v3 : les bonus permanents de la partie (state.perks, copiés au lancement) sont lus par perkValue()
+// (src/core/perks.js). Avec perks = {}, les niveaux 1 à 8 se jouent exactement comme en v2 (test de
+// parité) : aucune nouvelle règle, aucun tirage aléatoire supplémentaire.
 
 import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEATHER_TYPES } from '../data/balance.js';
 import { getInvestment } from '../data/investments.js';
-import { CROPS, getCrop } from '../data/crops.js';
+import { getCrop, isTreeCrop } from '../data/crops.js';
 import { getLevel, yearLength } from '../data/levels.js';
+import { getPerk, perkMaxRank } from '../data/perks.js';
+import { getProduct, productsFor, recipeActive, recipeFor, PRODUCTS } from '../data/products.js';
 import { createRngState, stream } from './rng.js';
 import {
   advanceDay,
@@ -45,11 +62,12 @@ import {
   tomorrowSeasonIndex,
 } from './calendar.js';
 import { drawWeather, isRainy, weatherWaters } from './weather.js';
-import { initialMarket, levelCrops, marketMultiplier, updateMarket } from './market.js';
+import { initialMarket, marketMultiplier, updateMarket } from './market.js';
 import {
   checkBuy,
   dailyCharges,
   dawnIncomes,
+  growthBonus,
   levelInvestments,
   loanDueOn,
   loanPaymentsLeft,
@@ -67,27 +85,67 @@ import {
   applyRot,
   clearPlot,
   createPlots,
-  currentUnitPrice,
   growPlots,
   harvestValue,
   isMature,
+  needsWaterToday,
   plotUnlockCost,
   rainWater,
+  rawUnitPrice,
   sprinklerWater,
   stageOf,
   wateredRate,
   wouldFatigue,
+  yieldFactor,
 } from './farm.js';
-import { addHarvest, addLost, addStat, buildSummary, createStats } from './stats.js';
+import {
+  fruitStage,
+  isFruitReady,
+  isTreeAdult,
+  isTreePlot,
+  pollinationFactor,
+  setTree,
+  treeForecast,
+  treeGrowDays,
+  treeSeedCost,
+  treeStage,
+} from './trees.js';
+import {
+  PROCESSING_IDS,
+  advanceProcessing,
+  capacity,
+  capacityAt,
+  ensureBuilding,
+  fillMilk,
+  isProcessingBuilding,
+  processingTotals,
+  productSaleValue,
+  productValueNow,
+  sellRaw,
+  targetFor,
+  tryProcessHarvest,
+} from './processing.js';
+import { awardContest, contestChanges, contestDueTonight, contestGoals, contestSnapshot, initialContest, prizeFor } from './contest.js';
+import { gameCrops, hasPerks, normalizeRunPerks, perkValue } from './perks.js';
+import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
 import { createEmitter } from './events.js';
 
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
-/** Nouvelle partie. */
-export function createGame({ levelId = 1, seed = Date.now() } = {}) {
+/** Dernier niveau qui existait en v1 (sauvegardes à migrer). */
+const V1_MAX_LEVEL = 8;
+
+/**
+ * Nouvelle partie.
+ * @param {object} opts { levelId, seed, perks } — perks : bonus permanents { [perkId]: rang }
+ *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine)
+ */
+export function createGame({ levelId = 1, seed = Date.now(), perks = {} } = {}) {
   const level = getLevel(levelId);
   if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
-  const crops = levelCrops(level, CROPS);
+  const runPerks = normalizeRunPerks(perks);
+  const crops = gameCrops(level, runPerks);
+  const startMoney = level.startMoney + perkValue({ perks: runPerks }, 'startMoney');
   const state = {
     version: STATE_VERSION,
     levelId: level.id,
@@ -95,8 +153,8 @@ export function createGame({ levelId = 1, seed = Date.now() } = {}) {
     status: 'playing',
     speed: DEFAULT_SPEED,
     time: { day: 1, seasonIndex: 0, dayOfSeason: 1, elapsed: 0 },
-    money: level.startMoney,
-    startMoney: level.startMoney,
+    money: startMoney,
+    startMoney,
     weather: { today: null, tomorrow: null },
     plots: createPlots(level),
     plotsBought: 0,
@@ -106,20 +164,61 @@ export function createGame({ levelId = 1, seed = Date.now() } = {}) {
     stats: { year: createStats(), season: createStats() },
     lastDawn: null,
     result: null,
+    perks: runPerks,
+    processing: {},
+    contest: initialContest(level),
   };
+  for (const idx of level.startTrees || []) setTree(state, state.plots[idx], 'apple', true);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);
   state.market = initialMarket(state, level, crops);
   return wrap(state);
 }
 
-/** Reprise d'une partie depuis un objet issu de game.serialize(). */
+/**
+ * Migre une sauvegarde v1 (niveaux 1 à 8, sans bonus) vers la v2 : bonus vides, fruits à 0, ateliers
+ * vides, pas de concours, nouveaux compteurs à 0. Renvoie un NOUVEL objet ; une v2 est copiée telle quelle.
+ */
+export function migrateState(saved) {
+  const s = JSON.parse(JSON.stringify(saved));
+  if (s.version === 1) {
+    s.perks = {};
+    if (Array.isArray(s.plots)) {
+      for (const p of s.plots) {
+        if (!p || typeof p !== 'object') continue;
+        if (p.fruit === undefined) p.fruit = 0;
+        if (p.insured === undefined) p.insured = false;
+      }
+    }
+    s.processing = {};
+    s.contest = null;
+    if (s.stats && typeof s.stats === 'object') {
+      for (const k of ['year', 'season']) {
+        const st = s.stats[k];
+        if (st && typeof st === 'object') {
+          for (const [key, v] of Object.entries(createStats())) if (st[key] === undefined) st[key] = v;
+          if (k === 'year' && s.stats.season && Number.isFinite(s.stats.season.harvestIncome)) {
+            st.bestSeasonHarvestIncome = Math.max(st.bestSeasonHarvestIncome || 0, s.stats.season.harvestIncome);
+          }
+        }
+      }
+      if (s.stats.season && Number.isFinite(s.stats.season.harvestIncome)) s.stats.season.bestSeasonHarvestIncome = s.stats.season.harvestIncome;
+    }
+    if (s.lastDawn && typeof s.lastDawn === 'object' && !s.lastDawn.milkToDairy) s.lastDawn.milkToDairy = [];
+    s.version = 2;
+  }
+  return s;
+}
+
+/** Reprise d'une partie depuis un objet issu de game.serialize() (v2, ou v1 migrée). */
 export function loadGame(saved) {
   if (!saved || typeof saved !== 'object') throw new Error('Sauvegarde invalide');
-  if (saved.version !== STATE_VERSION) throw new Error(`Version de sauvegarde incompatible : ${saved.version}`);
+  if (saved.version !== STATE_VERSION && saved.version !== 1) throw new Error(`Version de sauvegarde incompatible : ${saved.version}`);
   const level = getLevel(saved.levelId);
   if (!level) throw new Error(`Niveau inconnu : ${saved.levelId}`);
-  const state = JSON.parse(JSON.stringify(saved));
+  // Une sauvegarde v1 ne peut venir que des niveaux 1 à 8 (les niveaux 9 à 12 sont nés en v3).
+  if (saved.version === 1 && level.id > V1_MAX_LEVEL) throw new Error('Sauvegarde invalide : niveau inconnu en v1');
+  const state = migrateState(saved);
   state.levelId = level.id; // « 2 » (texte) → 2
   const problem = checkState(state, level);
   if (problem) throw new Error(`Sauvegarde invalide : ${problem}`);
@@ -133,6 +232,7 @@ export function loadGame(saved) {
 function checkState(s, level) {
   const num = (v) => typeof v === 'number' && Number.isFinite(v);
   const int = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+  const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   if (!['playing', 'bankrupt', 'victory'].includes(s.status)) return 'statut';
   if (!SPEEDS.includes(s.speed)) return 'vitesse';
   if (!num(s.money) || !num(s.startMoney)) return 'argent';
@@ -143,6 +243,12 @@ function checkState(s, level) {
   if (!int(t.day, 1, yearLength(level))) return 'jour';
   if (!num(t.elapsed) || t.elapsed < 0 || t.elapsed > DAY_SECONDS) return 'heure';
   if (!s.weather || !WEATHER_TYPES[s.weather.today] || !WEATHER_TYPES[s.weather.tomorrow]) return 'météo';
+  // Bonus de la partie (v3).
+  if (!obj(s.perks)) return 'bonus';
+  for (const [id, rank] of Object.entries(s.perks)) {
+    const perk = getPerk(id);
+    if (!perk || !int(rank, 1, perkMaxRank(perk))) return `bonus ${id}`;
+  }
   if (!Array.isArray(s.plots) || s.plots.length !== level.gridCols * level.gridRows) return 'parcelles';
   for (const p of s.plots) {
     if (!p || typeof p !== 'object' || typeof p.unlocked !== 'boolean') return 'parcelle';
@@ -150,6 +256,9 @@ function checkState(s, level) {
     if (p.cropId && !p.unlocked) return 'culture sur une parcelle fermée';
     if (!num(p.growth) || p.growth < 0) return 'pousse';
     if (p.lastHarvested != null && !getCrop(p.lastHarvested)) return 'culture précédente';
+    if (!num(p.fruit) || p.fruit < 0) return 'fruits';
+    if (p.fruit > 0 && !(p.cropId && isTreeCrop(getCrop(p.cropId)))) return 'fruits sans arbre';
+    if (typeof p.insured !== 'boolean') return 'assurance';
   }
   if (!int(s.plotsBought, 0, s.plots.length)) return 'parcelles achetées';
   if (!s.investments || typeof s.investments !== 'object') return 'investissements';
@@ -159,14 +268,39 @@ function checkState(s, level) {
   }
   if (!s.market || typeof s.market !== 'object' || Object.values(s.market).some((m) => !num(m))) return 'marché';
   if (!s.rng || !['weather', 'market', 'rot'].every((k) => Number.isInteger(s.rng[k]))) return 'aléatoire';
-  const statsOk = (st) => st && typeof st === 'object' && st.cropsHarvested && st.cropsLost && num(st.harvestIncome);
+  const statsOk = (st) =>
+    st && typeof st === 'object' && st.cropsHarvested && st.cropsLost && num(st.harvestIncome)
+    && obj(st.productsSold) && ['productIncome', 'rawSales', 'frostRefund', 'contestPrize', 'bestSeasonHarvestIncome'].every((k) => num(st[k]))
+    && (st.minMoneyAfterRent === null || num(st.minMoneyAfterRent));
   if (!s.stats || !statsOk(s.stats.year) || !statsOk(s.stats.season)) return 'statistiques';
+  // Ateliers (v3) : une entrée par atelier possédé, places ≤ capacité, produits connus.
+  if (!obj(s.processing)) return 'ateliers';
+  for (const [id, b] of Object.entries(s.processing)) {
+    if (!isProcessingBuilding(id) || !(s.investments[id] > 0)) return `atelier ${id}`;
+    if (!obj(b) || typeof b.on !== 'boolean' || !Array.isArray(b.places)) return `atelier ${id}`;
+    if (b.places.length > capacityAt(s, id, s.investments[id])) return `places de l'atelier ${id}`;
+    for (const place of b.places) {
+      if (place === null) continue;
+      const product = obj(place) && getProduct(place.productId);
+      if (!product || product.building !== id) return `produit de l'atelier ${id}`;
+      if (!int(place.daysLeft, 1, 99) || !num(place.rawValue) || !num(place.yieldFactor)) return `place de l'atelier ${id}`;
+      if (!['harvest', 'animal'].includes(place.source) || typeof place.input !== 'string') return `place de l'atelier ${id}`;
+    }
+  }
+  for (const id of PROCESSING_IDS) if (s.investments[id] > 0 && !s.processing[id]) return `atelier ${id} absent`;
+  // Concours (v3).
+  if (level.contest) {
+    if (!obj(s.contest) || typeof s.contest.awarded !== 'boolean') return 'concours';
+    if (s.contest.result !== null && !(obj(s.contest.result) && Array.isArray(s.contest.result.goalsMet) && num(s.contest.result.amount))) return 'concours';
+  } else if (s.contest !== null) return 'concours';
   return null;
 }
 
 function wrap(state) {
   const level = getLevel(state.levelId);
-  const crops = levelCrops(level, CROPS);
+  const crops = gameCrops(level, state.perks);
+  // Complète les places d'un atelier (sauvegarde plus courte que la capacité : jamais en jeu normal).
+  for (const id of Object.keys(state.processing || {})) ensureBuilding(state, id);
   const emitter = createEmitter();
   const queue = [];
   const push = (type, payload) => queue.push([type, payload]);
@@ -191,11 +325,55 @@ function wrap(state) {
     return Number.isInteger(index) && index >= 0 && index < state.plots.length;
   }
 
-  // ── Fin de journée : fermage ────────────────────────────────────────────────────────
+  /** Prix d'une graine dans cette partie (« Graines sélectionnées », « Arboriste »). */
+  function seedCostOf(crop) {
+    if (isTreeCrop(crop)) return treeSeedCost(state, crop);
+    const factor = perkValue(state, 'seedFactor');
+    return factor === 1 ? crop.seedCost : Math.max(1, Math.round(crop.seedCost * factor));
+  }
+
+  const rateOf = (si) => 1 + growthBonus(state, si);
+
+  /** Remboursement de l'Assurance gel, avant le gel : cultures non résistantes semées assurées. */
+  function frostRefundAmount() {
+    let sum = 0;
+    for (const p of state.plots) {
+      const crop = p.cropId ? getCrop(p.cropId) : null;
+      if (crop && !crop.frostHardy && p.insured) sum += seedCostOf(crop);
+    }
+    return sum;
+  }
+
+  function pushContestChanges(before) {
+    for (const c of contestChanges(state, level, before)) push('contestProgress', c);
+  }
+
+  /** Vend en l'état tout ce qui est en cours dans les ateliers (filets de sécurité). */
+  function sellAllRaw(reason) {
+    for (const id of PROCESSING_IDS) {
+      const { amount, count } = sellRaw(state, id);
+      if (count === 0) continue;
+      addStat(state, 'rawSales', amount);
+      changeMoney(amount);
+      push('processingSoldRaw', { buildingId: id, amount, count, reason });
+    }
+  }
+
+  // ── Fin de journée : concours, filets de sécurité, fermage ──────────────────────────
   function endOfDay() {
+    if (contestDueTonight(state, level)) {
+      const award = awardContest(state, level);
+      if (award.amount > 0) {
+        addStat(state, 'contestPrize', award.amount);
+        changeMoney(award.amount);
+      }
+      push('contestAwarded', award);
+    }
     if (!isLastDayOfSeason(state, level)) return;
     const sid = seasonId(state);
-    const rent = rentFor(level, state.time.seasonIndex);
+    const rent = rentFor(level, state.time.seasonIndex, state);
+    if (isLastSeason(state)) sellAllRaw('yearEnd');
+    else if (state.money < rent) sellAllRaw('rent');
     if (state.money < rent) {
       state.status = 'bankrupt';
       state.time.elapsed = DAY_SECONDS; // la partie s'arrête le soir du dernier jour
@@ -205,6 +383,7 @@ function wrap(state) {
     }
     addStat(state, 'rentsPaid', rent);
     changeMoney(-rent);
+    noteRentPaid(state);
     push('billPaid', { amount: rent, seasonId: sid, summary: buildSummary(state, sid, { amount: rent }) });
     if (isLastSeason(state)) {
       const [t2, t3] = level.starThresholds;
@@ -221,8 +400,9 @@ function wrap(state) {
     const moneyBefore = state.money;
     const prevSeason = state.time.seasonIndex;
     const prevWeather = state.weather.today;
+    const extraIncomes = []; // remboursement du gel, produits vendus (avant les revenus quotidiens)
 
-    // 1. Pousse (veille) puis remise à zéro de l'arrosage.
+    // 1. Pousse (veille), arbres compris, puis remise à zéro de l'arrosage.
     growPlots(state, prevSeason, prevWeather);
 
     // 2. Nouveau jour, nouvelle saison, gel.
@@ -232,9 +412,15 @@ function wrap(state) {
       state.stats.season = createStats();
       push('seasonStart', { seasonId: sid, seasonIndex: state.time.seasonIndex });
       if (sid === 'winter') {
+        // « Assurance gel » : graines remboursées pour les cultures gelées qui avaient été semées à temps.
+        const refund = perkValue(state, 'frostRefund') ? frostRefundAmount() : 0;
         const lost = applyFrost(state);
         addLost(state, 'frost', lost.length);
-        push('frost', { lostPlots: lost.map((l) => l.plotIndex), lost });
+        if (refund > 0) {
+          addStat(state, 'frostRefund', refund);
+          extraIncomes.push({ source: 'frostInsurance', amount: refund, owned: 1, kind: 'refund' });
+        }
+        push('frost', { lostPlots: lost.map((l) => l.plotIndex), lost, refund });
       }
     }
 
@@ -257,14 +443,26 @@ function wrap(state) {
     updateMarket(state, level, crops);
 
     // 7. Arrosage automatique.
-    const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level));
+    const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level), today);
     const waterCost = sprinkled.length * level.modifiers.waterCost;
 
-    // 8. Revenus.
-    const incomes = dawnIncomes(state, level, state.time.seasonIndex, today, isLastDayOfSeason(state, level));
-    const incomeTotal = incomes.reduce((s, i) => s + i.amount, 0);
+    // 8. Ateliers : les produits prêts sont vendus.
+    const contestBefore = contestSnapshot(state, level);
+    for (const sale of advanceProcessing(state)) {
+      addProductSold(state, sale.productId, sale.amount);
+      extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: owned(state, sale.buildingId), kind: 'processed', productId: sale.productId });
+      push('productSold', sale);
+    }
 
-    // 9-10. Charges et prêt.
+    // 9. Revenus ; le lait part à la fromagerie.
+    const incomes = dawnIncomes(state, level, state.time.seasonIndex, today, isLastDayOfSeason(state, level));
+    const milk = fillMilk(state, level, incomes, sid);
+    for (const st of milk.started) push('processingStarted', st);
+    const investmentTotal = incomes.reduce((s, i) => s + i.amount, 0);
+    const allIncomes = [...extraIncomes, ...incomes];
+    const incomeTotal = allIncomes.reduce((s, i) => s + i.amount, 0);
+
+    // 10-11. Charges et prêt.
     const fixed = dailyCharges(state, level);
     const loanPayment = loanDueOn(level, state.time.day) ? level.modifiers.loan.payment : 0;
     const chargesDetail = [{ source: 'farm', amount: fixed }];
@@ -272,22 +470,24 @@ function wrap(state) {
     if (loanPayment > 0) chargesDetail.push({ source: 'loan', amount: loanPayment });
     const charges = fixed + waterCost + loanPayment;
 
-    addStat(state, 'investmentIncome', incomeTotal);
+    addStat(state, 'investmentIncome', investmentTotal);
     addStat(state, 'charges', fixed);
     addStat(state, 'waterSpent', waterCost);
     addStat(state, 'loanPaid', loanPayment);
     state.money += incomeTotal - charges;
 
-    // 11. Événements.
+    // 12. Événements.
+    pushContestChanges(contestBefore);
     const dawnInfo = {
       day: state.time.day,
       seasonId: sid,
       weather: today,
-      incomes,
+      incomes: allIncomes,
       charges,
       chargesDetail,
       sprinkled,
       net: incomeTotal - charges,
+      milkToDairy: milk.milkToDairy,
     };
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
     push('weather', { today, tomorrow: state.weather.tomorrow });
@@ -322,6 +522,12 @@ function wrap(state) {
     };
   }
 
+  function ownedBuilding(buildingId) {
+    if (!isProcessingBuilding(buildingId)) return fail('Atelier inconnu.');
+    if (!state.processing[buildingId] || owned(state, buildingId) <= 0) return fail(`Vous n'avez pas encore « ${getInvestment(buildingId).name} ».`);
+    return null;
+  }
+
   const actions = {
     plant: act((plotIndex, cropId) => {
       if (!playing()) return fail(ENDED);
@@ -333,16 +539,24 @@ function wrap(state) {
       if (!crop || !crops.includes(crop)) return fail('Culture inconnue.');
       const sid = seasonId(state);
       if (!crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
-      if (state.money < crop.seedCost) return fail(notEnoughMoney(crop.seedCost - state.money));
-      p.cropId = crop.id;
-      p.growth = 0;
-      p.fatigued = wouldFatigue(level, p, crop.id);
-      p.watered = weatherWaters(state.weather.today); // il pleut : la graine est arrosée d'office
-      addStat(state, 'seedsSpent', crop.seedCost);
+      const cost = seedCostOf(crop);
+      if (state.money < cost) return fail(notEnoughMoney(cost - state.money));
+      if (isTreeCrop(crop)) {
+        setTree(state, p, crop.id);
+      } else {
+        // « Assurance gel » : assurée si elle a le temps de mûrir avant le gel (pas de semis malgré l'avertissement).
+        const insured = !!perkValue(state, 'frostRefund') && !freezes(crop, Math.ceil(crop.growDays / wateredRate(state, state.time.seasonIndex) - EPSILON));
+        p.cropId = crop.id;
+        p.growth = 0;
+        p.fatigued = wouldFatigue(level, p, crop.id);
+        p.watered = weatherWaters(state.weather.today); // il pleut : la graine est arrosée d'office
+        p.insured = insured;
+      }
+      addStat(state, 'seedsSpent', cost);
       addStat(state, 'cropsPlanted', 1);
-      changeMoney(-crop.seedCost);
-      push('planted', { plotIndex, cropId: crop.id, amount: crop.seedCost, fatigue: p.fatigued, watered: p.watered });
-      return { ok: true, cost: crop.seedCost, fatigue: p.fatigued };
+      changeMoney(-cost);
+      push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered });
+      return { ok: true, cost, fatigue: p.fatigued };
     }),
 
     water: act((plotIndex) => {
@@ -351,7 +565,10 @@ function wrap(state) {
       const p = state.plots[plotIndex];
       if (!p.unlocked) return fail('Cette parcelle n\'est pas encore ouverte.');
       if (!p.cropId) return fail('Rien à arroser ici.');
+      const crop = getCrop(p.cropId);
+      if (isTreeCrop(crop)) return fail('Le pommier n\'a pas besoin d\'eau.');
       if (isMature(p)) return fail('Cette culture est mûre : récoltez-la !');
+      if (!needsWaterToday(crop, state.weather.today)) return fail('Pas besoin : elle pousse sans arrosage.');
       if (p.watered) return fail('Déjà arrosée aujourd\'hui.');
       const cost = level.modifiers.waterCost;
       if (cost > 0 && state.money < cost) return fail(notEnoughMoney(cost - state.money));
@@ -367,20 +584,44 @@ function wrap(state) {
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
       if (!p.cropId) return fail('Rien à récolter ici.');
+      const tree = isTreePlot(p);
       if (!isMature(p)) {
+        if (tree) return fail(treeNotReadyReason(p));
         const left = plotDaysLeft(p);
         return fail(`Pas encore mûre (encore ${left} jour${left > 1 ? 's' : ''}).`);
       }
       const cropId = p.cropId;
-      const amount = harvestValue(state, level, p);
+      const raw = harvestValue(state, level, p);
+      const yf = yieldFactor(state, level, p);
       const fatigue = p.fatigued;
-      p.lastHarvested = cropId;
-      clearPlot(p);
+      const contestBefore = contestSnapshot(state, level);
+      const processed = tryProcessHarvest(state, cropId, raw, yf);
+      const amount = processed ? 0 : raw;
+      if (tree) {
+        p.fruit = 0;
+      } else {
+        p.lastHarvested = cropId;
+        clearPlot(p);
+      }
       addStat(state, 'harvestIncome', amount);
       addHarvest(state, cropId);
+      noteSeasonHarvest(state);
       changeMoney(amount);
-      push('harvested', { plotIndex, cropId, amount, fatigue });
-      return { ok: true, amount, cropId };
+      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed });
+      if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
+      pushContestChanges(contestBefore);
+      return { ok: true, amount, cropId, tree, processed };
+    }),
+
+    removeTree: act((plotIndex) => {
+      if (!playing()) return fail(ENDED);
+      if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
+      const p = state.plots[plotIndex];
+      if (!isTreePlot(p)) return fail('Il n\'y a pas d\'arbre ici.');
+      clearPlot(p);
+      p.lastHarvested = null;
+      push('treeRemoved', { plotIndex });
+      return { ok: true };
     }),
 
     unlockPlot: act((plotIndex) => {
@@ -404,11 +645,34 @@ function wrap(state) {
       const check = checkBuy(state, level, investmentId);
       if (!check.ok) return check;
       state.investments[investmentId] = owned(state, investmentId) + 1;
+      if (isProcessingBuilding(investmentId)) ensureBuilding(state, investmentId);
       addStat(state, 'investmentsSpent', check.cost);
       changeMoney(-check.cost);
       const n = state.investments[investmentId];
       push('purchased', { investmentId, owned: n, cost: check.cost });
       return { ok: true, owned: n, cost: check.cost };
+    }),
+
+    setProcessing: act((buildingId, on) => {
+      if (!playing()) return fail(ENDED);
+      const bad = ownedBuilding(buildingId);
+      if (bad) return bad;
+      const b = state.processing[buildingId];
+      b.on = !!on;
+      push('processingToggled', { buildingId, on: b.on });
+      return { ok: true, on: b.on };
+    }),
+
+    sellProcessing: act((buildingId) => {
+      if (!playing()) return fail(ENDED);
+      const bad = ownedBuilding(buildingId);
+      if (bad) return bad;
+      const { amount, count } = sellRaw(state, buildingId);
+      if (count === 0) return fail('Rien à vendre : l\'atelier est vide.');
+      addStat(state, 'rawSales', amount);
+      changeMoney(amount);
+      push('processingSoldRaw', { buildingId, amount, count, reason: 'player' });
+      return { ok: true, amount, count };
     }),
 
     setSpeed: act((speed) => {
@@ -422,7 +686,65 @@ function wrap(state) {
   function plotDaysLeft(p) {
     const crop = getCrop(p.cropId);
     if (!crop || isMature(p)) return 0;
+    if (isTreeCrop(crop)) return forecastOf(p).fruitDaysLeft;
     return Math.max(1, Math.ceil((crop.growDays - p.growth) / wateredRate(state, state.time.seasonIndex) - EPSILON));
+  }
+
+  function forecastOf(p) {
+    return treeForecast(state, level, getCrop(p.cropId), p, rateOf);
+  }
+
+  function treeNotReadyReason(p) {
+    const f = forecastOf(p);
+    if (f.fruitDaysLeft === null) return 'Pas de pommes avant la fin de l\'année.';
+    return `Pas encore de pommes (encore ${f.fruitDaysLeft} jour${f.fruitDaysLeft > 1 ? 's' : ''}).`;
+  }
+
+  function treeInfo(p) {
+    const crop = getCrop(p.cropId);
+    const f = forecastOf(p);
+    const stage = treeStage(state, p);
+    const season = seasonId(state);
+    return {
+      stage,
+      growth: p.growth,
+      growDays: treeGrowDays(state, crop),
+      adultInDays: f.adultInDays,
+      fruit: p.fruit,
+      fruitDays: crop.fruitDays,
+      fruitReady: isFruitReady(p),
+      fruitDaysLeft: f.fruitDaysLeft,
+      fruitStage: stage === 'adult' ? fruitStage(p) : 0,
+      dormant: season === 'winter',
+      blossom: season === 'spring' && stage === 'adult',
+      harvestsLeftEstimate: f.harvests,
+    };
+  }
+
+  /** Atelier qui recevrait cette récolte, pour les fiches : null si aucun atelier possédé ne la transforme. */
+  function processTargetOf(cropId, yf) {
+    const t = targetFor(state, cropId);
+    if (!t || t.product.source !== 'harvest') return null;
+    const b = state.processing[t.buildingId];
+    return {
+      buildingId: t.buildingId,
+      productId: t.product.id,
+      productName: t.product.name,
+      value: productValueNow(state, t.product.id, yf),
+      hasRoom: !!b && b.on && b.places.includes(null),
+      on: !!b && b.on,
+    };
+  }
+
+  /** Recette que ce niveau propose pour une culture (atelier possédé : recette de son niveau ; sinon niveau 1). */
+  function levelRecipeFor(cropId) {
+    for (const inv of levelInvestments(level)) {
+      if (!inv.effects.processing) continue;
+      const lvl = owned(state, inv.id);
+      const product = recipeFor(inv.id, Math.max(1, lvl), cropId);
+      if (product && product.source === 'harvest') return { buildingId: inv.id, product, owned: lvl > 0 };
+    }
+    return null;
   }
 
   /** Nombre d'aubes restant avant le gel (Infinity si l'hiver est déjà là). */
@@ -438,20 +760,38 @@ function wrap(state) {
     return !crop.frostHardy && daysNeeded > dawnsBeforeFrost();
   }
 
+  function rentAutoSellTonight(totals) {
+    if (!playing() || totals.count === 0 || !isLastDayOfSeason(state, level)) return false;
+    if (isLastSeason(state)) return true;
+    return state.money < rentFor(level, state.time.seasonIndex, state);
+  }
+
   const query = {
     plot(plotIndex) {
       if (!validPlot(plotIndex)) return null;
       const p = state.plots[plotIndex];
       const crop = p.cropId ? getCrop(p.cropId) : null;
+      const isTree = !!crop && isTreeCrop(crop);
       const mature = !!crop && isMature(p);
       const daysLeft = crop ? plotDaysLeft(p) : 0;
       const unlockCost = p.unlocked ? null : plotUnlockCost(state, level);
+      const needsWater = !!crop && !mature && needsWaterToday(crop, state.weather.today);
       let action = null;
       if (playing()) {
         if (!p.unlocked) action = unlockCost === null ? null : 'unlock';
         else if (!crop) action = 'plant';
         else if (mature) action = 'harvest';
-        else if (!p.watered) action = 'water';
+        else if (!p.watered && needsWater) action = 'water';
+      }
+      const tree = isTree ? treeInfo(p) : null;
+      let stage = 0;
+      let progress = 0;
+      if (isTree) {
+        stage = tree.fruitReady ? 4 : { sapling: 1, young: 2, adult: 3 }[tree.stage];
+        progress = tree.stage === 'adult' ? Math.min(1, p.fruit / tree.fruitDays) : Math.min(1, p.growth / tree.growDays);
+      } else if (crop) {
+        stage = stageOf(p.growth, crop.growDays);
+        progress = Math.min(1, p.growth / crop.growDays);
       }
       return {
         index: plotIndex,
@@ -461,15 +801,19 @@ function wrap(state) {
         unlockCost,
         cropId: p.cropId,
         cropName: crop ? crop.name : null,
-        stage: crop ? stageOf(p.growth, crop.growDays) : 0,
-        progress: crop ? Math.min(1, p.growth / crop.growDays) : 0,
+        stage,
+        progress,
         daysLeft,
         watered: p.watered,
         mature,
         fatigue: p.fatigued,
-        willFreeze: !!crop && !mature && freezes(crop, daysLeft),
+        willFreeze: !!crop && !isTree && !mature && freezes(crop, daysLeft),
         harvestValue: mature ? harvestValue(state, level, p) : null,
         action,
+        kind: crop ? (isTree ? 'tree' : 'crop') : null,
+        tree,
+        needsWater,
+        processTarget: crop ? processTargetOf(crop.id, yieldFactor(state, level, p)) : null,
       };
     },
 
@@ -485,24 +829,50 @@ function wrap(state) {
       return crops
         .filter((c) => c.seasons.includes(sid))
         .map((c) => {
-          const fatigue = plot ? wouldFatigue(level, plot, c.id) : false;
+          const tree = isTreeCrop(c);
+          const seedCost = seedCostOf(c);
+          const fatigue = plot && !tree ? wouldFatigue(level, plot, c.id) : false;
           const factor = fatigue ? 1 - level.modifiers.soilFatigue : 1;
-          const sellPrice = Math.round(currentUnitPrice(state, c) * factor);
-          const daysToMature = Math.ceil(c.growDays / rate - EPSILON);
+          const yf = factor * (tree ? pollinationFactor(state, level, c.id) : 1);
+          const sellPrice = Math.round(rawUnitPrice(state, level, c) * factor * (tree ? pollinationFactor(state, level, c.id) : 1));
+          let daysToMature;
+          let treeData = null;
+          if (tree) {
+            const f = treeForecast(state, level, c, { growth: 0, fruit: 0 }, rateOf);
+            daysToMature = f.fruitDaysLeft;
+            treeData = { fruitDays: c.fruitDays, fruitSeasons: [...c.fruitSeasons], basketPrice: sellPrice, harvestsBeforeYearEnd: f.harvests, adultInDays: f.adultInDays };
+          } else {
+            daysToMature = Math.ceil(c.growDays / rate - EPSILON);
+          }
+          const recipe = levelRecipeFor(c.id);
           return {
             id: c.id,
             name: c.name,
-            seedCost: c.seedCost,
+            seedCost,
             basePrice: c.sellPrice,
             marketMultiplier: marketMultiplier(state, c.id),
             sellPrice,
-            profit: sellPrice - c.seedCost,
-            growDays: c.growDays,
+            profit: tree ? sellPrice * treeData.harvestsBeforeYearEnd - seedCost : sellPrice - seedCost,
+            growDays: tree ? treeGrowDays(state, c) : c.growDays,
             daysToMature,
             frostHardy: c.frostHardy,
             fatigue,
-            willFreeze: freezes(c, daysToMature),
-            canAfford: state.money >= c.seedCost,
+            willFreeze: !tree && freezes(c, daysToMature),
+            canAfford: state.money >= seedCost,
+            kind: tree ? 'tree' : 'crop',
+            product: recipe
+              ? {
+                  buildingId: recipe.buildingId,
+                  productId: recipe.product.id,
+                  name: recipe.product.name,
+                  value: productValueNow(state, recipe.product.id, yf),
+                  days: recipe.product.days,
+                  owned: recipe.owned,
+                }
+              : null,
+            tree: treeData,
+            noWater: !tree && !needsWaterToday(c, 'sunny'),
+            sowAll: !tree,
           };
         });
     },
@@ -511,12 +881,35 @@ function wrap(state) {
       const sid = seasonId(state);
       return levelInvestments(level).map((inv) => {
         const check = playing() ? checkBuy(state, level, inv.id) : fail(ENDED);
+        const n = owned(state, inv.id);
+        let processing = null;
+        if (inv.effects.processing) {
+          const b = state.processing[inv.id];
+          const shown = Math.max(1, n);
+          processing = {
+            level: n,
+            places: capacity(state, inv.id),
+            nextPlaces: n < maxOf(inv) ? capacityAt(state, inv.id, n + 1) : null,
+            on: !!b && b.on,
+            used: b ? b.places.filter(Boolean).length : 0,
+            recipes: productsFor(inv.id).map((pr) => ({
+              input: pr.input,
+              inputName: getCrop(pr.input)?.name ?? getInvestment(pr.input)?.name ?? pr.input,
+              productId: pr.id,
+              productName: pr.name,
+              days: pr.days,
+              value: productValueNow(state, pr.id, 1),
+              active: recipeActive(pr, shown),
+              minLevel: pr.minLevel ?? 1,
+            })),
+          };
+        }
         return {
           id: inv.id,
           name: inv.name,
           description: inv.description,
           kind: inv.kind,
-          owned: owned(state, inv.id),
+          owned: n,
           max: maxOf(inv),
           nextCost: nextCost(state, inv),
           canBuy: check.ok,
@@ -525,12 +918,55 @@ function wrap(state) {
           incomeBySeason: { ...inv.income },
           upkeep: inv.upkeep,
           effects: jsonEffects(inv.effects),
+          category: inv.category,
+          requiresAny: inv.requiresAny ? [...inv.requiresAny] : null,
+          processing,
         };
       });
     },
 
+    processing() {
+      return PROCESSING_IDS.filter((id) => state.processing[id]).map((id) => {
+        const b = state.processing[id];
+        let value = 0;
+        let rawValue = 0;
+        const places = b.places.map((place) => {
+          if (!place) return null;
+          const product = getProduct(place.productId);
+          const v = productSaleValue(state, place);
+          value += v;
+          rawValue += place.rawValue;
+          return { productId: place.productId, productName: product.name, input: place.input, daysLeft: place.daysLeft, days: product.days, value: v, rawValue: place.rawValue };
+        });
+        return { buildingId: id, name: getInvestment(id).name, level: owned(state, id), on: b.on, capacity: capacity(state, id), places, value, rawValue };
+      });
+    },
+
+    contest() {
+      if (!level.contest || !state.contest) return null;
+      const goals = contestGoals(state, level);
+      const c = level.contest;
+      return {
+        deadlineDay: c.deadlineDay,
+        daysLeft: Math.max(0, c.deadlineDay - state.time.day),
+        awarded: state.contest.awarded,
+        result: state.contest.result ? JSON.parse(JSON.stringify(state.contest.result)) : null,
+        prizePerGoal: c.prizePerGoal,
+        bonusAll: c.bonusAll,
+        goals,
+        potentialPrize: prizeFor(level, goals.filter((g) => g.done).map((g) => g.id)),
+      };
+    },
+
+    perks() {
+      return Object.entries(state.perks).map(([id, rank]) => {
+        const perk = getPerk(id);
+        return { id, name: perk.name, rank, description: perk.description };
+      });
+    },
+
     forecast() {
-      return { today: state.weather.today, tomorrow: state.weather.tomorrow };
+      return { today: state.weather.today, tomorrow: state.weather.tomorrow, afterTomorrow: afterTomorrow() };
     },
 
     finance() {
@@ -541,12 +977,13 @@ function wrap(state) {
       const total = yearLength(level);
       const loan = level.modifiers.loan;
       const nextLoan = nextLoanDay(level, state.time.day, total);
+      const totals = processingTotals(state);
       return {
         money: state.money,
         dailyIncome,
         dailyCharges: charges,
         net: dailyIncome - charges,
-        nextBill: { amount: rentFor(level, si), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si] },
+        nextBill: { amount: rentFor(level, si, state), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si] },
         loan: loan
           ? {
               payment: loan.payment,
@@ -558,6 +995,9 @@ function wrap(state) {
           : null,
         priceBonus: priceBonus(state),
         waterCost: level.modifiers.waterCost,
+        processingValue: totals.value,
+        processingRawValue: totals.rawValue,
+        rentAutoSell: rentAutoSellTonight(totals),
       };
     },
 
@@ -572,7 +1012,42 @@ function wrap(state) {
     summary() {
       return buildSummary(state, seasonId(state));
     },
+
+    /** Contexte des succès (src/core/progression.js : checkAchievements). */
+    achievementContext() {
+      return {
+        levelId: level.id,
+        status: state.status,
+        day: state.time.day,
+        seasonId: seasonId(state),
+        money: state.money,
+        stars: state.result?.stars ?? 0,
+        perksActive: hasPerks(state),
+        stats: { year: JSON.parse(JSON.stringify(state.stats.year)), season: JSON.parse(JSON.stringify(state.stats.season)) },
+        investments: { ...state.investments },
+        availableInvestments: levelInvestments(level).map((i) => i.id),
+        adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
+        dailyCharges: dailyCharges(state, level),
+      };
+    },
   };
+
+  /** Météo d'après-demain (« Almanach ») : lue sur une COPIE du flux météo, sans rien consommer. */
+  function afterTomorrow() {
+    if (!perkValue(state, 'forecastDays')) return null;
+    const total = yearLength(level);
+    const target = state.time.day + 2;
+    if (target > total) return null;
+    // L'aube de demain tirera la météo d'après-demain avec la saison du jour target.
+    let acc = 0;
+    let si = 0;
+    for (; si < level.seasonLengths.length; si++) {
+      acc += level.seasonLengths[si];
+      if (target <= acc) break;
+    }
+    const copy = { weather: state.rng.weather };
+    return stream(copy, 'weather').weighted(level.weather[SEASONS[si]]);
+  }
 
   return {
     get state() {
@@ -589,8 +1064,8 @@ function wrap(state) {
 
 /** Copie des effets sans Infinity (null = « toutes les parcelles »), pour l'affichage. */
 function jsonEffects(effects) {
-  const out = { ...effects };
-  if (out.waterPlots) out.waterPlots = out.waterPlots.map((n) => (n === Infinity ? null : n));
+  const out = JSON.parse(JSON.stringify({ ...effects, waterPlots: undefined }));
+  if (effects.waterPlots) out.waterPlots = effects.waterPlots.map((n) => (n === Infinity ? null : n));
   return out;
 }
 

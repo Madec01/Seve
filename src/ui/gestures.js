@@ -17,6 +17,9 @@
 //     parcelle sans action ou sur un bâtiment → fiche ; molette ou glisser dans le vide = défiler ;
 //     survol = infobulle.
 // La cible est cherchée avec une tolérance pour le doigt (scene.hitTest(x, y, { touch: true })).
+// Mode décoration (src/ui/decor.js, aussi sur la ferme de démonstration du menu) : seuls les
+// emplacements, le panneau et le fermier réagissent (toucher ou clic → app.decor.onHit) ; glisser
+// fait défiler la scène ; pas d'appui long ni de série.
 
 const LONG_PRESS_MS = 450;
 const TOUCH_SLOP = 10; // px avant de considérer qu'on glisse
@@ -27,6 +30,10 @@ export function createSceneInput(canvas, app) {
   let inertia = null; // { v (px/ms), last }
 
   const scene = () => app.scene;
+  const decorOn = () => !!app.decor?.active;
+  /** La scène réagit-elle aux gestes ? (partie en cours, ou mode décoration) */
+  const live = () => decorOn() || (!!app.game && !app.inMenu);
+  const DECOR_TYPES = ['decorSlot', 'sign', 'farmer'];
   const canScroll = () => typeof scene()?.scrollBy === 'function' && (scene().maxScroll?.() ?? 1) > 0;
 
   function local(e) {
@@ -37,7 +44,11 @@ export function createSceneInput(canvas, app) {
   /** Cible sous le doigt, avec tolérance (la nouvelle scène la gère elle-même). */
   function hitAt(x, y, touch) {
     const s = scene();
-    if (!s || !app.game || app.inMenu) return null;
+    if (!s || !live()) return null;
+    if (decorOn()) {
+      const h = s.hitTest(x, y, { touch, decor: true });
+      return h && DECOR_TYPES.includes(h.type) ? h : null;
+    }
     if (typeof s.setInsets === 'function') return s.hitTest(x, y, { touch });
     const h = s.hitTest(x, y);
     if (h || !touch) return h;
@@ -143,7 +154,7 @@ export function createSceneInput(canvas, app) {
     }
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     stopInertia();
-    if (app.inMenu || !app.game) return;
+    if (!live()) return;
     const touch = e.pointerType !== 'mouse';
     const p = local(e);
     const hit = hitAt(p.x, p.y, touch);
@@ -152,7 +163,18 @@ export function createSceneInput(canvas, app) {
     } catch {
       /* rien */
     }
-    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastY: p.y, lastT: performance.now(), v: 0, hit, mode: null, action: null, done: new Set(), long: false, timer: null };
+    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastY: p.y, lastT: performance.now(), v: 0, hit, mode: null, action: null, done: new Set(), long: false, timer: null, decor: decorOn() };
+
+    if (g.decor) {
+      // Mode décoration : à la souris, le clic agit tout de suite ; au doigt, au lever.
+      if (!touch) {
+        if (hit) app.decor.onHit(hit);
+        else if (app.sheets.isOpen()) app.sheets.close();
+        g.mode = hit ? 'none' : null;
+        app.tooltip.hide('scene');
+      } else if (hit) scene().setHover?.(hit);
+      return;
+    }
 
     if (!touch) {
       // Souris : un clic dans la scène referme d'abord une fiche ouverte (grand écran).
@@ -189,7 +211,7 @@ export function createSceneInput(canvas, app) {
   });
 
   canvas.addEventListener('pointermove', (e) => {
-    if (app.inMenu || !app.game) return;
+    if (!live()) return;
     const p = local(e);
     if (!g || e.pointerId !== g.id) {
       if (e.pointerType === 'mouse') app.onSceneHover?.(hitAt(p.x, p.y, false), e);
@@ -201,7 +223,7 @@ export function createSceneInput(canvas, app) {
     if (!g.mode && !g.long && dx * dx + dy * dy > slop * slop) {
       clearTimeout(g.timer);
       scene()?.setHover(null);
-      if (g.hit?.type === 'plot') {
+      if (g.hit?.type === 'plot' && !g.decor) {
         g.mode = 'field';
         dragOver(g.hit.index);
       } else {
@@ -238,6 +260,11 @@ export function createSceneInput(canvas, app) {
     clearTimeout(cur.timer);
     scene()?.setHover(null);
     if (cancelled) return;
+    if (cur.decor) {
+      if (cur.touch && !cur.mode && cur.hit) app.decor.onHit(cur.hit);
+      else if (cur.mode === 'scroll' && performance.now() - cur.lastT < 80) startInertia(cur.v);
+      return;
+    }
     if (cur.touch && !cur.mode && !cur.long && cur.hit) {
       if (cur.hit.type === 'plot') tapPlot(cur.hit.index);
       else if (cur.hit.type === 'investment') tapInvestment(cur.hit.id);
@@ -257,7 +284,7 @@ export function createSceneInput(canvas, app) {
   canvas.addEventListener(
     'wheel',
     (e) => {
-      if (app.inMenu || !canScroll()) return;
+      if (!live() || !canScroll()) return;
       e.preventDefault();
       stopInertia();
       scene().scrollBy(e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY);

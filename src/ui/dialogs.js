@@ -1,16 +1,17 @@
 // Fenêtres : menu principal, choix du niveau, options, crédits, pause, fin de saison,
-// faillite, victoire, confirmations.
+// faillite, victoire, remise des prix du concours, confirmations.
 //
 // createDialogs(layer, app) → { open, close, closeTop, isOpen, top, mainMenu, levelSelect, options,
-//                               credits, pauseMenu, seasonEnd, bankrupt, victory, confirm }
+//                               credits, pauseMenu, seasonEnd, bankrupt, victory, contestResult,
+//                               confirm, frame, btn }
 // Les fenêtres s'empilent ; seule celle du dessus est active. Échap ferme celle du dessus si elle
 // le permet. Le focus clavier reste dans la fenêtre active.
 
 import { SEASONS } from '../data/balance.js';
-import { CROPS } from '../data/crops.js';
+import { gameCrops } from '../core/perks.js';
 import { LEVELS, yearLength } from '../data/levels.js';
 import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
-import { cropIcon, icon, sprite } from './icons.js';
+import { achievementIcon, cropIcon, ecuIcon, icon, investmentIcon, productIcon, sprite, spriteAny } from './icons.js';
 import { swipeToClose } from './sheets.js';
 import { cropCount, season, seasonArrives } from './text.js';
 
@@ -92,7 +93,7 @@ export function createDialogs(layer, app) {
   const top = () => stack[stack.length - 1]?.opts.id || null;
 
   // Le reste de la page est inerte tant qu'une fenêtre est ouverte (ni clic, ni focus clavier).
-  const BACKGROUND = ['#hud', '#tabbar', '#sheet-layer', '#stage', '#tutorial', '#banner'];
+  const BACKGROUND = ['#hud', '#tabbar', '#sheet-layer', '#stage', '#tutorial', '#banner', '#decorbar'];
   function setBackgroundInert(on) {
     for (const sel of BACKGROUND) {
       const n = document.querySelector(sel);
@@ -175,6 +176,18 @@ export function createDialogs(layer, app) {
       );
     }
     buttons.push(btn('Nouvelle partie', () => levelSelect(), saved ? 'btn--big' : 'btn--red.btn--big', { id: 'menu-new', ...(saved ? {} : { 'data-autofocus': '' }) }));
+    if (app.progression?.available()) {
+      // Pastille dorée : une étoile peut être dépensée, ou un succès n'a pas encore été vu.
+      const dot = app.progression.canSpendStars() || app.hasNewAchievements?.();
+      buttons.push(
+        btn(
+          [icon('star', 'sm'), el('span', 'La grange aux souvenirs'), dot ? el('span.menu-dot', { 'aria-label': 'Nouveau' }) : null],
+          () => app.grange.open(app.progression.canSpendStars() ? 'bonus' : app.hasNewAchievements?.() ? 'achievements' : 'bonus'),
+          'btn--big.btn--grange',
+          { id: 'menu-grange' },
+        ),
+      );
+    }
     buttons.push(btn('Options', () => options(), 'btn--big', { id: 'menu-options' }));
     if (app.canInstall()) buttons.push(btn('Installer le jeu', () => app.installApp(), 'btn--big', { id: 'menu-install' }));
     buttons.push(btn('Crédits', () => credits(), 'btn--big', { id: 'menu-credits' }));
@@ -189,15 +202,59 @@ export function createDialogs(layer, app) {
         app.isTouch ? null : el('p.menu-keys', 'Espace : pause · 1, 2, 3 : vitesses · Échap : menu'),
       ),
     );
-    return open(node, { id: 'main-menu', closable: false, menu: true, sound: false });
+    const handle = open(node, { id: 'main-menu', closable: false, menu: true, sound: false });
+    app.onMainMenu?.();
+    return handle;
   }
 
   // ── Choix du niveau ───────────────────────────────────────────────────────────
+  /** Systèmes v3 d'un niveau (icônes et libellés visibles sur sa carte). */
+  function levelSystems(lvl) {
+    const inv = lvl.availableInvestments || [];
+    const out = [];
+    const shop = ['jamWorkshop', 'dairy', 'mill'].filter((id) => inv.includes(id));
+    if (shop.length) out.push({ node: investmentIcon(shop[0], 'sprite--xs'), label: shop.length > 1 ? 'Ateliers' : 'Atelier' });
+    if ((lvl.startTrees || []).length || (lvl.id >= 9 && (lvl.crops || []).includes('apple'))) out.push({ node: cropIcon('apple', 'sprite--xs'), label: (lvl.startTrees || []).length ? 'Vieux pommiers' : 'Pommiers' });
+    if (inv.includes('goat')) out.push({ node: investmentIcon('goat', 'sprite--xs'), label: 'Chèvres' });
+    if (lvl.contest) out.push({ node: spriteAny(['icon.trophy.gold', 'icon.medal'], 'sprite--xs', 'star'), label: 'Concours' });
+    if (lvl.modifiers?.rawPriceFactor && lvl.modifiers.rawPriceFactor < 1) out.push({ node: icon('coin', 'xs'), label: `Récoltes −${Math.round((1 - lvl.modifiers.rawPriceFactor) * 100)} %` });
+    if (lvl.modifiers?.pollination) out.push({ node: investmentIcon('beehive', 'sprite--xs'), label: 'Pollinisation' });
+    return out;
+  }
+
+  /** Interrupteur « Bonus permanents » (choix du niveau) : activés (n) / désactivés, lien vers la grange. */
+  function perksBar(onChange) {
+    const P = app.progression;
+    if (!P?.available()) return null;
+    const bought = Object.keys(P.get().perks || {}).length;
+    const box = el('span.checkbox');
+    const label = el('span.opt-label');
+    const sw = el('button.opt-toggle.perks-switch', { type: 'button', role: 'switch', id: 'levels-perks' }, box, label);
+    const sync = () => {
+      const on = P.perksEnabled();
+      sw.classList.toggle('is-on', on);
+      sw.setAttribute('aria-checked', on ? 'true' : 'false');
+      label.textContent = '';
+      label.append(el('b', 'Bonus permanents'), el('small', bought ? (on ? `activés (${bought})` : 'désactivés : jeu d\'origine') : 'aucun bonus acheté'));
+    };
+    sw.addEventListener('click', () => {
+      app.audio.play('toggle');
+      P.setPerksEnabled(!P.perksEnabled());
+      sync();
+      onChange?.();
+    });
+    sync();
+    const grange = btn([icon('star', 'sm'), 'Grange'], () => app.grange.open('bonus'), 'btn--small.btn--grange-link', { id: 'levels-grange' });
+    return el('div.perks-bar', sw, grange);
+  }
+
   function levelSelect() {
     const progress = app.progress();
     const cards = LEVELS.map((lvl) => {
       const p = progress.levels[lvl.id] || {};
       const unlocked = app.isLevelUnlocked(lvl.id);
+      const systems = lvl.id >= 9 ? levelSystems(lvl) : [];
+      const isNew = unlocked && lvl.id >= 9 && !p.played && !p.completed;
       const stars = p.stars || 0;
       const prev = LEVELS.find((l) => l.id === lvl.id - 1);
       const card = el(
@@ -216,8 +273,9 @@ export function createDialogs(layer, app) {
             app.startLevel(lvl.id);
           },
         },
-        el('div.level-head', el('span.level-num', String(lvl.id)), el('span.level-name', lvl.name)),
+        el('div.level-head', el('span.level-num', String(lvl.id)), el('span.level-name', lvl.name), isNew ? el('span.level-new', 'Nouveau') : null),
         el('p.level-desc', lvl.description),
+        systems.length ? el('div.level-systems', systems.map((x) => el('span.level-sys', x.node, x.label))) : null,
         el(
           'div.level-meta',
           el('span', icon('coin', 'xs'), `Départ ${fmt(lvl.startMoney)}`),
@@ -236,7 +294,7 @@ export function createDialogs(layer, app) {
       title: 'Choisir une année',
       ribbon: 'ribbon',
       cls: 'dialog--levels',
-      body: el('div.level-grid', cards),
+      body: [perksBar(), el('div.level-grid', cards)],
       actions: [btn('Retour', () => closeTop(), '', { 'data-autofocus': '' })],
       onClose: () => closeTop(),
     });
@@ -323,11 +381,13 @@ export function createDialogs(layer, app) {
       el('h3.opt-section', 'Progression'),
       el(
         'div.opt-danger',
-        el('p', 'Efface les étoiles, les niveaux débloqués, le tutoriel et la partie en cours.'),
+        el('p', app.progression?.available() ? 'Efface les étoiles, les niveaux débloqués, les bonus, les succès, les écus, les décorations, le tutoriel et la partie en cours.' : 'Efface les étoiles, les niveaux débloqués, le tutoriel et la partie en cours.'),
         btn('Réinitialiser la progression', async () => {
           const ok = await confirm({
             title: 'Tout effacer ?',
-            text: 'Les étoiles, les niveaux débloqués et la partie en cours seront perdus. Cette action est définitive.',
+            text: app.progression?.available()
+              ? 'Les étoiles, les niveaux débloqués, les bonus achetés, les succès, les écus, les décorations et la partie en cours seront perdus. Cette action est définitive.'
+              : 'Les étoiles, les niveaux débloqués et la partie en cours seront perdus. Cette action est définitive.',
             ok: 'Tout effacer',
             danger: true,
           });
@@ -428,6 +488,7 @@ export function createDialogs(layer, app) {
       el(
         'div.menu-buttons',
         btn('Reprendre', () => closeTop(), 'btn--red.btn--big', { id: 'pause-resume', 'data-autofocus': '' }),
+        app.decor?.available() ? btn('Décorer la ferme', () => app.decor.enter(), 'btn--big', { id: 'pause-decor' }) : null,
         btn('Options', () => options(), 'btn--big', { id: 'pause-options' }),
         btn('Recommencer l\'année', async () => {
           const ok = await confirm({ title: 'Recommencer ?', text: 'La partie en cours sera perdue et l\'année recommencera au premier jour du printemps.', ok: 'Recommencer', danger: true });
@@ -459,8 +520,11 @@ export function createDialogs(layer, app) {
     const lines = [
       moneyLine(`Récoltes vendues${s.totalHarvested ? ` (${s.totalHarvested})` : ''}`, gain(s.harvestIncome), 'pos'),
       moneyLine('Revenus des investissements', gain(s.investmentIncome), 'pos'),
-      moneyLine('Charges quotidiennes', loss(s.charges), 'neg'),
     ];
+    if (s.productIncome || s.rawSales) lines.push(moneyLine('Produits transformés', gain((s.productIncome || 0) + (s.rawSales || 0)), 'pos'));
+    if (s.contestPrize) lines.push(moneyLine('Prix du concours', gain(s.contestPrize), 'pos'));
+    if (s.frostRefund) lines.push(moneyLine('Assurance gel', gain(s.frostRefund), 'pos'));
+    lines.push(moneyLine('Charges quotidiennes', loss(s.charges), 'neg'));
     if (s.waterSpent) lines.push(moneyLine('Arrosage', loss(s.waterSpent), 'neg'));
     if (s.loanPaid) lines.push(moneyLine('Prêt', loss(s.loanPaid), 'neg'));
     const spent = s.seedsSpent + s.plotsSpent;
@@ -472,10 +536,50 @@ export function createDialogs(layer, app) {
     return el('div.sum-lines', lines);
   }
 
-  function harvestChips(cropsHarvested) {
+  function harvestChips(cropsHarvested, productsSold = null) {
     const list = Object.entries(cropsHarvested || {}).filter(([, n]) => n > 0);
-    if (!list.length) return null;
-    return el('div.harvest-list', list.map(([id, n]) => el('span.harvest-chip.has-tip', { 'data-tip': cropCount(id, n) }, cropIcon(id, 'sprite--sm'), el('b', `×${n}`))));
+    const prods = Object.entries(productsSold || {}).filter(([, n]) => n > 0);
+    if (!list.length && !prods.length) return null;
+    return el(
+      'div.harvest-list',
+      list.map(([id, n]) => el('span.harvest-chip.has-tip', { 'data-tip': cropCount(id, n) }, cropIcon(id, 'sprite--sm'), el('b', `×${n}`))),
+      prods.map(([id, n]) => el('span.harvest-chip.is-product', productIcon(id, 'sprite--sm'), el('b', `×${n}`))),
+    );
+  }
+
+  /** Récompenses de fin d'année : écus, succès débloqués, étoiles à dépenser (bouton Grange). */
+  function rewardsBlock(record) {
+    if (!record || !app.progression?.available()) return null;
+    const ecus = record.rewards?.ecus || 0;
+    const achs = record.achievements || [];
+    const spare = record.starsAvailable || 0;
+    const nodes = [];
+    if (ecus) nodes.push(el('p.end-ecus', ecuIcon('sprite--sm'), `+${plural(ecus, 'écu')}`, el('small', ` (vous en avez ${fmt(app.progression.ecus())})`)));
+    if (achs.length) {
+      nodes.push(
+        el(
+          'div.end-achs',
+          el('h3.sum-title', icon('star', 'sm'), achs.length > 1 ? `${achs.length} succès débloqués` : 'Succès débloqué'),
+          el(
+            'div.end-ach-list',
+            achs.map((id) => {
+              const d = app.progression.achievementDef(id);
+              return el('span.end-ach', achievementIcon(id, true, 'sprite--md', d?.reward?.stars || 0), el('span', d?.name || id), d?.reward ? el('small', app.progression.rewardText(d.reward)) : null);
+            }),
+          ),
+        ),
+      );
+    }
+    if (spare > 0 && app.progression.canSpendStars()) {
+      nodes.push(
+        el(
+          'div.end-spare',
+          el('p', icon('star', 'sm'), `Vous avez ${plural(spare, 'étoile')} à dépenser.`),
+          btn([icon('star', 'sm'), 'Grange aux souvenirs'], () => app.openGrangeFromEnd('bonus'), 'btn--wide', { id: 'end-grange' }),
+        ),
+      );
+    }
+    return nodes.length ? el('div.end-rewards', nodes) : null;
   }
 
   // ── Fin de saison ─────────────────────────────────────────────────────────────
@@ -489,7 +593,11 @@ export function createDialogs(layer, app) {
     const sIdx = SEASONS.indexOf(ev.seasonId);
     const next = SEASONS[sIdx + 1];
     const s = ev.summary;
-    const crops = CROPS.filter((c) => (!lvl.crops || lvl.crops.includes(c.id)) && c.seasons.includes(next));
+    // Cultures de la partie : celles du niveau (+ les nouveautés avec « Semencier », niveaux 1 à 8 seulement).
+    const runCrops = gameCrops(lvl, g.state.perks || {});
+    const crops = runCrops.filter((c) => c.seasons.includes(next));
+    const hardy = runCrops.filter((c) => c.frostHardy).map((c) => c.name.toLowerCase());
+    const hardyText = hardy.length > 1 ? `${hardy.slice(0, -1).join(', ')} et ${hardy[hardy.length - 1]}` : hardy[0] || 'le navet et le chou';
     const lost = extra.frost ? (extra.frost.lost || extra.frost.lostPlots || []).length : 0;
 
     const nextBlock = el(
@@ -502,8 +610,8 @@ export function createDialogs(layer, app) {
             `p.next-warn${lost ? '.is-danger' : '.is-ok'}`,
             icon('winter', 'sm'),
             lost
-              ? `Le gel de la première nuit d'hiver a détruit ${plural(lost, 'culture')}. Seuls le navet et le chou résistent au froid.`
-              : 'Aucune culture n\'a gelé cette nuit : bien joué ! En hiver, seuls le navet et le chou se plantent.',
+              ? `Le gel de la première nuit d'hiver a détruit ${plural(lost, 'culture')}${extra.frost?.refund ? ` (assurance gel : +${fmt(extra.frost.refund)})` : ''}. Seuls ${hardyText} résistent au froid.`
+              : `Aucune culture n'a gelé cette nuit : bien joué ! En hiver, ${crops.length ? `on peut planter : ${crops.map((c) => c.name.toLowerCase()).join(', ')}` : 'rien ne se plante'}.`,
           )
         : null,
       next === 'autumn' ? el('p.next-warn', icon('winter', 'sm'), 'Pensez à l\'hiver : les cultures qui ne résistent pas au gel seront perdues le premier jour d\'hiver.') : null,
@@ -512,7 +620,7 @@ export function createDialogs(layer, app) {
     const body = el(
       'div.season-end',
       el('div.rent-paid', icon('coin', 'lg'), el('div', el('div.rent-paid-title', `Fermage payé : ${plural(ev.amount, 'pièce')}`), el('div.rent-paid-sub', `Il vous reste ${plural(g.state.money, 'pièce')}.`))),
-      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested)), nextBlock),
+      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold)), nextBlock),
     );
     const node = frame({
       title: season(ev.seasonId, 'end'),
@@ -525,7 +633,7 @@ export function createDialogs(layer, app) {
   }
 
   // ── Faillite ──────────────────────────────────────────────────────────────────
-  function bankrupt(ev) {
+  function bankrupt(ev, record = null) {
     const s = ev.summary;
     const lvl = app.game.query.level();
     const missing = ev.amountDue - ev.money;
@@ -541,8 +649,9 @@ export function createDialogs(layer, app) {
         ? `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous étiez à découvert (${fmt(ev.money)}).`
         : `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
       el('p.end-missing', `Il manquait ${plural(missing, 'pièce')}.`),
-      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested)),
+      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
       el('p.end-tip', icon('info', 'sm'), tip),
+      rewardsBlock(record),
     );
     const node = frame({
       title: 'Faillite…',
@@ -564,14 +673,17 @@ export function createDialogs(layer, app) {
     const [t2, t3] = lvl.starThresholds;
     const next = LEVELS.find((l) => l.id === lvl.id + 1);
     const starNodes = [0, 1, 2].map(() => el('span.big-star', icon('star-empty', 'xl'), el('span.big-star-on', icon('star', 'xl'))));
+    const farm = app.progression?.available() ? app.progression.farmName() : null;
     const body = el(
       'div.end-screen.is-victory',
+      farm ? el('p.end-farm', `${farm} · Niveau ${lvl.id}`) : null,
       el('div.victory-stars', starNodes),
       el('p.end-lead', `Vous avez tenu toute l'année ! Il vous reste ${plural(ev.money, 'pièce')}.`),
       record.newBest && !record.firstTime ? el('p.end-record', icon('star', 'sm'), 'Nouveau record !') : null,
       el('p.end-thresholds', `2 étoiles dès ${fmt(t2)} pièces · 3 étoiles dès ${fmt(t3)} pièces`),
-      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested)),
       next && record.firstTime ? el('p.end-unlock', icon('lock', 'sm'), `Nouveau niveau débloqué : « ${next.name} »`) : null,
+      rewardsBlock(record),
+      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
     );
     const actions = [btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'victory-menu' }), btn('Rejouer', () => app.startLevel(lvl.id, { skipConfirm: true }), '', { id: 'victory-replay' })];
     if (next) actions.push(btn('Niveau suivant', () => app.startLevel(next.id, { skipConfirm: true }), 'btn--red', { id: 'victory-next', 'data-autofocus': '' }));
@@ -587,6 +699,42 @@ export function createDialogs(layer, app) {
         app.audio.play(i === 2 ? 'unlock' : 'confirm', { pitch: 0, rate: 1 + i * 0.12 });
       }, reduce ? 0 : 700 + i * 550);
     });
+    return handle;
+  }
+
+  // ── Concours du village : remise des prix ─────────────────────────────────────
+  /** @param ev contestAwarded ({ amount, goalsMet, goals }) ; `onClose` : suite (bilan de saison). */
+  function contestResult(ev, { onClose } = {}) {
+    const goals = ev.goals || [];
+    const met = new Set(ev.goalsMet || []);
+    const all = goals.length > 0 && met.size === goals.length;
+    const body = el(
+      'div.end-screen.contest-result',
+      el('div.end-illus', spriteAny(['icon.trophy.gold', 'icon.medal'], 'sprite--hero', 'star')),
+      el('p.end-lead', ev.amount > 0 ? 'Le jury a fait le tour des fermes. Voici vos prix :' : 'Le jury a fait le tour des fermes… pas de prix cette fois.'),
+      el(
+        'div.contest-list',
+        goals.map((g) =>
+          el(
+            `div.contest-line${met.has(g.id) ? '.is-done' : '.is-missed'}`,
+            el('span.contest-mark', met.has(g.id) ? '✓' : '✗'),
+            el('span.contest-name', g.label),
+            el('span.contest-count', `${fmt(Math.min(g.progress ?? 0, g.target))} / ${fmt(g.target)}`),
+          ),
+        ),
+      ),
+      all ? el('p.end-record', icon('star', 'sm'), 'Les trois épreuves : prix spécial du jury !') : null,
+      el('p.contest-total', ev.amount > 0 ? `Prix : +${plural(ev.amount, 'pièce')}` : 'Prix : 0'),
+    );
+    const node = frame({
+      title: 'Concours du village',
+      ribbon: 'ribbon',
+      cls: 'dialog--contest',
+      body,
+      actions: [btn(['Continuer', icon('play', 'sm')], () => closeTop(), 'btn--red', { 'data-autofocus': '', id: 'contest-continue' })],
+    });
+    const handle = open(node, { id: 'contest', pauses: true, onClose, sound: false });
+    app.audio.play(ev.amount > 0 ? 'victory' : 'seasonEnd', { pitch: 0, volume: 0.8 });
     return handle;
   }
 
@@ -637,7 +785,10 @@ export function createDialogs(layer, app) {
     seasonEnd,
     bankrupt,
     victory,
+    contestResult,
     confirm,
+    frame,
+    btn,
     yearLength,
   };
 }

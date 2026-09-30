@@ -2,6 +2,8 @@
 // Chaque accès est protégé (navigation privée, stockage plein ou désactivé) : en cas d'échec,
 // le jeu continue sans sauvegarde et les lectures renvoient des valeurs par défaut.
 
+import { PROGRESS_SCHEMA, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
+
 const PREFIX = 'une-annee-a-la-ferme.';
 const KEYS = {
   run: `${PREFIX}run`,
@@ -66,47 +68,41 @@ export function clearRun() {
 }
 
 // ── Progression ──────────────────────────────────────────────────────────────────────
-/** { levels: { [id]: { stars, bestMoney, completed } } } */
+// Schéma 2 (v3) : voir src/core/progression.js (pur). Une progression v1 ({ levels }) est lue,
+// complétée, et les succès déjà mérités par les anciennes parties sont débloqués d'un coup au
+// premier chargement (écus et étoiles compris) ; progressMigration() dit lesquels (une seule fois).
+
+let lastMigration = null;
+
+/** Progression complète (schéma 2), jamais d'exception. */
 export function loadProgress() {
-  const data = read(KEYS.progress);
-  const levels = {};
-  const raw = data && typeof data.levels === 'object' && data.levels && !Array.isArray(data.levels) ? data.levels : {};
-  for (const [id, v] of Object.entries(raw)) {
-    if (!v || typeof v !== 'object') continue;
-    levels[id] = {
-      stars: Math.max(0, Math.min(3, Math.floor(Number(v.stars) || 0))),
-      bestMoney: Number.isFinite(v.bestMoney) ? v.bestMoney : null,
-      completed: v.completed === true,
-    };
+  const raw = read(KEYS.progress);
+  if (raw && typeof raw === 'object' && raw.schema !== PROGRESS_SCHEMA) {
+    const res = migrateProgress(raw);
+    if (res.retroactive.length) lastMigration = { retroactive: res.retroactive, rewards: res.rewards };
+    write(KEYS.progress, res.progress);
+    return res.progress;
   }
-  return { levels };
+  return normalizeProgress(raw);
+}
+
+/**
+ * Succès débloqués par la migration d'une progression v1 (« 3 succès débloqués grâce à vos
+ * anciennes parties ») : { retroactive: [id], rewards: { stars, ecus } } une seule fois, puis null.
+ */
+export function progressMigration() {
+  const m = lastMigration;
+  lastMigration = null;
+  return m;
 }
 
 export function saveProgress(progress) {
   return write(KEYS.progress, progress);
 }
 
-/**
- * Note le résultat d'un niveau gagné. Renvoie { progress, newBest, newStars }.
- */
-export function recordVictory(levelId, stars, money) {
-  const progress = loadProgress();
-  const prev = progress.levels[levelId] || { stars: 0, bestMoney: null, completed: false };
-  const newBest = prev.bestMoney === null || money > prev.bestMoney;
-  const newStars = stars > (prev.stars || 0);
-  progress.levels[levelId] = {
-    stars: Math.max(prev.stars || 0, stars),
-    bestMoney: newBest ? money : prev.bestMoney,
-    completed: true,
-  };
-  saveProgress(progress);
-  return { progress, newBest, newStars, firstTime: !prev.completed };
-}
-
 /** Le niveau 1 est toujours ouvert ; les suivants s'ouvrent quand le précédent est terminé. */
 export function isLevelUnlocked(levelId, progress = loadProgress()) {
-  if (levelId <= 1) return true;
-  return !!progress.levels[levelId - 1]?.completed;
+  return isUnlocked(progress, levelId);
 }
 
 export function resetProgress() {
