@@ -877,8 +877,9 @@ game.refreshLevel()              // carrière seulement : après une modificatio
   `investmentsById` (animaux, ruches, panneaux + ateliers des niveaux pour les recettes), `seasonLengths: [L,L,L,L]`,
   `seasonCharge`, `rents: null`, `weather` du niveau 1, nombres de la difficulté, `neighbourLoan` (plafond
   max(100, 100 % des charges), × 2 à 4 ♥, supplément 0 à 6 ♥), `modifiers` neutres).
-- **Durée des saisons** : coûts et gains quotidiens inchangés ; charges de saison et seuils de patrimoine des rangs
-  × durée / 7 (`seasonScale`). Les prix des terrains et bâtiments ne changent pas.
+- **Durée des saisons** : coûts et gains quotidiens inchangés ; charges de saison × durée / 7 (`seasonScale`). Les prix
+  des terrains et bâtiments ne changent pas. ⚠ Intégration : seuils de patrimoine des rangs × 2 / × 3,5
+  (`patrimonyScale`), objectifs comptés × durée / 7 (`objectiveTargetFor`) — voir « Mode Carrière — intégration ».
 - `state` : `version: 2`, `mode: 'career'`, `levelId: 'career'`, `time.year`, `perks: {}` (aucun bonus en carrière),
   `rng.career / .staff / .events`. `state.career` = forme du contrat **plus** `farmerGender`, `outfit`, `seasonLength`,
   `yearStats: { incomeBy, spentBy, cropIncome }` (bilan de l'année, remis à zéro au bilan), `paid: { buildings,
@@ -938,6 +939,7 @@ game.refreshLevel()              // carrière seulement : après une modificatio
 rang 2 **« Faire 60 récoltes »** (le joueur tranquille ramasse aussi les abris et répond aux visiteurs : ≈ 75 récoltes
 la 1re année) ; seuil du rang 6 **100 000** (au lieu de 70 000 : Domaine vers l'année 9 pour le joueur tranquille).
 L'objectif « 20 produits transformés » est gardé : le blocage venait du robot (plan sans fraises pour la confiturerie).
+⚠ Intégration : 15 produits (le débutant restait bloqué au rang 2), avec un conseil dans le Carnet.
 
 ### Points d'accroche pour CORE-B et CORE-C (`src/core/career/registry.js`)
 
@@ -1195,8 +1197,9 @@ src/ui/career/util.js      icônes (icon.career.*, portraits, blasons), boutons 
   `quest`, `crows`, `yearEnd` (`who: 'joseph'` : portrait de Joseph).
 - **Débogage** : `__debug.career()`, `careerStart(opts)`, `careerSkipYears(n)`, `careerRank(n)`, `careerMoney(n)`,
   `careerEvent(id)` (→ `actions.career.triggerEvent`), `lotPoint(id)`.
-- Pas encore fait : ferme de carrière derrière le menu, « Suivre le tutoriel » en carrière, décor propre à la carrière
-  (`career.cosmetics.decor` : pas d'action du cœur), ramassage en série (`collectAll`).
+- Pas encore fait : « Suivre le tutoriel » en carrière, modifier le décor propre à la carrière (`career.cosmetics.decor` :
+  pas d'action du cœur ; il est affiché depuis l'intégration), ramassage en série (`collectAll`). (Ferme de carrière
+  derrière le menu : faite à l'intégration.)
 
 ## Mode Carrière — livraison RENDER (scène, 2026-09-30)
 
@@ -1348,7 +1351,8 @@ joseph() → { hearts, maxHearts, questsDone, nextGift, tiers: [{ hearts, id, na
 ### Écarts au contrat (à connaître)
 
 - ⚠ Les **écus des quêtes** ne sont pas versés par le cœur (la progression est hors de la partie) : `questDone.ecus`
-  (3) et `yearEnd.report.questEcus` — l'interface (ou `recordCareerYear`) doit les ajouter à `progress.ecus`.
+  (3) et `yearEnd.report.questEcus`. ✓ Intégration : l'interface les verse à `questDone` (`recordCareerEcus`) ;
+  `report.questEcus` n'est qu'un rappel affiché au bilan (`recordCareerYear` ne les ajoute pas).
 - `buyLot` est remplacé par l'extension « quests » (même comportement, + verger de Joseph).
 - Épreuve « œufs » : œufs **ramassés** (baisse de la valeur en attente du poulailler et de la mare, 1 œuf = la
   production d'un animal pour un jour) ; retirée du tirage sans le lot CORE-B. Quête « œufs » : idem.
@@ -1368,3 +1372,35 @@ exporte `playCareer`, `simulateCareer`, `loadStaffHelper`, `STRATEGIES`, `CAREER
 de machines de CORE-B (`tools/sim-career-staff.js`, `staffDecisions`) sont chargées automatiquement. Budget de gestes
 par jour (glisser : 1 + 0,25 par parcelle ; semer partout : 3 ; ramasser, chasser, pêcher : 1 ; offre ou quête : 2 ;
 achat : 3) : casual 7-11, novice 4-8, optimal ≤ 40. Résultats : `docs/CARRIERE.md` § 13.4.
+
+## Mode Carrière — intégration (2026-09-30)
+
+Corrections et réglages après l'assemblage des cinq lots (tests : `tests/career-integration.test.js`).
+
+- **Écus des quêtes** : `progression.recordCareerEcus(p, n) → { progress, rewards: { ecus } }` (borné à 0..1000) ;
+  `app.progression.careerEcus(n)` appelé par `careerUI` à `questDone`. Le bilan annuel rappelle les quêtes réussies,
+  les écus déjà gagnés et l'amitié (`report.joseph`, `report.questEcus`).
+- **Durée des saisons** (`src/data/career/career.js`) : `PATRIMONY_SCALE = { 7: 1, 10: 2, 14: 3.5 }`,
+  `patrimonyScale(L)` (seuils arrondis à la centaine par `rankThreshold` ; 7 jours : exactement les données) ;
+  `DAY_COUNTED_OBJECTIVES = ['harvests', 'productsSold']`, `objectiveTargetFor(obj, L)` (× L / 7, arrondi à 5).
+  `ranks.js` : `objectiveTarget(state, obj)`, `objectiveLabel(state, obj)` (« {n} » dans le libellé des données →
+  cible de la carrière) ; `summary().nextRank.objectives[]` porte `label` accordé, `target` de la carrière et `tip`
+  (conseil facultatif, affiché dans le Carnet sous un objectif non rempli). Objectif `products` : 15.
+- **Meilleur patrimoine** : posé dès `createCareer` (archive d'une ferme vendue tout de suite).
+- **Performances** (grande ferme, 7 employés, 23 machines) : `careerAnimals()` / `careerInvestments()` /
+  `getCareerInvestment()` en cache (tableaux figés, invalidés quand une extension est enregistrée ou retirée) ;
+  prévision de la barre du haut en O(parcelles) (`plantableCrops` une fois) ; en carrière, barre du haut recalculée au
+  plus 4 fois par seconde (`scheduleRefresh`), feuilles vivantes et pastilles au plus 4 fois par seconde sur les
+  événements du jeu (`scheduleSoft` ; tout de suite après un toucher), animation de l'argent relancée sans lecture de
+  mise en page (plus de `offsetWidth` à chaque pièce gagnée par l'équipe) ; sons des actions de l'équipe et des
+  machines (`by` ≠ `'player'`) à 22 % du volume, au plus un toutes les 1,4 s.
+- **Scène** : `visitor { offerId, kind }` → carte de l'offre (sinon la première offre, sinon l'Agenda) ; la scène reçoit
+  le nom, la tenue et le décor de la carrière (`app.applyCosmetics`, aussi derrière le menu) ; `__debug.lotPoint`
+  convertit le panneau (en tuiles) en px.
+- **Menu principal** : derrière le menu, une copie de la ferme de carrière chargée de sa sauvegarde (`createAttractGame`,
+  vit à ×1, jamais enregistrée), sinon la ferme de démonstration du niveau 1 (`createDemoGame`).
+- **Interface** : pas de pastille sur l'onglet Équipe verrouillé ; « Sur … » des machines passe à la ligne
+  (`.stat--wide > b`) ; pluriels « choux », « pommes de terre » (`cropPlural`, `cropCount`).
+- **Simulation** : `--matrix --seasons 7,10,14 --difficulties detente,classique` (une partie de la matrice) ; robot
+  casual de `tools/sim-career-staff.js` : au plus 2 terrains de plus arrosés et 2 de plus mécanisés par an.
+

@@ -22,6 +22,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-09-30 | `backup/detente-2026-09-30` | Mode Détente + prêt de Joseph terminés (cœur et interface), commit `e648f84` ; pull request n° 5 |
 | 2026-09-30 | `backup/avant-carriere-2026-09-30` | Avant le mode Carrière (terrains, automatisation, salariés, bâtiments, animaux, événements), commit `8be41ea` |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
+| 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
 ---
 
@@ -301,6 +302,17 @@ Bug signalé : sur le téléphone, le jeu restait **bloqué sur l'écran de char
 - **Tests** : `tests/career-{events,quests,show,simulate}.test.js` (42) ; 342 au total, parité des niveaux inchangée.
 - **À surveiller** : avec des saisons de 10 ou 14 jours la progression est plus rapide (objectifs comptés non multipliés par la durée) ; le novice en Classique fait presque toujours faillite ; 10 ♥ de Joseph dès l'an 5 environ pour le joueur tranquille.
 
+### 2026-09-30 — Mode Carrière : intégration, équilibrage des durées de saison, fluidité, partie au doigt
+
+- **Écus des quêtes de Joseph** enfin versés : `recordCareerEcus` (progression), appelé par l'interface à chaque quête réussie ; le bilan de l'année rappelle les quêtes réussies, les écus déjà gagnés et l'amitié (sans les compter deux fois).
+- **Durée des saisons** : seuils de patrimoine des rangs × 2 (10 jours) et × 3,5 (14 jours) au lieu de × durée / 7 (la croissance se compose dans une année plus longue : mesuré ≈ carré de la durée) ; objectifs comptés au fil des jours (récoltes, produits transformés) × durée / 7 (60 → 85 → 120 récoltes). Libellés accordés (« Faire 85 récoltes »). Les rangs arrivent maintenant la même année quelle que soit la durée (tableaux dans `docs/CARRIERE.md` § 13.4).
+- **Objectif du rang 3** : « Vendre 15 produits transformés » (au lieu de 20) et un conseil dans le Carnet sous l'objectif ; le débutant restait des années au rang 2 (confirmé en jouant au doigt).
+- **Simulation** : le joueur tranquille ne mécanise plus tous ses champs d'un coup au rang 3 (au plus 2 terrains de plus arrosés et 2 de plus mécanisés par an) ; `--matrix --seasons … --difficulties …` pour lancer une partie de la matrice en parallèle.
+- **Fluidité (grande ferme)** : barre du haut recalculée au plus 4 fois par seconde en carrière et prévision des charges en un seul passage (4,7 → 0,7 ms par image à CPU ×4), feuilles ouvertes et pastilles au plus 4 fois par seconde sur les événements, plus de mise en page forcée à chaque pièce gagnée par l'équipe, listes d'animaux en cache (moteur 1,9 → 0,9 ms par image) ; sons de l'équipe et des machines discrets. La limite restante sur Chrome émulé sans GPU est la copie logicielle du canvas plein écran (≈ la moitié du temps de l'image, même plafond en mode Niveaux) : absente sur un vrai téléphone.
+- **Scène et menu** : toucher un visiteur ouvre sa carte ; la ferme de carrière (copie jamais enregistrée) vit derrière le menu principal ; le panneau, la tenue et le décor montrés sont ceux de la carrière (nom choisi à la création) et plus ceux de la grange.
+- **Partie au doigt** (Pixel 7, 5 années, fermière, saisons de 7 jours, Détente) : création, terrain et champ, étal, poules, maison niv. 2, embauche et affectation, arroseurs, grenier, pré, chèvrerie et chèvres, cour des ateliers et confiturerie, écurie, cheval et semoir, 6 quêtes de Joseph livrées, visiteurs touchés dans la scène, fêtes, comice, 2 bilans et 2 passages de rang, rechargement en plein été (partie identique), faillite Classique et archive, hors ligne ; aucune erreur de console ; 90 écrans mesurés (Pixel 7, 360 × 640) : cibles ≥ 48 px, textes ≥ 12 px, aucun débordement après correction.
+- **Tests** : `tests/career-integration.test.js` (écus des quêtes, seuils et objectifs selon la durée, listes en cache, meilleur patrimoine) ; deux assertions mises à jour (`career-buildings`, `career-core`) ; 347 tests ; parité et captures des niveaux 1 et 9 identiques avant / après.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -408,3 +420,15 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-09-30 | Contrat de la carrière : l'événement `lotDeveloped { type }` ne pouvait pas être reçu par un abonné `on('*')` (le champ `type` des données écrasait le type de l'événement) | Corrigé (`lotType`) |
 | 2026-09-30 | Simulation de carrière : le robot optimal faisait faillite en Classique (semis juste avant les charges, sans garder de quoi les payer) | Corrigé (`tools/simulate-career.js`, aucune règle du jeu en cause) |
 | 2026-09-30 | **Équilibre : faillite quasi inévitable pour un vrai joueur** (niveau 1, premier fermage, à ×1). Cause : tout l'équilibrage reposait sur des robots qui arrosent, récoltent et replantent chaque parcelle chaque jour ; au niveau 1, 100 pièces au départ pour 95 pièces de charges et de fermage au printemps, à regagner en 7 jours de 20 s, tutoriel compris (une seule carotte le 1er jour, poulailler conseillé dès 70 pièces). Un joueur simulé « tranquille » y perdait 100 % des parties | Corrigé (mode « détente » par défaut, joueurs humains simulés, prêt du voisin ; le mode classique garde l'ancien équilibre) |
+| 2026-09-30 | Carrière : les écus des quêtes de Joseph (`questDone.ecus`) n'étaient jamais ajoutés au porte-monnaie | Corrigé (`recordCareerEcus`, `src/ui/career/index.js`, test) |
+| 2026-09-30 | Carrière : saisons de 10 ou 14 jours, progression bien trop rapide (Domaine à l'an 5 pour l'appliqué, rang 6 parfois dès l'an 4) | Corrigé (seuils × 2 / × 3,5, objectifs comptés × durée / 7, simulation) |
+| 2026-09-30 | Carrière : toucher un visiteur dans la scène ne faisait rien (cible `visitor` non traitée) | Corrigé (`src/ui/career/index.js`) |
+| 2026-09-30 | Carrière : le panneau de la ferme et la tenue affichés étaient ceux de la grange, pas ceux choisis à la création (« Ferme des Mûriers », tenue) | Corrigé (`app.applyCosmetics`) |
+| 2026-09-30 | Carrière (grande ferme) : barre du haut recalculée à chaque image avec une prévision en O(parcelles × cultures), feuille ouverte reconstruite à chaque événement, mise en page forcée à chaque gain d'argent de l'équipe, cacophonie des sons des employés à ×4 | Corrigé (limites à 4 fois par seconde, caches, sons discrets) |
+| 2026-09-30 | Carrière : pastille jaune sur l'onglet Équipe encore verrouillé | Corrigé |
+| 2026-09-30 | Carrière : « Sur : Le champ de départ, Le Haut-Champ, La Com… » des machines débordait de l'écran avec beaucoup de terrains | Corrigé (`css/style.css`) |
+| 2026-09-30 | Textes : « 10 chous », « pomme de terres » | Corrigé (`cropPlural`, `cropCount`) |
+| 2026-09-30 | Carrière (Classique) : ferme vendue tout de suite → « Meilleur patrimoine 0 » | Corrigé (posé à la création, test) |
+| 2026-09-30 | Débogage : `__debug.lotPoint` prenait le panneau (en tuiles) pour des px | Corrigé |
+| 2026-09-30 | Carrière : l'objectif « produits transformés » bloquait le joueur débutant au rang 2 plusieurs années | Corrigé (15 au lieu de 20, conseil dans le Carnet) |
+| 2026-09-30 | Carrière : sur Chrome émulé sans GPU (CPU ×4), 19 à 22 images par seconde sur une grande ferme ; la copie logicielle du canvas plein écran prend la moitié du temps (le mode Niveaux plafonne pareil à 23 à 27) | À vérifier sur un vrai téléphone |

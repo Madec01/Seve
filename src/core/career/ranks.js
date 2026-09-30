@@ -187,7 +187,7 @@ export function rankSummary(state) {
           objectives: next.objectives.map((o) => {
             const progress = objectiveProgress(state, o);
             const target = objectiveTarget(state, o);
-            return { id: o.id, label: objectiveLabel(state, o), done: !!c.objectives[o.id], progress: Math.min(progress, target), target };
+            return { id: o.id, label: objectiveLabel(state, o), done: !!c.objectives[o.id], progress: Math.min(progress, target), target, tip: o.tip || null };
           }),
           unlocks: unlocksFor(next.rank),
         }

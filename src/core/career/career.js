@@ -22,6 +22,7 @@ import { initialCareerMarket } from './market.js';
 import { careerLevel } from './level.js';
 import { CAREER_STATE_VERSION, checkCareerState, defaultCareerFields, migrateCareer } from './save.js';
 import { careerExtensions } from './registry.js';
+import { patrimony } from './ranks.js';
 
 export { careerLevel } from './level.js';
 export { CAREER_SCHEMA, CAREER_VERSION, checkCareerState, migrateCareer, NEWER_SAVE_MESSAGE } from './save.js';
@@ -96,6 +97,8 @@ export function createCareer({ seed = Date.now(), cosmetics = null, ...rest } = 
   placeBuilding(state, 'house', 'home', null, 1, 0);
   placeBuilding(state, 'coop', 'yard', 0, 1, 0);
   for (const ext of careerExtensions()) if (typeof ext.init === 'function') ext.init(state);
+  // Patrimoine de départ (argent) : le « meilleur patrimoine » d'une ferme vendue tout de suite n'est jamais 0.
+  state.career.bestPatrimony = patrimony(state);
   const level = careerLevel(state);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);

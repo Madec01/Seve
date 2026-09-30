@@ -625,6 +625,8 @@ body.layout-wide .sheet-head { padding-top: 6px; }
 .stat[data-tip] { text-decoration: underline dotted var(--text-soft); text-underline-offset: 2px; cursor: help; }
 .stat-label { color: var(--text-soft); }
 .stat--wide { flex-basis: 100%; flex-wrap: wrap; align-items: center; row-gap: 2px; }
+/* Liste longue (carrière : « Sur » le champ de départ, le Haut-Champ… ) : elle passe à la ligne. */
+.stat--wide > b { white-space: normal; min-width: 0; }
 .season-incomes { display: inline-flex; flex-wrap: wrap; gap: 2px 6px; }
 .si { display: inline-flex; align-items: center; gap: 2px; padding: 0 3px 0 1px; color: var(--pos); font-weight: 700; }
 .si.is-zero { color: var(--text-soft); font-weight: 400; }
@@ -2330,6 +2332,7 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.8125rem; }
 .c-obj { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; min-height: 36px; padding: 3px 6px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); text-align: left; }
 .c-obj.is-done { background: #e3f3d6; box-shadow: 0 0 0 var(--u) #a8d28c; }
 .c-obj > .c-bar { grid-column: 2 / -1; height: 6px; }
+.c-obj-tip { grid-column: 2 / -1; margin: 0; font-size: 0.875rem; line-height: 1.25; color: var(--text-soft); }
 .c-obj-box { display: grid; place-items: center; width: 22px; height: 22px; background: var(--parch); box-shadow: 0 0 0 var(--u) var(--outline); font-weight: 700; color: var(--green-text); }
 .c-obj-label { font-size: 0.9375rem; line-height: 1.2; }
 .c-obj small { font-size: 0.875rem; color: var(--text-soft); white-space: nowrap; }

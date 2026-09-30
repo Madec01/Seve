@@ -54,7 +54,7 @@ export const RANKS = [
       // 30 au § 1.5 ; 20 après simulation (au rang 2, seul l'atelier de confitures transforme : fraises, pommes) ;
       // 15 après l'intégration (le débutant qui ne sème pas exprès des fraises restait des années au rang 2 avec
       // 10 à 16 produits : rang 3 à l'an 5 dans 65 % → cible 70 %).
-      { id: 'products', label: 'Vendre {n} produits transformés', type: 'productsSold', target: 15 },
+      { id: 'products', label: 'Vendre {n} produits transformés', type: 'productsSold', target: 15, tip: 'Une cour des ateliers, l\'atelier de confitures, et des fraises semées au printemps et en été : chaque pot vendu compte.' },
     ],
     features: [
       { kind: 'machine', id: 'seeder', name: 'Semoir' },

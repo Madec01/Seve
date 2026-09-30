@@ -100,6 +100,7 @@ function farmTab(ui) {
               el('span.c-obj-label', o.label),
               el('small', o.target > 1 ? `${fmt(o.progress)} / ${fmt(o.target)}` : o.done ? 'fait' : 'à faire'),
               o.target > 1 && !o.done ? bar(o.progress, o.target) : null,
+              o.tip && !o.done ? el('p.c-obj-tip', o.tip) : null,
             ),
           ),
         ),

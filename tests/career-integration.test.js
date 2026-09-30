@@ -87,3 +87,8 @@ test('listes d\'animaux et d\'investissements : en cache, recalculées quand les
   assert.equal(getCareerAnimal('llama'), null, 'extension retirée : liste recalculée');
   assert.equal(getCareerInvestment('llama'), null);
 });
+
+test('meilleur patrimoine : celui du départ dès la création (archive d\'une ferme vendue tout de suite)', () => {
+  assert.equal(newCareer().state.career.bestPatrimony, 200);
+  assert.equal(newCareer({ difficulty: 'classique' }).state.career.bestPatrimony, 150);
+});

@@ -361,9 +361,11 @@ export function createCareerUI(app) {
     // Équipe : nouveaux candidats (pas encore vus) ; verrouillée avant le rang 2 et la maison niv. 2.
     const cands = q('candidates', null);
     const day = game.state.career?.candidatesDay ?? null;
-    if (cands?.canHire && (cands.list || []).length && day !== null && day !== seen.candidatesDay) badges.staff = true;
-    tb.setBadge('staff', badges.staff);
-    tb.setLocked?.('staff', !staffUnlocked());
+    const unlocked = staffUnlocked();
+    if (unlocked && cands?.canHire && (cands.list || []).length && day !== null && day !== seen.candidatesDay) badges.staff = true;
+    // Onglet verrouillé : jamais de pastille (elle invitait à toucher un onglet qui ne s'ouvre pas).
+    tb.setBadge('staff', unlocked && badges.staff);
+    tb.setLocked?.('staff', !unlocked);
     // Carnet : quête ou offre nouvelle.
     const quest = q('quest', null);
     if (quest && !quest.accepted && quest.id !== seen.questId) badges.journal = true;

@@ -516,6 +516,7 @@ export function cropPlural(cropId, n) {
   if (name === 'maïs') return 'épis de maïs';
   if (name === 'pomme') return 'paniers de pommes';
   if (name === 'pomme de terre') return 'pommes de terre';
+  if (name === 'chou') return 'choux';
   return name.endsWith('s') || name.endsWith('x') ? name : `${name}s`;
 }
 
