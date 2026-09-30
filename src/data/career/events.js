@@ -87,7 +87,7 @@ export const CONTEST_GOAL_POOL = [
   { id: 'fruits', type: 'harvest', tree: true, target: { base: 4, perRank: 2 }, label: '{n} paniers de fruits', needs: 'trees' },
   { id: 'eggs', type: 'eggs', target: { base: 0, perRank: 10 }, label: '{n} œufs ramassés', needs: 'eggs' },
   { id: 'truffles', type: 'truffles', target: { base: 0, perRank: 1 }, label: '{n} truffes', needs: 'pigs' },
-  { id: 'stock', type: 'stock', target: { base: 0, perRank: 20 }, label: 'Plus beau stock : {n} unités au grenier le jour du jugement', needs: 'storage' },
+  { id: 'stock', type: 'stock', target: { base: 0, perRank: 15 }, label: 'Plus beau stock : {n} unités au grenier le jour du jugement', needs: 'storage' },
   // Toujours possibles (cultures du rang 1, d'été ou d'automne) : complètent le tirage d'une petite ferme.
   { id: 'harvests', type: 'harvests', target: { base: 30, perRank: 15 }, label: '{n} récoltes', needs: null },
   { id: 'tomatoes', type: 'harvest', cropIds: ['tomato'], target: { base: 6, perRank: 2 }, label: '{n} tomates', needs: null },

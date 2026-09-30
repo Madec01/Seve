@@ -479,16 +479,38 @@ function setLotPlan(game, me, lotId) {
   if (!base) return;
   const plan = { ...base };
   if (game.state.career.buildings.jamWorkshop) plan.spring = 'strawberry';
+  // Comice : un champ par épreuve « culture » pas encore réussie (le joueur prépare le comice).
+  const goals = contestCropGoals(game, me);
+  if (goals.length) {
+    const k = fieldLots(game).findIndex((l) => l.id === lotId);
+    const cropId = k >= 0 && k < goals.length ? goals[k] : null;
+    const crop = cropId && getCrop(cropId);
+    if (crop) for (const sid of ['summer', 'autumn']) if (crop.seasons.includes(sid)) plan[sid] = cropId;
+  }
   for (const [sid, cropId] of Object.entries(plan)) {
     const ok = game.query.career.lot(lotId)?.plan;
     if (!ok) return;
     game.actions.career.setPlan(lotId, sid, game.level.crops.includes(cropId) ? cropId : 'same');
   }
-  me.planned[lotId] = planKey(game);
+  me.planned[lotId] = planKey(game, me);
 }
 
-function planKey(game) {
-  return `${game.state.career.rank}/${game.state.career.buildings.jamWorkshop ? 'jam' : ''}`;
+function planKey(game, me) {
+  return `${game.state.career.rank}/${game.state.career.buildings.jamWorkshop ? 'jam' : ''}/${contestCropGoals(game, me).join(',')}`;
+}
+
+/** Cultures des épreuves du comice pas encore réussies (si le joueur s'y intéresse cette année). */
+function contestCropGoals(game, me) {
+  const k = game.state.career.contest;
+  if (!me || !me.contestFocus || !k || k.judged || k.year !== game.state.time.year) return [];
+  const info = game.query.career.contest();
+  const out = [];
+  for (const g of k.goals) {
+    if (!g.cropIds) continue;
+    if (info?.goals.find((x) => x.id === g.id)?.done) continue;
+    out.push(g.cropIds[0]);
+  }
+  return out;
 }
 
 // ── Événements, quêtes, comice ─────────────────────────────────────────────────────────────
@@ -725,11 +747,11 @@ function seasonalDecisions(game, me) {
   const P = me.profile;
   const cal = game.query.calendar();
   const A = game.actions.career;
+  // Plans des champs (au changement de rang, d'atelier, d'épreuves du comice).
+  for (const lot of fieldLots(game)) if (me.planned[lot.id] !== planKey(game, me)) setLotPlan(game, me, lot.id);
   const key = `${game.state.time.year}/${cal.seasonId}`;
   if (me.lastSeasonKey === key) return;
   me.lastSeasonKey = key;
-  // Plans des champs (au changement de rang : nouvelles cultures).
-  for (const lot of fieldLots(game)) if (me.planned[lot.id] !== planKey(game)) setLotPlan(game, me, lot.id);
   // Congés d'hiver.
   if (!game.state.career.staff.length) return;
   if (cal.seasonId === 'winter') {
@@ -786,8 +808,8 @@ function playDay(game, me) {
   };
   if (P.idleFrom && year >= P.idleFrom) return t;
   const noGestures = P.noGesturesFrom && year >= P.noGesturesFrom;
-  seasonalDecisions(game, me);
   contestFocus(game, me);
+  seasonalDecisions(game, me);
   t.left = noGestures ? 0 : Math.round(between(me.rnd, P.taps));
   const cal = game.query.calendar();
   if (!noGestures && me.rnd() < P.skipDay && cal.daysLeftInSeason > 0) {

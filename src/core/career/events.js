@@ -177,7 +177,7 @@ export function contestGoalPossible(api, goal, rank) {
     case 'pigs':
       return count(state, 'pig') * L * TRUFFLE_CHANCE_HINT >= target * 1.5;
     case 'storage':
-      return storageCapacity(state) >= target;
+      return storageCapacity(state) >= Math.ceil(target * 1.5); // de la marge : le vendeur vend au bon cours
     default:
       return false;
   }

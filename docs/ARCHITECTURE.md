@@ -934,6 +934,10 @@ game.refreshLevel()              // carrière seulement : après une modificatio
 ⚠ Deux objectifs changés par rapport au § 1.5 (simulation, joueur tranquille) : rang 2 **« Faire 80 récoltes »**
 (id `harvests`, au lieu de 100 : il en fait ≈ 85 la première année) ; rang 3 **« Vendre 20 produits transformés »**
 (id `products`, au lieu de 30 : au rang 2 seul l'atelier de confitures transforme). Seuils de patrimoine inchangés.
+⚠ Réglage de CORE-C après la simulation complète (employés, machines, événements ; voir « livraison CORE-C ») :
+rang 2 **« Faire 60 récoltes »** (le joueur tranquille ramasse aussi les abris et répond aux visiteurs : ≈ 75 récoltes
+la 1re année) ; seuil du rang 6 **100 000** (au lieu de 70 000 : Domaine vers l'année 9 pour le joueur tranquille).
+L'objectif « 20 produits transformés » est gardé : le blocage venait du robot (plan sans fraises pour la confiturerie).
 
 ### Points d'accroche pour CORE-B et CORE-C (`src/core/career/registry.js`)
 
@@ -1213,3 +1217,154 @@ src/ui/career/util.js      icônes (icon.career.*, portraits, blasons), boutons 
   `investment` (ruche, panneau), `plot`. Les événements de carrière passés à `onEvent` sont traités après la
   reconstruction de la disposition (positions à jour).
 - Tampon fenêtré en carrière (vue = écran, couche fixe = tout le monde) ; mode Niveaux inchangé au pixel près.
+
+## Mode Carrière — livraison CORE-C (événements vivants, Joseph, comice, simulation, 2026-09-30)
+
+Deux extensions (`registerCareerExtension`), une ligne d'import chacune dans `src/core/career/extensions.js` :
+`events` (fêtes, comice, événements au hasard, offres, corbeaux, pêche) et `quests` (quêtes et amitié de Joseph).
+Tout vit dans `state.career` (sauvegardé tel quel) ; tous les tirages passent par le flux `events` ; aucune règle
+n'est lue par une partie de niveau. Tests : `tests/career-{events,quests,show,simulate}.test.js`.
+
+### Fichiers
+
+```
+src/data/career/events.js    CALENDAR_EVENTS (4 fêtes), CONTEST + CONTEST_GOAL_POOL (comice), RANDOM_EVENT_RULES,
+                             RANDOM_EVENTS (8, poids), VISITOR, TOURISTS, CROWS, RAINBOW, DEW, MERCHANT_ITEMS, PETS,
+                             JOSEPH_GIFT, FISH
+src/data/career/quests.js    QUEST_RANK, QUEST_TEMPLATES (5), QUEST_REWARD, EGG_VALUE, MAX_HEARTS, JOSEPH_HEARTS
+                             (paliers 2/4/6/8/10), JOSEPH_ORCHARD, JOSEPH_CART, JOSEPH_LINES (répliques de Joseph)
+src/core/career/events.js    extension « events » ; exporte dayIndex, festivalToday/Tomorrow, contestInfo,
+                             chaseCrowAt(api, i, by), eggsCountable, cropPlural, baseCropPrice…
+src/core/career/quests.js    extension « quests » ; exporte addHeart(api, reason), questInfo, productPlural
+tools/simulate-career.js     robots casual / novice / optimal / idle / automator, --matrix
+```
+
+### État (en plus du contrat)
+
+```js
+state.career.events = { active, offers, calendarDone, fishedDay /* jour absolu */, lastKind,
+  today: null | 'seedFair' | 'villageFete' | 'harvestFestival' | 'christmasMarket',   // fête du jour
+  nextOfferId, eggs /* œufs ramassés (cumul) */, eggSeen, fertilizer: null | { lotId, left, growth },
+  year: { visitors, visitorIncome, tourists, touristIncome, crowsChased, crowsMissed, fish, fishIncome, gifts, events } }
+active = { id, kind /* id de RANDOM_EVENTS */, day, endDay /* jours absolus */, data }
+offers[k] = { id: 'offer7', kind: 'visitor' | 'merchant' | 'pet', day, endDay, accepted, delivered, data }
+state.career.contest = null | { year, rank, goals: [{ id, type, label, target, base, cropIds?, productIds?, tree?,
+  notified }], judgeDay, prizePerGoal, judged, result: null | { goalsMet, amount, all, goals } }
+state.career.quest = null | { id, templateId, type, need: { type, id, n }, progress, accepted, offeredDay, endDay,
+  base, value, what, text, reward: { money, ecus, hearts } }
+state.career.joseph = { hearts, questsDone, gifts, loansRepaid (CORE-A), loanHearts, festivalHeartYear, onceDone,
+  orchardDone, nextQuestId, questsThisYear, ecusThisYear, heartLog }
+state.career.pets = { cat, dog }
+```
+
+« Jour absolu » = `(année − 1) × 4 × durée des saisons + jour de l'année` (même règle que `absDay` de CORE-B).
+
+### Déroulé
+
+- **seasonStart** : été (rang ≥ 2) → annonce du comice (3 épreuves possibles et distinctes, `contestAnnounced`) ;
+  chaque saison (rang ≥ 2, pas de quête en cours) → quête de Joseph (`questOffered`).
+- **dawnEvents** (après la météo) : œufs ramassés observés ; engrais ; pénalité des corbeaux non chassés
+  (`plot.crowPenalty`, fin de l'événement) ; fête du jour (`festival`, `events.today`, `cheerStaff` de CORE-B le jour
+  de la fête du village) ; tirage du jour (30 %, jamais les 3 premiers jours ni un jour de fête, jamais deux fois le
+  même d'affilée, un seul actif) ; +1 ♥ à la fête des récoltes si une quête est acceptée ; quêtes « passives ».
+- **tick** : 3 passages des touristes (30 %, 55 %, 80 % du jour) ; œufs ; quêtes passives ; cœur du prêt remboursé.
+- **incomes** : chambre d'hôte × 2 le jour de la fête du village (poste `guests`, source `festival`).
+- **evening** : offres échues (`offerResolved { outcome: 'expired' }` ; ce qui a été mis de côté est payé au prix
+  normal) ; comice jugé le soir du dernier jour d'automne, avant les charges (`contestAwarded`) ; quête échue le soir
+  du dernier jour de la saison (`questExpired`).
+- **harvest** : récolte mise de côté pour un visiteur (commande acceptée, même culture) puis pour Joseph (quête
+  « culture » ou « fruits ») → `harvested.diverted` = « → Mme Leblanc » / « → Joseph ».
+- **yearEnd** : `report.events` (compteurs, fêtes, comice), `report.joseph` et `report.questEcus` ; calendrier remis
+  à zéro.
+- **Fournisseurs** : `priceFactor` (fête du village : récoltes × 1,25 ; fête des récoltes : tout × 1,15 ; marché de
+  Noël : produits × 1,5, grenier × 1,25) ; `seedFactor` (foire aux semis × 0,75, semoir compris) ;
+  `effects('growthBonus')` (arc-en-ciel + 0,1) ; `effects('priceBonus')` (charrette de Joseph + 0,05 à 10 ♥) ;
+  `lotPrice` (verger de Joseph à 8 ♥ : terrain suivant à moitié prix) ; `objective(quests)` ; `unlocks(2)`.
+
+### Actions (`game.actions.career.*`)
+
+```js
+chaseCrow(plotIndex) → { ok, plotIndex }             // crowChased { plotIndex, by: 'player' }
+fish() → { ok, amount, fishId, name }                  // mare ; une fois par jour ; fishCaught
+acceptOffer(offerId, lotId?) / declineOffer(offerId) / deliverOffer(offerId)
+   // visiteur : accepter (offerAccepted), livrer du grenier (offerProgress, puis offerResolved 'delivered')
+   // marchand : acheter (engrais : lotId optionnel, sinon le champ le plus semé ; 2 poules ; ruche) ; animal perdu
+acceptQuest() → { ok, quest, line } / declineQuest() → { ok, line } / deliverQuest() → { ok, delivered, done }
+buyLot()        // ⚠ remplace celui de CORE-A (même résultat) : « Le verger de Joseph » est aménagé tout de suite
+                // (verger, 4 pommiers adultes, lotDeveloped { gift: 'josephOrchard' }, josephOrchard) → + lotType
+triggerEvent(id) // débogage (__debug.careerEvent) et tests : lance un événement si sa condition est remplie
+```
+
+### Requêtes (`game.query.career.*`)
+
+```js
+events() → { today, tomorrow /* fête : { id, name, text, icon, seasonId, day, factors, seedFactor } */,
+  active: null | { id, kind, name, icon, day, endDay, text, data },
+  offers: [offerInfo], calendar: [{ id, name, text, icon, seasonId, day, rank, locked, today, done, daysUntil }],
+  contest, fishing: { pond, fishedToday }, fertilizer, pets, crows: [plotIndex] }
+offerInfo = { id, kind, title, icon, text, detail, acceptLabel, declineLabel, accepted, daysLeft, endDay, data,
+  // visiteur : delivered, n, inStock, canDeliver, reward ; marchand : price, canAccept }
+contest() → null | { name, year, rank, goals: [{ id, label, target, progress, done }], prizePerGoal, bonusAll,
+  maxPrize, daysLeft, judged, result }
+festival() → fête du jour ou null
+quest() → null | { id, templateId, type, text, what, need, progress, left, reward: { money, ecus, hearts },
+  daysLeft, accepted, canDeliver, inStock, line, portrait }
+joseph() → { hearts, maxHearts, questsDone, nextGift, tiers: [{ hearts, id, name, text, reached }],
+  orchard: { offered, done }, cart, title, portrait, quest, loan /* forme de finance().neighbourLoan */ }
+```
+
+### Événements (ajouts et formes)
+
+| Type | Données |
+|---|---|
+| `festival` | `{ id, name, text, icon, seasonId, day }` (aube du jour de fête) |
+| `careerEvent` / `careerEventEnded` | `{ id, kind, name, icon, text, data }` / `{ id, kind, reason: 'ended'\|'chased'\|'delivered'\|'declined'\|'expired'\|'accepted'\|'replaced', data }` (corbeaux : `data.penalized`) |
+| `offer` / `offerAccepted` / `offerProgress` / `offerResolved` | `{ offerId, kind, data: offerInfo }` / idem / `{ offerId, delivered, n, fromStock? }` / `{ offerId, kind, outcome, amount?, … }` |
+| `crow` / `crowChased` | `{ plots }` / `{ plotIndex, by }` |
+| `touristsPassed` | `{ amount, pass, passes }` |
+| `fishCaught` | `{ fishId, name, amount }` |
+| `contestAnnounced` / `contestProgress` / `contestAwarded` | `{ career: true, year, goals, prizePerGoal }` / `{ career: true, goalId, label, progress, target, done }` / `{ career: true, year, amount, goalsMet, goals, all, contestsWon }` |
+| `questOffered` / `questProgress` / `questDone` / `questExpired` | `{ quest: questInfo, line? }` ; `questDone` + `amount, ecus, hearts` ; `questExpired` + `accepted, declined?, amount` |
+| `josephHeart` | `{ hearts, reason: 'quest'\|'loan'\|'festival', line, unlock: null \| { id, name, text, line }, gift? }` |
+| `josephOrchard` | `{ lotId, trees, line }` |
+
+### Règles chiffrées (réglées par la simulation)
+
+- Fêtes : foire aux semis (printemps j. 3), fête du village (été j. 4), fête des récoltes (automne j. 2), marché de
+  Noël (hiver j. 4, rang ≥ 2) ; mêmes jours quelle que soit la durée des saisons.
+- Comice : prix 100 × rang par épreuve + autant si les 3 sont réussies, × 2 au rang 6 ; épreuves : citrouilles
+  (4 + rang), produits (6 + 3 × rang), fromages (2 + rang), fruits (4 + 2 × rang), œufs ramassés (10 × rang, seulement
+  avec le ramassage de CORE-B), truffes (rang ; ≥ assez de cochons), stock (15 × rang, grenier ≥ 1,5 × la cible),
+  et toujours possibles : récoltes (30 + 15 × rang), tomates (6 + 2 × rang), pommes de terre (6 + 3 × rang).
+- Au hasard (poids) : visiteur 30 (4 à 7 récoltes, 3 à 5 si ≥ 40 pièces, × 1,5, 2 jours), touristes 15
+  (5 × (1 + attrait) × 3 ; attrait = chambre d'hôte, chevaux, mare), corbeaux 15 (1 à 3 parcelles, ≥ 12 semées, hors
+  hiver, −50 %), arc-en-ciel 10 (+10 % de pousse), rosée 10, marchand 10 (engrais 150 : +0,25 jour de pousse × 3
+  aubes sur un champ ; 2 poules 40 ; ruche 40), animal perdu 5, cadeau de Joseph 5 (≥ 2 ♥ : 8 parcelles semées
+  gratuitement, sinon 30 pièces). Pêche : 5 à 40 pièces.
+- Quêtes : culture (6 + 2 × rang, récompense 1,5 × valeur), produit (4 + rang, 0,5 × valeur : déjà vendus), œufs
+  (8 × rang, 1,5 × 2 par œuf), fruits (4 + rang, 1,5 ×), pommiers (2, une fois, 1,5 × prix des plants) ; + 3 écus
+  et +1 ♥.
+
+### Écarts au contrat (à connaître)
+
+- ⚠ Les **écus des quêtes** ne sont pas versés par le cœur (la progression est hors de la partie) : `questDone.ecus`
+  (3) et `yearEnd.report.questEcus` — l'interface (ou `recordCareerYear`) doit les ajouter à `progress.ecus`.
+- `buyLot` est remplacé par l'extension « quests » (même comportement, + verger de Joseph).
+- Épreuve « œufs » : œufs **ramassés** (baisse de la valeur en attente du poulailler et de la mare, 1 œuf = la
+  production d'un animal pour un jour) ; retirée du tirage sans le lot CORE-B. Quête « œufs » : idem.
+- Quêtes « produit » et « œufs » : comptées sans détourner les ventes (il n'y a pas de point d'accroche sur la vente
+  d'un produit) ; la récompense ajoute la moitié de la valeur (produits) — total ≈ 1,5 × comme les autres.
+- Nouveaux événements : `festival`, `touristsPassed`, `offerAccepted`, `offerProgress`, `contestAnnounced`,
+  `josephOrchard`. `contestAwarded` et `contestProgress` portent `career: true` (ne pas les confondre avec le
+  concours du niveau 12).
+- Employés : `cheerStaff(api)` de CORE-B est appelé le jour de la fête du village ; les jardiniers chassent les
+  corbeaux eux-mêmes (`chaseCrowAt` exporté pour eux).
+
+### Simulation (`tools/simulate-career.js`)
+
+`node tools/simulate-career.js [--strategy casual,novice,optimal,idle,automator] [--runs 20] [--years 10]
+[--difficulty classique] [--season 7|10|14] [--matrix] [--assume-objectives] [--trace --seed 3] [--json]` ;
+exporte `playCareer`, `simulateCareer`, `loadStaffHelper`, `STRATEGIES`, `CAREER_PROFILES`. Les décisions d'équipe et
+de machines de CORE-B (`tools/sim-career-staff.js`, `staffDecisions`) sont chargées automatiquement. Budget de gestes
+par jour (glisser : 1 + 0,25 par parcelle ; semer partout : 3 ; ramasser, chasser, pêcher : 1 ; offre ou quête : 2 ;
+achat : 3) : casual 7-11, novice 4-8, optimal ≤ 40. Résultats : `docs/CARRIERE.md` § 13.4.

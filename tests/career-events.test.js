@@ -509,3 +509,17 @@ test('ancienne sauvegarde sans les champs de CORE-C : complétée à la reprise'
   skipDays(g2, 10);
   assert.equal(g2.state.status, 'playing');
 });
+
+test('fête du village : l\'équipe est joyeuse 7 jours (CORE-B : cheerStaff)', () => {
+  const g = newCareer();
+  setRank(g, 2);
+  g.state.money = 10000;
+  assert.ok(g.actions.career.upgradeBuilding('house').ok);
+  const cand = g.query.career.candidates().list[0];
+  assert.ok(g.actions.career.hire(cand.id, 'gardener', 'start').ok);
+  goTo(g, 1, dayOf(1, 4));
+  assert.equal(g.state.career.events.today, 'villageFete');
+  const s = g.state.career.staff[0];
+  assert.equal(s.mood, 'joyful');
+  assert.ok(s.joyUntilDay > dayIndex(g.state));
+});

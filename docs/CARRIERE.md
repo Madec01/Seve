@@ -77,11 +77,11 @@ Un rang s'obtient **dès que** le patrimoine atteint le seuil **et** que les deu
 | Rang | Nom | Titre du fermier | Patrimoine *(à régler)* | Objectifs | Débloque |
 |---|---|---|---|---|---|
 | 1 | **Petite ferme** | Jeune fermier | départ | — | Carotte, navet, blé, chou, pomme de terre, fraise, tomate ; poules ; ruches (2) ; étal ; panneaux solaires ; **1 terrain** ; aménagements Champ et Pré ; bergerie, chèvrerie |
-| 2 | **Ferme familiale** | Fermier | 1 200 | Acheter un premier terrain · Faire 80 récoltes *(100 avant la simulation)* | Maïs, tournesol, courgette, pommier ; **maison niv. 2** (2 employés) et **embauche** ; **grenier** ; étable (vaches) ; atelier de confitures ; aménagements Verger et Cour des ateliers ; **arroseurs** de terrain ; **jusqu'à 3 terrains** ; ruches (4) ; quêtes de Joseph |
+| 2 | **Ferme familiale** | Fermier | 1 200 | Acheter un premier terrain · Faire 60 récoltes *(100 → 80 → 60 après simulation, § 13.4)* | Maïs, tournesol, courgette, pommier ; **maison niv. 2** (2 employés) et **embauche** ; **grenier** ; étable (vaches) ; atelier de confitures ; aménagements Verger et Cour des ateliers ; **arroseurs** de terrain ; **jusqu'à 3 terrains** ; ruches (4) ; quêtes de Joseph |
 | 3 | **Belle ferme** | Fermier reconnu | 4 000 | Embaucher un employé · Vendre 20 produits transformés *(30 avant la simulation)* | Citrouille ; maison niv. 3 (4 employés) ; porcherie (cochons), clapier (lapins), écurie (chevaux) ; fromagerie, moulin ; chambre d'hôte ; **semoir** et **moissonneuse** niv. 1, cueilleuse, collecteur ; serre *(phase B)* ; **jusqu'à 6 terrains** ; ruches (6) |
 | 4 | **Grande ferme** | Maître fermier | 12 000 | 48 parcelles cultivables · Réussir 3 quêtes de Joseph | Maison niv. 4 (6 employés) ; **tracteur**, machines niv. 2 ; **silo** (grenier niv. 2) ; mare et canards, conserverie, filature *(phase B)* ; étal niv. 2 ; ateliers niv. 4 ; **jusqu'à 9 terrains** |
 | 5 | **Exploitation modèle** | Grand exploitant | 30 000 | 5 employés · 6 espèces d'animaux | Maison niv. 5 **Manoir** (8 employés) ; grand silo ; ateliers niv. 5 ; château d'eau, convoyeur, marché fermier (étal niv. 3), embellissements *(phase B)* ; **jusqu'à 12 terrains** |
-| 6 | **Domaine** | Seigneur du domaine | 70 000 | Maison au niveau Manoir · Réussir les 3 épreuves d'un comice | Panneau « Domaine des … », fanion doré sur la maison, objets de décor « Domaine » (écus), comice « régional » (prix doublés) ; jeu libre |
+| 6 | **Domaine** | Seigneur du domaine | 100 000 *(70 000 avant la simulation, § 13.4)* | Maison au niveau Manoir · Réussir les 3 épreuves d'un comice | Panneau « Domaine des … », fanion doré sur la maison, objets de décor « Domaine » (écus), comice « régional » (prix doublés) ; jeu libre |
 
 - Passage de rang : fenêtre « Votre ferme devient une **Belle ferme** ! » (fanfare de victoire, confettis) avec la liste des déblocages (icônes) et **+20 × rang écus** ; conseil « première fois » sur le premier déblocage utile.
 - Le titre du fermier s'affiche dans le Carnet, sur l'écran de bilan et dans la grange (« Ma ferme »). Titre au féminin au choix (option « Fermière », § 15).
@@ -689,6 +689,50 @@ Rang, patrimoine, argent (min, fin), bénéfice par année ; revenus par source 
 | **mode Niveaux** | `node --test tests/` vert, parité identique (`tests/parity.test.js`), `node tools/simulate.js` identique à avant |
 
 Commandes : `node tools/simulate-career.js` (tous les robots, Détente), `--strategy casual --years 10 --runs 50`, `--difficulty classique`, `--trace --seed 3` (une carrière jour par jour), `--csv` (courbes par année).
+
+### 13.4 Résultats (lot CORE-C, 2026-09-30 : employés, machines, animaux, événements, quêtes, comice)
+
+Robots réalistes (budget de gestes par jour comme `tools/simulate.js`, décisions d'équipe et de machines de
+`tools/sim-career-staff.js`), 20 carrières × 10 ans par réglage. Rang médian à la fin de chaque année, et part des
+carrières au rang visé par la courbe du § 9.1 (an 1 → 2, an 3 → 3, an 5 → 4, an 7 → 5, an 10 → 6) :
+
+| Réglage | Robot | An 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Domaine (méd.) | Faillites |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Détente 7 j | casual | 2 (75 %) | 2 | 3 (80 %) | 4 | 4 (100 %) | 5 | 5 (100 %) | 5 | 6 | 6 (100 %) | an 9 | 0 % |
+| Détente 7 j | novice | 1 | 2 | 2 | 2 | 3 | 4 | 4,5 | 5 | 5 | 5 | jamais (10 %) | 0 % |
+| Détente 7 j | optimal | 2 | 2 | 4 | 5 | 5 | 6 | 6 | 6 | 6 | 6 | an 6 (0 % avant la fin de l'an 4) | 0 % |
+| Détente 7 j | automator | 2 | 2 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | 6 | an 7 | 0 % |
+| Détente 7 j | idle | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | — | 0 % |
+| Détente 10 j | casual | 2 | 2 | 4 | 4 | 5 | 5 | 5,5 | 6 | 6 | 6 | an 7,5 | 0 % |
+| Détente 10 j | optimal | 2 | 4 | 5 | 5 | 6 | 6 | 6 | 6 | 6 | 6 | an 5 | 0 % |
+| Détente 14 j | casual | 2 | 3 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | 6 | an 7 | 0 % |
+| Détente 14 j | optimal | 2 | 4 | 5 | 5 | 6 | 6 | 6 | 6 | 6 | 6 | an 5 | 0 % |
+| Classique 7 j | casual | 1 | 2 | 2 | 3 | 4 | 4 | 4 | 5 | 5 | 5 | jamais (10 %) | 5 % |
+| Classique 7 j | optimal | 2 | 3 | 4 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | an 8 | 0 % |
+| Classique 10 j | casual | 1 | 2 | 3 | 4 | 4 | 5 | 5 | 5 | 6 | 6 | an 9 | 5 % |
+| Classique 14 j | casual | 1 | 2 | 3 | 4 | 5 | 5 | 5 | 6 | 6 | 6 | an 8 | 10 % |
+| Classique | novice / idle | | | | | | | | | | | — | 85 à 100 % |
+
+- **Cibles tenues (Détente, 7 j)** : casual rang 2 fin d'an 1 dans 75 % (an 2 : 100 %), rang 3 à l'an 3 dans 80 %,
+  rang 4 à l'an 5 et rang 5 à l'an 7 dans 100 %, Domaine en médiane à l'an 9 (100 % à l'an 10) ; optimal : Domaine
+  à l'an 6 (entre 5 et 7), jamais avant la fin de l'an 4 ; idle : jamais de fin de partie, patrimoine qui monte
+  lentement ; automator (aucun geste dès l'an 3) : ≈ 82 % du bénéfice de l'optimal en fin de partie (cible ≥ 60 %) ;
+  délégation : gestes du casual à l'an 5 = 44 % de ceux de l'an 1 (2,7 contre 6,2), part des récoltes et semis faits
+  à la main 2 à 4 % dès l'an 4 ; Classique : casual 5 à 10 % de faillites, optimal 0 %. Aucune vente de secours
+  pour le casual et le novice ; produits animaux perdus ≤ 1 % (plafond de 3 jours gardé).
+- **Presque** : novice rang 3 à l'an 5 dans 65 % (cible 70 %).
+- **Événements vivants** : ≈ 10 à 16 % des revenus du joueur tranquille (visiteurs 150 à 400 par an, quêtes 400 à
+  800, comice 400 à 3 000, touristes et pêche quelques dizaines) ; 3 à 4 quêtes réussies par an ; 10 ♥ vers l'an 5
+  (casual) ; comice réussi (3 épreuves) en médiane 5 fois en 10 ans (casual), 6 (optimal).
+- **Réglages faits** : rang 2 « Faire 60 récoltes » (80 : rang 2 fin d'an 1 dans 37 % seulement, le joueur passe
+  aussi ses gestes aux abris, aux visiteurs et à Joseph) ; seuil du Domaine 100 000 (70 000 : Domaine à l'an 8 pour
+  le joueur tranquille) ; épreuve « stock » 15 × rang avec un grenier ≥ 1,5 × la cible (le vendeur vend au bon
+  cours) ; l'objectif « 20 produits transformés » est gardé (il suffit de planter des fraises pour la confiturerie).
+- **À surveiller** : avec des saisons de 10 ou 14 jours tout va plus vite (Domaine an 7 à 7,5 pour le casual, an 5
+  pour l'optimal, qui atteint même le rang 6 dès l'an 4 dans certaines carrières de 14 jours) : les objectifs
+  comptés (récoltes, produits, quêtes, comice) ne sont pas multipliés par la durée et la croissance se compose plus
+  vite dans une année plus longue. Piste : objectifs comptés × durée / 7 et seuils × (durée / 7)^1,3.
+  Le novice en Classique fait presque toujours faillite : l'écran de création recommande déjà Détente.
 
 ---
 

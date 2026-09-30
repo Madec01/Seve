@@ -1,7 +1,7 @@
 {
-  "id": "80f8149668fd",
+  "id": "3f6f86fe7622",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.fedf7aa894.js",
+  "js": "dist/game.5cdc1f400e.js",
   "css": "dist/game.bef9d1e055.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -151,7 +151,7 @@
     "src/core/career/career.js": "9b39a9de13f583af",
     "src/core/career/crew.js": "896a32d6dfa49dc4",
     "src/core/career/effects.js": "ccaa1afad583af9a",
-    "src/core/career/events.js": "275272dcd909d878",
+    "src/core/career/events.js": "9ea327d65104e6ac",
     "src/core/career/extensions.js": "811cd9ca9d997b34",
     "src/core/career/land.js": "b7086fa149f19bca",
     "src/core/career/level.js": "369b1b4a616754a3",
@@ -184,12 +184,12 @@
     "src/data/career/animals.js": "bb0310114eec654b",
     "src/data/career/buildings.js": "5fb6613b2c72514e",
     "src/data/career/career.js": "b0a78a771491e2e1",
-    "src/data/career/events.js": "b08486c95d581024",
+    "src/data/career/events.js": "ddaa86847cc300d7",
     "src/data/career/lots.js": "305cc6161edf2e9a",
     "src/data/career/machines.js": "51e5f1ac005ee3bc",
     "src/data/career/names.js": "8ed1d9050dae373d",
     "src/data/career/quests.js": "f226f6be9e61dc86",
-    "src/data/career/ranks.js": "5f768c535326e03c",
+    "src/data/career/ranks.js": "9138a39f7837666d",
     "src/data/career/staff.js": "0c7c7cd4ac8cb93d",
     "src/data/cosmetics.js": "f7d4eb5ebb95979a",
     "src/data/crops.js": "b95f14be6d5a8267",
@@ -246,6 +246,14 @@
   },
   "history": [
     {
+      "id": "3f6f86fe7622",
+      "files": [
+        "dist/game.5cdc1f400e.js",
+        "dist/game.5cdc1f400e.js.map",
+        "dist/game.bef9d1e055.css"
+      ]
+    },
+    {
       "id": "80f8149668fd",
       "files": [
         "dist/game.fedf7aa894.js",
@@ -274,14 +282,6 @@
       "files": [
         "dist/game.57b08c089a.js",
         "dist/game.57b08c089a.js.map",
-        "dist/game.cf5821b84d.css"
-      ]
-    },
-    {
-      "id": "3906c9243d99",
-      "files": [
-        "dist/game.bed37be153.js",
-        "dist/game.bed37be153.js.map",
         "dist/game.cf5821b84d.css"
       ]
     }

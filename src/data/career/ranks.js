@@ -32,8 +32,10 @@ export const RANKS = [
     patrimony: 1200,
     objectives: [
       { id: 'firstLot', label: 'Acheter un premier terrain', type: 'lots', target: 1 },
-      // 100 au § 1.5 ; 80 après simulation (le joueur tranquille en fait ≈ 85 la première année).
-      { id: 'harvests', label: 'Faire 80 récoltes', type: 'harvests', target: 80 },
+      // 100 au § 1.5 ; 80 après la simulation du socle ; 60 après la simulation complète (CORE-C : le joueur
+      // tranquille passe aussi ses gestes à ramasser les abris, aux visiteurs et à Joseph : ≈ 75 récoltes la
+      // première année ; 60 → rang 2 à la fin de l'année 1 dans ≈ 80 % des carrières, cible ≥ 70 %).
+      { id: 'harvests', label: 'Faire 60 récoltes', type: 'harvests', target: 60 },
     ],
     features: [
       { kind: 'feature', id: 'hire', name: 'Embauche' },
@@ -90,7 +92,9 @@ export const RANKS = [
     rank: 6,
     name: 'Domaine',
     title: { fermier: 'Seigneur du domaine', fermiere: 'Dame du domaine' },
-    patrimony: 70000,
+    // 70 000 au § 1.5 ; 100 000 après la simulation complète (employés et machines de CORE-B, événements de
+    // CORE-C) : Domaine vers l'année 9 pour le joueur tranquille (70 000 : année 8), année 6 pour l'appliqué.
+    patrimony: 100000,
     objectives: [
       { id: 'manor', label: 'Maison au niveau Manoir', type: 'buildingLevel', buildingId: 'house', target: 5 },
       { id: 'contestAll', label: 'Réussir les 3 épreuves d\'un comice', type: 'contestsWon', target: 1 },

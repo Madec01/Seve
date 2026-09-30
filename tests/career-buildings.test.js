@@ -314,15 +314,15 @@ test('serre : 4 puis 8 parcelles, toutes les cultures en toute saison, ni gel ni
 });
 
 test('rangs : seuils (× durée), deux objectifs, déblocages, jamais de retour en arrière', () => {
-  assert.deepEqual(RANKS.map((r) => r.patrimony), [0, 1200, 4000, 12000, 30000, 70000]);
+  assert.deepEqual(RANKS.map((r) => r.patrimony), [0, 1200, 4000, 12000, 30000, 100000]);
   const g = newCareer();
   const ev = record(g);
   g.state.money = 5000;
   nextDay(g);
   assert.equal(g.state.career.rank, 1, 'patrimoine suffisant, objectifs non remplis');
   const next = g.query.career.summary().nextRank;
-  assert.deepEqual(next.objectives.map((o) => [o.id, o.done, o.target]), [['firstLot', false, 1], ['harvests', false, 80]]);
-  g.state.career.lifetime.harvests = 80;
+  assert.deepEqual(next.objectives.map((o) => [o.id, o.done, o.target]), [['firstLot', false, 1], ['harvests', false, 60]]);
+  g.state.career.lifetime.harvests = 60;
   assert.ok(g.actions.career.buyLot().ok);
   const up = ev.of('rankUp');
   assert.equal(up.length, 1, 'vérifié après l\'achat');
