@@ -9,6 +9,9 @@
 //   event=seed|village|harvest|christmas|rainbow|tourists|crows|visitor|merchant|pet|joseph|all
 //   staff=0..8 (défaut selon le stade)  sim=secondes de jeu à dérouler (employés et machines au travail)
 //   pets=1  focus=<lotId>|house|field  crops=0 (champs vides)
+//   (carte 2D) sides=N : N terrains de côté achetés en plus (alternés gauche / droite, du bas vers le
+//   haut, dans la lisière de query.career.grid()) ; sans la carte 2D du cœur : cases posées à la main
+//   (state.career.lots[].col/row) et grille simulée (query.career.grid).
 // window.preview.career expose { stage(n), event(id), sim(s), lots(), focus(id) } pour les scripts.
 
 import { createCareer } from '../src/core/career/career.js';
@@ -72,6 +75,9 @@ export function buildCareerGame(opts = {}) {
     tryAct(`developLot ${r.lotId} ${type}`, A.developLot(r.lotId, type));
     (byType[type] ||= []).push(r.lotId);
   }
+  // (Carte 2D) Terrains de côté
+  const nSides = Math.max(0, Number(opts.sides) || 0);
+  if (nSides > 0) buySides(game, nSides, byType, rich);
   // Bâtiments de la maison
   const houseLevel = stage === 'manor' ? 5 : nLots >= 8 ? 4 : nLots >= 3 ? 2 : 1;
   for (let l = 2; l <= houseLevel; l++) { rich(); tryAct('house', A.upgradeBuilding('house')); }
@@ -163,6 +169,61 @@ export function buildCareerGame(opts = {}) {
   game.refreshLevel?.();
   if (log.length) console.info(`[aperçu carrière] refus (${log.length}) :\n${log.join('\n')}`);
   return game;
+}
+
+const SIDE_TYPES = ['meadow', 'field', 'orchard', 'workshops', 'field', 'pond', 'meadow', 'greenhouse', 'field', 'orchard'];
+
+/** Achète `n` terrains de côté (gauche, droite, …), aménagés. Cœur sans carte 2D : grille simulée. */
+function buySides(game, n, byType, rich) {
+  const st = game.state;
+  const A = game.actions.career;
+  if (typeof game.query.career?.grid !== 'function') installMockGrid(game);
+  for (let k = 0; k < n; k++) {
+    rich();
+    const want = k % 2 === 0 ? -1 : 1;
+    const grid = game.query.career.grid();
+    const cands = (grid.lots || []).filter((e) => !e.owned && e.col !== 0);
+    cands.sort((a, b) => (Math.sign(a.col) === want ? 0 : 1) - (Math.sign(b.col) === want ? 0 : 1) || a.row - b.row || Math.abs(a.col) - Math.abs(b.col));
+    const c = cands[0];
+    if (!c) break;
+    st.career.rank = Math.max(st.career.rank, 5);
+    let r;
+    if (game.__mockGrid) {
+      r = tryAct('buyLot (grille simulée)', A.buyLot());
+      if (r?.ok) {
+        const lot = st.career.lots.find((l) => l.id === r.lotId);
+        lot.col = c.col;
+        lot.row = c.row;
+      }
+    } else r = tryAct(`buyLot ${c.id}`, A.buyLot(c.id));
+    if (!r?.ok) break;
+    const type = SIDE_TYPES[k % SIDE_TYPES.length];
+    tryAct(`developLot ${r.lotId} ${type}`, A.developLot(r.lotId, type));
+    (byType[type] ||= []).push(r.lotId);
+  }
+}
+
+/** Grille simulée (cœur sans carte 2D) : lisière autour des terrains possédés, -2 … 2 × 0 … 6. */
+function installMockGrid(game) {
+  game.__mockGrid = true;
+  const q = game.query.career;
+  q.grid = () => {
+    const st = game.state;
+    const owned = st.career.lots.filter((l) => l.index >= 3).map((l, k) => ({ id: l.id, col: Number.isFinite(l.col) ? l.col : 0, row: Number.isFinite(l.row) ? l.row : k + 1, owned: true, type: l.type }));
+    const occ = new Set(['0,0', ...owned.map((o) => `${o.col},${o.row}`)]);
+    const lots = [...owned];
+    let n = 0;
+    for (let col = -2; col <= 2; col++) {
+      for (let row = 0; row <= 6; row++) {
+        const k = `${col},${row}`;
+        if (occ.has(k)) continue;
+        if (![[0, 1], [0, -1], [1, 0], [-1, 0]].some(([dc, dr]) => occ.has(`${col + dc},${row + dr}`))) continue;
+        lots.push({ id: `mock${col}_${row}`, col, row, owned: false, buyable: n % 3 !== 2, price: 400 + 300 * n, lockedReason: n % 3 === 2 ? 'Rang 5 requis' : null, lockedByRank: n % 3 === 2 ? 5 : null });
+        n++;
+      }
+    }
+    return { cols: [-2, 2], rows: [0, 6], home: { col: 0, row: 0 }, lots };
+  };
 }
 
 /** Cultures au hasard : champs selon la saison, serre toutes cultures, verger en pommiers. */

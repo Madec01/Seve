@@ -6,8 +6,8 @@
 
 import { SEASONS } from '../balance.js';
 
-/** Version de state.career (migrateCareer fait passer chaque version à la suivante). */
-export const CAREER_VERSION = 1;
+/** Version de state.career (migrateCareer fait passer chaque version à la suivante) ; 2 : terrains sur la carte 2D (col, row). */
+export const CAREER_VERSION = 2;
 
 /** Version de l'enveloppe de sauvegarde (clé « une-annee-a-la-ferme.career »). */
 export const CAREER_SCHEMA = 1;
@@ -130,7 +130,7 @@ export const STORAGE_MODES = ['never', 'low', 'always'];
 export const DEFAULT_STORAGE_MODE = 'low';
 
 /** Limites (§ 2.5). */
-export const MAX_LOTS = 12;
+export const MAX_LOTS = 16;
 export const MAX_ANIMALS = 80;
 export const MAX_STAFF = 8;
 export const MAX_PLOTS = 128;

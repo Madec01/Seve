@@ -100,16 +100,18 @@ export const TRUFFLE_CHANCE_HINT = 0.3;
 // ── 8.2 Événements au hasard ────────────────────────────────────────────────────────────────────
 // Tirage à l'aube (flux « events ») : `chance` par jour, jamais les `graceDays` premiers jours de la
 // carrière, jamais un jour de fête, jamais deux fois le même d'affilée, un seul actif à la fois.
-export const RANDOM_EVENT_RULES = { chance: 0.3, graceDays: 3 };
+// Rythme « tranquille » (retours de joueurs, 2026-09-30) : 0,3 → 0,15 par jour ; avec les quêtes de Joseph (au plus
+// une toutes les deux saisons), ≈ 1 sollicitation par semaine de jeu (simulation, docs/CARRIERE.md § 13.5).
+export const RANDOM_EVENT_RULES = { chance: 0.15, graceDays: 3 };
 
 //   weight : poids du tirage ; name, icon, text : pour le message (toast) et l'Agenda
 export const RANDOM_EVENTS = [
-  { id: 'visitor', weight: 30, name: 'Visiteur acheteur', icon: 'npc.visitor.1' },
+  { id: 'visitor', weight: 20, name: 'Visiteur acheteur', icon: 'npc.visitor.1' },
   { id: 'tourists', weight: 15, name: 'Touristes', icon: 'npc.visitor.2' },
-  { id: 'crows', weight: 15, name: 'Corbeaux', icon: 'bird.crow' },
+  { id: 'crows', weight: 10, name: 'Corbeaux', icon: 'bird.crow' },
   { id: 'rainbow', weight: 10, name: 'Arc-en-ciel', icon: 'effect.rainbow' },
   { id: 'dew', weight: 10, name: 'Rosée du matin', icon: 'icon.career.dew' },
-  { id: 'merchant', weight: 10, name: 'Marchand ambulant', icon: 'npc.visitor.3' },
+  { id: 'merchant', weight: 8, name: 'Marchand ambulant', icon: 'npc.visitor.3' },
   { id: 'lostPet', weight: 5, name: 'Animal perdu', icon: 'pet.cat' },
   { id: 'josephGift', weight: 5, name: 'Cadeau de Joseph', icon: 'portrait.joseph' },
 ];
@@ -118,16 +120,21 @@ export const RANDOM_EVENTS_BY_ID = Object.fromEntries(RANDOM_EVENTS.map((e) => [
 
 /**
  * Visiteur acheteur : commande de `count` récoltes d'une culture de saison, payées `factor` × le prix de
- * base (difficulté comprise, sans le cours du jour), valable `days` jours (aujourd'hui et demain). Livrée
+ * base (difficulté comprise, sans le cours du jour), valable max(`days`, durée de saison × `seasonShare`) jours
+ * (5 jours en saisons de 7 et 10 jours, 7 en saisons de 14). Seulement une culture qu'on peut avoir à temps : au
+ * grenier, déjà semée, ou qui pousse en `days` − 1 jours au plus. Une seule commande à la fois. Livrée
  * depuis le grenier (« Livrer ») ou avec les prochaines récoltes de cette culture (mises de côté). Ratée :
- * les unités déjà mises de côté sont payées au prix normal (rien ne se perd).
+ * les unités déjà mises de côté sont payées au prix normal (rien ne se perd). Rappel (offerReminder) la veille
+ * du dernier jour d'une commande acceptée.
  */
 export const VISITOR = {
   factor: 1.5,
-  days: 2,
-  count: [4, 7],
-  countExpensive: [3, 5],
+  days: 5,
+  seasonShare: 0.5,
+  count: [3, 5],
+  countExpensive: [2, 4],
   expensivePrice: 40,
+  reminders: [1],
   names: ['Mme Leblanc', 'M. Garnier', 'Mme Rousseau', 'M. Fabre', 'Mlle Perrin', 'le boulanger Paulo', 'Mme Chevalier', 'la petite Lili', 'M. le maire', 'Mme Morel'],
 };
 

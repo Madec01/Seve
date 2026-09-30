@@ -66,6 +66,23 @@
 //                                       | { type: 'joseph' } | { type: 'visitor', offerId, kind }
 //                                       | { type: 'investment', id: 'beehive' | 'solarPanel' }
 //   scene.careerStats()                 acteurs dessinés, taille des tampons (mesures)
+//   Carte 2D (Carrière v2) : le monde a des colonnes de terrains côte à côte (layout.x0 < 0 à gauche) ;
+//   le zoom reste celui d'une colonne de 14 tuiles, on voit les côtés en faisant défiler en largeur.
+//   scene.scrollBy(dxCss, dyCss)        deux axes (un seul argument : vertical, comme avant) ; renvoie
+//                                       { x, y } appliqués
+//   scene.fling(vxCss, vyCss)           élan dans les deux axes (un argument : vertical)
+//   scene.setScroll(xCss, yCss)         défilement absolu (un argument : vertical)
+//   scene.getScroll() / maxScroll()     { x, y } px CSS (valent y dans un calcul : compatibilité)
+//   scene.focusLot(id, opts)            centre le terrain dans les deux axes (animé si opts.animate)
+//   scene.focusWorld(wx, wy, opts?)     centre un point du monde (px) ; opts { animate (true) }
+//   scene.viewRect()                    rectangle du monde (px) visible au-dessus de la feuille ouverte
+//   scene.getMinimap({ w, h, ctx?, x?, y?, markers?, staff? })  mini-carte (px du canevas) : fond en
+//                                       cache (terrains colorés par type + icône, à vendre en pointillés,
+//                                       verrouillés avec un cadenas, allées, route), vue courante, repères
+//                                       (Joseph, visiteurs, abris pleins qui clignotent, corbeaux,
+//                                       employés) ; renvoie un canevas (ou dessine dans ctx à x, y)
+//   scene.minimapToWorld(mx, my, { w, h }?)  point de la mini-carte → monde (px) (dernière taille dessinée)
+//   scene.minimapLotAt(mx, my)          terrain (id) sous un point de la mini-carte, ou null
 //   Tampons : en carrière la vue ne couvre que l'écran ; la couche fixe couvre tout le monde et on en
 //   recopie la tranche visible à chaque image (monde très haut, 60 i/s au téléphone).
 //
@@ -84,7 +101,7 @@ import {
   TILE, SPRITES, drawSprite, cropSprite, soilSprite, spriteRect, treeSprite, productSprite, decorSprite, outfitSprite,
   FARM_SIGN_WIDE_TEXT_RECT, WINDMILL_FRAMES, drawWideFarmSign, playerSprite, BUBBLE_CONTENT,
 } from './atlas.js';
-import { createCareerLayout, careerLayoutKey, WORKSHOP_IDS } from './layout-career.js';
+import { createCareerLayout, careerLayoutKey, careerGridKey, WORKSHOP_IDS } from './layout-career.js';
 import { createCareerActors } from './career-actors.js';
 import { getCrop } from '../data/crops.js';
 import { buildSeasonSheets } from './assets.js';
@@ -105,6 +122,7 @@ const PROCESSING_IDS = ['jamWorkshop', 'dairy', 'mill'];
 const DEFAULT_COSMETICS = { farmName: 'Ferme des Tilleuls', outfit: 'outfit.classic', path: 'path.dirt', fence: 'fence.wood', decor: {} };
 const SEASON_INDEX = { spring: 0, summer: 1, autumn: 2, winter: 3 };
 const CAREER_VISIBLE_ROWS = 22;
+const CAREER_COL_TILES = 14; // largeur d'une colonne de la carte de carrière (tuiles)
 const FAIR_LANTERNS_X = [1.5, 9.5]; // lampions des fêtes (tuiles, au-dessus de la route) // ordinateur : tuiles visibles en hauteur (zoom par la hauteur)
 const PRODUCT_OF_ANIMAL = { hen: 'product.eggs', rabbit: 'product.angora', duck: 'product.duckEgg', cow: 'product.milk', goat: 'product.milk', pig: 'product.truffle', sheep: 'product.angora', horse: 'product.ride' };
 
@@ -146,9 +164,13 @@ export function createScene(canvas, images, level, opts = {}) {
   let careerKey = '';
   let windowed = false; // vue limitée à l'écran, couche fixe sur tout le monde (carrière)
   let sBufY0 = 0; // haut de la couche fixe (px du monde) en mode fenêtré
+  let sBufX0 = 0; // gauche de la couche fixe (px du monde) en mode fenêtré
   let staticH = 1;
+  let staticW = 1;
   const actors = createCareerActors();
-  const careerInfo = { t: -1, nextLot: null, full: {}, today: null, active: null, contest: false };
+  const careerInfo = { t: -1, nextLot: null, full: {}, today: null, active: null, contest: false, cands: new Map() };
+  let gridKey = ''; // clé de la grille 2D de la disposition courante
+  let minimapStatic = null; // fond de la mini-carte (cache) : { key, canvas, map }
   const prevLevels = {}; // niveaux des bâtiments (apparition « pop » à la construction / amélioration)
   const deferred = []; // événements de carrière, traités après la reconstruction de la disposition
   let clearing = null; // défrichage d'un terrain acheté : { lotId, t0 }
@@ -182,6 +204,11 @@ export function createScene(canvas, images, level, opts = {}) {
   const band = { x: 0, y: 0, w: 1, h: 1 }; // bande visible (px réels)
   let scrollDev = 0; // défilement vertical (px réels, entier)
   let maxScrollDev = 0;
+  let scrollXDev = 0; // (carrière 2D) défilement horizontal (px réels, entier), 0 = colonne la plus à gauche
+  let maxScrollXDev = 0;
+  let xLo = 0; // abscisse du monde (px) au centre de la bande pour un défilement horizontal nul
+  let flingVX = 0; // élan horizontal (px CSS / s)
+  let scrollXBeforeOverlay = null;
   let userScrolled = false; // le joueur a fait défiler : ne plus recentrer tout seul
   let flingV = 0; // élan (px CSS / s)
   let overlayDev = 0; // panneau posé sur le bas de la bande (feuille ouverte), px réels
@@ -305,13 +332,21 @@ export function createScene(canvas, images, level, opts = {}) {
     return (cur + band.y + band.h / 2 - baseY) / zoom;
   }
 
+  /** (Carrière) Abscisse du monde (px) au centre de la bande visible. */
+  function worldCenterX() {
+    const cur = scrollAnim ? scrollAnim.toX : scrollXDev;
+    return (cur + band.x + band.w / 2 - baseX) / zoom;
+  }
+
   /**
    * Zoom, position du monde, taille des tampons ; garde (ou recentre) le défilement.
    * @param keepWorldY  (carrière) ordonnée du monde à garder au centre de la bande (défaut : l'actuelle)
+   * @param keepWorldX  (carrière) abscisse du monde à garder au centre de la bande (défaut : l'actuelle)
    */
-  function computeCamera(keepWorldY) {
+  function computeCamera(keepWorldY, keepWorldX) {
     const prevMax = maxScrollDev;
     const keepY = careerMode && userScrolled ? (keepWorldY ?? (initialized ? worldCenterY() : null)) : null;
+    const keepX = careerMode && userScrolled ? (keepWorldX ?? (initialized ? worldCenterX() : null)) : null;
     band.x = Math.round(insets.left * dpr);
     band.y = Math.round(insets.top * dpr);
     band.w = Math.max(1, devW - band.x - Math.round(insets.right * dpr));
@@ -331,8 +366,24 @@ export function createScene(canvas, images, level, opts = {}) {
     } else {
       zoom = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
     }
-    // Horizontal : partie essentielle centrée dans la bande.
-    baseX = Math.round(band.x + band.w / 2 - (ess.x + ess.w / 2) * zoom);
+    // Horizontal : partie essentielle centrée dans la bande. (Carrière 2D) le centre de la vue va du
+    // centre de la colonne la plus à gauche à celui de la plus à droite (défilement horizontal).
+    xLo = ess.x + ess.w / 2;
+    maxScrollXDev = 0;
+    if (careerMode && layout.grid) {
+      const G = layout.grid;
+      const colW = CAREER_COL_TILES * TILE;
+      const hw = band.w / 2 / zoom;
+      const W0 = layout.x0 ?? 0;
+      const W1 = layout.x1 ?? layout.width;
+      const mid = (W0 + W1) / 2;
+      let lo = Math.max(G.cMin * colW + xLo, Math.min(W0 + hw, mid));
+      let hi = Math.min(G.cMax * colW + xLo, Math.max(W1 - hw, mid));
+      if (lo > hi) lo = hi = mid;
+      xLo = lo;
+      maxScrollXDev = Math.max(0, Math.round((hi - lo) * zoom));
+    }
+    baseX = Math.round(band.x + band.w / 2 - xLo * zoom);
     // Vertical : monde centré s'il tient, sinon défilement (0 = haut du monde en haut de la bande).
     const worldDevH = layout.height * zoom;
     if (worldDevH <= band.h) {
@@ -345,25 +396,29 @@ export function createScene(canvas, images, level, opts = {}) {
     // Tampon : couvre tout le canvas, pour tout défilement possible.
     bufX0 = Math.floor(-baseX / zoom) - 1;
     bufY0 = Math.floor(-baseY / zoom) - 1;
-    const w = Math.ceil(devW / zoom) + 3;
+    let w = Math.ceil(devW / zoom) + 3;
     // + une hauteur d'écran : défilement au-delà du bas du monde quand une feuille est ouverte.
     let h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
-    // (Carrière) Fenêtré : la vue ne couvre que l'écran ; la couche fixe garde toute la hauteur.
+    // (Carrière) Fenêtré : la vue ne couvre que l'écran ; la couche fixe garde tout le monde.
     const sh = h;
+    const sw = Math.ceil((devW + maxScrollXDev) / zoom) + 3;
     if (windowed) {
       sBufY0 = bufY0;
+      sBufX0 = bufX0;
       h = Math.ceil(devH / zoom) + 3;
     }
     ox = -bufX0;
     oy = -bufY0;
     const wantStaticH = windowed ? sh : h;
-    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h || staticLayer.height !== wantStaticH) {
+    const wantStaticW = windowed ? sw : w;
+    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h || staticLayer.height !== wantStaticH || staticLayer.width !== wantStaticW) {
       viewW = w;
       viewH = h;
       staticH = wantStaticH;
+      staticW = wantStaticW;
       view.width = viewW;
       view.height = viewH;
-      staticLayer.width = viewW;
+      staticLayer.width = staticW;
       staticLayer.height = staticH;
       scratch.width = viewW;
       scratch.height = viewH;
@@ -372,9 +427,13 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     staticKey = -1;
     if (!userScrolled) focusFieldDev();
-    else if (keepY !== null && keepY !== undefined) setScrollDev(baseY + keepY * zoom - (band.y + band.h / 2));
-    else if (prevMax > 0 && maxScrollDev > 0) setScrollDev(Math.round((scrollDev / prevMax) * maxScrollDev));
-    else setScrollDev(scrollDev);
+    else {
+      if (keepY !== null && keepY !== undefined) setScrollDev(baseY + keepY * zoom - (band.y + band.h / 2));
+      else if (prevMax > 0 && maxScrollDev > 0) setScrollDev(Math.round((scrollDev / prevMax) * maxScrollDev));
+      else setScrollDev(scrollDev);
+      if (keepX !== null && keepX !== undefined) setScrollXDev(baseX + keepX * zoom - (band.x + band.w / 2));
+      else setScrollXDev(scrollXDev);
+    }
   }
 
   /** Défilement maximal : bornes du monde, ou plus loin si une feuille couvre le bas. */
@@ -385,15 +444,27 @@ export function createScene(canvas, images, level, opts = {}) {
     return Math.max(maxScrollDev, Math.round(worldBottom - visibleBottom));
   }
 
+  /** Position des tampons pour le défilement courant (les deux axes). */
+  function applyScroll() {
+    if (windowed) {
+      // La vue suit le défilement : son coin haut-gauche est le premier pixel du monde visible.
+      bufY0 = Math.max(sBufY0, Math.floor((scrollDev - baseY) / zoom) - 1);
+      bufX0 = Math.max(sBufX0, Math.min(sBufX0 + Math.max(0, staticW - viewW), Math.floor((scrollXDev - baseX) / zoom) - 1));
+      oy = -bufY0;
+      ox = -bufX0;
+    }
+    blitX = baseX - scrollXDev + bufX0 * zoom;
+    blitY = baseY - scrollDev + bufY0 * zoom;
+  }
+
   function setScrollDev(v) {
     scrollDev = Math.max(0, Math.min(scrollLimitDev(), Math.round(v)));
-    blitX = baseX + bufX0 * zoom;
-    if (windowed) {
-      // La vue suit le défilement : son haut est la première ligne de pixels du monde visible.
-      bufY0 = Math.max(sBufY0, Math.floor((scrollDev - baseY) / zoom) - 1);
-      oy = -bufY0;
-    }
-    blitY = baseY - scrollDev + bufY0 * zoom;
+    applyScroll();
+  }
+
+  function setScrollXDev(v) {
+    scrollXDev = Math.max(0, Math.min(maxScrollXDev, Math.round(v)));
+    applyScroll();
   }
 
   /** Défilement qui place le centre vertical d'un rectangle (px du monde) au centre de la bande. */
@@ -401,8 +472,15 @@ export function createScene(canvas, images, level, opts = {}) {
     return baseY + (r.y + r.h / 2) * zoom - (band.y + band.h / 2);
   }
 
+  /** Défilement horizontal qui place le centre d'un rectangle (px du monde) au centre de la bande. */
+  function centerOnXDev(r) {
+    return baseX + (r.x + r.w / 2) * zoom - (band.x + band.w / 2);
+  }
+
   function focusFieldDev() {
     setScrollDev(centerOnDev(layout.fieldRect));
+    if (maxScrollXDev > 0) setScrollXDev(centerOnXDev(layout.fieldRect));
+    else setScrollXDev(0);
   }
 
   function setInsets(ins = {}) {
@@ -418,16 +496,19 @@ export function createScene(canvas, images, level, opts = {}) {
     if (changed) computeCamera();
   }
 
-  /** Défilement animé (px réels) : départ rapide, arrivée en douceur. */
-  function animateScrollDev(target) {
+  /** Défilement animé (px réels) : départ rapide, arrivée en douceur. targetX absent : inchangé. */
+  function animateScrollDev(target, targetX) {
     const to = Math.max(0, Math.min(scrollLimitDev(), Math.round(target)));
+    const baseToX = scrollAnim ? scrollAnim.toX : scrollXDev;
+    const toX = Math.max(0, Math.min(maxScrollXDev, Math.round(targetX ?? baseToX)));
     const reduce = typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion');
-    if (reduce || Math.abs(to - scrollDev) < 2) {
+    if (reduce || (Math.abs(to - scrollDev) < 2 && Math.abs(toX - scrollXDev) < 2)) {
       scrollAnim = null;
       setScrollDev(to);
+      setScrollXDev(toX);
       return;
     }
-    scrollAnim = { from: scrollDev, to, t: 0, dur: SCROLL_ANIM };
+    scrollAnim = { from: scrollDev, to, fromX: scrollXDev, toX, t: 0, dur: SCROLL_ANIM };
   }
 
   function stepScrollAnim(dt) {
@@ -436,6 +517,7 @@ export function createScene(canvas, images, level, opts = {}) {
     a.t = Math.min(a.dur, a.t + dt);
     const k = a.t / a.dur;
     const e = 1 - (1 - k) ** 3;
+    scrollXDev = Math.max(0, Math.min(maxScrollXDev, Math.round(a.fromX + (a.toX - a.fromX) * e)));
     setScrollDev(a.from + (a.to - a.from) * e);
     if (k >= 1) scrollAnim = null;
   }
@@ -444,12 +526,17 @@ export function createScene(canvas, images, level, opts = {}) {
     const v = Math.max(0, Math.round((Number(bottomCss) || 0) * dpr));
     if (v === overlayDev) return;
     // Feuille ouverte : on retient la vue d'avant, retrouvée en douceur à la fermeture.
-    if (overlayDev === 0 && v > 0) scrollBeforeOverlay = scrollAnim ? scrollAnim.to : scrollDev;
+    if (overlayDev === 0 && v > 0) {
+      scrollBeforeOverlay = scrollAnim ? scrollAnim.to : scrollDev;
+      scrollXBeforeOverlay = scrollAnim ? scrollAnim.toX : scrollXDev;
+    }
     overlayDev = v;
     if (v === 0 && scrollBeforeOverlay !== null) {
       const back = scrollBeforeOverlay;
+      const backX = scrollXBeforeOverlay;
       scrollBeforeOverlay = null;
-      animateScrollDev(back);
+      scrollXBeforeOverlay = null;
+      animateScrollDev(back, backX ?? undefined);
       return;
     }
     // Feuille plus basse : on revient en douceur dans les bornes du monde.
@@ -458,8 +545,20 @@ export function createScene(canvas, images, level, opts = {}) {
     if (!scrollAnim && scrollDev > limit) animateScrollDev(limit);
   }
 
-  function scrollTo(yCss, animate = false) {
+  function stopFling() {
     flingV = 0;
+    flingVX = 0;
+  }
+
+  /** Défilement courant ou maximal (px CSS) : { x, y }, qui vaut y dans un calcul (compatibilité). */
+  function scrollPair(xDev, yDev) {
+    const x = xDev / dpr;
+    const y = yDev / dpr;
+    return { x, y, valueOf: () => y, toString: () => String(y) };
+  }
+
+  function scrollTo(yCss, animate = false) {
+    stopFling();
     userScrolled = true;
     if (animate) animateScrollDev((Number(yCss) || 0) * dpr);
     else {
@@ -469,37 +568,69 @@ export function createScene(canvas, images, level, opts = {}) {
     return scrollDev / dpr;
   }
 
-  function scrollBy(dyCss) {
+  /**
+   * scrollBy(dyCss) (compatibilité : vertical) ou scrollBy(dxCss, dyCss) (carrière : les deux axes).
+   * Renvoie le déplacement appliqué : nombre (un argument) ou { x, y } (deux).
+   */
+  function scrollBy(a, b) {
+    const two = b !== undefined;
+    const dx = two ? Number(a) || 0 : 0;
+    const dy = two ? Number(b) || 0 : Number(a) || 0;
     const before = scrollDev;
-    flingV = 0;
+    const beforeX = scrollXDev;
+    stopFling();
     scrollAnim = null;
     scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
     userScrolled = true;
-    setScrollDev(scrollDev + (Number(dyCss) || 0) * dpr);
-    return (scrollDev - before) / dpr;
+    scrollXDev = Math.max(0, Math.min(maxScrollXDev, Math.round(scrollXDev + dx * dpr)));
+    setScrollDev(scrollDev + dy * dpr);
+    if (!two) return (scrollDev - before) / dpr;
+    return scrollPair(scrollXDev - beforeX, scrollDev - before);
   }
 
-  function setScroll(yCss) {
-    flingV = 0;
+  /** setScroll(yCss) (compatibilité) ou setScroll(xCss, yCss). Renvoie le défilement obtenu. */
+  function setScroll(a, b) {
+    const two = b !== undefined;
+    stopFling();
     scrollAnim = null;
     userScrolled = true;
-    setScrollDev((Number(yCss) || 0) * dpr);
-    return scrollDev / dpr;
+    if (two) scrollXDev = Math.max(0, Math.min(maxScrollXDev, Math.round((Number(a) || 0) * dpr)));
+    setScrollDev((Number(two ? b : a) || 0) * dpr);
+    return two ? scrollPair(scrollXDev, scrollDev) : scrollDev / dpr;
   }
 
-  function fling(vyCss) {
-    if (maxScrollDev <= 0) return;
+  /** fling(vyCss) (compatibilité) ou fling(vxCss, vyCss) : élan (px CSS / s, même sens que scrollBy). */
+  function fling(a, b) {
+    const two = b !== undefined;
+    const vx = two ? Number(a) || 0 : 0;
+    const vy = two ? Number(b) || 0 : Number(a) || 0;
+    if (maxScrollDev <= 0 && maxScrollXDev <= 0) return;
     userScrolled = true;
     scrollAnim = null;
-    flingV = Math.max(-4000, Math.min(4000, Number(vyCss) || 0));
+    flingV = Math.max(-4000, Math.min(4000, vy));
+    flingVX = maxScrollXDev > 0 ? Math.max(-4000, Math.min(4000, vx)) : 0;
   }
 
   function focusField() {
-    flingV = 0;
+    stopFling();
     scrollAnim = null;
     scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
     userScrolled = false;
     focusFieldDev();
+  }
+
+  /**
+   * (Carrière 2D) Défilement horizontal visé pour voir le rectangle r (px du monde) : inchangé s'il est
+   * déjà visible (avec la marge), sinon centré.
+   */
+  function targetXFor(r, m, cur) {
+    if (maxScrollXDev <= 0 || !r) return cur;
+    const left = baseX - cur + r.x * zoom;
+    const right = left + r.w * zoom;
+    if (left >= band.x + m && right <= band.x + band.w - m) return cur;
+    return centerOnXDev(r);
   }
 
   /**
@@ -512,7 +643,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const o = typeof opts === 'number' ? { margin: opts } : opts || {};
     const r = layout.plotRect(i);
     if (!r) return scrollDev / dpr;
-    flingV = 0;
+    stopFling();
     const m = (o.margin ?? 24) * dpr;
     const cur = scrollAnim ? scrollAnim.to : scrollDev;
     const top = baseY - cur + r.y * zoom;
@@ -522,10 +653,13 @@ export function createScene(canvas, images, level, opts = {}) {
     let target = cur;
     if (bottom > visBottom) target = cur + (bottom - visBottom);
     if (top - (target - cur) < visTop) target = cur - (visTop - top); // le haut d'abord si trop petit
-    if (target === cur) return cur / dpr;
-    if (o.animate) animateScrollDev(target);
+    const curX = scrollAnim ? scrollAnim.toX : scrollXDev;
+    const targetX = targetXFor(r, m, curX);
+    if (target === cur && targetX === curX) return cur / dpr;
+    if (o.animate) animateScrollDev(target, targetX);
     else {
       scrollAnim = null;
+      setScrollXDev(targetX);
       setScrollDev(target);
     }
     return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
@@ -550,7 +684,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function focusDecorArea(animate = true) {
     const r = decorAreaRect();
     if (!r) return scrollDev / dpr;
-    flingV = 0;
+    stopFling();
     userScrolled = true;
     const m = 12 * dpr;
     const visH = band.h - overlayDev;
@@ -583,7 +717,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function focusRect(r, opts = {}) {
     if (!r) return scrollDev / dpr;
     const d = r;
-    flingV = 0;
+    stopFling();
     userScrolled = true;
     const top0 = d.y;
     const m = (opts.margin ?? 24) * dpr;
@@ -595,11 +729,14 @@ export function createScene(canvas, images, level, opts = {}) {
     let target = cur;
     if (bottom > visBottom) target = cur + (bottom - visBottom);
     if (top - (target - cur) < visTop) target = cur - (visTop - top);
-    if (target !== cur) {
+    const curX = scrollAnim ? scrollAnim.toX : scrollXDev;
+    const targetX = careerMode ? targetXFor(d, m, curX) : curX;
+    if (target !== cur || targetX !== curX) {
       if (opts.animate === false) {
         scrollAnim = null;
+        setScrollXDev(targetX);
         setScrollDev(target);
-      } else animateScrollDev(target);
+      } else animateScrollDev(target, targetX);
     }
     return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
   }
@@ -695,18 +832,22 @@ export function createScene(canvas, images, level, opts = {}) {
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
   function centerRect(r, opts = {}) {
     if (!r) return scrollDev / dpr;
-    flingV = 0;
+    stopFling();
     userScrolled = true;
     scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
     const visH = band.h - overlayDev;
     let target;
     if (opts.align === 'fit' || r.h * zoom > visH) {
       // Trop haut pour tenir : on montre le bas (allée, panneau), là où l'on entre dans le terrain.
       target = r.h * zoom > visH ? baseY + (r.y + r.h) * zoom - (band.y + visH) + 8 * dpr : baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
     } else target = baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
-    if (opts.animate) animateScrollDev(target);
+    // (Carrière 2D) centré aussi en largeur.
+    const targetX = maxScrollXDev > 0 ? centerOnXDev(r) : scrollXDev;
+    if (opts.animate) animateScrollDev(target, targetX);
     else {
       scrollAnim = null;
+      setScrollXDev(targetX);
       setScrollDev(target);
     }
     return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
@@ -1000,24 +1141,24 @@ export function createScene(canvas, images, level, opts = {}) {
     const sheets = seasonSheets[season];
     const L = layout;
     const c = sctx;
-    const SOX = ox;
+    const SOX = -sBufX0;
     const SOY = -sBufY0;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, viewW, staticH);
+    c.clearRect(0, 0, staticW, staticH);
     c.translate(SOX, SOY);
     const tx0 = Math.floor(-SOX / TILE) - 1;
     const ty0 = Math.floor(-SOY / TILE) - 1;
-    const tx1 = Math.ceil((viewW - SOX) / TILE) + 1;
+    const tx1 = Math.ceil((staticW - SOX) / TILE) + 1;
     const ty1 = Math.min(Math.ceil((staticH - SOY) / TILE) + 1, L.rows + 40);
     const fr = flowerRate(season);
     const orchardSet = new Set();
-    for (const o of L.orchards) for (let y = o.rect.y; y < o.rect.y + o.rect.h; y++) for (let x = o.rect.x; x < o.rect.x + o.rect.w; x++) orchardSet.add(y * 64 + x);
+    for (const o of L.orchards) for (let y = o.rect.y; y < o.rect.y + o.rect.h; y++) for (let x = o.rect.x; x < o.rect.x + o.rect.w; x++) orchardSet.add(y * 4096 + x + 2048);
 
     // 1. Herbe (fleurs plus nombreuses au verger au printemps)
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         const h = tileHash(tx, ty, 11);
-        const rate = orchardSet.has(ty * 64 + tx) ? fr * 3 : fr;
+        const rate = orchardSet.has(ty * 4096 + tx + 2048) ? fr * 3 : fr;
         const name = h < 0.14 ? 'ground.grass.tufts' : h > 1 - rate ? 'ground.grass.flowers' : 'ground.grass';
         drawSprite(c, sheets, name, tx * TILE, ty * TILE);
       }
@@ -1076,17 +1217,22 @@ export function createScene(canvas, images, level, opts = {}) {
         drawSprite(c, sheets, name, tx * TILE + dx, ty * TILE - 3 + (ty % 2) * 2);
       }
     }
-    // Terrain à vendre : forêt assombrie, souches et grand panneau dans la lisière.
-    const sale = L.saleBand;
-    if (sale) {
+    // Terrains à vendre : forêt assombrie, souches et grand panneau dans la lisière. Colonne 0 seule :
+    // l'assombrissement couvre toute la largeur (comme avant la carte 2D) ; sinon le bloc.
+    const sales = L.saleBands || (L.saleBand ? [L.saleBand] : []);
+    const wide = (L.grid?.cMin ?? 0) === 0 && (L.grid?.cMax ?? 0) === 0;
+    for (const sale of sales) {
+      const sx = (sale.ox || 0) * TILE;
       const y0 = sale.y0 * TILE;
       const hh = (sale.rows - 1) * TILE;
+      const rx = wide ? -SOX : sx;
+      const rw = wide ? staticW : CAREER_COL_TILES * TILE;
       c.fillStyle = 'rgba(18,30,26,0.30)';
-      c.fillRect(-SOX, y0, viewW, hh);
+      c.fillRect(rx, y0, rw, hh);
       c.fillStyle = 'rgba(18,30,26,0.16)';
-      c.fillRect(-SOX, y0 + hh - 6, viewW, 6);
-      for (const [x, dy] of [[3, 0], [10, 0], [4, -1]]) drawSprite(c, sheets, 'land.stump', x * TILE + 2, (sale.y0 + sale.rows - 1) * TILE + dy * 4);
-      drawSprite(c, sheets, 'land.sale.sign.big', 6 * TILE, (sale.y0 + sale.rows - 2) * TILE + 2);
+      c.fillRect(rx, y0 + hh - 6, rw, 6);
+      for (const [x, dy] of [[3, 0], [10, 0], [4, -1]]) drawSprite(c, sheets, 'land.stump', sx + x * TILE + 2, (sale.y0 + sale.rows - 1) * TILE + dy * 4);
+      drawSprite(c, sheets, 'land.sale.sign.big', sx + 6 * TILE, (sale.y0 + sale.rows - 2) * TILE + 2);
     }
     // 6. Clôtures (champs : style de la personnalisation ; enclos et verger : bois)
     for (const f of L.fences) {
@@ -1280,7 +1426,7 @@ export function createScene(canvas, images, level, opts = {}) {
   // ── Fermier ───────────────────────────────────────────────────────────────────────
   function inField(x, y) {
     if (careerMode) {
-      const b = layout.bandAt(y);
+      const b = layout.bandAt(y, x);
       return !!b && b.type !== 'home' && !b.forSale;
     }
     const f = layout.field.fence;
@@ -1491,7 +1637,9 @@ export function createScene(canvas, images, level, opts = {}) {
     // (Carrière) Monde très haut : seules les parcelles proches de la vue ; parcelles retirées ignorées.
     const cy0 = windowed ? -oy - 40 : -Infinity;
     const cy1 = windowed ? -oy + viewH + 8 : Infinity;
-    const skip = (r) => r.retired || r.y > cy1 || r.y + r.h < cy0;
+    const cx0 = windowed ? -ox - 40 : -Infinity;
+    const cx1 = windowed ? -ox + viewW + 8 : Infinity;
+    const skip = (r) => r.retired || r.y > cy1 || r.y + r.h < cy0 || r.x > cx1 || r.x + r.w < cx0;
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       const r = L.plots[i];
@@ -2113,6 +2261,40 @@ export function createScene(canvas, images, level, opts = {}) {
     }
   }
 
+  /**
+   * (Carrière) Prix ou verrou d'un terrain à vendre : grille du cœur (carte 2D, à jour 4 fois par
+   * seconde), sinon nextLot (colonne unique), sinon ce que la disposition connaît.
+   * → { text, locked, canBuy, price, reason } | null
+   */
+  function saleInfo(sale) {
+    const money = lastGame?.state?.money ?? 0;
+    const e = careerInfo.cands.get(sale.id);
+    if (e) {
+      const byRank = e.lockedByRank ?? null;
+      const reason = e.lockedReason || null;
+      const locked = byRank !== null || e.locked === true || (e.buyable === false && !!reason && !/pi[eè]ce/i.test(reason));
+      const price = Number.isFinite(e.price) ? e.price : null;
+      const text = byRank !== null ? `Rang ${byRank} requis` : locked ? shortReason(reason) : price !== null ? `${price} pièces` : 'À vendre';
+      const canBuy = typeof e.canBuy === 'boolean' ? e.canBuy : !locked && e.buyable !== false && (price === null || money >= price);
+      return { text, locked, canBuy, price, reason };
+    }
+    const n = careerInfo.nextLot;
+    if (n && (n.id === sale.id || !careerInfo.cands.size)) {
+      const locked = !!n.lockedByRank;
+      return { text: locked ? `Rang ${n.lockedByRank} requis` : `${n.price} pièces`, locked, canBuy: !!n.canBuy, price: n.price, reason: n.reason || null };
+    }
+    const k = sale.cand;
+    if (!k) return null;
+    const locked = k.lockedByRank !== null && k.lockedByRank !== undefined;
+    return { text: locked ? `Rang ${k.lockedByRank} requis` : k.price !== null ? `${k.price} pièces` : 'À vendre', locked, canBuy: !locked && k.buyable && money >= (k.price || 0), price: k.price, reason: k.lockedReason };
+  }
+
+  /** Raison d'un verrou, raccourcie pour tenir sous le panneau. */
+  function shortReason(r) {
+    const t = String(r || 'Bientôt').replace(/\.$/, '');
+    return t.length > 22 ? `${t.slice(0, 21)}…` : t;
+  }
+
   /** Nombres des bulles et prix du terrain à vendre, écrits à l'échelle de l'écran (nets). */
   const labelPt = { x: 0, y: 0 };
   function drawCareerLabels() {
@@ -2131,27 +2313,27 @@ export function createScene(canvas, images, level, opts = {}) {
       ctx.fillStyle = b.full ? '#ffb3a0' : '#fff3b0';
       ctx.fillText(b.text, labelPt.x, labelPt.y);
     }
-    const sale = layout.saleBand;
-    const info = careerInfo.nextLot;
-    if (sale && info) {
-      worldToDevice(7 * TILE, (sale.y0 + sale.rows) * TILE + 4, labelPt);
-      if (labelPt.y > -size * 2 && labelPt.y < devH + size * 2) {
-        const big = Math.max(Math.round(13 * dpr), Math.round(zoom * 6.5));
-        ctx.font = `700 ${big}px "Ferme", "Trebuchet MS", monospace`;
-        const locked = !!info.lockedByRank;
-        const text = locked ? `Rang ${info.lockedByRank} requis` : `${info.price} pièces`;
-        ctx.lineWidth = Math.max(3, Math.round(big / 5));
-        ctx.strokeStyle = '#3f2631';
-        const tw = ctx.measureText(text).width;
-        const iconS = Math.max(1, Math.round(big / 9));
-        const iw = 16 * iconS * 0.8;
-        const cx = labelPt.x + iw / 2;
-        ctx.strokeText(text, cx, labelPt.y);
-        ctx.fillStyle = locked ? '#f3e9dc' : info.canBuy ? '#fff3b0' : '#ffd0c0';
-        ctx.fillText(text, cx, labelPt.y);
-        const icon = locked ? 'icon.career.lock' : 'icon.career.coins';
-        if (SPRITES[icon]) drawSprite(ctx, images, icon, Math.round(cx - tw / 2 - 16 * iconS), Math.round(labelPt.y - 8 * iconS), { scale: iconS });
-      }
+    const sales = layout.saleBands || (layout.saleBand ? [layout.saleBand] : []);
+    for (const sale of sales) {
+      const info = saleInfo(sale);
+      if (!info) continue;
+      worldToDevice(((sale.ox || 0) + 7) * TILE, (sale.y0 + sale.rows) * TILE + 4, labelPt);
+      if (labelPt.y < -size * 2 || labelPt.y > devH + size * 2 || labelPt.x < -devW * 0.5 || labelPt.x > devW * 1.5) continue;
+      const big = Math.max(Math.round(13 * dpr), Math.round(zoom * 6.5));
+      ctx.font = `700 ${big}px "Ferme", "Trebuchet MS", monospace`;
+      const locked = info.locked;
+      const text = info.text;
+      ctx.lineWidth = Math.max(3, Math.round(big / 5));
+      ctx.strokeStyle = '#3f2631';
+      const tw = ctx.measureText(text).width;
+      const iconS = Math.max(1, Math.round(big / 9));
+      const iw = 16 * iconS * 0.8;
+      const cx = labelPt.x + iw / 2;
+      ctx.strokeText(text, cx, labelPt.y);
+      ctx.fillStyle = locked ? '#f3e9dc' : info.canBuy ? '#fff3b0' : '#ffd0c0';
+      ctx.fillText(text, cx, labelPt.y);
+      const icon = locked ? 'icon.career.lock' : 'icon.career.coins';
+      if (SPRITES[icon]) drawSprite(ctx, images, icon, Math.round(cx - tw / 2 - 16 * iconS), Math.round(labelPt.y - 8 * iconS), { scale: iconS });
     }
     ctx.restore();
   }
@@ -2165,16 +2347,20 @@ export function createScene(canvas, images, level, opts = {}) {
     const cull = windowed;
     const vy0 = -oy - 8;
     const vy1 = -oy + viewH + 8;
+    const vx0 = -ox - 8;
+    const vx1 = -ox + viewW + 8;
     for (const e of drawList) {
       if (e.img) {
         c.drawImage(e.img, e.x, e.y);
         continue;
       }
       if (cull) {
-        if (e.y > vy1) continue;
+        if (e.y > vy1 || e.x > vx1) continue;
         const sp = e.name.charCodeAt(0) === 64 ? null : SPRITES[e.name];
         const hh = sp ? (sp.h || 1) * TILE * e.scale : 40;
         if (e.y + hh < vy0) continue;
+        const ww = sp ? (sp.w || 1) * TILE * e.scale : 40;
+        if (e.x + ww + 12 < vx0) continue;
       }
       if (e.name === '@bubble') {
         extraImages();
@@ -2584,6 +2770,290 @@ export function createScene(canvas, images, level, opts = {}) {
     ctx.restore();
   }
 
+  // ── (Carrière) Mini-carte ────────────────────────────────────────────────────────
+  const MM_COLORS = {
+    field: '#b98049', meadow: '#8fcf64', orchard: '#5aa44c', workshops: '#a9a295', pond: '#4f9fd6', greenhouse: '#a9dde3',
+    wild: '#6f8c46', yard: '#9fd36f', home: '#e6c68c', forSale: '#27402c', locked: '#1f3024',
+  };
+  const MM_ICONS = {
+    field: ['crop.carrot.icon', 'crop.wheat.icon', 'crop.potato.icon', 'crop.pumpkin.icon'], meadow: ['animal.sheep', 'animal.cow'], orchard: ['crop.apple.icon'],
+    workshops: ['product.jam', 'product.cheese'], pond: ['product.fish.1', 'animal.duck.swim'], greenhouse: ['icon.career.greenhouse'], wild: ['land.tallgrass.1', 'land.stump'],
+    yard: ['animal.chicken', 'product.eggs'], home: ['icon.career.house'], forSale: ['icon.career.coins'], locked: ['icon.career.lock'],
+  };
+  const mmIcon = (kind) => (MM_ICONS[kind] || []).find((n) => SPRITES[n]) || null;
+
+  /**
+   * Correspondance monde ↔ mini-carte (schéma de la grille : une case par terrain, la maison en bas en
+   * 1,3 case, marge de forêt autour). Linéaire en x ; par morceaux en y (terrains, puis maison).
+   */
+  function minimapMapping(w, h) {
+    const G = layout.grid;
+    if (!G) return null;
+    const nc = G.cMax - G.cMin + 1;
+    const nr = G.rMax + 1;
+    const HF = 1.3;
+    const M = 0.35;
+    const cs = Math.max(4, Math.min(w / (nc + 2 * M), h / (nr + HF + 2 * M)));
+    const gw = nc * cs;
+    const gh = (nr + HF) * cs;
+    const gx0 = Math.round((w - gw) / 2);
+    const gy0 = Math.round((h - gh) / 2);
+    const lotsH = nr * cs;
+    const homeTiles = Math.max(1, G.homeBottom - 2 - G.rowBottom);
+    const LR = 11;
+    const toMap = (wx, wy) => {
+      const tx = wx / TILE;
+      const ty = wy / TILE;
+      const mx = gx0 + (tx / CAREER_COL_TILES - G.cMin) * cs;
+      let my;
+      if (ty < G.rowBottom) my = gy0 + ((ty - G.rowTop) / LR) * cs;
+      else my = gy0 + lotsH + ((ty - G.rowBottom) / homeTiles) * HF * cs;
+      return { x: mx, y: my };
+    };
+    const toWorld = (mx, my) => {
+      const tx = ((mx - gx0) / cs + G.cMin) * CAREER_COL_TILES;
+      let ty;
+      if (my < gy0 + lotsH) ty = G.rowTop + ((my - gy0) / cs) * LR;
+      else ty = G.rowBottom + ((my - gy0 - lotsH) / (HF * cs)) * homeTiles;
+      return { x: tx * TILE, y: ty * TILE };
+    };
+    return { w, h, cs, gx0, gy0, gw, gh, nc, nr, HF, toMap, toWorld };
+  }
+
+  function mmSprite(c, name, cx, cy, size) {
+    if (!name || !SPRITES[name]) return;
+    const sp = SPRITES[name];
+    const sw = (sp.w || 1) * TILE;
+    const sh = (sp.h || 1) * TILE;
+    const k = Math.max(0.25, size / Math.max(sw, sh));
+    const scale = k >= 1 ? Math.floor(k) : k;
+    drawSprite(c, images, name, Math.round(cx - (sw * scale) / 2), Math.round(cy - (sh * scale) / 2), { scale });
+  }
+
+  /** Fond de la mini-carte (forêt, route, allées, terrains, icônes) : reconstruit si la ferme change. */
+  function minimapBase(w, h) {
+    let lockKey = '';
+    for (const sb of layout.saleBands || []) lockKey += saleInfo(sb)?.locked ? 'L' : 'o';
+    const key = `${careerKey}|${gridKey}|${w}x${h}|${lockKey}|${layout.height}`;
+    if (minimapStatic && minimapStatic.key === key) return minimapStatic;
+    const map = minimapMapping(w, h);
+    const cv = makeCanvas(w, h);
+    const c = noSmooth(cv.getContext('2d'));
+    if (!map) {
+      minimapStatic = { key, canvas: cv, map: null };
+      return minimapStatic;
+    }
+    const { cs } = map;
+    c.fillStyle = '#20331f';
+    c.fillRect(0, 0, w, h);
+    // Forêt : petits points plus clairs.
+    c.fillStyle = '#2f4a33';
+    for (let y = 1; y < h; y += 4) for (let x = (y >> 2) % 2 ? 1 : 3; x < w; x += 4) c.fillRect(x, y, 2, 2);
+    const cellRect = (r) => {
+      const a = map.toMap(r.x, r.y);
+      const b = map.toMap(r.x + r.w, r.y + r.h);
+      return { x: Math.round(a.x) + 1, y: Math.round(a.y) + 1, w: Math.max(2, Math.round(b.x - a.x) - 2), h: Math.max(2, Math.round(b.y - a.y) - 2) };
+    };
+    const L = layout;
+    // Maison : basse-cour + champ de départ + maison, une seule zone.
+    const homeTop = map.toMap(0, L.grid.rowY(0) * TILE);
+    const homeBot = map.toMap(CAREER_COL_TILES * TILE, (L.grid.homeBottom - 2) * TILE);
+    const hr = { x: Math.round(homeTop.x) + 1, y: Math.round(homeTop.y) + 1, w: Math.round(homeBot.x - homeTop.x) - 2, h: Math.round(homeBot.y - homeTop.y) - 2 };
+    // Route
+    const road = map.toMap(0, (L.grid.roadY + 1) * TILE);
+    c.fillStyle = '#c79a62';
+    c.fillRect(0, Math.round(road.y) - Math.max(1, Math.round(cs / 14)), w, Math.max(2, Math.round(cs / 7)));
+    c.fillStyle = MM_COLORS.home;
+    c.fillRect(hr.x, hr.y, hr.w, hr.h);
+    c.fillStyle = 'rgba(63,38,49,0.55)';
+    c.fillRect(hr.x, hr.y + hr.h - 1, hr.w, 1);
+    for (const l of L.lots || []) {
+      if (l.id === 'start' || l.id === 'home') continue;
+      const r = cellRect(l.rect);
+      if (l.forSale) {
+        const info = L.saleBands ? saleInfo(L.saleBands.find((b) => b.id === l.id) || { id: l.id }) : null;
+        const locked = !!info?.locked;
+        c.fillStyle = locked ? MM_COLORS.locked : MM_COLORS.forSale;
+        c.fillRect(r.x, r.y, r.w, r.h);
+        // Pointillés « à vendre »
+        c.fillStyle = locked ? 'rgba(200,190,170,0.45)' : 'rgba(255,241,176,0.85)';
+        const d = Math.max(1, Math.round(cs / 24));
+        for (let x = r.x; x < r.x + r.w; x += 3 * d) { c.fillRect(x, r.y, d * 2 > r.x + r.w - x ? r.x + r.w - x : d * 2, d); c.fillRect(x, r.y + r.h - d, Math.min(d * 2, r.x + r.w - x), d); }
+        for (let y = r.y; y < r.y + r.h; y += 3 * d) { c.fillRect(r.x, y, d, Math.min(d * 2, r.y + r.h - y)); c.fillRect(r.x + r.w - d, y, d, Math.min(d * 2, r.y + r.h - y)); }
+        const icon = mmIcon(locked ? 'locked' : 'forSale');
+        const withText = cs >= 44 && info;
+        mmSprite(c, icon, r.x + r.w / 2, r.y + r.h / 2 - (withText ? cs * 0.12 : 0), cs * 0.42);
+        if (withText) {
+          const fs = Math.max(8, Math.round(cs / 5.5));
+          c.font = `700 ${fs}px "Ferme", "Trebuchet MS", monospace`;
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          c.lineWidth = Math.max(2, Math.round(fs / 4));
+          c.strokeStyle = '#1b1320';
+          const t = locked ? (info.text.startsWith('Rang') ? info.text.replace(' requis', '') : '') : 'À vendre';
+          if (t && c.measureText(t).width <= r.w - 4) {
+            c.strokeText(t, r.x + r.w / 2, r.y + r.h - fs * 0.8);
+            c.fillStyle = locked ? '#f3e9dc' : '#fff3b0';
+            c.fillText(t, r.x + r.w / 2, r.y + r.h - fs * 0.8);
+          }
+        }
+        continue;
+      }
+      const kind = l.type === 'yard' ? 'yard' : MM_COLORS[l.type] ? l.type : 'wild';
+      c.fillStyle = MM_COLORS[kind];
+      c.fillRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = 'rgba(63,38,49,0.55)';
+      c.fillRect(r.x, r.y + r.h - 1, r.w, 1);
+      c.fillRect(r.x + r.w - 1, r.y, 1, r.h);
+      if (l.type === 'yard') continue; // icône dans la zone de la maison
+      mmSprite(c, mmIcon(kind), r.x + r.w / 2, r.y + r.h / 2, cs * 0.5);
+    }
+    // Allées (tuiles de chemin) par-dessus
+    c.fillStyle = 'rgba(214,168,108,0.95)';
+    const ps = Math.max(1, Math.round(cs / 11));
+    const G = L.grid;
+    for (let ty = G.rowTop; ty < G.homeBottom - 2; ty++) {
+      if (ty === G.roadY || ty === G.roadY + 1) continue;
+      for (let tx = G.x0Tiles; tx < G.x0Tiles + G.colsTiles; tx++) {
+        if (!L.isPath(tx, ty)) continue;
+        const p = map.toMap(tx * TILE + 8, ty * TILE + 8);
+        c.fillRect(Math.round(p.x - ps / 2), Math.round(p.y - ps / 2), ps, ps);
+      }
+    }
+    // Icônes de la maison et de la basse-cour
+    const yardR = cellRect({ x: 0, y: L.grid.rowY(0) * TILE, w: CAREER_COL_TILES * TILE, h: 11 * TILE });
+    mmSprite(c, mmIcon('yard'), yardR.x + yardR.w / 2, yardR.y + yardR.h / 2, cs * 0.45);
+    mmSprite(c, mmIcon('home'), hr.x + hr.w / 2, yardR.y + yardR.h + (hr.y + hr.h - yardR.y - yardR.h) / 2, cs * 0.55);
+    minimapStatic = { key, canvas: cv, map };
+    return minimapStatic;
+  }
+
+  /** Rectangle du monde (px) visible dans la bande (au-dessus d'une feuille ouverte). */
+  function visibleWorldRect() {
+    const a = screenToWorld(band.x / dpr, band.y / dpr);
+    const b = screenToWorld((band.x + band.w) / dpr, (band.y + band.h - overlayDev) / dpr);
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  }
+
+  /**
+   * Mini-carte : fond en cache + vue courante (rectangle) + repères (Joseph, visiteurs, abris pleins,
+   * corbeaux, employés). opts { w, h (px du canevas), ctx?, x?, y? (dessine dans ctx à x, y),
+   * markers (true), staff (true) } → le canevas (ou ctx.canvas). null hors carrière.
+   */
+  let mmCanvas = null;
+  function getMinimap(opts = {}) {
+    if (!careerMode || !lastGame) return null;
+    const w = Math.max(16, Math.round(opts.w || 120));
+    const h = Math.max(16, Math.round(opts.h || 160));
+    const base = minimapBase(w, h);
+    let c = opts.ctx || null;
+    const x0 = c ? Math.round(opts.x || 0) : 0;
+    const y0 = c ? Math.round(opts.y || 0) : 0;
+    if (!c) {
+      if (!mmCanvas) mmCanvas = makeCanvas(w, h);
+      if (mmCanvas.width !== w) mmCanvas.width = w;
+      if (mmCanvas.height !== h) mmCanvas.height = h;
+      c = noSmooth(mmCanvas.getContext('2d'));
+    }
+    c.save();
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.imageSmoothingEnabled = false;
+    c.drawImage(base.canvas, x0, y0);
+    const map = base.map;
+    if (map) {
+      c.translate(x0, y0);
+      const cs = map.cs;
+      const dot = (p, color, r) => {
+        c.fillStyle = '#1b1320';
+        c.fillRect(Math.round(p.x - r - 1), Math.round(p.y - r - 1), 2 * r + 2, 2 * r + 2);
+        c.fillStyle = color;
+        c.fillRect(Math.round(p.x - r), Math.round(p.y - r), 2 * r, 2 * r);
+      };
+      if (opts.markers !== false) {
+        const st = lastGame.state;
+        const pulse = Math.sin(time * 5) > 0;
+        const rDot = Math.max(1, Math.round(cs / 16));
+        // Employés au travail
+        if (opts.staff !== false) for (const m of actors.markers()) if (m.kind === 'staff') dot(map.toMap(m.x, m.y), m.working ? '#fff3b0' : '#d8c9e6', rDot);
+        // Corbeaux
+        for (const [i] of (st.plots || []).entries()) {
+          if (!st.plots[i].crow) continue;
+          const r = layout.plotRect(i);
+          if (r) dot(map.toMap(r.x + r.w / 2, r.y + r.h / 2), '#3f2631', rDot + 1);
+        }
+        // Abris pleins : point rouge qui clignote
+        for (const id of Object.keys(careerInfo.full)) {
+          const sl = layout.slots[id];
+          if (!sl) continue;
+          const p = map.toMap(sl.anchor.x, sl.anchor.y + TILE);
+          dot(p, pulse ? '#ff5a4a' : '#ffb3a0', rDot + 1);
+        }
+        const icon = Math.max(8, cs * 0.34);
+        // Visiteurs (offres en attente), Joseph (quête proposée ou de passage)
+        const offers = (st.career?.events?.offers || []).filter((o) => o && !o.accepted && o.delivered !== true);
+        const H = layout.home;
+        if (offers.length) mmSprite(c, 'icon.career.visitor', map.toMap((H.stand.x + 1) * TILE, H.roadY * TILE).x, map.toMap(0, H.roadY * TILE).y - icon * 0.3, icon);
+        const q = st.career?.quest;
+        const j = actors.joseph;
+        if ((q && !q.accepted) || (j && j.state !== 'out')) {
+          const p = j ? map.toMap(j.x, j.y) : map.toMap(layout.farmerHome.x, layout.farmerHome.y);
+          mmSprite(c, 'icon.career.quest', p.x, p.y - icon * 0.4 - (pulse ? 1 : 0), icon);
+        }
+      }
+      // Vue courante
+      const v = visibleWorldRect();
+      const a = map.toMap(v.x, v.y);
+      const b = map.toMap(v.x + v.w, v.y + v.h);
+      const rx = Math.round(Math.max(-1, a.x));
+      const ry = Math.round(Math.max(-1, a.y));
+      const rw = Math.round(Math.min(w + 1, b.x)) - rx;
+      const rh = Math.round(Math.min(h + 1, b.y)) - ry;
+      c.strokeStyle = '#1b1320';
+      c.lineWidth = 3;
+      c.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 1;
+      c.strokeRect(rx + 0.5, ry + 0.5, rw - 1, rh - 1);
+    }
+    c.restore();
+    return opts.ctx ? opts.ctx.canvas : mmCanvas;
+  }
+
+  /** Point de la mini-carte (px du canevas, taille de la dernière mini-carte ou opts) → monde (px). */
+  function minimapToWorld(mx, my, opts = {}) {
+    if (!careerMode) return null;
+    const m = opts.w && opts.h ? minimapMapping(opts.w, opts.h) : minimapStatic?.map;
+    if (!m) return null;
+    const p = m.toWorld(mx, my);
+    return { x: Math.max(layout.x0 ?? 0, Math.min(layout.x1 ?? layout.width, p.x)), y: Math.max(0, Math.min(layout.height, p.y)) };
+  }
+
+  /** Terrain (id) sous un point de la mini-carte, ou null. */
+  function minimapLotAt(mx, my, opts = {}) {
+    const p = minimapToWorld(mx, my, opts);
+    if (!p) return null;
+    const b = layout.bandAt(p.y, p.x);
+    return b ? b.id : null;
+  }
+
+  /** Centre la vue sur un point du monde (px) ; opts { animate (true) }. → { x, y } défilement visé. */
+  function focusWorld(wx, wy, opts = {}) {
+    stopFling();
+    userScrolled = true;
+    scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
+    const visH = band.h - overlayDev;
+    const ty = baseY + (Number(wy) || 0) * zoom - (band.y + visH / 2);
+    const tx = baseX + (Number(wx) || 0) * zoom - (band.x + band.w / 2);
+    if (opts.animate !== false) animateScrollDev(ty, tx);
+    else {
+      scrollAnim = null;
+      setScrollXDev(tx);
+      setScrollDev(ty);
+    }
+    return scrollPair(scrollAnim ? scrollAnim.toX : scrollXDev, scrollAnim ? scrollAnim.to : scrollDev);
+  }
+
   // ── Image ───────────────────────────────────────────────────────────────────────
   const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
@@ -2591,11 +3061,16 @@ export function createScene(canvas, images, level, opts = {}) {
     lastTime = timeMs;
     time += dt;
     stepScrollAnim(dt);
-    if (flingV !== 0) {
+    if (flingV !== 0 || flingVX !== 0) {
       const before = scrollDev;
+      const beforeX = scrollXDev;
+      if (flingVX !== 0) scrollXDev = Math.max(0, Math.min(maxScrollXDev, Math.round(scrollXDev + flingVX * dt * dpr)));
       setScrollDev(scrollDev + flingV * dt * dpr);
-      flingV *= Math.exp(-dt * 4.5);
+      const damp = Math.exp(-dt * 4.5);
+      flingV *= damp;
+      flingVX *= damp;
       if (Math.abs(flingV) < 12 || scrollDev === before) flingV = 0;
+      if (Math.abs(flingVX) < 12 || scrollXDev === beforeX) flingVX = 0;
     }
 
     if (game.state && game.state.mode === 'career') {
@@ -2689,8 +3164,20 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   // ── (Carrière) Disposition, reconstruction et image ──────────────────────────────────
+  /** Grille 2D du cœur (query.career.grid(), carte 2D) ou null (cœur d'avant, requête en erreur). */
+  function queryGrid(g) {
+    try {
+      const q = g.query?.career;
+      return typeof q?.grid === 'function' ? q.grid() || null : null;
+    } catch {
+      return null;
+    }
+  }
+
   function careerOpts(g) {
-    return { career: g.state.career, plots: g.state.plots, investments: g.state.investments };
+    const grid = queryGrid(g);
+    gridKey = careerGridKey(grid);
+    return { career: g.state.career, plots: g.state.plots, investments: g.state.investments, grid };
   }
 
   /**
@@ -2701,7 +3188,9 @@ export function createScene(canvas, images, level, opts = {}) {
   function rebuildCareer(g, first) {
     const oldH = layout.height;
     const keepY = !first && userScrolled ? worldCenterY() : null;
-    const anim = !first && scrollAnim ? { ...scrollAnim } : null;
+    const keepX = !first && userScrolled ? worldCenterX() : null;
+    const anim = !first && scrollAnim ? { ...scrollAnim, wX: xLo + scrollAnim.fromX / zoom, wToX: xLo + scrollAnim.toX / zoom } : null;
+    minimapStatic = null;
     layout = createCareerLayout(g.level || layout.level, careerOpts(g));
     careerKey = careerLayoutKey(g.state);
     forceRebuild = false;
@@ -2716,7 +3205,7 @@ export function createScene(canvas, images, level, opts = {}) {
       for (const k of Object.keys(prevLevels)) delete prevLevels[k];
       careerInfo.t = -1;
       userScrolled = false;
-      flingV = 0;
+      stopFling();
       scrollAnim = null;
       scrollBeforeOverlay = null;
       computeCamera();
@@ -2742,8 +3231,8 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.shift(0, dy);
       actors.shift(dy);
     }
-    computeCamera(keepY !== null ? keepY + dy : undefined);
-    if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom };
+    computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
+    if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
   }
 
   /** Relit quelques requêtes de carrière (au plus 4 fois par seconde). */
@@ -2752,6 +3241,11 @@ export function createScene(canvas, images, level, opts = {}) {
     careerInfo.t = time;
     const q = g.query?.career;
     try { careerInfo.nextLot = q?.nextLot ? q.nextLot() : null; } catch { careerInfo.nextLot = null; }
+    // (Carte 2D) terrains à vendre : prix et verrous à jour ; nouvelle grille → nouvelle disposition.
+    const grid = queryGrid(g);
+    careerInfo.cands = new Map();
+    for (const e of grid?.lots || []) if (e && !e.owned) careerInfo.cands.set(e.id, e);
+    if (careerGridKey(grid) !== gridKey) forceRebuild = true;
     careerInfo.full = {};
     try {
       for (const b of (q?.buildings ? q.buildings() : [])) if (b && b.full) careerInfo.full[b.id] = true;
@@ -2859,7 +3353,7 @@ export function createScene(canvas, images, level, opts = {}) {
     c.globalAlpha = k;
     for (let ty = Math.floor(r.y / TILE); ty < (r.y + r.h) / TILE; ty++) {
       const part = ty === Math.floor((r.y + r.h) / TILE) - 1 ? 'bottom' : 'fill';
-      for (let tx = 0; tx < layout.cols; tx++) drawSprite(c, sheetsEnv, `${fset}.${part}`, tx * TILE, ty * TILE);
+      for (let tx = Math.floor(r.x / TILE); tx < (r.x + r.w) / TILE; tx++) drawSprite(c, sheetsEnv, `${fset}.${part}`, tx * TILE, ty * TILE);
     }
     c.globalAlpha = 1;
   }
@@ -2903,7 +3397,7 @@ export function createScene(canvas, images, level, opts = {}) {
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
     // Tranche visible de la couche fixe.
-    c.drawImage(staticLayer, 0, bufY0 - sBufY0, viewW, viewH, 0, 0, viewW, viewH);
+    c.drawImage(staticLayer, bufX0 - sBufX0, bufY0 - sBufY0, viewW, viewH, 0, 0, viewW, viewH);
     c.translate(ox, oy);
     drawWater();
     drawPlots(sheetsEnv, raining, season);
@@ -2943,7 +3437,7 @@ export function createScene(canvas, images, level, opts = {}) {
     resetTracking();
     effects.clear();
     userScrolled = false;
-    flingV = 0;
+    stopFling();
     scrollAnim = null;
     scrollBeforeOverlay = null;
   }
@@ -3054,7 +3548,7 @@ export function createScene(canvas, images, level, opts = {}) {
       return actors;
     },
     careerStats() {
-      return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: viewW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };
+      return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: staticW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };
     },
     get decorMode() {
       return decorMode;
@@ -3071,18 +3565,26 @@ export function createScene(canvas, images, level, opts = {}) {
     setScroll,
     scrollTo,
     setOverlay,
+    /** Défilement courant (px CSS) : { x, y } (vaut y dans un calcul : compatibilité). */
     getScroll() {
-      return scrollDev / dpr;
+      return scrollPair(scrollXDev, scrollDev);
     },
+    /** Défilement maximal (px CSS) : { x, y } (vaut y dans un calcul). */
     maxScroll() {
-      return maxScrollDev / dpr;
+      return scrollPair(maxScrollXDev, maxScrollDev);
     },
+    getMinimap,
+    minimapToWorld,
+    minimapLotAt,
+    focusWorld,
+    /** Rectangle du monde (px) visible au-dessus de la feuille ouverte. */
+    viewRect: visibleWorldRect,
     fling,
     get overlay() {
       return overlayDev / dpr;
     },
     get scrolling() {
-      return !!scrollAnim || flingV !== 0;
+      return !!scrollAnim || flingV !== 0 || flingVX !== 0;
     },
     focusField,
     focusPlot,

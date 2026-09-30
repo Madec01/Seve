@@ -11,7 +11,7 @@ import { getProduct } from '../../data/products.js';
 import { COSMETICS_BY_ID, DECOR_SLOTS_BY_ID, FARM_NAME_MAX } from '../../data/cosmetics.js';
 import { CAREER_SCHEMA, CAREER_VERSION, DIFFICULTY_CAREER, FARMER_GENDERS, INCOME_KEYS, MAX_LOTS, MAX_STAFF, SEASON_LENGTHS, SPENT_KEYS, STORAGE_MODES } from '../../data/career/career.js';
 import { BUILDINGS_BY_ID, WORKSHOPS, buildingMaxLevel } from '../../data/career/buildings.js';
-import { FIRST_LOT_INDEX, FIXED_LOTS, START_FIELD, getLotType, lotIdFor } from '../../data/career/lots.js';
+import { FIRST_LOT_INDEX, FIXED_LOTS, LOT_GRID, START_FIELD, getLotType, inLotGrid, lotCellOf, lotIdAt } from '../../data/career/lots.js';
 import { ALL_OBJECTIVES, MAX_RANK } from '../../data/career/ranks.js';
 import { capacityAt } from '../processing.js';
 import { getCareerInvestment } from './effects.js';
@@ -75,7 +75,23 @@ export function migrateCareer(saved) {
     throw err;
   }
   const s = JSON.parse(JSON.stringify(saved));
-  // v → v + 1 : (aucune pour l'instant : la version 1 est la première)
+  // v1 → v2 : carte 2D. Les terrains achetés s'empilaient en colonne : ils gardent la colonne 0 et les rangées
+  // 1, 2, 3… dans l'ordre d'achat (même identifiant « lot3 »…, même image) ; la ferme de départ est la case (0, 0).
+  if (s.career.version < 2) {
+    if (Array.isArray(s.career.lots)) {
+      for (const l of s.career.lots) {
+        if (!l || typeof l !== 'object') continue;
+        if (!Number.isInteger(l.index) || l.index < FIRST_LOT_INDEX) {
+          l.col = LOT_GRID.home.col;
+          l.row = LOT_GRID.home.row;
+        } else {
+          l.col = 0;
+          l.row = l.index - FIXED_LOTS.length + 1;
+        }
+      }
+    }
+    s.career.version = 2;
+  }
   // Champs ajoutés sans changer de version (ajouts compatibles) : complétés à leur valeur par défaut.
   const defaults = defaultCareerFields();
   for (const [k, val] of Object.entries(defaults)) if (s.career[k] === undefined) s.career[k] = val;
@@ -135,12 +151,24 @@ export function checkCareerState(s) {
   if (!Array.isArray(c.lots) || c.lots.length < FIXED_LOTS.length) return 'terrains';
   if (!int(c.lotsBought, 0, MAX_LOTS) || c.lots.length !== FIXED_LOTS.length + c.lotsBought) return 'terrains achetés';
   const lotIds = new Set();
+  const cells = new Set([`${LOT_GRID.home.col},${LOT_GRID.home.row}`]);
   for (let k = 0; k < c.lots.length; k++) {
     const l = c.lots[k];
     if (!obj(l)) return 'terrain';
     const fixed = FIXED_LOTS[k];
-    const wantId = fixed ? fixed.id : lotIdFor(FIRST_LOT_INDEX + k - FIXED_LOTS.length);
-    if (l.id !== wantId || l.index !== k) return `terrain ${k}`;
+    if (l.index !== k) return `terrain ${k}`;
+    if (fixed) {
+      if (l.id !== fixed.id || l.col !== LOT_GRID.home.col || l.row !== LOT_GRID.home.row) return `terrain ${k}`;
+    } else {
+      // Case de la grille (ou colonne 0 d'une ancienne carrière), identifiant de la case, case libre, et qui
+      // touche la ferme ou un terrain acheté avant lui.
+      const cell = lotCellOf(l.id);
+      if (!cell || cell.col !== l.col || cell.row !== l.row || l.id !== lotIdAt(l.col, l.row)) return `terrain ${k}`;
+      if (!inLotGrid(l.col, l.row) && !(l.col === 0 && l.row >= 1 && l.row <= LOT_GRID.legacyRows)) return `case du terrain ${l.id}`;
+      if (cells.has(`${l.col},${l.row}`)) return `case du terrain ${l.id}`;
+      if (![[0, 1], [0, -1], [-1, 0], [1, 0]].some(([dc, dr]) => cells.has(`${l.col + dc},${l.row + dr}`))) return `terrain isolé ${l.id}`;
+      cells.add(`${l.col},${l.row}`);
+    }
     if (fixed ? l.type !== fixed.type : !getLotType(l.type)) return `type du terrain ${l.id}`;
     if (!num(l.pricePaid) || !num(l.developPaid) || l.pricePaid < 0 || l.developPaid < 0) return `prix du terrain ${l.id}`;
     const slotsWanted = l.type === 'yard' ? 2 : getLotType(l.type)?.slots || 0;
@@ -239,7 +267,7 @@ export function checkCareerState(s) {
   if (!obj(c.yearStats) || !obj(c.yearStats.incomeBy) || !obj(c.yearStats.spentBy)) return 'bilan de l\'année';
   if (!obj(c.paid) || !['buildings', 'machines', 'animals'].every((k) => num(c.paid[k]) && c.paid[k] >= 0)) return 'valeurs payées';
   if (!obj(c.cosmetics) || !obj(c.cosmetics.decor)) return 'décor';
-  for (const slotId of Object.keys(c.cosmetics.decor)) if (!DECOR_SLOTS_BY_ID[slotId] && !/^lot\d+\.corner$/.test(slotId)) return `décor ${slotId}`;
+  for (const slotId of Object.keys(c.cosmetics.decor)) if (!DECOR_SLOTS_BY_ID[slotId] && !/^lot\d+(?:[we]\d)?\.corner$/.test(slotId)) return `décor ${slotId}`;
   // Statistiques (même forme que les niveaux)
   const statsOk = (st) => obj(st) && obj(st.cropsHarvested) && obj(st.cropsLost) && num(st.harvestIncome) && obj(st.productsSold);
   if (!s.stats || !statsOk(s.stats.year) || !statsOk(s.stats.season)) return 'statistiques';

@@ -13,7 +13,10 @@
 //   par défaut 64 / 72 en vue téléphone, 0 sinon) ; mode=portrait|landscape|auto ; scroll=px
 //   Au doigt ou à la souris : glisser = défiler, toucher bref = action sur la parcelle.
 //   Mode Carrière : career=1 stage=start|1|3|8|12|manor event=… staff=N sim=s pets=1 pending=1|full
-//   focus=<lotId>|house|field (voir tools/scene-preview-career.js)
+//   focus=<lotId>|house|field sides=N (carte 2D) minimap=1 (mini-carte en bas à droite)
+//   scrollx=px (défilement horizontal) (voir tools/scene-preview-career.js)
+//   Carrière : le glisser fait défiler dans les deux sens (scrollBy(dx, dy), fling(vx, vy)) ; toucher
+//   la mini-carte centre la vue sur le point touché (minimapToWorld + focusWorld).
 // window.preview expose { game, scene, set(opts), buyAll(), fill(), … } pour les scripts.
 //
 // Cet outil modifie directement game.state (saison, météo, achats) : c'est volontaire, pour
@@ -105,6 +108,7 @@ function newGame(levelId, seed) {
       stage: params.get('stage') || 'start',
       season: params.get('season') ?? 0,
       staff: params.get('staff'),
+      sides: params.get('sides'),
       crops: params.get('crops') !== '0',
       female: params.get('female') === '1',
       farmName: params.get('name') || undefined,
@@ -355,7 +359,7 @@ const local = (e) => {
 };
 canvas.addEventListener('pointerdown', (e) => {
   const p = local(e);
-  drag = { id: e.pointerId, x: p.x, y: p.y, lastY: p.y, lastT: performance.now(), v: 0, moved: false, touch: e.pointerType !== 'mouse' };
+  drag = { id: e.pointerId, x: p.x, y: p.y, lastX: p.x, lastY: p.y, lastT: performance.now(), v: 0, vx: 0, moved: false, touch: e.pointerType !== 'mouse' };
   canvas.setPointerCapture?.(e.pointerId);
 });
 canvas.addEventListener('pointermove', (e) => {
@@ -368,10 +372,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (drag.moved) {
     const now = performance.now();
     const dy = p.y - drag.lastY;
-    scene.scrollBy(-dy);
+    const dx = p.x - drag.lastX;
+    if (scene.careerMode) scene.scrollBy(-dx, -dy);
+    else scene.scrollBy(-dy);
     const dt = Math.max(1, now - drag.lastT) / 1000;
     drag.v = drag.v * 0.6 + (-dy / dt) * 0.4;
+    drag.vx = drag.vx * 0.6 + (-dx / dt) * 0.4;
     drag.lastY = p.y;
+    drag.lastX = p.x;
     drag.lastT = now;
   }
 });
@@ -380,7 +388,7 @@ canvas.addEventListener('pointerup', (e) => {
   const d = drag;
   drag = null;
   if (d.moved) {
-    if (performance.now() - d.lastT < 80) scene.fling(d.v);
+    if (performance.now() - d.lastT < 80) { if (scene.careerMode) scene.fling(d.vx, d.v); else scene.fling(d.v); }
     return;
   }
   const p = local(e);
@@ -430,7 +438,8 @@ if (params.get('inv') === 'all') api.buyAll();
 if (params.get('crops') === '1' && !CP) api.fill();
 if (CP) {
   api.career = {
-    stage(n) { game = CP.buildCareerGame({ seed, stage: String(n), season: game.state.time.seasonIndex }); wire(); return game; },
+    stage(n, sides = 0) { game = CP.buildCareerGame({ seed, stage: String(n), sides, season: game.state.time.seasonIndex }); wire(); return game; },
+    minimap(w = 120, h = 160) { return scene.getMinimap({ w, h }); },
     event(id) { CP.applyEvent(game, id); },
     pending(full) { CP.fillPending(game, full); },
     sim(sec, from) { CP.simulate(game, Number(sec) || 1, from ?? null); },
@@ -460,6 +469,34 @@ if (params.get('contest') === '1') api.contest(true);
 if (params.get('panel') === '0') $('panel').classList.add('hidden');
 if (params.get('panel') === 'none') $('panel').style.display = 'none';
 if (params.get('scroll') !== null) scene.setScroll(Number(params.get('scroll')));
+if (params.get('scrollx') !== null) scene.setScroll(Number(params.get('scrollx')), scene.getScroll().y);
+
+// (Carrière 2D) Mini-carte : en bas à droite, au-dessus des onglets simulés ; toucher = y aller.
+const mm = params.get('minimap') === '1' ? document.createElement('canvas') : null;
+if (mm) {
+  mm.id = 'minimap';
+  const cssW = 96;
+  const cssH = 132;
+  const dprMM = Number(params.get('dpr')) || window.devicePixelRatio || 1;
+  mm.width = Math.round(cssW * dprMM);
+  mm.height = Math.round(cssH * dprMM);
+  Object.assign(mm.style, { position: 'fixed', width: `${cssW}px`, height: `${cssH}px`, zIndex: 3, imageRendering: 'pixelated', border: '2px solid #3f2631', borderRadius: '6px', boxShadow: '0 2px 6px rgba(0,0,0,.4)' });
+  document.body.appendChild(mm);
+  const place = () => {
+    const r = canvas.getBoundingClientRect();
+    mm.style.left = `${r.right - cssW - 12}px`;
+    mm.style.top = `${r.bottom - (insets.bottom || 0) - cssH - 12}px`;
+  };
+  place();
+  window.addEventListener('resize', place);
+  mm.addEventListener('pointerdown', (e) => {
+    const r = mm.getBoundingClientRect();
+    const k = mm.width / r.width;
+    const w = scene.minimapToWorld((e.clientX - r.left) * k, (e.clientY - r.top) * k);
+    if (w) scene.focusWorld(w.x, w.y, { animate: true });
+  });
+  api.minimapCanvas = mm;
+}
 
 // ── Boucle ────────────────────────────────────────────────────────────────────────────
 let last = performance.now();
@@ -476,12 +513,13 @@ function frame(t) {
   }
   const t0 = performance.now();
   scene.render(game, t);
+  if (mm && scene.careerMode) scene.getMinimap({ w: mm.width, h: mm.height, ctx: mm.getContext('2d') });
   const cost = performance.now() - t0;
   frames++;
   fpsT += dt;
   if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   const cal = game.query.calendar();
-  $('info').textContent = `${scene.layoutMode} zoom ×${scene.zoom}  défil. ${Math.round(scene.getScroll())}/${Math.round(scene.maxScroll())}\n${fps} i/s  rendu ${cost.toFixed(1)} ms\n${cal.seasonId} jour ${cal.day}  ${game.state.weather.today}  ${(cal.dayProgress * 100) | 0} %`;
+  $('info').textContent = `${scene.layoutMode} zoom ×${scene.zoom}  défil. ${Math.round(scene.getScroll().x)},${Math.round(scene.getScroll().y)}/${Math.round(scene.maxScroll().x)},${Math.round(scene.maxScroll().y)}\n${fps} i/s  rendu ${cost.toFixed(1)} ms\n${cal.seasonId} jour ${cal.day}  ${game.state.weather.today}  ${(cal.dayProgress * 100) | 0} %`;
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

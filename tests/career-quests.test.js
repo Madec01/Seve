@@ -1,5 +1,6 @@
-// Mode Carrière — quêtes et amitié de Joseph (CORE-C) : quête au début de chaque saison (rang ≥ 2), accepter,
-// refuser, récoltes mises de côté, livraison du grenier, échéance, récompenses (argent, écus, ♥), paliers
+// Mode Carrière — quêtes et amitié de Joseph (CORE-C) : quête au début d'une saison (rang ≥ 2 ; rythme et délais :
+// career-quest-pace.test.js), accepter, refuser, récoltes mises de côté, livraison du grenier, échéance,
+// récompenses (argent, écus, ♥), paliers
 // d'amitié (cadeaux, prêt × 2, prêt sans supplément, verger de Joseph, charrette), cœur du prêt remboursé et
 // de la fête des récoltes, sauvegarde.
 import { test } from 'node:test';
@@ -40,7 +41,7 @@ function withApi(fn) {
   }
 }
 
-test('pas de quête au rang 1 ; au rang 2 une quête proposée au début de chaque saison', () => {
+test('pas de quête au rang 1 ; au rang 2 une quête proposée au début d\'une saison', () => {
   const g = newCareer();
   const ev = record(g);
   goTo(g, 1, dayOf(1, 1));
@@ -52,7 +53,8 @@ test('pas de quête au rang 1 ; au rang 2 une quête proposée au début de chaq
   assert.ok(offered, 'quête proposée');
   const q = g.query.career.quest();
   assert.equal(q.accepted, false);
-  assert.equal(q.daysLeft, L - 1);
+  assert.ok(q.daysLeft >= 2 * L, 'délai en acceptant aujourd\'hui : au moins 2 saisons');
+  assert.equal(q.offerDaysLeft, 2 * L - 1, 'la proposition attend jusqu\'à la fin de la saison suivante');
   assert.ok(QUEST_TEMPLATES.some((t) => t.id === q.templateId));
   assert.ok(q.need.n >= 1);
   assert.ok(q.reward.money > 0);
@@ -73,7 +75,8 @@ test('accepter, récoltes mises de côté « → Joseph », récompense : 1,5 ×
   assert.ok(g.actions.harvest(0).amount > 0);
   const acc = g.actions.career.acceptQuest();
   assert.ok(acc.ok);
-  assert.equal(acc.line, JOSEPH_LINES.questAccepted);
+  assert.equal(acc.line, JOSEPH_LINES.questAccepted.replace('{deadline}', acc.quest.deadline));
+  assert.match(acc.line, /jusqu'à la fin de l'hiver/);
   assert.equal(g.actions.career.acceptQuest().ok, false);
   const money0 = g.state.money;
   for (let i = 0; i < 3; i++) {
@@ -118,7 +121,7 @@ test('refuser : « Pas grave, une autre fois ! » ; rien d\'autre ne change', ()
   assert.equal(g.actions.career.declineQuest().ok, false);
 });
 
-test('échéance : fin de la saison ; les récoltes mises de côté sont payées au prix normal', () => {
+test('échéance : le soir du dernier jour du délai ; les récoltes mises de côté sont payées au prix normal ; aucune pénalité', () => {
   const g = newCareer();
   setRank(g, 2);
   goTo(g, 1, dayOf(1, 1));
@@ -127,13 +130,18 @@ test('échéance : fin de la saison ; les récoltes mises de côté sont payées
   ripen(g, 0, 'potato');
   g.actions.harvest(0);
   assert.equal(g.query.career.quest().progress, 1);
+  const end = g.state.career.quest.endDay;
+  assert.equal(end, 4 * L, 'fin de l\'hiver (au moins 2 saisons de jours)');
   const ev = record(g);
-  goTo(g, 1, dayOf(2, 1));
+  goTo(g, 1, end);
+  assert.equal(ev.of('questExpired').length, 0, 'encore valable le dernier jour');
+  const hearts = g.state.career.joseph.hearts; // (+1 ♥ à la fête des récoltes : quête en cours)
+  nextDay(g);
   const exp = ev.of('questExpired')[0];
   assert.ok(exp);
   assert.equal(exp.amount, Math.round(16 * 1.25));
-  assert.equal(g.state.career.joseph.hearts, 0);
-  assert.ok(ev.of('questOffered')[0], 'nouvelle quête pour la nouvelle saison');
+  assert.equal(exp.line, JOSEPH_LINES.questExpired);
+  assert.equal(g.state.career.joseph.hearts, hearts, 'Joseph reste ami : pas de cœur perdu');
 });
 
 test('livrer depuis le grenier', () => {
@@ -294,6 +302,6 @@ test('déterminisme : même graine → mêmes quêtes', () => {
     return ev.of('questOffered').map((e) => `${e.quest.templateId}:${e.quest.need.id}:${e.quest.need.n}`);
   };
   const a = run();
-  assert.equal(a.length, 8);
+  assert.equal(a.length, 4, 'au plus une proposition toutes les deux saisons');
   assert.deepEqual(a, run());
 });

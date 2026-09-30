@@ -11,6 +11,7 @@ import { MAX_ANIMALS } from '../../data/career/career.js';
 import { getRank } from '../../data/career/ranks.js';
 import { ensureBuilding } from '../processing.js';
 import { buildingLevel, buildingLevelData, getCareerInvestment } from './effects.js';
+import { aboutFields } from '../../data/career/descriptions.js';
 import { careerAnimals } from './registry.js';
 
 export function rankLabel(rank) {
@@ -246,6 +247,8 @@ export function buildingInfo(state, buildingId) {
     nextEffects: level < max ? levelEffects(def, def.levels[level]) : null,
     lotId: b ? b.lotId : null,
     slot: b ? b.slot : null,
+    // « Ce que fait ce bâtiment » (fiche) : à quoi il sert, ce que donne ce niveau et chaque niveau, conseils.
+    ...aboutFields('building', buildingId, level),
   };
   if (def.category === 'shelter') {
     const count = state.investments[def.animal] || 0;

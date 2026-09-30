@@ -18,6 +18,7 @@
 import { MAX_ANIMALS } from '../../data/career/career.js';
 import { BUILDINGS_BY_ID, SHELTERS } from '../../data/career/buildings.js';
 import { CAREER_ANIMALS, CAREER_ANIMALS_BY_ID, COLLECT } from '../../data/career/animals.js';
+import { aboutFields } from '../../data/career/descriptions.js';
 import { registerCareerExtension } from './registry.js';
 import { animalCount, shelterCapacity } from './buildings.js';
 import { absDay, addWorkStat, ensureWork, keeperBonus } from './crew.js';
@@ -129,6 +130,8 @@ export function shelterInfo(state, shelterId, seasonId) {
     lastCollected: b?.lastCollected ?? null,
     collector: state.career.machines[collectorKey] ? collectorKey : null,
     keepers: state.career.staff.filter((s) => s.job === 'keeper' && b && (s.lotId === 'all' || s.lotId === b.lotId)).map((s) => s.id),
+    ...aboutFields('building', shelterId, b?.level || 0),
+    animalAbout: aboutFields('animal', def.animal),
   };
 }
 

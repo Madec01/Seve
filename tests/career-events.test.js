@@ -253,11 +253,15 @@ test('visiteur : livraison depuis le grenier ; refus ; échéance (ce qui est mi
   assert.equal(r.done, false);
   assert.equal(g.state.career.stock[cropId], undefined);
   assert.equal(g.actions.career.deliverOffer(offer.id).ok, false, 'grenier vide');
-  // Échéance : demain soir ; les 2 unités livrées sont payées au prix normal.
+  // Échéance : 5 jours (aujourd'hui compris) ; rappel la veille du dernier jour ; les 2 unités livrées sont
+  // payées au prix normal.
+  assert.equal(g.query.career.events().offers[0].daysLeft, 4);
   const ev = record(g);
   const money0 = g.state.money;
-  nextDay(g);
-  assert.equal(ev.of('offerResolved').length, 0, 'encore valable demain');
+  for (let k = 0; k < 4; k++) nextDay(g);
+  assert.equal(ev.of('offerResolved').length, 0, 'encore valable le dernier jour');
+  assert.equal(ev.of('offerReminder').length, 1, 'un rappel la veille du dernier jour');
+  assert.equal(ev.of('offerReminder')[0].daysLeft, 1);
   nextDay(g);
   const exp = ev.of('offerResolved')[0];
   assert.equal(exp.outcome, 'expired');
@@ -380,8 +384,9 @@ test('marchand ambulant (rang 2) : engrais, poules, ruche ; aujourd\'hui seuleme
   }
   assert.ok(Math.abs(g.state.plots[0].growth - Math.min(4, 3 * 1.25)) < 1e-9, `pousse ${g.state.plots[0].growth}`);
   assert.equal(g.state.career.events.fertilizer, null);
-  // Poules (place au poulailler : 4 - 2).
+  // Poules (place au poulailler : 4 - 2). (Une commande de visiteur tirée à l'aube dure 5 jours : on l'enlève.)
   g.state.career.events.active = null;
+  g.state.career.events.offers = [];
   g.state.career.events.lastKind = null;
   assert.ok(g.actions.career.triggerEvent('merchant').ok);
   const o2 = g.state.career.events.offers[0];

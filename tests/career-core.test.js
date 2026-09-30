@@ -486,9 +486,9 @@ test('mode Niveaux intact : aucune branche de carrière', () => {
   assert.equal(g.state.time.day, 28);
 });
 
-test('prix des terrains : ceux du § 2.2', () => {
-  assert.deepEqual(LOT_PRICES, [250, 400, 600, 900, 1300, 1900, 2700, 3800, 5300, 7400, 10000, 14000]);
-  assert.equal(LOT_PRICES.reduce((a, b) => a + b, 0), 48550);
+test('prix des terrains : ceux du § 2.2 (16 terrains avec la carte 2D)', () => {
+  assert.deepEqual(LOT_PRICES, [250, 400, 600, 900, 1300, 1900, 2700, 3800, 5300, 7400, 10000, 14000, 18500, 24000, 30000, 37000]);
+  assert.equal(LOT_PRICES.reduce((a, b) => a + b, 0), 158050);
 });
 
 test('une ferme tenue passe au rang 2 dans l\'année (objectifs et patrimoine)', () => {

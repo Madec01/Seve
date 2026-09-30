@@ -1404,3 +1404,37 @@ Corrections et réglages après l'assemblage des cinq lots (tests : `tests/caree
 - **Simulation** : `--matrix --seasons 7,10,14 --difficulties detente,classique` (une partie de la matrice) ; robot
   casual de `tools/sim-career-staff.js` : au plus 2 terrains de plus arrosés et 2 de plus mécanisés par an.
 
+
+## Carrière v2 — carte 2D : rendu (RENDER, 2026-09-30)
+
+Retour de joueur : agrandir la ferme **sur les côtés** et une **mini-carte**. Le cœur (lot CORE) place chaque terrain
+sur une case `(lot.col, lot.row)` et donne `query.career.grid()` ; le rendu en fait un monde 2D.
+
+- **Monde** (`src/render/layout-career.js`, pur) : un bloc de 14 × 11 tuiles par case ; colonne `c` = tuiles
+  `14c … 14c + 13` (**x négatif à gauche** : les coordonnées de la colonne 0 ne bougent jamais) ; ligne `r ≥ 1` au-dessus
+  de la basse-cour, ligne 0 à côté d'elle ; la ferme de départ (basse-cour, champ de départ, maison) reste en colonne 0.
+  `createCareerLayout(level, { career, plots, investments, grid })` ; `grid` = `query.career.grid()` (facultatif).
+  Terrains à vendre (`grid.lots` non possédés) : forêt assombrie du bloc + grand panneau (prix / cadenas écrits par la
+  scène, à jour 4 fois par seconde) ; toute autre case : forêt dense. Chemins : épine (x 12 du bloc) par suite de
+  terrains d'une colonne, jusqu'à la route pour la ligne 0 ; allées prolongées d'un bloc à son voisin de la même ligne.
+  `route(a, b)` : colonne 0 comme avant, sinon plus court chemin sur les allées (en cache).
+  Nouveaux champs : `x0`, `x1` (px), `grid { cMin, cMax, rMax, rowTop, rowBottom, x0Tiles, colsTiles, rowY(r), roadY,
+  homeBottom }`, `saleBands` (`saleBand` = le premier), `lots[].col/row/ox` (+ `price`, `buyable`, `lockedReason`,
+  `lockedByRank` des terrains à vendre), `bandAt(wy, wx?)`. `careerGridCells(career, grid)`, `careerGridKey(grid)`.
+- **Sans grille** (cœur d'avant) ou **ancienne carrière** en colonne : disposition **identique** à la précédente
+  (vérifié : parcelles, décor, chemins, forêt, cibles, trajets ; mode Niveaux identique au pixel près, captures
+  déterministes).
+- **Caméra** (`scene.js`) : zoom inchangé (une colonne de 12 tuiles utiles = la largeur du téléphone) ; défilement
+  horizontal du centre de la colonne la plus à gauche à celui de la plus à droite (bords du monde sur grand écran).
+  Couche fixe = tout le monde (≈ 1 120 × 2 250 px pour 5 colonnes), vue = l'écran ; parcelles et objets hors de la
+  vue non dessinés. API : `scrollBy(dx, dy)`, `fling(vx, vy)`, `setScroll(x, y)` (un argument : vertical, comme
+  avant), `getScroll()` / `maxScroll()` → `{ x, y }` (valent `y` dans un calcul), `focusLot` (les deux axes),
+  `focusWorld(wx, wy, { animate })`, `viewRect()`, `getMinimap({ w, h, ctx?, x?, y? })`, `minimapToWorld(mx, my)`,
+  `minimapLotAt(mx, my)`. `actors.markers()` (employés, Joseph, visiteurs).
+- **Ce que l'interface doit faire** : glisser en 2D (`scrollBy(-dx, -dy)` au lieu de `scrollBy(-dy)` en carrière,
+  `fling(vx, vy)`), un petit canevas de mini-carte (ex. 96 × 132 px CSS × dpr, en bas à droite au-dessus des onglets)
+  redessiné à chaque image par `getMinimap({ w, h, ctx })` (fond en cache : ≈ 0,15 ms) ; toucher la mini-carte →
+  `minimapToWorld` puis `focusWorld(x, y, { animate: true })` (ou `minimapLotAt` → fiche du terrain).
+- **Aperçu** : `tools/scene-preview.html?career=1&stage=8&sides=6&minimap=1` (glisser en 2D, toucher la mini-carte) ;
+  `sides=N` achète N terrains de côté (grille simulée si le cœur n'a pas `grid()`), `scrollx=px`.
+- Tests : `tests/career-render-layout.test.js` (blocs, cases, cibles des côtés, forêt, allées reliées, trajets).
