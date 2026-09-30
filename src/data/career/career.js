@@ -28,6 +28,32 @@ export function seasonScale(seasonLength) {
   return seasonLength / REFERENCE_SEASON_LENGTH;
 }
 
+/**
+ * Seuils de patrimoine des rangs selon la durée des saisons (et non × durée / 7) : dans une année plus longue,
+ * l'argent gagné est réinvesti plus de fois avant le bilan (terrains, bêtes, machines qui rapportent à leur tour
+ * chaque jour) : la croissance se compose et le patrimoine d'une année donnée grandit à peu près comme le CARRÉ
+ * de la durée (mesuré : ×2,1 en 10 jours, ×3,5 en 14 jours à l'année 2) ; au-delà, le plafond de 12 terrains
+ * freine la croissance, d'où ×3,5 (et non ×4) en 14 jours. Réglé par la simulation (tools/simulate-career.js
+ * --matrix, docs/CARRIERE.md § 13.4) pour que les rangs arrivent la même année quelle que soit la durée.
+ */
+export const PATRIMONY_SCALE = { 7: 1, 10: 2, 14: 3.5 };
+
+export function patrimonyScale(seasonLength) {
+  return PATRIMONY_SCALE[seasonLength] ?? Math.pow(seasonLength / REFERENCE_SEASON_LENGTH, 2);
+}
+
+/**
+ * Objectifs COMPTÉS au fil des jours (récoltes, produits transformés vendus) : × durée / 7, arrondi à 5.
+ * Les objectifs d'état (terrains, employés, parcelles, espèces, maison) et ceux qui arrivent une fois par saison ou
+ * par année (quêtes de Joseph, comice) ne changent pas.
+ */
+export const DAY_COUNTED_OBJECTIVES = ['harvests', 'productsSold'];
+
+export function objectiveTargetFor(obj, seasonLength) {
+  if (!obj || !DAY_COUNTED_OBJECTIVES.includes(obj.type) || seasonLength === REFERENCE_SEASON_LENGTH) return obj?.target ?? 0;
+  return Math.max(1, Math.round((obj.target * seasonScale(seasonLength)) / 5) * 5);
+}
+
 /** Fermier ou fermière (titres accordés, apparence du personnage). */
 export const FARMER_GENDERS = ['fermier', 'fermiere'];
 export const DEFAULT_FARMER_GENDER = 'fermier';

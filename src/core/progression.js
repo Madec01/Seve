@@ -643,6 +643,18 @@ export function recordCareerRank(p, rank, now = Date.now()) {
 }
 
 /**
+ * Écus gagnés en cours de carrière hors bilan et rang (quête de Joseph réussie : questDone.ecus). Versés tout de
+ * suite : le bilan de l'année (report.questEcus) ne fait que les rappeler, recordCareerYear ne les ajoute pas.
+ * → { progress, rewards: { ecus }, achievements: [] }
+ */
+export function recordCareerEcus(p, amount) {
+  const progress = clone(p);
+  const ecus = Math.max(0, Math.min(1000, Math.floor(Number(amount) || 0)));
+  progress.ecus = (progress.ecus || 0) + ecus;
+  return { progress, rewards: { ecus }, achievements: [] };
+}
+
+/**
  * Archive une carrière terminée (faillite en Classique, ou « Recommencer une ferme ») : 5 dernières gardées,
  * la plus récente d'abord. entry = { farmName, years, rank, patrimony, endedBy: 'bankrupt' | 'restart' }.
  */

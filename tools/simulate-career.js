@@ -7,6 +7,7 @@
 //   node tools/simulate-career.js --difficulty classique
 //   node tools/simulate-career.js --season 14            saisons de 10 ou 14 jours
 //   node tools/simulate-career.js --matrix               rangs par année : 7 / 10 / 14 jours × Détente / Classique
+//   node tools/simulate-career.js --matrix --seasons 10 --difficulties detente --strategy casual,optimal   (une partie)
 //   node tools/simulate-career.js --assume-objectives    objectifs « employés / quêtes / comice » supposés remplis
 //   node tools/simulate-career.js --trace --seed 3       une carrière, année par année
 //   node tools/simulate-career.js --json
@@ -1072,8 +1073,10 @@ async function run() {
   }
   if (arg('matrix', false)) {
     const results = [];
-    for (const difficulty of ['detente', 'classique']) {
-      for (const seasonLength of [7, 10, 14]) {
+    // --difficulties detente,classique et --seasons 7,10,14 : une partie de la matrice (lancer plusieurs en parallèle).
+    const listArg = (name, def) => (typeof arg(name, false) === 'string' ? String(arg(name)).split(',') : def);
+    for (const difficulty of listArg('difficulties', ['detente', 'classique'])) {
+      for (const seasonLength of listArg('seasons', [7, 10, 14]).map(Number)) {
         results.push({ label: `${difficulty} ${seasonLength} j`, table: simulateCareer({ ...opts, difficulty, seasonLength }) });
       }
     }

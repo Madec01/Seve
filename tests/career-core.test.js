@@ -56,7 +56,7 @@ test('création : options choisies (Classique, 14 jours, fermière, tenue, nom, 
   assert.equal(c.outfit, 'outfit.raincoat');
   assert.equal(c.farmName, 'Les Mûriers');
   assert.deepEqual(c.cosmetics.decor, { 'porch.left': 'gnome' });
-  assert.equal(g.query.career.summary().nextRank.patrimony, 2400, 'seuils × 14 / 7');
+  assert.equal(g.query.career.summary().nextRank.patrimony, 4200, 'seuils × 3,5 en saisons de 14 jours');
   assert.equal(g.level.dailyCharge, 5);
 });
 

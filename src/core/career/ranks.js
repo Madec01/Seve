@@ -6,7 +6,7 @@
 // objectifs sont remplis (vérifié à chaque aube et après chaque achat). Un objectif rempli l'est pour
 // toujours (state.career.objectives[id] = true) ; un rang acquis aussi.
 
-import { CAREER_ECUS, seasonScale } from '../../data/career/career.js';
+import { CAREER_ECUS, objectiveTargetFor, patrimonyScale } from '../../data/career/career.js';
 import { BUILDINGS, BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { LOT_TYPES } from '../../data/career/lots.js';
 import { MAX_RANK, RANKS, getRank } from '../../data/career/ranks.js';
@@ -30,10 +30,25 @@ export function patrimony(state) {
   return Math.round(state.money + lots + half / 2 + providedSum('patrimony', state) - debt);
 }
 
-/** Seuil de patrimoine d'un rang pour cette carrière (× durée de saison / 7). */
+/**
+ * Seuil de patrimoine d'un rang pour cette carrière : × 2 en saisons de 10 jours, × 3,5 en 14 jours
+ * (patrimonyScale), arrondi à la centaine ; saisons de 7 jours : inchangé.
+ */
 export function rankThreshold(state, rank) {
   const r = getRank(rank);
-  return r ? Math.round(r.patrimony * seasonScale(state.career.seasonLength)) : Infinity;
+  if (!r) return Infinity;
+  const scale = patrimonyScale(state.career.seasonLength);
+  return scale === 1 ? r.patrimony : Math.round((r.patrimony * scale) / 100) * 100;
+}
+
+/** Cible d'un objectif pour cette carrière (récoltes et produits × durée de saison / 7). */
+export function objectiveTarget(state, obj) {
+  return objectiveTargetFor(obj, state.career.seasonLength);
+}
+
+/** Libellé d'un objectif avec sa cible (« Faire {n} récoltes »). */
+export function objectiveLabel(state, obj) {
+  return String(obj.label || '').replace('{n}', String(objectiveTarget(state, obj)));
 }
 
 /** Progression d'un objectif (nombre comparé à target). */
@@ -71,7 +86,7 @@ export function updateObjectives(state) {
   for (const r of RANKS) {
     for (const o of r.objectives) {
       if (state.career.objectives[o.id]) continue;
-      if (objectiveProgress(state, o) >= o.target) {
+      if (objectiveProgress(state, o) >= objectiveTarget(state, o)) {
         state.career.objectives[o.id] = true;
         done.push(o.id);
       }
@@ -171,7 +186,8 @@ export function rankSummary(state) {
           patrimony: rankThreshold(state, next.rank),
           objectives: next.objectives.map((o) => {
             const progress = objectiveProgress(state, o);
-            return { id: o.id, label: o.label, done: !!c.objectives[o.id], progress: Math.min(progress, o.target), target: o.target };
+            const target = objectiveTarget(state, o);
+            return { id: o.id, label: objectiveLabel(state, o), done: !!c.objectives[o.id], progress: Math.min(progress, target), target };
           }),
           unlocks: unlocksFor(next.rank),
         }

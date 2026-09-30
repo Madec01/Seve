@@ -51,6 +51,11 @@ const HOOK_NAMES = ['seasonStart', 'dawnEvents', 'water', 'afterProcessing', 'in
 const PROVIDER_NAMES = ['effects', 'extraPlaces', 'priceFactor', 'seedFactor', 'patrimony', 'lotPrice', 'objective', 'unlocks'];
 
 const extensions = new Map();
+// Listes dérivées des extensions (animaux…) : recalculées seulement quand les extensions changent.
+let animalsCache = null;
+function changed() {
+  animalsCache = null;
+}
 
 /** Enregistre (ou remplace, même id) un lot d'extension. Renvoie une fonction qui le retire (tests). */
 export function registerCareerExtension(ext) {
@@ -58,14 +63,17 @@ export function registerCareerExtension(ext) {
   for (const name of Object.keys(ext.hooks || {})) if (!HOOK_NAMES.includes(name)) throw new Error(`Point d'accroche inconnu : ${name}`);
   for (const name of Object.keys(ext.providers || {})) if (!PROVIDER_NAMES.includes(name)) throw new Error(`Fournisseur inconnu : ${name}`);
   extensions.set(ext.id, ext);
+  changed();
   return () => {
     if (extensions.get(ext.id) === ext) extensions.delete(ext.id);
+    changed();
   };
 }
 
 /** Retire une extension (tests). */
 export function unregisterCareerExtension(id) {
   extensions.delete(id);
+  changed();
 }
 
 /** Extensions enregistrées, dans l'ordre d'enregistrement. */
@@ -133,9 +141,13 @@ export function careerFlag(name) {
  * provisoires de DEFAULT_ANIMALS de même id ; l'ordre est celui de DEFAULT_ANIMALS, puis les nouveaux.
  */
 export function careerAnimals() {
+  // Appelée des milliers de fois par seconde sur une grande ferme (prix, effets, prévision) : tableau figé en
+  // cache, le même tant que les extensions ne changent pas (ne pas le modifier).
+  if (animalsCache) return animalsCache;
   const byId = new Map(DEFAULT_ANIMALS.map((a) => [a.id, a]));
   for (const ext of extensions.values()) for (const inv of ext.investments || []) byId.set(inv.id, inv);
-  return [...byId.values()];
+  animalsCache = Object.freeze([...byId.values()]);
+  return animalsCache;
 }
 
 export function getCareerAnimal(id) {

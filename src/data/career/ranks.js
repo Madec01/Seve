@@ -1,7 +1,8 @@
 // Mode Carrière — rangs de la ferme (données pures). Conception : docs/CARRIERE.md § 1.5.
 //
-// Un rang s'obtient dès que le patrimoine atteint le seuil (× durée de saison / 7) ET que ses deux
-// objectifs sont remplis. Un rang acquis l'est pour toujours.
+// Un rang s'obtient dès que le patrimoine atteint le seuil (× 2 en saisons de 10 jours, × 3,5 en 14 : patrimonyScale) ET que
+// ses deux objectifs sont remplis. Un rang acquis l'est pour toujours. Les objectifs comptés au fil des jours
+// (récoltes, produits) sont × durée / 7 (objectiveTargetFor) ; « {n} » dans un libellé = la cible de la carrière.
 //
 // Types d'objectif (évalués dans src/core/career/ranks.js) :
 //   lots {target}                terrains achetés
@@ -35,7 +36,7 @@ export const RANKS = [
       // 100 au § 1.5 ; 80 après la simulation du socle ; 60 après la simulation complète (CORE-C : le joueur
       // tranquille passe aussi ses gestes à ramasser les abris, aux visiteurs et à Joseph : ≈ 75 récoltes la
       // première année ; 60 → rang 2 à la fin de l'année 1 dans ≈ 80 % des carrières, cible ≥ 70 %).
-      { id: 'harvests', label: 'Faire 60 récoltes', type: 'harvests', target: 60 },
+      { id: 'harvests', label: 'Faire {n} récoltes', type: 'harvests', target: 60 },
     ],
     features: [
       { kind: 'feature', id: 'hire', name: 'Embauche' },
@@ -50,8 +51,10 @@ export const RANKS = [
     patrimony: 4000,
     objectives: [
       { id: 'firstHire', label: 'Embaucher un employé', type: 'staff', target: 1 },
-      // 30 au § 1.5 ; 20 après simulation (au rang 2, seul l'atelier de confitures transforme : fraises, pommes).
-      { id: 'products', label: 'Vendre 20 produits transformés', type: 'productsSold', target: 20 },
+      // 30 au § 1.5 ; 20 après simulation (au rang 2, seul l'atelier de confitures transforme : fraises, pommes) ;
+      // 15 après l'intégration (le débutant qui ne sème pas exprès des fraises restait des années au rang 2 avec
+      // 10 à 16 produits : rang 3 à l'an 5 dans 65 % → cible 70 %).
+      { id: 'products', label: 'Vendre {n} produits transformés', type: 'productsSold', target: 15 },
     ],
     features: [
       { kind: 'machine', id: 'seeder', name: 'Semoir' },

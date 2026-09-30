@@ -134,9 +134,29 @@ export function createCareerUI(app) {
     queued = true;
     requestAnimationFrame(() => {
       queued = false;
+      lastLiveAt = performance.now();
       refreshLive();
       refreshBadges();
     });
+  }
+
+  // Événements du jeu : une grande ferme en émet presque à chaque image (employés, machines, abris). Les feuilles
+  // ouvertes (compteurs de l'équipe, stock…) et les pastilles sont remises à jour au plus 4 fois par seconde ;
+  // après un toucher (act), tout de suite (schedule).
+  let lastLiveAt = 0;
+  let softTimer = null;
+  const LIVE_MS = 250;
+  function scheduleSoft() {
+    if (queued || softTimer) return;
+    const wait = LIVE_MS - (performance.now() - lastLiveAt);
+    if (wait <= 0) {
+      schedule();
+      return;
+    }
+    softTimer = setTimeout(() => {
+      softTimer = null;
+      schedule();
+    }, wait);
   }
 
   function refreshLive() {
@@ -419,6 +439,14 @@ export function createCareerUI(app) {
       case 'crow':
         act('chaseCrow', hit.plotIndex);
         return true;
+      case 'visitor': {
+        // Visiteur (Mme Leblanc, marchand ambulant, animal perdu) : sa carte d'offre ; déjà partie → l'agenda.
+        const offers = q('events', { offers: [] })?.offers || [];
+        if (offers.some((o) => (o.offerId ?? o.id) === hit.offerId)) open.offer(hit.offerId);
+        else if (offers.length) open.offer(offers[0].offerId ?? offers[0].id);
+        else open.journal('agenda');
+        return true;
+      }
       default:
         return false;
     }
@@ -618,6 +646,11 @@ export function createCareerUI(app) {
         break;
       case 'questDone':
         app.audio.play('unlock', { volume: 0.7 });
+        try {
+          app.progression.careerEcus?.(ev.ecus || 0);
+        } catch (err) {
+          console.warn('recordCareerEcus :', err);
+        }
         t.show({ kind: 'success', sprite: joseph('happy', 'sprite--sm'), title: `Quête réussie : +${fmt(ev.amount || 0)} pièces`, text: `« ${ev.line || 'Formidable, merci !'} »${ev.ecus ? ` · +${plural(ev.ecus, 'écu')}` : ''}`, duration: 5200 });
         break;
       case 'questExpired':
@@ -676,7 +709,7 @@ export function createCareerUI(app) {
       default:
         break;
     }
-    schedule();
+    scheduleSoft();
   }
 
   function shelterAnimal(buildingId) {

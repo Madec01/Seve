@@ -238,10 +238,21 @@ app.markAchievementsSeen = () => {
 // ── Personnalisation : la scène reçoit les choix du joueur (lot RENDER : scene.setCosmetics) ──
 app.applyCosmetics = () => {
   const s = app.scene;
-  if (!s || typeof s.setCosmetics !== 'function' || !app.progression.available()) return;
-  const c = app.progression.cosmetics();
+  if (!s || typeof s.setCosmetics !== 'function') return;
+  // Carrière (partie en cours, ou ferme de carrière derrière le menu) : nom, tenue et décor de la carrière
+  // (choisis à la création : « Nouvelle ferme ») ; allée et clôture de la progression (partagées).
+  const g = app.game && !app.inMenu ? app.game : attract;
+  const cc = g?.mode === 'career' ? g.state.career : null;
+  if (!cc && !app.progression.available()) return;
+  const c = app.progression.available() ? app.progression.cosmetics() : {};
   try {
-    s.setCosmetics({ farmName: c.farmName, outfit: c.outfit, path: c.path, fence: c.fence, decor: { ...c.decor } });
+    s.setCosmetics({
+      farmName: cc?.farmName || c.farmName,
+      outfit: cc?.outfit || c.outfit,
+      path: c.path,
+      fence: c.fence,
+      decor: { ...(cc ? cc.cosmetics?.decor || {} : c.decor || {}) },
+    });
   } catch (err) {
     console.warn('setCosmetics :', err);
   }
@@ -809,14 +820,22 @@ window.addEventListener('keydown', (e) => {
 
 // ── Événements du jeu ─────────────────────────────────────────────────────────────
 let refreshQueued = false;
+let lastRefreshAt = 0;
+// Carrière : une grande ferme émet des événements presque à chaque image (employés, machines) ; la barre du haut
+// (prévision des charges, rang) est recalculée au plus 4 fois par seconde. Niveaux : à chaque image, inchangé.
+const CAREER_REFRESH_MS = 250;
 function scheduleRefresh() {
   if (refreshQueued) return;
   refreshQueued = true;
-  requestAnimationFrame(() => {
+  const run = () => {
     refreshQueued = false;
+    lastRefreshAt = performance.now();
     app.hud.refresh();
     if (hover.hit && app.tooltip.owner === 'scene') updateHoverTip();
-  });
+  };
+  const wait = app.game?.mode === 'career' ? CAREER_REFRESH_MS - (performance.now() - lastRefreshAt) : 0;
+  if (wait > 0) setTimeout(() => requestAnimationFrame(run), wait);
+  else requestAnimationFrame(run);
 }
 
 /** Messages des niveaux aussi valables en carrière (le reste passe par app.careerUI.onGameEvent). */
@@ -928,6 +947,12 @@ function flushGrouped() {
 }
 
 function reactAudio(ev, game) {
+  // Carrière : ce que font l'équipe et les machines s'entend à peine (une grande ferme en ferait une cacophonie à ×4).
+  if (ev.by && ev.by !== 'player' && ['planted', 'watered', 'harvested'].includes(ev.type)) {
+    const name = ev.type === 'planted' ? 'plant' : ev.type === 'watered' ? 'water' : 'harvest';
+    audio.play(name, { volume: 0.22, throttle: 1400 });
+    return;
+  }
   switch (ev.type) {
     case 'planted':
       audio.play('plant');
@@ -1371,6 +1396,7 @@ function startRun(game, { resumed = false, created = false } = {}) {
   unwire = wire(game);
   resizeScene();
   syncSceneCareer();
+  app.applyCosmetics();
   if (typeof app.scene?.focusField === 'function') app.scene.focusField();
 
   if (!resumed) game.actions.setSpeed(1);
@@ -1507,6 +1533,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   attract = createAttractGame();
   resizeScene();
   syncSceneCareer();
+  app.applyCosmetics();
   audio.playMusic('menu');
   audio.setAmbience({});
   audio.setWorld({ active: false });
@@ -1640,7 +1667,29 @@ app.careerEnded = (ev) => {
 };
 
 // ── Ferme de démonstration (fond du menu) ─────────────────────────────────────────
+/**
+ * Derrière le menu : la ferme de carrière du joueur s'il en a une (une COPIE chargée de sa sauvegarde, qui vit à
+ * ×1 et n'est jamais enregistrée : la vraie partie reprend exactement où elle était), sinon la ferme de
+ * démonstration du niveau 1.
+ */
 function createAttractGame() {
+  try {
+    const saved = storage.loadCareer();
+    if (saved?.state) {
+      const g = loadCareer(saved.state);
+      if (g.state.status === 'playing') {
+        g.actions.setSpeed(1);
+        g.__attract = true;
+        return g;
+      }
+    }
+  } catch {
+    /* sauvegarde illisible : la ferme de démonstration */
+  }
+  return createDemoGame();
+}
+
+function createDemoGame() {
   const g = createGame({ levelId: 1, seed: 20260929 });
   const tend = () => {
     for (const p of g.query.plots()) {
@@ -1676,7 +1725,11 @@ function frame(t) {
   } else if (attract) {
     g = attract;
     g.update(dt);
-    if (g.state.status !== 'playing') attract = createAttractGame();
+    if (g.state.status !== 'playing') {
+      attract = createDemoGame();
+      syncSceneCareer();
+      app.applyCosmetics();
+    }
   }
   if (g) app.scene.render(g, t);
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
@@ -1783,6 +1836,8 @@ async function boot() {
   applyViewport();
   attract = createAttractGame();
   resizeScene();
+  syncSceneCareer();
+  app.applyCosmetics();
   document.body.classList.add('in-menu');
   requestAnimationFrame(frame);
 
@@ -1964,7 +2019,8 @@ if (DEBUG) {
     lotPoint(id) {
       const l = app.scene?.layout?.lots?.find?.((x) => x.id === id);
       if (!l) return null;
-      const p = l.sign ? { x: l.sign.x, y: l.sign.y } : { x: l.rect.x + l.rect.w / 2, y: l.rect.y + l.rect.h / 2 };
+      // Panneau en tuiles (16 px), rectangle en px du monde.
+      const p = l.sign ? { x: (l.sign.x + 1) * 16, y: (l.sign.y + 0.5) * 16 } : { x: l.rect.x + l.rect.w / 2, y: l.rect.y + l.rect.h / 2 };
       return worldToPage(p.x, p.y);
     },
   };

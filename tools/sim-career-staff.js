@@ -18,7 +18,8 @@
 //   casual    ramasse un abri sur deux par jour (ceux qu'aucun soigneur ni collecteur ne couvre) ; embauche
 //             un jardinier dès que possible pour le champ le moins bien tenu, puis un soigneur (≥ 2 abris),
 //             un vendeur (grenier), un artisan (cour des ateliers) ; arroseurs, puis cheval + semoir +
-//             moissonneuse (rang 3), collecteur du poulailler, tracteur et niveaux 2 (rang 4) ; met les
+//             moissonneuse (rang 3), collecteur du poulailler, tracteur et niveaux 2 (rang 4) — peu à peu : au plus
+//             2 terrains de plus arrosés et 2 de plus mécanisés par an (délégation progressive, § 1.3) ; met les
 //             jardiniers en congé en hiver une année sur deux ;
 //   optimal   ramasse tout chaque jour ; embauche et équipe les champs dès que c'est rentable (réserve de
 //             2 saisons de charges + 14 jours de salaires) ; congés d'hiver des jardiniers sans serre ;
@@ -29,7 +30,8 @@
 const FIELD_TYPES = ['field', 'greenhouse'];
 
 function mem(me) {
-  if (!me.crew) me.crew = { leaveYear: {}, hires: 0, bought: [] };
+  if (!me.crew) me.crew = { leaveYear: {}, hires: 0, bought: [], equipYear: {} };
+  if (!me.crew.equipYear) me.crew.equipYear = {};
   return me.crew;
 }
 
@@ -187,6 +189,35 @@ function horseWish(game, strategy) {
   void strategy;
 }
 
+/**
+ * Joueur tranquille : il délègue PEU À PEU (courbe du § 1.3 et du § 9.1 : arroseurs les années 2-3, semoir
+ * l'année 3, moissonneuse l'année 4, tracteur l'année 5…), pas tous ses champs d'un coup au rang 3 :
+ *   - arroseurs : au plus 2 terrains nouvellement arrosés par an ;
+ *   - semoir / moissonneuse / cueilleuse : au plus 2 terrains nouvellement mécanisés par an.
+ */
+const CASUAL_PER_YEAR = { water: 2, mech: 2 };
+const MECH_MACHINES = ['seeder', 'harvester', 'fruitPicker'];
+const groupOf = (id) => (id === 'sprinklers' ? 'water' : MECH_MACHINES.includes(id) ? 'mech' : null);
+
+function lotHasGroup(game, lotId, group) {
+  return Object.values(game.state.career.machines).some((m) => m.lotId === lotId && groupOf(m.id) === group);
+}
+
+function lotEquipAllowed(game, me, strategy, w) {
+  const group = groupOf(w.id);
+  if (strategy !== 'casual' || !w.place || !group || lotHasGroup(game, w.place, group)) return true;
+  const y = mem(me).equipYear[game.state.time.year] || {};
+  return (y[group] || 0) < CASUAL_PER_YEAR[group];
+}
+
+function noteEquipped(game, me, w, wasEquipped) {
+  const group = groupOf(w.id);
+  if (wasEquipped || !w.place || !group) return;
+  const m = mem(me);
+  const y = (m.equipYear[game.state.time.year] ||= {});
+  y[group] = (y[group] || 0) + 1;
+}
+
 function machines(game, me, strategy) {
   if (strategy === 'idle') return 0;
   const c = game.state.career;
@@ -206,8 +237,13 @@ function machines(game, me, strategy) {
       const cat = game.query.career.machineCatalog().find((x) => x.id === w.id);
       const place = cat?.places.find((p) => (p.place ?? null) === w.place);
       if (!place || (!place.canBuy && !/Pas assez/.test(place.reason || ''))) continue;
+      if (!lotEquipAllowed(game, me, strategy, w)) continue;
       if (game.state.money - cat.cost < reserve(game, strategy)) return 0;
-      if (A.buyMachine(w.id, w.place).ok) return 3;
+      const wasEquipped = !!w.place && !!groupOf(w.id) && lotHasGroup(game, w.place, groupOf(w.id));
+      if (A.buyMachine(w.id, w.place).ok) {
+        noteEquipped(game, me, w, wasEquipped);
+        return 3;
+      }
       continue;
     }
     const line = game.query.career.machine(key);

@@ -57,12 +57,22 @@ export function buildingUpkeep(state, buildingId) {
 }
 
 /** Investissements de carrière possédables avec buyInvestment : animaux puis aménagements (ruches, panneaux). */
+// Cache lié au tableau des animaux (lui-même en cache tant que les extensions ne changent pas).
+let invCache = { animals: null, list: null, byId: null };
 export function careerInvestments() {
-  return [...careerAnimals(), ...FARM_ITEMS];
+  const animals = careerAnimals();
+  if (invCache.animals !== animals) {
+    const list = Object.freeze([...animals, ...FARM_ITEMS]);
+    const byId = new Map();
+    for (const i of list) if (!byId.has(i.id)) byId.set(i.id, i); // le premier, comme find()
+    invCache = { animals, list, byId };
+  }
+  return invCache.list;
 }
 
 export function getCareerInvestment(id) {
-  return careerInvestments().find((i) => i.id === id) || null;
+  careerInvestments();
+  return invCache.byId.get(id) || null;
 }
 
 /**

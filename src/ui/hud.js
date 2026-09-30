@@ -285,11 +285,13 @@ export function createHud(root, app) {
       loanTotal = f.loan.payment * (1 + Math.floor((daysLeft - f.loan.nextInDays) / f.loan.every));
     }
     let crops = 0;
+    let plantable = null; // calculé une seule fois (et seulement s'il sert) : grande ferme = 100+ parcelles
     for (const p of game.query.plots()) {
       if (!p.cropId) continue;
       if (p.mature) crops += p.harvestValue || 0;
       else if (p.daysLeft <= daysLeft && !p.willFreeze) {
-        const c = game.query.plantableCrops().find((x) => x.id === p.cropId);
+        if (!plantable) plantable = new Map(game.query.plantableCrops().map((x) => [x.id, x]));
+        const c = plantable.get(p.cropId);
         crops += c ? c.sellPrice : 0;
       }
     }
@@ -467,10 +469,30 @@ export function createHud(root, app) {
     if (ev.type === 'moneyChanged') {
       targetMoney = ev.money;
       if (ev.delta) popDelta(ev.delta);
-      money.classList.remove('is-bump');
-      void money.offsetWidth;
-      money.classList.add('is-bump');
+      if (career) bumpSoft();
+      else {
+        money.classList.remove('is-bump');
+        void money.offsetWidth;
+        money.classList.add('is-bump');
+      }
     }
+  }
+
+  // Carrière : l'équipe et les machines font bouger l'argent plusieurs fois par seconde. Relancer l'animation
+  // en lisant offsetWidth forçait une mise en page à chaque fois : ici au plus 3 fois par seconde, et la classe
+  // est remise à l'image suivante (aucune lecture de mise en page).
+  let bumpAt = 0;
+  let bumpQueued = false;
+  function bumpSoft() {
+    const now = performance.now();
+    if (bumpQueued || now - bumpAt < 330) return;
+    bumpAt = now;
+    bumpQueued = true;
+    money.classList.remove('is-bump');
+    requestAnimationFrame(() => {
+      bumpQueued = false;
+      money.classList.add('is-bump');
+    });
   }
 
   let infoQueued = false;

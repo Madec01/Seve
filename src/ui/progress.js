@@ -9,7 +9,7 @@
 //   recordRunEnd(info), ecus(), cosmetics(), cosmeticsList(category?), buyCosmetic(id),
 //   placeDecor(slotId, itemId|null), setPath(id), setFence(id), setOutfit(id), setFarmName(text),
 //   farmName(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars(),
-//   difficulty(), setDifficulty(id), careerStart(), careerYear(run), careerRank(rank),
+//   difficulty(), setDifficulty(id), careerStart(), careerYear(run), careerRank(rank), careerEcus(n),
 //   careerAchievementList(ctx) }
 //
 // Toute la logique est dans src/core/progression.js (pur) ; ici, seulement l'état courant,
@@ -241,6 +241,8 @@ export function createProgress(app, storage) {
   const careerYear = (run) => careerRecord('recordCareerYear', run);
   /** Passage de rang : 20 × rang écus, succès. */
   const careerRank = (rank) => careerRecord('recordCareerRank', rank);
+  /** Écus d'une quête de Joseph réussie (versés tout de suite). */
+  const careerEcus = (amount) => (amount > 0 ? careerRecord('recordCareerEcus', amount) : null);
   /** Succès de la carrière pour la grange (section « Carrière »). ctx : contexte d'une carrière en cours ou null. */
   const careerAchievementList = (ctx = null) => call('careerAchievementList', ctx) || [];
 
@@ -341,6 +343,7 @@ export function createProgress(app, storage) {
     careerStart,
     careerYear,
     careerRank,
+    careerEcus,
     careerAchievementList,
     fmtEcus: (n) => `${fmt(n)} écu${Math.abs(n) > 1 ? 's' : ''}`,
   };

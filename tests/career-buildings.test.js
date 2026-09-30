@@ -335,11 +335,11 @@ test('rangs : seuils (× durée), deux objectifs, déblocages, jamais de retour 
   const before = patrimony(g.state);
   g.actions.career.developLot('lot3', 'meadow');
   assert.equal(patrimony(g.state), before - 120 + 60);
-  // Rang 3 : il faut un employé (lot CORE-B) et 20 produits.
+  // Rang 3 : il faut un employé (lot CORE-B) et 15 produits.
   g.state.money = 1e6;
   nextDay(g);
   assert.equal(g.state.career.rank, 2);
-  g.state.career.lifetime.productsSold = 20;
+  g.state.career.lifetime.productsSold = 15;
   g.state.career.staff.push({ id: 's1', level: 1 });
   nextDay(g);
   assert.equal(g.state.career.rank, 3);
@@ -353,9 +353,11 @@ test('rangs : seuils (× durée), deux objectifs, déblocages, jamais de retour 
   nextDay(g);
   assert.equal(g.state.career.rank, 5);
   assert.equal(g.query.career.summary().nextRank.rank, 6);
-  // Seuils × 10 / 7.
+  // Saisons de 10 jours : seuils × 2 (la croissance se compose dans une année plus longue), récoltes × 10 / 7.
   const l = newCareer({ seasonLength: 10 });
-  assert.equal(l.query.career.summary().nextRank.patrimony, Math.round(1200 * 10 / 7));
+  const n10 = l.query.career.summary().nextRank;
+  assert.equal(n10.patrimony, 2400);
+  assert.deepEqual(n10.objectives.map((o) => [o.id, o.target, o.label]), [['firstLot', 1, 'Acheter un premier terrain'], ['harvests', 85, 'Faire 85 récoltes']]);
 });
 
 test('objectifs remplis gardés (rang 4 : 48 parcelles cultivables comptées)', () => {
