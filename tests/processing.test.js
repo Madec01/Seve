@@ -6,6 +6,7 @@ import { goToDay, newGame, nextDay, record, rich } from './helpers.js';
 import { loadGame } from '../src/core/game.js';
 import { getInvestment } from '../src/data/investments.js';
 import { PRODUCTS, getProduct, productsFor, recipeFor } from '../src/data/products.js';
+import { getPerk } from '../src/data/perks.js';
 
 /** Rend la parcelle i récoltable avec cette culture (tests de l'atelier, sans attendre la pousse). */
 function ripe(g, i, cropId) {
@@ -42,9 +43,10 @@ test('achat d’un atelier : places créées (interrupteur allumé), améliorati
   const rec = record(g);
   let seen = null;
   g.on('purchased', () => (seen = JSON.parse(JSON.stringify(g.state.processing.jamWorkshop))));
-  assert.deepEqual(g.actions.buyInvestment('jamWorkshop'), { ok: true, owned: 1, cost: 140 });
+  const price = getInvestment('jamWorkshop').costs[0];
+  assert.deepEqual(g.actions.buyInvestment('jamWorkshop'), { ok: true, owned: 1, cost: price });
   assert.deepEqual(seen, { on: true, places: [null, null] }, 'l’atelier existe quand purchased part');
-  assert.deepEqual(rec.of('purchased')[0], { type: 'purchased', investmentId: 'jamWorkshop', owned: 1, cost: 140 });
+  assert.deepEqual(rec.of('purchased')[0], { type: 'purchased', investmentId: 'jamWorkshop', owned: 1, cost: price });
   g.actions.buyInvestment('jamWorkshop');
   assert.equal(g.state.processing.jamWorkshop.places.length, 3);
   g.actions.buyInvestment('jamWorkshop');
@@ -157,7 +159,9 @@ test('prix d’un produit : étal, Réputation, Recettes de grand-mère, rendeme
   g.actions.buyInvestment('roadsideStand');
   ripe(g, 1, 'strawberry');
   g.actions.harvest(1);
-  assert.equal(g.query.processing()[0].places[0].value, Math.round(46 * 1.1 * 1.25));
+  const pb = getPerk('grandmaRecipes').effect.values[0];
+  const fs = getPerk('famousStand').effect.values[0];
+  assert.equal(g.query.processing()[0].places[0].value, Math.round(46 * (1 + pb) * (1.2 + fs)));
   // Pollinisation (niveau 10) : jus à moitié prix sans ruche, calculé à la vente.
   const h = newGame(10);
   rich(h, 1000);

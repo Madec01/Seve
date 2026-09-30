@@ -1,7 +1,7 @@
 {
-  "id": "18bad90c6877",
+  "id": "49a6eacac62b",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.780039755f.js",
+  "js": "dist/game.52695bd29b.js",
   "css": "dist/game.ac322645b8.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -146,25 +146,25 @@
     "src/audio/manifest.js": "bcd255827929807c",
     "src/core/calendar.js": "adf7ac06b4e95cec",
     "src/core/contest.js": "ece98131e7c91d99",
-    "src/core/economy.js": "adbcbc654cf05775",
+    "src/core/economy.js": "d6b3320a2c12bdb5",
     "src/core/events.js": "467b3069052f8d70",
-    "src/core/farm.js": "1bbc5a1812170ff2",
-    "src/core/game.js": "d370859cc07dd3a5",
+    "src/core/farm.js": "9b17a26dd96ead3e",
+    "src/core/game.js": "37658f2ae9b850e3",
     "src/core/market.js": "b44b99ed21844017",
-    "src/core/perks.js": "d18e7ba869d11c63",
+    "src/core/perks.js": "d4c235975cc3fe4a",
     "src/core/processing.js": "10c857ea3dcc0a8f",
     "src/core/progression.js": "bd72ed3ef3ba45a4",
     "src/core/rng.js": "025e534f65322939",
     "src/core/stats.js": "c3acd1b0bc177056",
-    "src/core/trees.js": "f67bc32eb73286c1",
+    "src/core/trees.js": "7b5d36eb1d128ce5",
     "src/core/weather.js": "875f3410fa4564a6",
     "src/data/achievements.js": "e07e9c4ce24347dd",
     "src/data/balance.js": "d3f28fc92ba51403",
     "src/data/cosmetics.js": "f7d4eb5ebb95979a",
     "src/data/crops.js": "b95f14be6d5a8267",
-    "src/data/investments.js": "cfa12af90110c8a9",
-    "src/data/levels.js": "d367592d6f4e79d3",
-    "src/data/perks.js": "7fcbd95f75825657",
+    "src/data/investments.js": "9e5e2af7cf191542",
+    "src/data/levels.js": "bdaa9d92f6e4a280",
+    "src/data/perks.js": "64d88e2fd12b657e",
     "src/data/products.js": "ca4308ec37323ecd",
     "src/index.template.html": "481723bd863c8d56",
     "src/loader.js": "6dc86df712de36e9",
@@ -201,6 +201,14 @@
     "tools/build.js": "96604599f3e50f75"
   },
   "history": [
+    {
+      "id": "49a6eacac62b",
+      "files": [
+        "dist/game.52695bd29b.js",
+        "dist/game.52695bd29b.js.map",
+        "dist/game.ac322645b8.css"
+      ]
+    },
     {
       "id": "18bad90c6877",
       "files": [

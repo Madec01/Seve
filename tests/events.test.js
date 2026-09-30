@@ -117,3 +117,19 @@ test('la simulation tourne (fumée)', () => {
     for (const r of lv.rows) assert.ok(r.winRate >= 0 && r.winRate <= 1);
   }
 });
+
+test('la simulation : --perks, --levels et --compare-perks (fumée)', () => {
+  const script = fileURLToPath(new URL('../tools/simulate.js', import.meta.url));
+  const a = spawnSync(process.execPath, [script, '--seeds', '1', '--levels', '9-12', '--perks', 'all', '--json'], { encoding: 'utf8' });
+  assert.equal(a.status, 0, a.stderr);
+  const out = JSON.parse(a.stdout);
+  assert.deepEqual(out.map((l) => l.level), [9, 10, 11, 12]);
+  assert.ok(out[3].rows.every((r) => r.contest && r.share));
+  const b = spawnSync(process.execPath, [script, '--seeds', '1', '--level', '10', '--compare-perks', '--json'], { encoding: 'utf8' });
+  assert.equal(b.status, 0, b.stderr);
+  const cmp = JSON.parse(b.stdout);
+  assert.equal(cmp.none[0].level, 10);
+  assert.equal(cmp.all[0].rows.length, 4);
+  const c = spawnSync(process.execPath, [script, '--seeds', '1', '--level', '1', '--perks', 'dragon'], { encoding: 'utf8' });
+  assert.notEqual(c.status, 0, 'bonus inconnu refusé');
+});

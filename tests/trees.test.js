@@ -35,7 +35,7 @@ test('pommier : plantation (prix, état, événement), jamais arrosé même sous
   const r = g.actions.plant(i, 'apple');
   assert.deepEqual(r, { ok: true, cost: 45, fatigue: false });
   assert.equal(g.state.money, money - 45);
-  assert.deepEqual(g.state.plots[i], { unlocked: true, cropId: 'apple', growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0 });
+  assert.deepEqual(g.state.plots[i], { unlocked: true, cropId: 'apple', growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0, insured: false });
   assert.deepEqual(rec.of('planted')[0], { type: 'planted', plotIndex: i, cropId: 'apple', amount: 45, fatigue: false, watered: false });
   const q = g.query.plot(i);
   assert.equal(q.kind, 'tree');
@@ -206,7 +206,7 @@ test('arracher un pommier : parcelle vidée, pas une récolte, gratuit', () => {
   assert.equal(g.actions.removeTree(99).reason, 'Parcelle inexistante.');
   assert.deepEqual(g.actions.removeTree(i), { ok: true });
   assert.equal(g.state.money, money);
-  assert.deepEqual(g.state.plots[i], { unlocked: true, cropId: null, growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0 });
+  assert.deepEqual(g.state.plots[i], { unlocked: true, cropId: null, growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0, insured: false });
   assert.deepEqual(rec.of('treeRemoved'), [{ type: 'treeRemoved', plotIndex: i }]);
   assert.equal(g.state.stats.year.cropsHarvested.apple, undefined);
   // Une culture ordinaire ne s'arrache pas.

@@ -155,7 +155,7 @@ Pensée d'abord pour le **téléphone tenu en portrait** (cahier des charges : `
 
 # Contenu v3 (conception, 2026-09-30)
 
-> **v3** — Tout ce qui suit est nouveau. Les chiffres sont des **valeurs de départ**, à régler avec la simulation (`tools/simulate.js`) ; la version qui fait foi vivra dans `src/data/`. Contrats de code : `docs/ARCHITECTURE.md`, section « v3 ».
+> **v3** — Tout ce qui suit est nouveau. Les chiffres marqués *(équilibré)* ont été réglés avec la simulation (`tools/simulate.js`, 2026-09-30) ; la version qui fait foi vit dans `src/data/`. Contrats de code : `docs/ARCHITECTURE.md`, section « v3 ».
 >
 > **Règle d'or : les niveaux 1 à 8 ne changent pas.** Leurs chiffres (départ, fermages, météo, seuils, cultures et investissements proposés) restent ceux du § 8. Sans bonus permanent, une partie des niveaux 1 à 8 doit se dérouler **exactement** comme en v2 (même graine → même météo, mêmes résultats : test de parité, § 12.11). Les nouveautés (cultures, ateliers, chèvres) n'y apparaissent que par un bonus permanent explicite (« Semencier », § 12.4) ; les nouveaux niveaux 9 à 12 sont construits autour d'elles.
 
@@ -184,7 +184,7 @@ Données dans `src/data/crops.js`, **ajoutées après les 7 cultures existantes*
 
 Repères (profit par jour et par parcelle, arrosée) : pomme de terre 2,75 (sans aucun clic d'arrosage), fraise 3,5, courgette 4,7, citrouille 6,3 — à comparer à carotte 3, tomate 5,2, maïs 5,8. Aucune n'écrase les anciennes : elles élargissent les choix.
 
-Pomme de terre, règles exactes : nouveau champ de donnée `dryGrowth: 1` (pousse non arrosée) et `dryHeatwaveGrowth: 0.5` (pousse non arrosée un jour de canicule). L'arrosage ne lui sert donc que les jours de canicule : toucher une parcelle de pommes de terre n'arrose que si la canicule est annoncée aujourd'hui (sinon, fiche) ; l'arrosage automatique l'ignore aussi, sauf ces jours-là. Au niveau 2 (arrosage payant), c'est une économie réelle — mais elle n'y est disponible qu'avec le bonus « Semencier ».
+Pomme de terre, règles exactes : nouveau champ de donnée `dryGrowth: 1` (pousse non arrosée) et `dryHeatwaveGrowth: 0.5` (pousse non arrosée un jour de canicule). L'arrosage ne lui sert donc que les jours de canicule : toucher une parcelle de pommes de terre n'arrose que si la canicule est annoncée aujourd'hui (sinon, fiche) ; l'arrosage automatique l'ignore aussi, sauf ces jours-là. Au niveau 2 (arrosage payant), c'est une économie réelle — mais elle n'y est disponible qu'avec le bonus « Semencier ». La feuille des graines l'annonce (« Pousse sans arrosage ») ; toucher la parcelle un jour sans canicule ouvre sa fiche (refus : « Pas besoin : elle pousse sans arrosage. »).
 
 ### Le pommier (`apple`)
 
@@ -216,7 +216,7 @@ Repères : planté au 1er jour du printemps (saisons de 7 jours), il est adulte 
 
 ### Disponibilité des nouvelles cultures
 
-- Niveaux 1 à 8 : liste explicite des 7 cultures d'origine (`BASE_CROPS`), **inchangée**. Les 5 nouvelles (dont le pommier) s'y ajoutent seulement avec le bonus « Semencier ».
+- Niveaux 1 à 8 : liste explicite des 7 cultures d'origine (`BASE_CROPS`), **inchangée**. Les 5 nouvelles (dont le pommier) s'y ajoutent seulement avec le bonus « Semencier » (champ de niveau `seedMerchant: true` ; les niveaux 9 à 12 ont leur propre liste et le bonus n'y change rien — la montagne reste sans courgette ni citrouille).
 - Niveaux 9 à 12 : liste par niveau (§ 12.6).
 
 ## 12.2 Transformation *(v3)*
@@ -233,7 +233,7 @@ Un **atelier** a des **places** (2 au niveau 1 du bâtiment, 3, puis 4). Tant qu
 - **Filets de sécurité** : (1) au moment d'un fermage, si l'argent manque et que des produits sont en cours, ils sont **vendus en l'état automatiquement** avant de décider de la faillite (événement `processingSoldRaw`, raison `rent`) ; (2) le soir du dernier jour de l'année, juste avant le fermage d'hiver, tout ce qui est en cours est vendu en l'état (raison `yearEnd`). Rien n'est jamais perdu.
 - Un atelier acheté commence **allumé**.
 
-Prix d'un produit à la vente : `round(valeur de la recette × (1 + bonus produits) × (1 + bonus de prix) × rendement)`, où le bonus de prix est celui de l'étal (+20 %) et de « Réputation » (+5 %), le bonus produits celui de « Recettes de grand-mère » (+10 %), et le rendement celui de la récolte d'origine (fatigue du sol : 0,7 ; pollinisation manquante au niveau 10 : 0,5 ; sinon 1 ; toujours 1 pour le lait). La valeur « en l'état » d'une place est fixée à son entrée (prix brut de la récolte à ce moment, baisse du niveau 9 comprise ; revenu quotidien de l'animal pour le lait). Le cours du marché fou et la baisse de prix du niveau 9 ne touchent **pas** les produits. Le prix est calculé **à la vente** (un étal acheté entre-temps compte).
+Prix d'un produit à la vente : `round(valeur de la recette × (1 + bonus produits) × (1 + bonus de prix) × rendement)`, où le bonus de prix est celui de l'étal (+20 %) et de « Réputation » (+3 %), le bonus produits celui de « Recettes de grand-mère » (+5 %), et le rendement celui de la récolte d'origine (fatigue du sol : 0,7 ; pollinisation manquante au niveau 10 : 0,5 ; sinon 1 ; toujours 1 pour le lait). La valeur « en l'état » d'une place est fixée à son entrée (prix brut de la récolte à ce moment, baisse du niveau 9 comprise ; revenu quotidien de l'animal pour le lait). Le cours du marché fou et la baisse de prix du niveau 9 ne touchent **pas** les produits. Le prix est calculé **à la vente** (un étal acheté entre-temps compte).
 
 ### Les bâtiments
 
@@ -241,7 +241,7 @@ Tous de type `upgrade` (niveaux successifs), dans `src/data/investments.js`, ave
 
 | Bâtiment | id | Prix (niv. 1 / 2 / 3) | Places | Entretien/jour | Condition | Recettes |
 |---|---|---|---|---|---|---|
-| Atelier de confitures | `jamWorkshop` | 140 / 120 / 160 | 2 / 3 / 4 | 1 | — | Fraise (26) → **Confiture de fraises 46**, 2 j · Pomme (26) → **Jus de pomme 44**, 1 j |
+| Atelier de confitures | `jamWorkshop` | **90** / 120 / 160 *(équilibré)* | 2 / 3 / 4 | 1 | — | Fraise (26) → **Confiture de fraises 46**, 2 j · Pomme (26) → **Jus de pomme 44**, 1 j |
 | Fromagerie | `dairy` | 160 / 130 / 170 | 2 / 3 / 4 | 2 | posséder au moins une vache ou une chèvre | Lait de vache (16) → **Fromage de vache 30**, 2 j · Lait de chèvre (9) → **Fromage de chèvre 20**, 2 j |
 | Moulin | `mill` | 150 / 130 / 200 | 2 / 3 / 4 | 1 | — | Blé (16) → **Farine 28**, 1 j (niveaux 1-2) · niveau 3 « **Four à pain** » : Blé → **Pain 44**, 2 j (remplace la farine) |
 
@@ -263,7 +263,7 @@ Repères : une place saturée rapporte en plus environ +10/jour (confiture), +18
 ### Ordre de l'aube v3
 
 1. Pousse des cultures **et des arbres** (croissance, fruits), puis remise à zéro de l'arrosage ;
-2. nouveau jour, début de saison ; gel au 1er jour d'hiver (les arbres ne gèlent pas ; bonus « Assurance gel » : remboursement) ;
+2. nouveau jour, début de saison ; gel au 1er jour d'hiver (les arbres ne gèlent pas ; bonus « Assurance gel » : remboursement des cultures assurées, calculé juste avant le gel) ;
 3. météo ;
 4. maladie (cultures non récoltées et pommes mûres) ;
 5. la pluie arrose ;
@@ -303,26 +303,26 @@ Fin de journée : dernier jour de l'automne au niveau 12 → **remise des prix d
 - **Interrupteur « Bonus permanents »** (grange et choix du niveau) : éteint, les parties se jouent sans aucun bonus (jeu d'origine). Il sert au succès « Pur et dur ». Le choix est mémorisé.
 - Les bonus actifs sont **copiés dans la partie au lancement** (`createGame({ perks })`) : acheter ou rembourser un bonus pendant une partie ne change pas la partie en cours.
 
-### Arbre des bonus (14 bonus, 3 paliers, 41 étoiles pour tout acheter)
+### Arbre des bonus (14 bonus, 3 paliers, 41 étoiles pour tout acheter) *(équilibré : effets réduits après simulation, voir § 12.10)*
 
 Un palier s'ouvre selon les **étoiles gagnées** (pas disponibles) : palier 1 dès le début, palier 2 à **8 étoiles gagnées**, palier 3 à **18**.
 
 | Palier | Bonus | id | Prix | Effet exact | Système touché |
 |---|---|---|---|---|---|
 | 1 | Almanach | `almanac` | 1 | La météo d'**après-demain** s'affiche aussi (prévision exacte : lue sans consommer l'aléatoire) | météo (affichage) |
-| 1 | Bas de laine | `startPurse` | 2, puis 3 (2 rangs) | Argent de départ **+15** (rang 1), **+30** (rang 2) | départ |
-| 1 | Graines sélectionnées | `goodSeeds` | 2 | Prix des graines × 0,9, arrondi à l'unité (au moins 1) ; pas les pommiers | graines |
-| 1 | Bon voisinage | `goodNeighbor` | 2 | Fermage de **printemps** × 0,85 (arrondi) | fermage |
+| 1 | Bas de laine | `startPurse` | 2, puis 3 (2 rangs) | Argent de départ **+10** (rang 1), **+15** (rang 2) | départ |
+| 1 | Graines sélectionnées | `goodSeeds` | 2 | Prix des graines × 0,95, arrondi à l'unité (au moins 1) ; pas les pommiers | graines |
+| 1 | Bon voisinage | `goodNeighbor` | 2 | Fermage de **printemps** × 0,95 (arrondi) | fermage |
 | 2 | Main verte | `greenThumb` | 3 | Pousse **+5 %** hors hiver (s'ajoute aux ruches ; cultures et arbres) | pousse |
 | 2 | Marchandage | `haggler` | 3 | Investissements et ateliers × 0,95 (arrondi) | investissements |
-| 2 | Arpenteur | `surveyor` | 2 | Chaque parcelle achetée coûte **10 de moins** | parcelles |
-| 2 | Ferme économe | `frugal` | 3 | Charges fixes de la ferme **−1/jour** (5 → 4) | charges |
-| 2 | Recettes de grand-mère | `grandmaRecipes` | 2 | Produits transformés **+10 %** | transformation |
-| 3 | Réputation | `famousStand` | 4 | Tous les prix de vente **+5 %** (récoltes et produits ; s'ajoute à l'étal : +25 % avec lui) | ventes |
+| 2 | Arpenteur | `surveyor` | 2 | Chaque parcelle achetée coûte **5 de moins** | parcelles |
+| 2 | Ferme économe | `frugal` | 3 | Entretien des animaux et des bâtiments **−1/jour** (jamais en dessous de 0 ; les 5 pièces de la ferme ne changent pas) | charges |
+| 2 | Recettes de grand-mère | `grandmaRecipes` | 2 | Produits transformés **+5 %** | transformation |
+| 3 | Réputation | `famousStand` | 4 | Tous les prix de vente **+3 %** (récoltes et produits ; s'ajoute à l'étal : +23 % avec lui) | ventes |
 | 3 | Artisan | `artisan` | 3 | **+1 place** dans chaque atelier | transformation |
 | 3 | Arboriste | `orchardist` | 3 | Pommiers **−10** pièces, adultes **2 jours plus tôt** (4 j) | arbres |
-| 3 | Assurance gel | `frostInsurance` | 3 | Au gel du 1er jour d'hiver, le **prix des graines** des cultures gelées est remboursé | gel |
-| 3 | Semencier | `seedMerchant` | 5 | Pomme de terre, fraise, courgette, citrouille et pommier disponibles dans les niveaux 1 à 8 | cultures |
+| 3 | Assurance gel | `frostInsurance` | 3 | Au gel du 1er jour d'hiver, le **prix des graines** des cultures gelées est remboursé, si elles avaient le temps de mûrir quand on les a semées (pas de remboursement pour un semis fait malgré l'avertissement « gèlera ») | gel |
+| 3 | Semencier | `seedMerchant` | 5 | Pomme de terre, fraise, courgette, citrouille et pommier disponibles dans les niveaux 1 à 8 (sans effet aux niveaux 9 à 12) | cultures |
 
 Total : 1 + 5 + 2 + 2 + 3 + 3 + 2 + 3 + 2 + 4 + 3 + 3 + 3 + 5 = **41 étoiles**. Tout acheter demande presque toutes les étoiles du jeu : c'est un objectif de long terme.
 
@@ -417,14 +417,14 @@ Nouveaux champs de niveau (valeurs par défaut entre parenthèses, qui laissent 
   - Prix : **120 pièces par épreuve réussie**, + **120** si les trois le sont (480 au plus). Pas de pénalité si on échoue : juste pas de prix.
 - Interface : bandeau au début (« Concours du village : jugement le soir du 21ᵉ jour »), section « Concours » en haut du Bilan (3 lignes avec barre de progression, « 4 / 6 citrouilles »), message quand une épreuve est réussie, fenêtre de remise des prix avant le bilan de fin d'automne.
 
-### Tableau des réglages (valeurs de départ, à équilibrer)
+### Tableau des réglages *(équilibré)*
 
 | # | Départ | Grille · parcelles (ouvertes / max) | Saisons (jours) | Fermages (printemps → hiver) | ★★ / ★★★ | Réglages |
 |---|---|---|---|---|---|---|
-| 9 | 120 | 6 × 4 · 12 / 24 | 7-7-7-7 | 70 / 130 / 210 / 400 | 320 / 560 | Récoltes brutes −25 % ; atelier de confitures |
-| 10 | 100 | 4 × 4 · 12 / 16 | 7-7-7-7 | 70 / 140 / 260 / 420 | 300 / 520 | 4 pommiers adultes ; pollinisation |
-| 11 | 160 | 5 × 3 · 9 / 15 | 7-5-7-10 | 70 / 120 / 220 / 400 | 220 / 380 | Montagne ; pas de vache ; chèvres et fromagerie |
-| 12 | 150 | 6 × 4 · 12 / 24 | 7-7-7-7 | 90 / 180 / 300 / 650 | 380 / 650 | Concours (jusqu'à 480 de prix) ; tous les ateliers |
+| 9 | 300 | 6 × 4 · 12 / 24 | 7-7-7-7 | 50 / 100 / 180 / 400 | 380 / 460 | Récoltes brutes −25 % ; atelier de confitures (90) |
+| 10 | 180 | 4 × 4 · 12 / 16 | 7-7-7-7 | 60 / 120 / 240 / 440 | 320 / 600 | 4 pommiers adultes ; pollinisation |
+| 11 | 280 | 5 × 3 · 9 / 15 | 7-5-7-10 | 60 / 100 / 200 / 500 | 300 / 470 | Montagne ; pas de vache ; chèvres et fromagerie |
+| 12 | 250 | 6 × 4 · 12 / 24 | 7-7-7-7 | 80 / 160 / 280 / 700 | 360 / 650 | Concours (jusqu'à 480 de prix) ; tous les ateliers |
 
 Les seuils suivent la règle du § 6 : ★★★ ≈ argent médian du meilleur robot (sans bonus), ★★ atteint par la plupart des stratégies réfléchies.
 
@@ -440,7 +440,7 @@ Monnaie **permanente et décorative**, gagnée en jouant (jamais achetée) :
 - Faillite : **3 écus** (lot de consolation).
 - Succès : 5 à 100 écus (§ 12.5).
 
-Repères : une année gagnée ≈ 25 à 45 écus ; les 26 succès ≈ 560 écus ; tout le catalogue ≈ 700 écus.
+Repères : une année gagnée ≈ 25 à 45 écus ; les 26 succès rapportent 575 écus ; tout le catalogue coûte 545 écus.
 
 ### Catalogue (`src/data/cosmetics.js`)
 
@@ -541,6 +541,31 @@ Mêmes fenêtres (centrées) ; la grange s'ouvre en fenêtre large avec les ongl
 | Tous les bonus, niveaux 1 à 12 | balanced et optimal gagnent ≥ 95 % ; careless reste en faillite dans ≥ 50 % des parties aux niveaux 2, 4, 5, 7, 8, 9 à 12 et ≥ 35 % aux niveaux 3 et 6 ; argent médian de l'optimal **+30 % au plus** par rapport à sans bonus |
 
 Si une cible « tous les bonus » n'est pas tenue, on réduit les bonus (jamais les chiffres des niveaux 1 à 8).
+
+### Résultats *(équilibré, 2026-09-30, 200 parties par niveau et par stratégie)*
+
+Niveaux 1 à 8 sans bonus : **identiques à la v2**, partie par partie (tableau de la simulation v2 reproduit à l'identique ; `tests/parity.test.js`).
+
+Niveaux 9 à 12, sans bonus (victoires · argent médian · ★★★) :
+
+| # | careless | balanced | investor | optimal | Le système compte |
+|---|---|---|---|---|---|
+| 9 | 0 % · 291 | 100 % · 525 · ★★★ 100 % | 100 % · 583 | 100 % · 462 · ★★★ 100 % | produits 27 % du revenu de l'optimal (36 % pour balanced), pommes 14 % |
+| 10 | 0 % · 345 | 100 % · 335 · ★★ 100 % | 100 % · 635 | 100 % · 616 · ★★★ 100 % | pommes (brutes + jus) 21 % |
+| 11 | 0 % · 383 | 98 % · 415 · ★★ 98 % | 100 % · 418 | 100 % · 477 · ★★★ 100 % | lait + fromage 26 % |
+| 12 | 0 % · 363 | 100 % · 378 · ★★ 100 % | 100 % · 570 | 100 % · 655 · ★★★ 100 % | concours : l'optimal réussit 2 épreuves dans 100 % des parties (240 de prix) |
+
+Les parties des niveaux 9 à 12 dépendent peu de la graine (robots qui arrosent tout, peu de hasard hors météo) : les seuils sont placés juste sous l'argent médian (★★★ : optimal ; ★★ : balanced).
+
+Tous les bonus (bonus réduits après une première simulation : Bas de laine +10/+15, graines × 0,95, fermage de printemps × 0,95, parcelles −5, Ferme économe sur l'entretien seulement, produits +5 %, Réputation +3 %, Assurance gel pour les semis faits à temps, Semencier limité aux niveaux 1 à 8) :
+
+| Cible | Résultat |
+|---|---|
+| balanced et optimal gagnent ≥ 95 % | tenu partout sauf aux niveaux 3 et 6 (balanced 92 % / 90 %, optimal 92 % / 92 %) — **déjà sous 95 % sans bonus en v2** (89 à 95 %), aucun réglage des bonus ne peut y remédier ; les bonus n'y font pas baisser les victoires (sauf optimal au niveau 3 : 95 → 92 %, dans le bruit) |
+| careless en faillite ≥ 50 % (2, 4, 5, 7, 8, 9 à 12) et ≥ 35 % (3, 6) | tenu : 100 % aux niveaux 2, 4, 5, 7 à 12 ; 39 % au niveau 3 ; 82 % au niveau 6 (le niveau 1 reste gagné par tous, comme en v2) |
+| argent médian de l'optimal + 30 % au plus | tenu aux niveaux 1 (+14 %), 2 (−20 %) et 3 (+28 %) ; **non tenu ailleurs** (+39 % à +237 %) |
+
+Pourquoi la dernière cible n'est pas tenue : l'économie est **à effet boule de neige** et les robots « gelés » par la parité (leurs décisions des niveaux 1 à 8 doivent rester celles de la v2) sont souvent juste sous un seuil de décision. Exemple mesuré : au niveau 5, **10 pièces de plus au départ, sans aucun bonus**, font passer l'optimal de 2 poulaillers à 3 vaches et son argent final de 269 à 487 (+81 %). Chaque bonus pris seul rapporte à l'optimal de 0 à ~100 pièces (souvent moins que ce seuil), mais les 14 réunis se composent. Réduire encore les bonus les rendrait insignifiants pour un joueur sans tenir la cible (tout gain de ~10 pièces franchit ces seuils). Le robot insouciant, lui, n'en profite presque pas (+5 à +20 pièces, sauf +90 au niveau 2) : les bonus récompensent le joueur qui investit, sans rendre les niveaux triviaux (★★★ reste à conquérir sans bonus, et « Pur et dur » l'exige).
 
 ## 12.11 Plan de réalisation *(v3)*
 

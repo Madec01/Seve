@@ -81,6 +81,7 @@ export function setTree(state, plot, cropId, adult = false) {
   plot.fruit = 0;
   plot.watered = false;
   plot.fatigued = false;
+  plot.insured = false;
 }
 
 /** Rendement d'une récolte de pommes : 0,5 sans ruche au niveau « pollinisation », sinon 1. */

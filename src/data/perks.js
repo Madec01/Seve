@@ -8,7 +8,7 @@
 //   effect { key, values }  clé d'effet lue par le cœur, valeur par rang
 //
 // Clés d'effet : forecastDays, startMoney, seedFactor, springRentFactor, growthBonus, investmentFactor,
-// plotDiscount, farmChargeReduction, productBonus, priceBonus, extraPlaces, treeDiscount,
+// plotDiscount, upkeepReduction, productBonus, priceBonus, extraPlaces, treeDiscount,
 // treeGrowReduction (orchardist : deux effets), frostRefund, extraCrops.
 
 import { NEW_CROPS } from './crops.js';
@@ -31,26 +31,26 @@ export const PERKS = [
   {
     id: 'startPurse',
     name: 'Bas de laine',
-    description: 'Argent de départ : +15 pièces (rang 2 : +30).',
+    description: 'Argent de départ : +10 pièces (rang 2 : +15).',
     tier: 1,
     costs: [2, 3],
-    effect: { key: 'startMoney', values: [15, 30] },
+    effect: { key: 'startMoney', values: [10, 15] },
   },
   {
     id: 'goodSeeds',
     name: 'Graines sélectionnées',
-    description: 'Les graines coûtent 10 % de moins (pas les pommiers).',
+    description: 'Les graines coûtent 5 % de moins (pas les pommiers).',
     tier: 1,
     costs: [2],
-    effect: { key: 'seedFactor', values: [0.9] },
+    effect: { key: 'seedFactor', values: [0.95] },
   },
   {
     id: 'goodNeighbor',
     name: 'Bon voisinage',
-    description: 'Le fermage de printemps baisse de 15 %.',
+    description: 'Le fermage de printemps baisse de 5 %.',
     tier: 1,
     costs: [2],
-    effect: { key: 'springRentFactor', values: [0.85] },
+    effect: { key: 'springRentFactor', values: [0.95] },
   },
   {
     id: 'greenThumb',
@@ -71,34 +71,34 @@ export const PERKS = [
   {
     id: 'surveyor',
     name: 'Arpenteur',
-    description: 'Chaque parcelle achetée coûte 10 pièces de moins.',
+    description: 'Chaque parcelle achetée coûte 5 pièces de moins.',
     tier: 2,
     costs: [2],
-    effect: { key: 'plotDiscount', values: [10] },
+    effect: { key: 'plotDiscount', values: [5] },
   },
   {
     id: 'frugal',
     name: 'Ferme économe',
-    description: 'Les charges fixes de la ferme baissent d\'1 pièce par jour.',
+    description: 'L\'entretien des animaux et des bâtiments baisse d\'1 pièce par jour.',
     tier: 2,
     costs: [3],
-    effect: { key: 'farmChargeReduction', values: [1] },
+    effect: { key: 'upkeepReduction', values: [1] },
   },
   {
     id: 'grandmaRecipes',
     name: 'Recettes de grand-mère',
-    description: 'Les produits transformés se vendent 10 % plus cher.',
+    description: 'Les produits transformés se vendent 5 % plus cher.',
     tier: 2,
     costs: [2],
-    effect: { key: 'productBonus', values: [0.1] },
+    effect: { key: 'productBonus', values: [0.05] },
   },
   {
     id: 'famousStand',
     name: 'Réputation',
-    description: 'Tout se vend 5 % plus cher (récoltes et produits).',
+    description: 'Tout se vend 3 % plus cher (récoltes et produits).',
     tier: 3,
     costs: [4],
-    effect: { key: 'priceBonus', values: [0.05] },
+    effect: { key: 'priceBonus', values: [0.03] },
   },
   {
     id: 'artisan',
@@ -120,7 +120,7 @@ export const PERKS = [
   {
     id: 'frostInsurance',
     name: 'Assurance gel',
-    description: 'Au gel du premier jour d\'hiver, les graines des cultures gelées sont remboursées.',
+    description: 'Au gel du premier jour d\'hiver, les graines des cultures gelées sont remboursées (si elles avaient le temps de mûrir).',
     tier: 3,
     costs: [3],
     effect: { key: 'frostRefund', values: [true] },

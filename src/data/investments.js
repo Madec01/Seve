@@ -133,7 +133,7 @@ export const INVESTMENTS = [
     name: 'Atelier de confitures',
     description: 'Transforme les fraises en confiture et les pommes en jus, vendus tout seuls à l\'aube.',
     kind: 'upgrade',
-    costs: [140, 120, 160],
+    costs: [90, 120, 160],
     income: ZERO,
     upkeep: 1,
     effects: { processing: { places: [2, 3, 4], source: 'harvest' } },

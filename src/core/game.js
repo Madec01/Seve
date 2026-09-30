@@ -183,7 +183,13 @@ export function migrateState(saved) {
   const s = JSON.parse(JSON.stringify(saved));
   if (s.version === 1) {
     s.perks = {};
-    if (Array.isArray(s.plots)) for (const p of s.plots) if (p && typeof p === 'object' && p.fruit === undefined) p.fruit = 0;
+    if (Array.isArray(s.plots)) {
+      for (const p of s.plots) {
+        if (!p || typeof p !== 'object') continue;
+        if (p.fruit === undefined) p.fruit = 0;
+        if (p.insured === undefined) p.insured = false;
+      }
+    }
     s.processing = {};
     s.contest = null;
     if (s.stats && typeof s.stats === 'object') {
@@ -252,6 +258,7 @@ function checkState(s, level) {
     if (p.lastHarvested != null && !getCrop(p.lastHarvested)) return 'culture précédente';
     if (!num(p.fruit) || p.fruit < 0) return 'fruits';
     if (p.fruit > 0 && !(p.cropId && isTreeCrop(getCrop(p.cropId)))) return 'fruits sans arbre';
+    if (typeof p.insured !== 'boolean') return 'assurance';
   }
   if (!int(s.plotsBought, 0, s.plots.length)) return 'parcelles achetées';
   if (!s.investments || typeof s.investments !== 'object') return 'investissements';
@@ -327,6 +334,16 @@ function wrap(state) {
 
   const rateOf = (si) => 1 + growthBonus(state, si);
 
+  /** Remboursement de l'Assurance gel, avant le gel : cultures non résistantes semées assurées. */
+  function frostRefundAmount() {
+    let sum = 0;
+    for (const p of state.plots) {
+      const crop = p.cropId ? getCrop(p.cropId) : null;
+      if (crop && !crop.frostHardy && p.insured) sum += seedCostOf(crop);
+    }
+    return sum;
+  }
+
   function pushContestChanges(before) {
     for (const c of contestChanges(state, level, before)) push('contestProgress', c);
   }
@@ -395,9 +412,10 @@ function wrap(state) {
       state.stats.season = createStats();
       push('seasonStart', { seasonId: sid, seasonIndex: state.time.seasonIndex });
       if (sid === 'winter') {
+        // « Assurance gel » : graines remboursées pour les cultures gelées qui avaient été semées à temps.
+        const refund = perkValue(state, 'frostRefund') ? frostRefundAmount() : 0;
         const lost = applyFrost(state);
         addLost(state, 'frost', lost.length);
-        const refund = perkValue(state, 'frostRefund') ? lost.reduce((sum, l) => sum + seedCostOf(getCrop(l.cropId)), 0) : 0;
         if (refund > 0) {
           addStat(state, 'frostRefund', refund);
           extraIncomes.push({ source: 'frostInsurance', amount: refund, owned: 1, kind: 'refund' });
@@ -526,10 +544,13 @@ function wrap(state) {
       if (isTreeCrop(crop)) {
         setTree(state, p, crop.id);
       } else {
+        // « Assurance gel » : assurée si elle a le temps de mûrir avant le gel (pas de semis malgré l'avertissement).
+        const insured = !!perkValue(state, 'frostRefund') && !freezes(crop, Math.ceil(crop.growDays / wateredRate(state, state.time.seasonIndex) - EPSILON));
         p.cropId = crop.id;
         p.growth = 0;
         p.fatigued = wouldFatigue(level, p, crop.id);
         p.watered = weatherWaters(state.weather.today); // il pleut : la graine est arrosée d'office
+        p.insured = insured;
       }
       addStat(state, 'seedsSpent', cost);
       addStat(state, 'cropsPlanted', 1);

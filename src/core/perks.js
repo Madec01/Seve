@@ -13,7 +13,7 @@ const NEUTRAL = {
   growthBonus: 0,
   investmentFactor: 1,
   plotDiscount: 0,
-  farmChargeReduction: 0,
+  upkeepReduction: 0,
   productBonus: 0,
   priceBonus: 0,
   extraPlaces: 0,
@@ -58,9 +58,12 @@ export function hasPerks(state) {
   return !!state.perks && Object.keys(state.perks).length > 0;
 }
 
-/** Cultures de la partie : celles du niveau, + les nouveautés avec « Semencier » (dans l'ordre de CROPS). */
+/**
+ * Cultures de la partie : celles du niveau, + les nouveautés avec « Semencier » dans les niveaux qui
+ * l'acceptent (1 à 8 : level.seedMerchant), dans l'ordre de CROPS.
+ */
 export function gameCrops(level, perks) {
-  const extra = perkValue({ perks }, 'extraCrops');
+  const extra = level.seedMerchant === false ? [] : perkValue({ perks }, 'extraCrops');
   const ids = new Set([...(level.crops || CROPS.map((c) => c.id)), ...extra]);
   return CROPS.filter((c) => ids.has(c.id));
 }

@@ -1,12 +1,13 @@
 // Le potager : parcelles, plantation, arrosage, pousse, récolte, gel, maladie, arrosage automatique.
 //
 // Une parcelle (dans state.plots) :
-//   { unlocked, cropId, growth, watered, lastHarvested, fatigued, fruit }
+//   { unlocked, cropId, growth, watered, lastHarvested, fatigued, fruit, insured }
 //   growth        jours de pousse accumulés (0 → growDays)
 //   watered       arrosée aujourd'hui (remis à false à chaque aube, après la pousse)
 //   lastHarvested dernière culture récoltée sur cette parcelle (fatigue du sol)
 //   fatigued      la culture en place a été replantée juste après la même (rendement réduit)
 //   fruit         (v3) arbres : jours de fruits accumulés (0 pour une culture) — voir src/core/trees.js
+//   insured       (v3) « Assurance gel » : semée quand elle avait le temps de mûrir avant le gel (remboursée si elle gèle)
 
 import { EPSILON, GROWTH, PLOT_COST, SEASONS, WEATHER_TYPES } from '../data/balance.js';
 import { perkValue } from './perks.js';
@@ -38,7 +39,7 @@ export function createPlots(level) {
   const open = new Set(initialUnlockedIndices(level));
   const plots = [];
   for (let i = 0; i < level.gridCols * level.gridRows; i++) {
-    plots.push({ unlocked: open.has(i), cropId: null, growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0 });
+    plots.push({ unlocked: open.has(i), cropId: null, growth: 0, watered: false, lastHarvested: null, fatigued: false, fruit: 0, insured: false });
   }
   return plots;
 }
@@ -165,6 +166,7 @@ export function clearPlot(p) {
   p.watered = false;
   p.fatigued = false;
   p.fruit = 0;
+  p.insured = false;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */

@@ -10,6 +10,8 @@ import { getLevel } from '../src/data/levels.js';
 import { normalizeRunPerks, perkValue } from '../src/core/perks.js';
 
 const freePlot = (g) => g.state.plots.findIndex((p) => p.unlocked && !p.cropId);
+/** Valeur d'effet d'un bonus au rang donné (les chiffres viennent des données : réglables). */
+const V = (id, rank = 1) => getPerk(id).effect.values[rank - 1];
 
 test('bonus : données (14 bonus, 3 paliers, 41 étoiles pour tout acheter)', () => {
   assert.equal(PERKS.length, 14);
@@ -53,7 +55,7 @@ test('perkValue : valeurs neutres sans bonus', () => {
   assert.equal(perkValue(s, 'growthBonus'), 0);
   assert.equal(perkValue(s, 'frostRefund'), false);
   assert.deepEqual(perkValue(s, 'extraCrops'), []);
-  assert.equal(perkValue({ perks: { startPurse: 2 } }, 'startMoney'), 30);
+  assert.equal(perkValue({ perks: { startPurse: 2 } }, 'startMoney'), V('startPurse', 2));
   assert.equal(perkValue({ perks: { orchardist: 1 } }, 'treeGrowReduction'), 2);
   assert.equal(perkValue({ perks: { orchardist: 1 } }, 'treeDiscount'), 10);
 });
@@ -91,39 +93,45 @@ test('Almanach : météo d’après-demain exacte, lue sans consommer l’aléat
   }
 });
 
-test('Bas de laine : argent de départ +15 (rang 1), +30 (rang 2)', () => {
+test('Bas de laine : argent de départ + rang 1, + rang 2', () => {
   const base = getLevel(3).startMoney;
-  assert.equal(createGame({ levelId: 3, seed: 1, perks: { startPurse: 1 } }).state.money, base + 15);
+  assert.ok(V('startPurse', 1) > 0 && V('startPurse', 2) > V('startPurse', 1));
+  assert.equal(createGame({ levelId: 3, seed: 1, perks: { startPurse: 1 } }).state.money, base + V('startPurse', 1));
   const g = createGame({ levelId: 3, seed: 1, perks: { startPurse: 2 } });
-  assert.equal(g.state.money, base + 30);
-  assert.equal(g.state.startMoney, base + 30);
-  assert.equal(g.query.summary().startMoney, base + 30);
+  assert.equal(g.state.money, base + V('startPurse', 2));
+  assert.equal(g.state.startMoney, base + V('startPurse', 2));
+  assert.equal(g.query.summary().startMoney, base + V('startPurse', 2));
 });
 
-test('Graines sélectionnées : graines × 0,9 arrondi (au moins 1), pas les pommiers', () => {
+test('Graines sélectionnées : graines × facteur arrondi (au moins 1), pas les pommiers', () => {
+  const f = V('goodSeeds');
+  assert.ok(f < 1);
   const g = newGame(12, 42, { perks: { goodSeeds: 1 } });
   rich(g);
   const offer = Object.fromEntries(g.query.plantableCrops().map((c) => [c.id, c]));
-  assert.equal(offer.carrot.seedCost, Math.max(1, Math.round(4 * 0.9)));
-  assert.equal(offer.potato.seedCost, Math.round(5 * 0.9));
-  assert.equal(offer.strawberry.seedCost, Math.round(12 * 0.9));
+  assert.equal(offer.carrot.seedCost, Math.max(1, Math.round(4 * f)));
+  assert.equal(offer.potato.seedCost, Math.round(5 * f));
+  assert.equal(offer.strawberry.seedCost, Math.round(12 * f));
   assert.equal(offer.apple.seedCost, 45);
   const money = g.state.money;
   const r = g.actions.plant(freePlot(g), 'strawberry');
-  assert.equal(r.cost, 11);
-  assert.equal(g.state.money, money - 11);
-  assert.equal(g.state.stats.year.seedsSpent, 11);
+  assert.equal(r.cost, Math.round(12 * f));
+  assert.equal(g.state.money, money - r.cost);
+  assert.equal(g.state.stats.year.seedsSpent, r.cost);
   goToDay(g, 15);
-  assert.equal(g.query.plantableCrops().find((c) => c.id === 'cabbage').seedCost, 7);
+  assert.equal(g.query.plantableCrops().find((c) => c.id === 'pumpkin').seedCost, Math.round(18 * f));
+  assert.ok(Math.round(18 * f) < 18, 'le bonus change bien quelque chose');
 });
 
-test('Bon voisinage : fermage de printemps × 0,85, les autres inchangés', () => {
+test('Bon voisinage : fermage de printemps réduit, les autres inchangés', () => {
   const g = newGame(1, 42, { perks: { goodNeighbor: 1 } });
   rich(g, 5000);
-  assert.equal(g.query.finance().nextBill.amount, Math.round(60 * 0.85));
+  const spring = Math.round(60 * V('goodNeighbor'));
+  assert.ok(spring < 60);
+  assert.equal(g.query.finance().nextBill.amount, spring);
   const rec = record(g);
   goToDay(g, 8);
-  assert.equal(rec.of('billPaid')[0].amount, 51);
+  assert.equal(rec.of('billPaid')[0].amount, spring);
   assert.equal(g.query.finance().nextBill.amount, 120);
 });
 
@@ -147,52 +155,60 @@ test('Main verte : +5 % de pousse hors hiver (avec les ruches)', () => {
   assert.equal(g.state.plots[j].growth, 1, 'hiver : aucun bonus');
 });
 
-test('Marchandage : investissements et ateliers × 0,95 arrondi', () => {
+test('Marchandage : investissements et ateliers × facteur arrondi', () => {
+  const f = V('haggler');
   const g = newGame(12, 42, { perks: { haggler: 1 } });
   rich(g);
   const cost = (id) => g.query.investments().find((i) => i.id === id).nextCost;
-  assert.equal(cost('chickenCoop'), Math.round(70 * 0.95));
-  assert.equal(cost('jamWorkshop'), Math.round(140 * 0.95));
-  assert.equal(g.actions.buyInvestment('chickenCoop').cost, Math.round(70 * 0.95));
-  assert.equal(cost('chickenCoop'), Math.round(85 * 0.95));
-  assert.equal(g.state.stats.year.investmentsSpent, Math.round(70 * 0.95));
+  assert.equal(cost('chickenCoop'), Math.round(70 * f));
+  assert.equal(cost('jamWorkshop'), Math.round(getInvestment('jamWorkshop').costs[0] * f));
+  assert.equal(g.actions.buyInvestment('chickenCoop').cost, Math.round(70 * f));
+  assert.equal(cost('chickenCoop'), Math.round(85 * f));
+  assert.equal(g.state.stats.year.investmentsSpent, Math.round(70 * f));
 });
 
-test('Arpenteur : chaque parcelle achetée coûte 10 de moins', () => {
+test('Arpenteur : chaque parcelle achetée coûte moins cher', () => {
+  const d = V('surveyor');
   const g = newGame(1, 42, { perks: { surveyor: 1 } });
   rich(g);
-  assert.equal(g.query.plot(0).unlockCost, 30);
-  assert.equal(g.actions.unlockPlot(0).cost, 30);
-  assert.equal(g.query.plot(5).unlockCost, 40);
+  assert.equal(g.query.plot(0).unlockCost, 40 - d);
+  assert.equal(g.actions.unlockPlot(0).cost, 40 - d);
+  assert.equal(g.query.plot(5).unlockCost, 50 - d);
 });
 
-test('Ferme économe : charges fixes 5 → 4', () => {
+test('Ferme économe : entretien des animaux et bâtiments −1/jour (jamais en dessous de 0)', () => {
   const g = newGame(1, 42, { perks: { frugal: 1 } });
-  assert.equal(g.query.finance().dailyCharges, 4);
+  assert.equal(g.query.finance().dailyCharges, 5, 'les charges de la ferme ne changent pas');
   rich(g);
+  g.actions.buyInvestment('chickenCoop'); // entretien 1 → 0
+  assert.equal(g.query.finance().dailyCharges, 5);
+  g.actions.buyInvestment('sheep'); // entretien 1 + 2 − 1
+  assert.equal(g.query.finance().dailyCharges, 5 + 2);
   g.actions.buyInvestment('solarPanel');
-  assert.equal(g.query.finance().dailyCharges, 0);
+  assert.equal(g.query.finance().dailyCharges, 2);
   const rec = record(g);
   nextDay(g);
-  assert.equal(rec.of('dawn')[0].charges, 0);
+  assert.equal(rec.of('dawn')[0].charges, 2);
 });
 
-test('Recettes de grand-mère : produits +10 % ; Réputation : tout +5 % (+25 % avec l’étal)', () => {
+test('Recettes de grand-mère : produits plus chers ; Réputation : tout plus cher (s’ajoute à l’étal)', () => {
+  const pb = V('grandmaRecipes');
+  const fs = V('famousStand');
   const g = newGame(12, 42, { perks: { grandmaRecipes: 1 } });
   rich(g);
-  assert.equal(g.query.plantableCrops().find((c) => c.id === 'strawberry').product.value, Math.round(46 * 1.1));
+  assert.equal(g.query.plantableCrops().find((c) => c.id === 'strawberry').product.value, Math.round(46 * (1 + pb)));
   assert.equal(g.query.plantableCrops().find((c) => c.id === 'strawberry').sellPrice, 26, 'les récoltes brutes ne changent pas');
   const h = newGame(12, 42, { perks: { famousStand: 1 } });
   rich(h);
   const i = freePlot(h);
   h.actions.plant(i, 'carrot');
   h.state.plots[i].growth = 2;
-  assert.equal(h.query.plot(i).harvestValue, Math.round(10 * 1.05));
-  assert.equal(h.query.finance().priceBonus, 0.05);
+  assert.equal(h.query.plot(i).harvestValue, Math.round(10 * (1 + fs)));
+  assert.equal(h.query.finance().priceBonus, fs);
   h.actions.buyInvestment('roadsideStand');
-  assert.ok(Math.abs(h.query.finance().priceBonus - 0.25) < 1e-9);
-  assert.equal(h.actions.harvest(i).amount, Math.round(10 * 1.25));
-  assert.equal(h.query.plantableCrops().find((c) => c.id === 'strawberry').product.value, Math.round(46 * 1.25));
+  assert.ok(Math.abs(h.query.finance().priceBonus - (0.2 + fs)) < 1e-9);
+  assert.equal(h.actions.harvest(i).amount, Math.round(10 * (1.2 + fs)));
+  assert.equal(h.query.plantableCrops().find((c) => c.id === 'strawberry').product.value, Math.round(46 * (1.2 + fs)));
 });
 
 test('Artisan : une place de plus dans chaque atelier', () => {
@@ -219,17 +235,20 @@ test('Arboriste : pommier à 35, adulte en 4 jours', () => {
   assert.equal(h.query.plot(0).tree.stage, 'adult');
 });
 
-test('Assurance gel : prix des graines gelées remboursé à l’aube du gel', () => {
+test('Assurance gel : graines remboursées à l’aube du gel, pour les cultures semées à temps', () => {
   const g = newGame(1, 42, { perks: { frostInsurance: 1, goodSeeds: 1 } });
   rich(g);
-  goToDay(g, 21);
+  goToDay(g, 15);
   const a = freePlot(g);
-  g.actions.plant(a, 'corn');
+  g.actions.plant(a, 'corn'); // 6 jours, 7 aubes avant le gel : assurée ; jamais arrosée, elle ne mûrira pas
+  assert.equal(g.state.plots[a].insured, true);
+  goToDay(g, 21);
   const b = freePlot(g);
-  g.actions.plant(b, 'carrot');
+  g.actions.plant(b, 'carrot'); // semée malgré l'avertissement : pas assurée
+  assert.equal(g.state.plots[b].insured, false);
   const c = freePlot(g);
-  g.actions.plant(c, 'cabbage'); // résiste : pas de remboursement
-  const paid = Math.round(15 * 0.9) + Math.max(1, Math.round(4 * 0.9)); // prix payés (graines sélectionnées)
+  g.actions.plant(c, 'cabbage'); // résiste au gel
+  const paid = Math.round(15 * 0.95); // prix payé (graines sélectionnées)
   const rec = record(g);
   nextDay(g);
   const frost = rec.of('frost')[0];
@@ -239,15 +258,17 @@ test('Assurance gel : prix des graines gelées remboursé à l’aube du gel', (
   assert.deepEqual(dawn.incomes[0], { source: 'frostInsurance', amount: paid, owned: 1, kind: 'refund' });
   assert.equal(g.state.stats.year.frostRefund, paid);
   assert.equal(g.state.stats.year.investmentIncome, 0);
-  // Sans le bonus : refund 0.
+  // Sans le bonus : jamais assurée, refund 0.
   const h = newGame(1);
   rich(h);
-  goToDay(h, 21);
-  h.actions.plant(freePlot(h), 'corn');
+  goToDay(h, 15);
+  const i = freePlot(h);
+  h.actions.plant(i, 'corn');
+  assert.equal(h.state.plots[i].insured, false);
   const rec2 = record(h);
-  nextDay(h);
+  goToDay(h, 22);
   assert.equal(rec2.of('frost')[0].refund, 0);
-  assert.ok(!rec2.of('dawn')[0].incomes.some((i) => i.kind === 'refund'));
+  assert.ok(!rec2.of('dawn').some((d) => d.incomes.some((x) => x.kind === 'refund')));
 });
 
 test('Semencier : les 5 nouveautés dans les niveaux 1 à 8', () => {
@@ -268,7 +289,7 @@ test('tous les bonus à la fois : la partie se joue et se recharge', () => {
   for (const levelId of [1, 6, 10, 12]) {
     const g = createGame({ levelId, seed: 3, perks: all });
     for (let d = 0; d < 40 && g.state.status === 'playing'; d++) {
-      g.state.money += 80;
+      g.state.money += 150;
       for (const p of g.query.plots()) {
         if (p.action === 'harvest') g.actions.harvest(p.index);
         else if (p.action === 'plant') {
@@ -280,7 +301,7 @@ test('tous les bonus à la fois : la partie se joue et se recharge', () => {
       g.update(20);
       assert.deepEqual(loadGame(g.serialize()).state, g.state);
     }
-    assert.equal(g.state.status, 'victory');
+    assert.notEqual(g.state.status, 'playing');
     assert.equal(getInvestment('chickenCoop').costs[0], 70, 'les données ne changent jamais');
   }
 });

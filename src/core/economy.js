@@ -80,15 +80,19 @@ export function dawnIncomes(state, level, seasonIndex, weatherId, lastDayOfSeaso
   return incomes;
 }
 
-/** Charges quotidiennes fixes : ferme + entretien des investissements − panneaux solaires (≥ 0). */
+/**
+ * Charges quotidiennes fixes : ferme + entretien des investissements (− « Ferme économe », au plus
+ * tout l'entretien) − panneaux solaires (≥ 0).
+ */
 export function dailyCharges(state, level) {
-  let upkeep = BASE_DAILY_CHARGE - perkValue(state, 'farmChargeReduction');
+  let upkeep = 0;
   for (const inv of levelInvestments(level)) {
     const n = owned(state, inv.id);
     if (n === 0) continue;
     upkeep += inv.upkeep * (inv.kind === 'upgrade' ? 1 : n);
   }
-  return Math.max(0, upkeep - effectTotal(state, 'chargeReduction'));
+  upkeep = Math.max(0, upkeep - perkValue(state, 'upkeepReduction'));
+  return Math.max(0, BASE_DAILY_CHARGE + upkeep - effectTotal(state, 'chargeReduction'));
 }
 
 /** Jour de la première mensualité (par défaut : l'aube qui suit les `every` premiers jours). */
