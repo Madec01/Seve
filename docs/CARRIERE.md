@@ -727,3 +727,9 @@ Critères d'acceptation communs : `node --test tests/` vert (parité comprise), 
 | Terrains achetables dans le désordre / choix de la position | Non : toujours le suivant (colonne continue, rendu simple) |
 | Animaux en unités individuelles (poule) plutôt qu'en « poulaillers » comme dans les niveaux | **Unités** (plus lisible quand l'abri grandit) ; les chiffres des niveaux ne changent pas |
 | Récolte « à la main » +10 % | Oui (garde l'envie de toucher) ; à confirmer par la mesure « le toucher compte » |
+
+## 16. Décisions de l'utilisateur (2026-09-30)
+
+- **Pas de production hors jeu** : le temps s'arrête quand on quitte le jeu.
+- **Durée des saisons réglable** à la création de la ferme : 7, 10 ou 14 jours (7 par défaut). Les coûts et gains journaliers restent identiques ; les charges de saison et les paliers sont ajustés par jour de saison pour que l'année reste équilibrée quelle que soit la durée.
+- **Création de la ferme** : nom de la ferme, **fermier ou fermière** (titre et apparence du personnage), tenue parmi celles débloquées, difficulté (Détente sans fin de partie / Classique où la faillite termine la carrière).
