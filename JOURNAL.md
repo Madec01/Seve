@@ -203,6 +203,13 @@ Bug signalé : sur le téléphone, le jeu restait **bloqué sur l'écran de char
 - Débogage : `window.__debug.setMoney(n)`.
 - Vérifié avec Playwright (Pixel 7 et 360 × 640, toucher seul, `dev.html` et `index.html` construit) : choix du mode, prêt provoqué, fenêtre, fiches, Bilan et remboursement, messages groupés, deuxième prêt, fin d'année avec dette effacée, faillite avec dette, partie Classique (faillite immédiate, sans Joseph), ancienne sauvegarde chargée en Classique avec son étiquette et le message unique ; toutes les cibles ≥ 48 px, aucun texte < 12 px, aucun débordement, aucune erreur de console. Partie complète du niveau 1 en Détente jouée comme un joueur tranquille, uniquement au toucher, à ×1 (suit le tutoriel, 7 à 11 gestes par jour au plus, arrose ~60 % des parcelles, replante 3 jours sur 4 une graine au hasard parmi les premières, 1 journée sur 10 sans rien faire) : **2 parties, 2 victoires ★★★** (771 et 671 pièces, 165 et 186 touchers dans l'année), sans avoir besoin de Joseph. À noter (pour le lot CORE) : lors d'une première tentative où le script s'était bloqué après le printemps (poulailler acheté, plus rien fait ensuite), la partie a quand même été gagnée (★, 22 pièces) — l'« idle » qui achète le poulailler du tutoriel ne fait pas faillite.
 
+### 2026-09-30 — Conception du mode Carrière
+
+- **Demande** : garder le mode Niveaux (12 années, inchangé) et ajouter un **mode Carrière** : sa ferme à soi qui dure d'année en année et grandit — terrains à acheter, automatisation, employés, bâtiments à niveaux, nouveaux animaux, événements vivants ; relaxant (Détente par défaut, prêt de Joseph), jouable au pouce en portrait.
+- Nouveau document **`docs/CARRIERE.md`** : années continues et charges de saison (20 + 15 par terrain en Détente), 6 rangs (Petite ferme → Domaine) avec patrimoine, objectifs et déblocages, titres ; monde vertical de 12 terrains achetés un à un et aménagés (champ, pré, verger, cour des ateliers, mare, serre) ; bâtiments à niveaux (maison = capacité d'employés, grenier → silo et cours du marché, serre d'hiver, étal → marché fermier, abris, ateliers niv. 5, conserverie, filature) ; 8 animaux (poule, lapin, canard, chèvre, vache, mouton, cochon et truffes, cheval) avec ramassage plafonné à 3 jours ; 8 machines ; employés (4 métiers, salaire, niveaux 1-5, humeur simple, congés, chômage technique) ; fêtes, comice, événements au hasard, quêtes et amitié de Joseph ; coups durs sans fin de partie en Détente ; sauvegarde unique + copie de secours ; écus / décor / succès partagés, bonus sans effet ; liste des graphismes ; plan de simulation (casual, novice, optimal, idle, automator) et cibles ; plan en lots CORE-A / CORE-B / CORE-C / UI / RENDER / ART, phases A et B.
+- `docs/ARCHITECTURE.md` : section « Mode Carrière — contrats » (fichiers, état, déroulé de la journée, actions, requêtes, événements, API de scène, propriété des fichiers). `docs/GAME_DESIGN.md` : § 14 (renvoi).
+- Aucun code modifié. Règle d'or : le mode Niveaux et la parité ne changent pas.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -234,6 +241,26 @@ Idées étudiées pendant la conception v3 (2026-09-30) et **écartées** (raiso
 - Niveau « grêle » qui détruit des cultures au hasard (frustrant, sans décision possible).
 - Commandes des voisins à délai (bonne idée, mais un système de plus en v3 ; gardée pour plus tard).
 - Afficher la météo d'après-demain en tirant la météo plus tôt (changerait la suite des tirages des niveaux 1 à 8 ; l'almanach lit une copie du flux aléatoire).
+
+Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **écartées** (raison entre parenthèses) :
+
+- Monde en 2D libre (défilement dans les deux sens, pincement pour zoomer) : gestes ambigus au doigt, parcelles sous 48 px au zoom arrière ; retenu : une colonne verticale, terrains empilés vers le haut.
+- Terrains achetables dans n'importe quel ordre / placement libre des bâtiments sur une grille : colonne trouée, précision impossible au doigt ; retenu : toujours le terrain suivant, emplacements prédéfinis.
+- Progression hors ligne (la ferme tourne jeu fermé) : obligation de revenir, contraire à la détente, triche avec l'horloge ; le temps n'avance qu'en jeu.
+- Faim, soif, maladies ou mort des animaux ; abattage et viande ; foie gras : punitif ou pas « cosy » ; retenu : produits à ramasser plafonnés à 3 jours, lapins angoras, truffes.
+- Employés qui démissionnent, grèves, humeur très négative, salaires négociés, enchères entre fermes pour les candidats : stress et gestion au doigt ; retenu : humeur à 3 états, jamais de départ, traits tous positifs.
+- Recherche de chemin réelle pour les employés : coût et bugs ; trajets en ligne droite par le chemin du terrain.
+- Pannes de machines au hasard, carburant à acheter et stocker (jauge) : punition sans décision, écran de plus ; carburant payé à l'usage.
+- Plusieurs ateliers du même type dans la ferme : état des ateliers indexé par type (v3), fiches en double ; remplacé par les niveaux 4 et 5.
+- Grêle, incendie, tempête qui détruit (déjà écartés en v3) ; événements qui font perdre des animaux ou des bâtiments : frustrants.
+- Bonus permanents (étoiles) actifs en carrière : double progression, déséquilibre ; les rangs sont la progression de la carrière.
+- Plusieurs carrières sauvegardées en parallèle : une seule ferme (et une archive des anciennes), une seule sauvegarde à protéger.
+- Pêche en mini-jeu d'adresse : pas de réflexes ; une touche par jour.
+- Saisons de 14 jours en carrière : année de ~20 minutes, trop longue pour une session sur téléphone ; 7 jours gardés (option « saisons longues » à étudier).
+- Stock qui se gâte au grenier : un compte à rebours de plus à surveiller ; rien ne se gâte.
+- Multijoueur, échanges entre joueurs, classements en ligne : hors du jeu hors ligne et relaxant.
+
+À étudier plus tard (mode Carrière) : payer un terrain en 4 saisons (+10 %) ; option « saisons longues » ; renommer ses terrains ; mode « Zen » sans aucune charge ; commandes régulières de paniers (abonnements) ; concours régional entre fermes fictives ; saisonniers embauchés pour une saison seulement.
 
 ---
 

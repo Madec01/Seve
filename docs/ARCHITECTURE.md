@@ -593,3 +593,238 @@ Les quatre points ci-dessus sont faits :
   `waterEffect(level)` (`text.js`, qui a aussi `weatherHint(id, level)` et `difficultyName(id)`).
 - `panel.js` : l'entretien de la ferme lit `level.dailyCharge` (2 en détente).
 
+
+---
+
+## Mode Carrière — contrats (conception 2026-09-30)
+
+> Conception : `docs/CARRIERE.md`. Ce qui suit fixe les **noms, formes et comportements** que les lots CORE-A, CORE-B, CORE-C, UI, RENDER et ART se promettent (découpage : `docs/CARRIERE.md` § 14). Tout est **ajouté** : rien du contrat des niveaux n'est retiré ni renommé. Tant qu'un lot n'a pas livré, les autres simulent ses requêtes avec des objets factices de la même forme.
+
+### Règles communes
+
+- **Parité** : toute règle de carrière est gardée par `state.mode === 'career'`. Une partie de niveau (`state.mode` absent ou `'levels'`) ne passe par **aucun** nouveau code, ne crée aucun nouveau flux aléatoire, ne lit aucune donnée de `src/data/career/`. `createRngState` ne change pas ; les flux de carrière (`career`, `staff`, `events`) sont ajoutés à `state.rng` par `createCareer` (`hashSeed(seed, 'career')`…). `tests/parity.test.js` et `node tools/simulate.js` restent identiques.
+- `src/core/career/*` et `src/data/career/*` sont **purs** (aucun DOM, aucune horloge : les dates viennent de l'interface).
+- Textes en français, identifiants en anglais. Les actions renvoient `{ ok: true, ... }` ou `{ ok: false, reason }`.
+
+### Nouveaux fichiers
+
+```
+src/data/career/career.js     constantes (CAREER_VERSION, DIFFICULTY_CAREER, charges, MAX_*), cultures par rang
+src/data/career/lots.js       prix des terrains, noms, types d'aménagement (LOT_TYPES), gabarits logiques (parcelles, emplacements)
+src/data/career/buildings.js  bâtiments à niveaux (house, storage, greenhouse, roadsideStand, guestHouse, abris, ateliers niv. 4-5)
+src/data/career/ranks.js      RANKS (seuils, objectifs, déblocages, titres)
+src/data/career/animals.js    animaux de carrière (hen, rabbit, duck, goat, cow, sheep, pig, horse) : forme d'investissement
+src/data/career/machines.js   MACHINES
+src/data/career/staff.js      JOBS, TRAITS, XP_LEVELS, salaires ; names.js : prénoms, apparences
+src/data/career/events.js     CALENDAR_EVENTS, RANDOM_EVENTS (poids, conditions), CONTEST_GOAL_POOL
+src/data/career/quests.js     QUEST_TEMPLATES, JOSEPH_HEARTS (paliers)
+src/core/career/career.js     createCareer(), loadCareer(), careerLevel(state), hooks appelés par game.js
+src/core/career/land.js       terrains : achat, aménagement, réaménagement, création des parcelles
+src/core/career/buildings.js  construction, amélioration, capacités
+src/core/career/ranks.js      patrimoine, objectifs, passage de rang
+src/core/career/market.js     cours de carrière, hors saison, jours de fête, prix de vente
+src/core/career/storage.js    grenier : mise en réserve, ventes, filet de sécurité
+src/core/career/animals.js    production à ramasser, plafond, naissances, truffes, balades
+src/core/career/machines.js   passages des machines, carburant
+src/core/career/staff.js      candidats, embauche, niveaux, humeur, congés, chômage technique
+src/core/career/work.js       tâches des employés dans la journée (planification, exécution à doneAt)
+src/core/career/events.js     calendrier, comice (s'appuie sur contest.js), événements au hasard, offres
+src/core/career/quests.js     quêtes et amitié de Joseph
+src/core/career/save.js       CAREER_SCHEMA, migrateCareer(), checkCareerState()
+src/render/layout-career.js   disposition en colonne à partir des terrains
+src/render/career-actors.js   employés, machines en mouvement, corbeaux, bulles
+src/ui/career/*.js            menu, nouvelle ferme, carte, terrain, équipe, carnet, offres, bilan annuel
+tools/simulate-career.js      simulation de carrière
+assets/sprites/generate-career.py → assets/sprites/career.png (bloc « // <career:auto> » d'atlas.js)
+tests/career-*.test.js
+```
+
+### Création, chargement, sauvegarde
+
+```js
+import { createCareer, loadCareer } from './core/career/career.js';
+const game = createCareer({ seed, difficulty = 'detente', farmName, cosmetics? });
+const game2 = loadCareer(saved.state);        // migre (migrateCareer) puis vérifie (checkCareerState) ; lève une erreur sinon
+game.mode === 'career'
+// Même interface que createGame : update(dt), on(type, h), state, serialize(), actions, query, level
+```
+
+- `game.level` / `query.level()` = `careerLevel(state)` : un objet **de même forme qu'un niveau** (recalculé après chaque achat de terrain, de bâtiment ou passage de rang) : `id: 'career'`, `crops` (par rang), `availableInvestments` (animaux, ruches, panneaux, étal, chambre d'hôte, ateliers débloqués), `investmentsById` (données de carrière : `src/data/career/animals.js` + bâtiments), `seasonLengths: [7,7,7,7]`, `weather` (table douce des niveaux), `dailyCharge`, `cropPriceFactor`, `dryGrowth`, `dryHeatwaveGrowth`, `neighbourLoan` (plafond de carrière), `rents: null` (remplacés par `seasonCharge`), `modifiers` (défauts).
+- **Accès aux investissements** : `economy.js` gagne `investmentOf(level, id)` = `level.investmentsById?.[id] ?? getInvestment(id)` ; `game.js`, `economy.js`, `processing.js` l'utilisent partout où ils lisaient `getInvestment(id)` (niveaux : même objet → parité).
+- **Stockage** (`storage.js`, CORE-A) :
+
+```js
+saveCareer(serialized, meta)   // clé une-annee-a-la-ferme.career : { schema: 1, savedAt, meta, state } ; copie la précédente sauvegarde valide dans « .career.bak » (au plus une fois par jour de jeu)
+loadCareer() → { state, meta } | null        // lecture seule (la validation est faite par loadCareer du cœur)
+loadCareerBackup() → { state, meta } | null
+careerMeta() → meta | null                    // pour le menu, sans charger la partie
+clearCareer({ archive })                      // archive dans progress.career.archive puis efface
+// meta = { farmName, year, seasonId, day, rank, difficulty, patrimony }
+```
+
+- **Progression** (`progression.js`) : `progress.career = { started, bestRank, bestYear, years, archive: [{ farmName, years, rank, patrimony, endedBy }] }` (défaut `{ started: false, bestRank: 0, bestYear: 0, years: 0, archive: [] }`, `normalizeProgress` le complète) ; `recordCareerYear(p, { year, rank, net, report }) → { progress, rewards: { ecus }, achievements }` (écus du bilan annuel, cumuls `lifetime`, succès) ; `recordCareerRank(p, rank) → { progress, rewards }` ; `checkAchievements(p, ctx)` accepte `ctx.career` (= `query.career.achievementContext()`) ; nouveaux types de condition : `careerStarted`, `careerLots {n}`, `careerRank {n}`, `careerStaff {n}`, `careerStaffLevel {n}`, `careerMachine {id?}`, `careerCropInSeason {cropId, seasonId}`, `careerSpecies {n}`, `careerTruffles {n}`, `careerHearts {n}`, `careerContestAll`, `careerYear {n}`, `careerStock {n}`, `careerYearNet {n}`. Chaque succès de carrière porte `category: 'career'` et `reward.stars: 0`.
+
+### État de carrière
+
+```js
+state.mode = 'career'
+state.time.year = 1                         // day repart à 1 chaque printemps
+state.rng.career / .staff / .events         // flux propres à la carrière
+state.plots[i].lot = 'start' | 'lot3' …     // terrain de la parcelle (carrière seulement)
+state.plots[i].env = 'field' | 'greenhouse' | 'orchard'
+state.plots[i].crow = false                 // corbeau posé (événement)
+state.investments = { hen: 2, cow: 0, …, beehive: 0, solarPanel: 0 }   // unités d'animaux et aménagements
+state.processing                            // v3, inchangé (capacité = niveau + artisan)
+state.career = {
+  version: 1, farmName, difficulty,
+  rank: 1, objectives: { [objectiveId]: true },
+  lots: [{ id, index /* 0 = maison, 1 = champ de départ, 2 = basse-cour, 3.. = terrains */, type, pricePaid,
+           developPaid, slots: [null | buildingId, null | buildingId], plan: { spring, summer, autumn, winter }, name }],
+  lotsBought: 0,
+  buildings: { [buildingId]: { level, lotId, slot, pending: 0 /* valeur à ramasser (abris) */, lastCollected } },
+  machines: { [key /* 'seeder@lot3' ou 'tractor' */]: { id, lotId, level, on, workedDay } },
+  staff: [{ id, name, look: { outfit, hat, tint }, trait, job: null|'gardener'|'keeper'|'artisan'|'seller',
+            lotId: null|'all'|lotId, level, xp, wage, mood: 'joyful'|'content'|'tired', streak, joyUntilDay,
+            onLeave, idleReason: null|'noMoney', actionsToday, task: null|{ kind, target, startAt, doneAt, from } }],
+  candidates: [{ id, name, look, trait, level, suggestedJob }], candidatesDay, nextStaffId,
+  stock: { [cropId]: n }, storageMode: 'never'|'low'|'always',
+  events: { active: null|{ id, kind, day, endDay, data }, offers: [...], calendarDone: [eventId], fishedDay, lastKind },
+  contest: null | (forme v3 de state.contest, pour le comice de l'année),
+  quest: null | { id, templateId, need: { type, id, n }, progress, reward, endDay, accepted },
+  joseph: { hearts, questsDone, gifts: [] },
+  pets: { cat: false, dog: false },
+  hardship: null | { stage: 'overdraft'|'rescueSold', since: { year, day } },
+  history: [{ year, net, incomeBy, spentBy, rank, patrimony }],
+  lifetime: { harvests, productsSold, truffles, questsDone, contestsWon },
+  cosmetics: { decor: { [slotId]: itemId } },
+}
+```
+
+`checkCareerState` vérifie tout (identifiants connus, niveaux ≤ max, capacités, parcelles ↔ terrains, employés ≤ capacité de la maison…). `state.status` reste `'playing'` (Classique : `'bankrupt'` à la faillite ; jamais `'victory'`).
+
+### Déroulé d'une journée (ajouts, carrière seulement)
+
+Fin de journée, dernier jour de la saison : (automne) jugement du comice → ateliers vendus en l'état si besoin → **stock vendu si besoin** (`stockSold`) → Joseph (plafond de carrière) → **charges de saison** (`billPaid` avec `career: true`, `amount` = charges) ou coup dur (`hardship`) / vente de secours (`rescueSale`) / faillite (Classique) → (hiver) **fin d'année** : `yearEnd { year, report }`, `state.time.year++`, `stats.year` remis à zéro, historique ; pas de `victory`.
+
+Aube (entre les étapes des niveaux) : 2. début de saison → naissances des lapins, nouveaux candidats, quête de Joseph, fête du jour ; 3 bis. événement au hasard (`careerEvent`) et truffes ; 7. arrosage : **arroseurs par terrain** (remplacent `sprinkler`), château d'eau, serre ; semoir (1er passage) ; 8. ateliers (+ convoyeur) ; 9. production des animaux **ajoutée à `buildings[abri].pending`** (plafond 3 jours) au lieu d'être payée (lait vers la fromagerie : inchangé) ; tonte ; balades ; 10. charges : + salaires (employés au travail), + carburant des machines de la veille, chauffage de la serre ; jamais de salaire ni de carburant si l'argent est négatif (`idleReason: 'noMoney'`).
+
+Pendant la journée (`update`) : à 30 % moissonneuse, cueilleuse ; 35 % semoir ; 40 % et 80 % collecteurs ; de 15 % à 85 % tâches des employés (chacune appliquée quand `elapsed ≥ doneAt`). Un grand `dt` exécute tout dans l'ordre chronologique (tâches, passages, fin de journée, aube). Offres et commandes expirent à leur `endDay`.
+
+### Actions (carrière : `game.actions.career.*`)
+
+```js
+buyLot()                                   // le terrain suivant → { ok, lotId, cost }
+developLot(lotId, type)                    // 'field'|'meadow'|'orchard'|'workshops'|'pond'|'greenhouse' → { ok, cost, plots: [index] }
+build(lotId, slot, buildingId)             // abri, chambre d'hôte, atelier sur un emplacement → { ok, cost }
+upgradeBuilding(buildingId)                // house, storage, greenhouse, roadsideStand, abris, ateliers… → { ok, level, cost }
+buyMachine(machineId, lotId?)  / upgradeMachine(machineId, lotId?) / setMachine(machineId, lotId, on)
+setPlan(lotId, seasonId, cropId | 'same' | null)
+collect(buildingId) → { ok, amount }       // ramasser un abri
+chaseCrow(plotIndex) → { ok }
+fish() → { ok, amount, fishId }
+hire(candidateId) / fire(staffId) / assign(staffId, job, lotId|'all'|null) / setLeave(staffId, on) / setTeamLeave(on)
+setStorageMode(mode) / sellStock(cropId | null /* tout */, n?) → { ok, amount, count }
+acceptOffer(offerId) / declineOffer(offerId) / deliverOffer(offerId)     // visiteurs, marchand, adoption
+acceptQuest() / declineQuest() / deliverQuest()                          // depuis le grenier
+renameLot(lotId, text)                                                  // phase B
+// inchangées et valables en carrière : plant, water, harvest (→ + handPicked: true, stored?, crowPenalty?),
+// removeTree, setProcessing, sellProcessing, setSpeed, repayNeighbour, unlockPlot (champ de départ)
+// buyInvestment(id) : animaux (refus « L'étable est pleine : améliorez-la. »), ruches, panneaux
+```
+
+### Requêtes (carrière : `game.query.career.*`)
+
+```js
+summary() → { year, seasonId, day, rank, rankName, title, patrimony, nextRank: null | { rank, name, patrimony,
+             objectives: [{ id, label, done, progress, target }], unlocks: [{ kind, id, name }] }, difficulty, hardship }
+lots() → [{ id, index, type, name, bought, forSale, price, developCost, lockedByRank, rect? /* rendu */,
+            plots: [index], slots: [{ buildingId, level } | null], machines: [key], staff: [staffId], plan }]
+lot(id)                                    // idem, un seul
+nextLot() → null | { id, index, name, price, chargeIncrease, canBuy, reason }
+lotTypes(lotId) → [{ type, name, cost, canDevelop, reason, max, count }]
+buildings() → [{ id, name, level, maxLevel, nextCost, canUpgrade, reason, effects, lotId, slot,
+                 animals?: { id, count, capacity }, pending?, pendingDays?, full? }]
+buildOptions(lotId, slot) → [{ buildingId, name, cost, canBuild, reason }]
+machines() → [{ key, id, name, lotId, level, maxLevel, on, nextCost, fuel, requires, canUpgrade, reason }]
+machineCatalog() → [{ id, name, scope: 'lot'|'farm', lotTypes, cost, rank, canBuy, reason, compatibleLots }]
+staff() → [{ ...state.career.staff[i], jobName, lotName, actionsPerDay, nextLevelXp, moodName, traitName, traitText }]
+candidates() → { list: [...], nextInDays, capacity, count, canHire, reason }
+stock() → { capacity, used, mode, lines: [{ cropId, name, n, unitPrice, total, multiplier, offSeason }], value }
+market() → { [cropId]: { multiplier, offSeason, fair } }
+events() → { today: null | calendarEvent, active: null | {...}, offers: [...], calendar: [{ id, name, seasonId, day, done, daysUntil }],
+             contest: null | (forme de query.contest() v3) }
+quest() → null | { id, text, need, progress, reward, daysLeft, accepted, canDeliver }
+joseph() → { hearts, nextGift: null | { hearts, text }, loan /* = finance().neighbourLoan */ }
+charges() → { daily: [{ source: 'farm'|'upkeep'|'wages'|'fuel'|'heating'|'solar', amount }], season: { amount, daysLeft, perLot } }
+yearReport(year?) → { year, net, incomeBy: {...}, spentBy: {...}, bestCrop, rank, ecus?, achievements? }
+history() → state.career.history
+achievementContext() → { rank, lots, staffCount, maxStaffLevel, machines, species, truffles, hearts, contestAll, year, stock, yearNet, cropsInSeason }
+workPlan() → [{ staffId, task, pos? }]      // lu par le rendu pour les employés
+// query.plot(i) en carrière : + lot, env, crow, handBonus (1,1), storeTarget (grenier), offSeason, marketMultiplier
+```
+
+### Événements (ajouts)
+
+| Type | Données |
+|---|---|
+| `lotBought` | `{ lotId, index, cost }` |
+| `lotDeveloped` | `{ lotId, type, cost, plots: [index] }` |
+| `buildingBuilt` / `buildingUpgraded` | `{ buildingId, level, lotId, slot, cost }` |
+| `machineBought` / `machineUpgraded` / `machineToggled` | `{ key, id, lotId, level, on? }` |
+| `machineWorked` | `{ key, id, lotId, kind: 'water'\|'sow'\|'harvest'\|'pick'\|'collect', plots: [{ index, at /* elapsed */ }], fuel }` |
+| `taskStarted` / `taskDone` | `{ staffId, kind, target, startAt, doneAt, result? }` (rendu : trajet et animation) |
+| `staffHired` / `staffLeft` / `staffLevelUp` / `staffMood` | `{ staffId, … }` |
+| `candidatesRenewed` | `{ count }` |
+| `collected` | `{ buildingId, amount, by: 'player'\|'keeper'\|'collector' }` |
+| `animalBorn` | `{ animalId, count }` · `truffleFound` `{ amount }` · `fishCaught` `{ fishId, amount }` |
+| `stored` / `stockSold` | `{ cropId, n, plotIndex? }` / `{ amount, count, reason: 'player'\|'seller'\|'charges'\|'fair' }` |
+| `careerEvent` / `careerEventEnded` | `{ id, kind, data }` |
+| `offer` / `offerResolved` | `{ offerId, kind, data }` / `{ offerId, outcome: 'accepted'\|'declined'\|'delivered'\|'expired', amount? }` |
+| `crow` / `crowChased` | `{ plots: [index] }` / `{ plotIndex, by }` |
+| `questOffered` / `questProgress` / `questDone` / `questExpired` | `{ quest }` |
+| `josephHeart` | `{ hearts, gift? }` |
+| `rankUp` | `{ rank, name, title, unlocks, ecus }` |
+| `hardship` / `rescueSale` | `{ stage, money }` / `{ sold: [{ kind, id, amount }], total }` |
+| `yearEnd` | `{ year, report }` (après `billPaid` d'hiver ; l'interface met en pause et affiche le bilan) |
+| `billPaid` | v3 + `career: true`, `detail: { base, perLot, lots }` |
+| `harvested` | v3 + `handPicked`, `stored`, `crowPenalty`, `by: 'player'\|'staff'\|'machine'` |
+| `dawn` | `incomes[].kind` + `'tourists'\|'rides'\|'truffle'\|'passersby'` ; `chargesDetail` + `'wages'\|'fuel'\|'heating'` |
+
+### Rendu (RENDER)
+
+```js
+createLayout(level, { career: state.career })   // mode carrière → layout-career.js
+layout.lots = [{ id, index, type, rect /* px monde */, sign: { x, y }, forSale }]
+layout.slots[buildingId] = { building: rect, pen: rect, sign, anchor }       // abris, ateliers, maison, grenier…
+layout.machineParking[key] = { x, y }
+layout.plots (index du cœur, jamais renumérotés), layout.decorSlots (ids v3 dans la bande de la maison)
+scene.setCareer(on)                           // reconstruit la disposition si les terrains changent (lotDeveloped, buildingBuilt…)
+scene.focusLot(lotId, { animate })            // Carte → « Aller »
+scene.hitTest(x, y, opts) → niveaux | { type: 'lotSign', lotId } | { type: 'lotForSale' } | { type: 'shelter', buildingId }
+                           | { type: 'building', buildingId } | { type: 'machine', key } | { type: 'employee', staffId }
+                           | { type: 'pond' } | { type: 'crow', plotIndex }
+scene.onEvent('taskStarted' | 'machineWorked' | 'collected' | 'lotBought' | 'rankUp' | …)   // animations
+```
+
+- La scène lit `game.state`, `query.career.lots()`, `buildings()`, `workPlan()` ; elle ne modifie rien.
+- Noms de sprites : `docs/CARRIERE.md` § 11 (planche `career`) ; l'UI les obtient par `sprite(name)` / `spriteURL(name)` d'`icons.js` (portraits `portrait.staff.<look>`, `portrait.joseph`, icônes `icon.career.*`, `icon.ach.<id>`). Apparence d'un employé → nom : `staffSprite(look, pose)` et `staffPortrait(look)` exportés par `atlas.js`.
+
+### Interface (UI)
+
+- `main.js` : `app.startCareer({ farmName, difficulty })`, `app.continueCareer()`, sauvegarde de la carrière (aube, arrière-plan, achats, `yearEnd`), une seule partie active à la fois (la partie de niveau est enregistrée avant d'ouvrir la carrière, et inversement) ; `yearEnd` → pause + bilan annuel → `progression.recordCareerYear` ; `rankUp` → fenêtre + `recordCareerRank`.
+- Onglets de carrière : `tabbar.js` reçoit une configuration (`['farm','buy','staff','journal','menu']`) ; les onglets des niveaux ne changent pas.
+- Nouveaux conseils : identifiants `career.*` (`docs/CARRIERE.md` § 10.8).
+- Débogage (`?debug=1`) : `__debug.career()` (état), `careerSkipYears(n)`, `careerRank(n)`, `careerMoney(n)`, `careerEvent(id)`.
+
+### Découpage et frontières
+
+| Lot | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE-A** | `src/core/{game,farm,economy,calendar,neighbour,progression}.js`, `src/storage.js`, `src/data/achievements.js`, `src/data/career/{career,lots,buildings,ranks}.js`, `src/core/career/{career,land,buildings,ranks,market,storage,save}.js`, `tests/career-{core,land,buildings,save}.test.js` | jalon « squelette » (`createCareer` qui enchaîne les années), hooks d'aube / de journée / de fin de journée appelés par `game.js` (`careerHooks.{dawn,tick,evening,yearEnd}`), actions et requêtes ci-dessus | rien |
+| **CORE-B** | `src/data/career/{machines,staff,animals,names}.js`, `src/core/career/{machines,staff,work,animals}.js`, `tests/career-{machines,staff,animals}.test.js` | fonctions branchées sur les hooks de CORE-A | CORE-A : squelette |
+| **CORE-C** | `src/data/career/{events,quests}.js`, `src/core/career/{events,quests}.js`, `tools/simulate-career.js`, `tests/career-{events,quests,simulate}.test.js` | événements, quêtes, simulation, tableaux chiffrés de `docs/CARRIERE.md` après équilibrage | CORE-A/B |
+| **UI** | `src/ui/*` (dont `src/ui/career/*`), `css/style.css`, `src/main.js`, `src/index.template.html` | écrans et câblage | CORE : API ; RENDER : scène ; ART : sprites (factices en attendant) |
+| **RENDER** | `src/render/*` (dont `layout-career.js`, `career-actors.js`), hors bloc `<career:auto>` d'`atlas.js` | disposition, scène, hit-test | CORE : formes d'état et requêtes ; ART : planche |
+| **ART** | `assets/sprites/generate-career.py`, `assets/sprites/career.png`, bloc `<career:auto>` d'`atlas.js`, nouveaux sons dans `assets/audio/sfx/`, `CREDITS.md` | planche et noms du § 11 | — |
+
+Règles : aucun lot ne modifie les fichiers d'un autre (demande au chef de projet) ; `index.html`, `dev.html`, `dist/` générés par `node tools/build.js` ; la planche `career.png` doit être ajoutée au chargement des images par RENDER (`assets.js`) ; `node --test tests/` vert (parité comprise) à chaque livraison.
