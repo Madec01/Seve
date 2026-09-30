@@ -21,6 +21,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-09-30 | `backup/avant-equilibrage-detente-2026-09-30` | Avant le rééquilibrage « détente » (retour utilisateur : faillite quasi inévitable dès le niveau 1, au premier fermage, en jouant tranquillement à ×1), commit `b3e71ab` |
 | 2026-09-30 | `backup/detente-2026-09-30` | Mode Détente + prêt de Joseph terminés (cœur et interface), commit `e648f84` ; pull request n° 5 |
 | 2026-09-30 | `backup/avant-carriere-2026-09-30` | Avant le mode Carrière (terrains, automatisation, salariés, bâtiments, animaux, événements), commit `8be41ea` |
+| 2026-09-30 | `backup/carriere-2026-09-30` | Mode Carrière terminé et vérifié, commit `fd3d68d` ; pull request n° 7 |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
