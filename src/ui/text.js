@@ -38,6 +38,30 @@ export const WEATHER_HINTS = {
   snow: 'Neige : un joli manteau blanc, sans effet sur les cultures.',
 };
 
+/**
+ * Conseil météo tenant compte du mode de difficulté (pousse sans arrosage pendant une canicule :
+ * 0 en classique, un peu en détente).
+ */
+export function weatherHint(id, level = null) {
+  if (id === 'heatwave' && level && (level.dryHeatwaveGrowth ?? 0) > 0) return 'Canicule : une culture non arrosée pousse à peine.';
+  return WEATHER_HINTS[id] || '';
+}
+
+/**
+ * Effet d'un jour sans arrosage, selon le mode (level.dryGrowth : 0,5 en classique, 0,75 en détente).
+ * @returns { faster: « deux fois plus vite » | « plus vite », slower: « deux fois moins vite » | « un peu moins vite » }
+ */
+export function waterEffect(level = null) {
+  const dry = level?.dryGrowth ?? 0.5;
+  if (dry <= 0.5) return { faster: 'deux fois plus vite', slower: 'deux fois moins vite' };
+  return { faster: 'plus vite', slower: 'un peu moins vite' };
+}
+
+/** Nom court d'un mode de difficulté ('detente' → « Détente »). */
+export function difficultyName(id) {
+  return id === 'classique' ? 'Classique' : 'Détente';
+}
+
 export function investmentName(id) {
   return getInvestment(id)?.name || id;
 }

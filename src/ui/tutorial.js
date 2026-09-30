@@ -12,6 +12,7 @@
 
 import { append, clear, el, fmt, placeNear, setText } from './dom.js';
 import { icon, sprite } from './icons.js';
+import { waterEffect } from './text.js';
 
 const NAME = 'Joseph, votre voisin';
 
@@ -87,7 +88,7 @@ export function createTutorial(layer, app) {
       id: 'water',
       hint: () => `${tap()} la carotte pour l'arroser.`,
       title: 'Arroser',
-      text: () => `${tap()} la parcelle pour l'arroser : elle poussera deux fois plus vite. À refaire chaque matin !${app.isTouch ? ' (Glissez le doigt sur le champ pour tout arroser d\'un coup.)' : ''}`,
+      text: () => `${tap()} la parcelle pour l'arroser : elle poussera ${waterEffect(game.level).faster}. À refaire chaque matin !${app.isTouch ? ' (Glissez le doigt sur le champ pour tout arroser d\'un coup.)' : ''}`,
       pauses: true,
       skipIf: () => tutoPlot !== null && game.query.plot(tutoPlot)?.watered,
       skipToast: 'Il pleut : la pluie arrose le champ pour vous !',
@@ -125,21 +126,25 @@ export function createTutorial(layer, app) {
       hint: () => 'Le fermage se paie le dernier soir de chaque saison.',
       title: 'Le fermage',
       text: () =>
-        `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Vert : c'est couvert ; orange : récoltez encore ; rouge : danger !`,
+        game.query.finance().neighbourLoan
+          ? `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison. Vert : c'est couvert ; orange : récoltez encore. S'il manque un peu, je vous avancerai l'argent !`
+          : `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Vert : c'est couvert ; orange : récoltez encore ; rouge : danger !`,
       pauses: true,
       target: () => ({ type: 'ui', selector: '#hud-bill' }),
       buttons: [{ label: 'Compris', primary: true, action: () => next() }],
     },
     {
       id: 'coop',
-      hint: () => (game.state.money >= 70 ? 'Achetez un poulailler (onglet « Acheter »).' : `Récoltez jusqu'à 70 pièces (${fmt(game.state.money)}), puis achetez un poulailler.`),
+      // Conseillé seulement si, après l'achat, il reste de quoi payer le fermage de la saison
+      // (sinon un débutant vide sa caisse juste avant le fermage).
+      hint: () => (coopReady() ? 'Achetez un poulailler (onglet « Acheter »).' : `Récoltez jusqu'à ${fmt(coopTarget())} pièces (${fmt(game.state.money)}), puis achetez un poulailler.`),
       title: 'Investir',
       text: () =>
-        game.state.money >= 70
+        coopReady()
           ? `Les investissements rapportent chaque matin, même en hiver. ${app.sheets.isOpen('shop') ? `${tap()} « Acheter » sur le poulailler.` : `Ouvrez l'onglet « Acheter » en bas.`}`
-          : `Les investissements rapportent chaque matin, même en hiver. À 70 pièces, achetez un poulailler (vous en avez ${fmt(game.state.money)}).`,
+          : `Les investissements rapportent chaque matin, même en hiver. Gardez d'abord de quoi payer le fermage : à ${fmt(coopTarget())} pièces, achetez un poulailler (vous en avez ${fmt(game.state.money)}).`,
       enter: () => {
-        if (game.state.money >= 70) app.panel.focusInvestment('chickenCoop');
+        if (coopReady()) app.panel.focusInvestment('chickenCoop');
       },
       target: () => (app.sheets.isOpen('shop') ? { type: 'ui', selector: '#card-chickenCoop' } : { type: 'ui', selector: '#tab-shop' }),
       showOver: ['shop'],
@@ -182,6 +187,16 @@ export function createTutorial(layer, app) {
   ];
 
   const step = () => STEPS[index] || null;
+
+  /** Prix du poulailler dans cette partie (bonus compris). */
+  function coopCost() {
+    return game.query.investments().find((i) => i.id === 'chickenCoop')?.nextCost ?? 70;
+  }
+  /** Argent à avoir pour acheter le poulailler en gardant le fermage de la saison. */
+  function coopTarget() {
+    return coopCost() + game.query.finance().nextBill.amount;
+  }
+  const coopReady = () => game.state.money >= coopTarget();
 
   // ── Déroulé ───────────────────────────────────────────────────────────────────
   function start(g, from = 0) {

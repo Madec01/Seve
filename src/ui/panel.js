@@ -10,7 +10,7 @@
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
 import { gameCrops } from '../core/perks.js';
 import { clear, dec, el, fmt, gain, loss, plural, signed } from './dom.js';
-import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
+import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes, sprite } from './icons.js';
 import { cropCount, incomePhrase, incomeProfile, season } from './text.js';
 import { isProcessing, nextLevelLabel, processingOf, recipeLine, recipesOf } from './buildings.js';
 import { v3 } from './v3.js';
@@ -261,6 +261,63 @@ export function createPanel(app) {
     );
   }
 
+  /** Mode détente : le prêt de Joseph (dette, remboursement anticipé) ou le rappel de son aide. */
+  function neighbourSection(f) {
+    const nl = f.neighbourLoan;
+    if (!nl) return null;
+    const pct = Math.round(nl.surcharge * 100);
+    if (nl.debt <= 0) {
+      return el(
+        'section.stats-section.neighbour-section',
+        { id: 'stats-neighbour' },
+        el('h3.stats-title', 'Joseph, votre voisin'),
+        el(
+          'div.neighbour-card',
+          el('span.neighbour-avatar', sprite('farmer', 'sprite--avatar')),
+          el(
+            'p.neighbour-text',
+            nl.loans > 0
+              ? `Vous ne lui devez plus rien : merci ! S'il vous manque de l'argent un soir de fermage, il peut encore vous avancer jusqu'à ${fmt(nl.maxMissing)} pièces.`
+              : `S'il vous manque de l'argent un soir de fermage, Joseph vous avance jusqu'à ${fmt(nl.maxMissing)} pièces (à lui rendre avec ${pct} % de plus).`,
+          ),
+        ),
+        nl.loans > 0 ? line('Prêté cette année', fmt(nl.borrowed)) : null,
+        nl.loans > 0 ? line('Rendu', fmt(nl.repaid), 'pos') : null,
+      );
+    }
+    const money = Math.max(0, Math.floor(f.money));
+    const choices = [20, 50, 100].filter((n) => n < nl.debt);
+    const repayBtn = (amount, label, id) => {
+      const can = money >= amount;
+      return el(
+        `button.btn.btn--repay${can ? '.btn--red' : '.is-disabled'}`,
+        { type: 'button', id, 'aria-disabled': can ? 'false' : 'true', onclick: () => (can ? app.repayNeighbour(amount) : app.repayNeighbour(amount, { explain: true })) },
+        el('span.buy-label', label),
+        el('span.buy-cost', icon('coin', 'sm'), fmt(amount)),
+      );
+    };
+    return el(
+      'section.stats-section.neighbour-section.has-debt',
+      { id: 'stats-neighbour' },
+      el('h3.stats-title', 'Joseph, votre voisin'),
+      el(
+        'div.neighbour-card',
+        el('span.neighbour-avatar', sprite('farmer', 'sprite--avatar')),
+        el('p.neighbour-text', `« Rien ne presse ! La moitié de chacune de vos ventes me revient toute seule. Vous pouvez aussi me rembourser plus tôt. »`),
+      ),
+      line('Joseph vous a prêté', fmt(nl.borrowed)),
+      nl.repaid ? line('Déjà rendu', fmt(nl.repaid), 'pos') : null,
+      el('div.stats-total', line('Reste à lui rendre', `${fmt(nl.debt)} pièces`, 'warn')),
+      el(
+        'div.repay-grid',
+        choices.map((n) => repayBtn(n, 'Rendre', `repay-${n}`)),
+        repayBtn(nl.debt, 'Tout rendre', 'repay-all'),
+      ),
+      money < nl.debt ? el('p.stats-note', `Vous avez ${plural(money, 'pièce')} : gardez de quoi ressemer !`) : el('p.stats-note', 'Pensez à garder de quoi ressemer et payer le fermage.'),
+      el('p.stats-note.is-warn', 'Tant que vous lui devez de l\'argent, Joseph ne peut pas vous dépanner une deuxième fois.'),
+    );
+  }
+
   function buildStats() {
     clear(statsBody);
     const q = game.query;
@@ -270,8 +327,23 @@ export function createPanel(app) {
     const invs = q.investments();
     const sum = q.summary();
 
+    // Mode de la partie (il ne change pas en cours d'année).
+    const mode = typeof q.difficulty === 'function' ? q.difficulty() : null;
+    if (mode) {
+      statsBody.append(
+        el(
+          `p.mode-line.is-${mode.id}`,
+          el(`span.mode-badge.is-${mode.id}`, mode.name),
+          mode.id === 'detente' ? 'Charges et fermages doux ; Joseph aide en cas de coup dur.' : 'L\'équilibre d\'origine : un fermage manqué, c\'est la faillite.',
+        ),
+      );
+    }
+
     const contest = contestSection();
     if (contest) statsBody.append(contest);
+
+    const neighbour = neighbourSection(f);
+    if (neighbour && f.neighbourLoan.debt > 0) statsBody.append(neighbour);
 
     // Aujourd'hui : revenus et charges
     const incomeLines = [];
@@ -281,7 +353,7 @@ export function createPanel(app) {
       const amount = (inv.income || 0) * units;
       if (amount > 0) incomeLines.push(line(`${inv.name}${units > 1 ? ` ×${units}` : ''}`, gain(amount), 'pos'));
     }
-    const chargeLines = [line('Entretien de la ferme', `−${BASE_DAILY_CHARGE}`, 'neg')];
+    const chargeLines = [line('Entretien de la ferme', `−${lvl.dailyCharge ?? BASE_DAILY_CHARGE}`, 'neg')];
     let solar = 0;
     for (const inv of invs) {
       if (!inv.owned) continue;
@@ -319,15 +391,19 @@ export function createPanel(app) {
         'Fermages de l\'année',
         el('div.rent-table', rentRows),
         el(
-          `p.stats-note.is-${proj.state}`,
+          `p.stats-note.is-${proj.state === 'loan' ? 'warn' : proj.state}`,
           proj.state === 'ok'
             ? 'Le prochain fermage est couvert.'
             : proj.state === 'warn'
               ? `Prévision au soir du fermage : ${fmt(proj.projected)} pièces (récoltes comprises).`
-              : `Prévision au soir du fermage : ${fmt(proj.projected)} pièces. Il manque ${fmt(proj.amount - proj.projected)} pièces !`,
+              : proj.state === 'loan'
+                ? `Prévision au soir du fermage : ${fmt(proj.projected)} pièces. S'il manque un peu, Joseph pourra vous avancer environ ${fmt(proj.lend)} pièces.`
+                : `Prévision au soir du fermage : ${fmt(proj.projected)} pièces. Il manque ${fmt(proj.amount - proj.projected)} pièces !${proj.loanBlocked ? ` ${proj.loanBlocked}` : ''}`,
         ),
       ),
     );
+    // Joseph (sans dette : rappel discret du filet de sécurité, après les fermages).
+    if (neighbour && f.neighbourLoan.debt <= 0) statsBody.append(neighbour);
 
     // Prêt
     if (f.loan) {
@@ -381,6 +457,8 @@ export function createPanel(app) {
         sum.waterSpent ? line('Arrosage', loss(sum.waterSpent), 'neg') : null,
         sum.loanPaid ? line('Prêt remboursé', loss(sum.loanPaid), 'neg') : null,
         line('Fermages payés', loss(sum.rentsPaid), 'neg'),
+        sum.neighbourLoan?.borrowed ? line('Prêté par Joseph', gain(sum.neighbourLoan.borrowed), 'pos') : null,
+        sum.neighbourLoan?.repaid ? line('Rendu à Joseph', loss(sum.neighbourLoan.repaid), 'neg', 'Remboursements (supplément de 10 % compris).') : null,
         line('Achats (graines, parcelles, investissements)', loss(spent), 'neg', `Graines ${fmt(sum.seedsSpent)} · Parcelles ${fmt(sum.plotsSpent)} · Investissements ${fmt(sum.investmentsSpent)}`),
         el('div.stats-total', line('Bilan', signed(sum.net), sum.net >= 0 ? 'pos' : 'neg')),
         harvested.length
@@ -449,7 +527,7 @@ export function createPanel(app) {
 
   function onEvent(ev) {
     // Toute modification d'argent ou de saison peut changer l'état des boutons et le bilan.
-    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'contestProgress', 'contestAwarded', 'treeRemoved'].includes(ev.type)) refresh();
+    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'contestProgress', 'contestAwarded', 'treeRemoved', 'neighbourLoan', 'loanRepayment', 'loanRepaid'].includes(ev.type)) refresh();
   }
 
   return {
@@ -469,6 +547,15 @@ export function createPanel(app) {
       }
     },
     cardOf: (id) => cards.get(id)?.node || null,
+    /** Fait défiler le bilan jusqu'à la section de Joseph. */
+    focusNeighbour() {
+      const n = statsBody.querySelector('#stats-neighbour');
+      if (!n) return;
+      n.scrollIntoView({ block: 'start', behavior: document.documentElement.classList.contains('reduced-motion') ? 'auto' : 'smooth' });
+      n.classList.remove('is-focus');
+      void n.offsetWidth;
+      n.classList.add('is-focus');
+    },
   };
 }
 

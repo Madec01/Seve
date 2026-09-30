@@ -8,7 +8,8 @@
 //   achievementList(ctx), achievementDef(id), checkGame(game), checkBoot(), announce(ids, rewards),
 //   recordRunEnd(info), ecus(), cosmetics(), cosmeticsList(category?), buyCosmetic(id),
 //   placeDecor(slotId, itemId|null), setPath(id), setFence(id), setOutfit(id), setFarmName(text),
-//   farmName(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars() }
+//   farmName(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars(),
+//   difficulty(), setDifficulty(id) }
 //
 // Toute la logique est dans src/core/progression.js (pur) ; ici, seulement l'état courant,
 // l'enregistrement et les messages. Sans ce module (lot CORE pas encore livré), available()
@@ -249,6 +250,14 @@ export function createProgress(app, storage) {
   const setFarmName = (text) => place('setFarmName', text);
   const farmName = () => cosmetics().farmName || v3.cosmetics?.DEFAULT_FARM_NAME || DEFAULT_NAME;
 
+  // ── Difficulté (mode des nouvelles parties) ───────────────────────────────────
+  /** 'detente' | 'classique' : à passer à createGame({ difficulty }). Détente sans module de progression. */
+  const difficulty = () => call('runDifficulty') || 'detente';
+  function setDifficulty(id) {
+    if (!has('setDifficulty')) return { ok: false, reason: 'Indisponible pour l\'instant.' };
+    return applyResult(P().setDifficulty(get(), id));
+  }
+
   // ── Conseils et niveaux ───────────────────────────────────────────────────────
   const hintSeen = (id) => (get().hintsSeen || []).includes(id);
   function markHint(id) {
@@ -300,6 +309,8 @@ export function createProgress(app, storage) {
     markHint,
     isLevelUnlocked,
     levelInfo,
+    difficulty,
+    setDifficulty,
     fmtEcus: (n) => `${fmt(n)} écu${Math.abs(n) > 1 ? 's' : ''}`,
   };
 }

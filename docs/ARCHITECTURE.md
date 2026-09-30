@@ -561,3 +561,35 @@ Une seule fiche par niveau (`levels[id]`), quel que soit le mode : étoiles et r
    printemps. Suggestion : conseiller le poulailler après le premier fermage, ou seulement si l'argent restant
    couvre le fermage (`money − 70 ≥ finance().nextBill.amount`). Le texte « Un an pour… » peut rester ;
    l'étape « L'hiver approche » lit `game.level.rents[3]` (déjà le chiffre du mode).
+
+### Interface livrée (lot UI, 2026-09-30)
+
+Les quatre points ci-dessus sont faits :
+
+- `src/ui/progress.js` : `difficulty()` (= `runDifficulty`) et `setDifficulty(id)` ; `main.js` : `app.difficulty()`,
+  `app.setDifficulty(id)`, `createGame({ levelId, seed, perks, difficulty: app.difficulty() })` (aussi pour
+  « Recommencer », « Réessayer », « Rejouer » : le mode choisi pour les nouvelles parties). La ferme de démonstration
+  du menu reste en détente.
+- `dialogs.js` : `difficultySwitch(onChange)` (groupe radio de deux boutons ≥ 60 px, `#diff-detente`, `#diff-classique`)
+  en tête de la sélection des niveaux et des Options ; `levelCards(mode)` lit `levelFor(id, mode)` (départ, fermages,
+  objectifs) ; `modeBadge(id)` dans le menu pause ; `neighbourLoan(ev, { onClose })` (fenêtre `neighbour-loan`,
+  avant le bilan de saison, qui reçoit `extra.loan`) ; `detenteNotice({ savedClassique })` (message unique, clé
+  `detenteNotice` de la mémoire d'interface `une-annee-a-la-ferme.ui`, seulement si le joueur avait déjà joué) ;
+  faillite : raison liée à Joseph (`ev.neighbourDebt`, `finance().neighbourLoan.maxMissing`) ; victoire :
+  `loanBlock(summary.neighbourLoan)` ; `summaryLines` du bilan de l'année ajoute « Prêté par Joseph » / « Rendu à Joseph »
+  (le `net` de l'année les inclut).
+- `hud.js` : `projection()` rend aussi `neighbourShare` (part de Joseph sur les récoltes et produits à venir),
+  `lend`, `loanBlocked` et l'état `'loan'` (manque couvert par Joseph : classe `is-warn is-loan`, jamais
+  `is-urgent`) ; `stateText(p)` ; fiche « Argent » : dette + bouton `#info-repay` (→ `app.openNeighbour()`).
+  L'état `'loan'` est calculé sur la **prévision** (`nextBill.amount − projected ≤ maxMissing` et `available`), pas
+  seulement sur `wouldLend` (argent actuel) : les récoltes à venir comptent.
+- `panel.js` (Bilan) : ligne du mode, section `#stats-neighbour` (dette : `#repay-20|50|100`, `#repay-all` →
+  `app.repayNeighbour(amount)` ; sans dette : rappel du plafond) ; `focusNeighbour()`.
+- `main.js` : `pending.loan` ; messages `loanRepayment` (sources `harvest`/`product` cumulées dans un seul toast à clé
+  `neighbour-repay`, mis à jour — `toasts.show({ key })` ; source `player` : message de confirmation), `loanRepaid`
+  (hors fin d'année) ; conseil doux `maybeLowMoneyHint` (aube, ≤ 3 jours avant le fermage, une fois par saison) ;
+  étiquette du mode dans `savedRunInfo().label` (sauvegarde sans `difficulty` → Classique) et dans le bandeau de début.
+- `tutorial.js` : poulailler conseillé si `money ≥ coût + fermage de la saison` ; textes d'arrosage via
+  `waterEffect(level)` (`text.js`, qui a aussi `weatherHint(id, level)` et `difficultyName(id)`).
+- `panel.js` : l'entretien de la ferme lit `level.dailyCharge` (2 en détente).
+

@@ -9,7 +9,7 @@
 import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon } from './icons.js';
-import { season, weatherName, WEATHER_HINTS } from './text.js';
+import { season, weatherHint, weatherName } from './text.js';
 
 export function createHud(root, app) {
   let game = null;
@@ -120,7 +120,10 @@ export function createHud(root, app) {
     infoKind = kind;
     infoDyn = el('div.info-dyn', infoRows(kind));
     const titles = { money: ['coin', 'Argent et saison'], weather: [game.state.weather.today, 'Météo'], bill: ['bill', 'Prochain fermage'] };
-    const actions = kind === 'bill' ? el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-bilan', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet')) : null;
+    const debt = game.query.finance().neighbourLoan?.debt || 0;
+    let actions = null;
+    if (kind === 'bill') actions = el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-bilan', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'));
+    else if (kind === 'money' && debt > 0) actions = el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-repay', onclick: () => app.openNeighbour() }, icon('coin', 'sm'), 'Rembourser Joseph'));
     app.sheets.open({ id: `info-${kind}`, kind: 'popup', icon: icon(titles[kind][0], 'md'), title: titles[kind][1], content: el('div.info-sheet', infoDyn, actions) });
   }
 
@@ -145,6 +148,11 @@ export function createHud(root, app) {
     rows.push(el('div.tip-row.tip-total', el('span', 'Solde de chaque matin'), el(`b.${f.net < 0 ? 'neg' : 'pos'}`, `${signed(f.net)} / jour`)));
     if (f.loan && f.loan.nextInDays !== null) rows.push(row('Prochaine mensualité du prêt', `−${fmt(f.loan.payment)}`, 'neg'));
     rows.push(el('div.tip-sub', 'Les récoltes, elles, rapportent au moment où vous les cueillez.'));
+    const nl = f.neighbourLoan;
+    if (nl && nl.debt > 0) {
+      rows.push(el('div.tip-row.tip-debt', el('span', 'Dette envers Joseph'), el('b.warn', `${fmt(nl.debt)} pièces`)));
+      rows.push(el('div.tip-sub', `${shareText(nl.repayShare)} de chaque vente lui revient jusqu'au remboursement.`));
+    }
     if (f.money < 0) rows.push(el('div.tip-note.neg', 'Vous êtes à découvert : attention au prochain fermage !'));
     return el('div.tip-rows', rows);
   }
@@ -166,8 +174,8 @@ export function createHud(root, app) {
     return el(
       'div.tip-rows',
       el('div.tip-title', `Aujourd'hui : ${weatherName(w.today)}`),
-      el('div', WEATHER_HINTS[w.today] || ''),
-      el('div.tip-sub', `Demain : ${weatherName(w.tomorrow)}. ${WEATHER_HINTS[w.tomorrow] || ''}`),
+      el('div', weatherHint(w.today, game.level)),
+      el('div.tip-sub', `Demain : ${weatherName(w.tomorrow)}. ${weatherHint(w.tomorrow, game.level)}`),
       w.afterTomorrow ? el('div.tip-sub', `Après-demain : ${weatherName(w.afterTomorrow)} (almanach).`) : null,
     );
   }
@@ -184,17 +192,10 @@ export function createHud(root, app) {
     if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
     if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
     if (p.products > 0) nodes.push(row('Produits en cours (vendus aux prochaines aubes)', signed(p.products), 'pos'));
-    nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : 'neg'}`, fmt(p.projected))));
-    nodes.push(
-      el(
-        `div.tip-note.${p.state === 'danger' ? 'neg' : p.state === 'warn' ? 'warn' : 'pos'}`,
-        p.state === 'ok'
-          ? 'Vous avez déjà de quoi payer.'
-          : p.state === 'warn'
-            ? `Il manque encore ${fmt(p.amount - p.money)} pièces : récoltez avant ce soir-là.`
-            : 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !',
-      ),
-    );
+    if (p.neighbourShare > 0) nodes.push(row('Part de Joseph sur ces ventes', signed(-p.neighbourShare), 'warn'));
+    nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : p.state === 'loan' ? 'warn' : 'neg'}`, fmt(p.projected))));
+    nodes.push(el(`div.tip-note.${p.state === 'danger' ? 'neg' : p.state === 'ok' ? 'pos' : 'warn'}`, stateText(p)));
+    if (p.state === 'danger' && p.loanBlocked) nodes.push(el('div.tip-sub', p.loanBlocked));
     if (p.rentAutoSell && p.daysLeft === 0) {
       nodes.push(el('div.tip-note.warn', `Il manque ${fmt(Math.max(0, p.amount - p.money))} pièces : vos produits seront vendus en l'état ce soir.`));
     }
@@ -205,6 +206,21 @@ export function createHud(root, app) {
       nodes.push(el('div.tip-sub', `Concours du village : ${done}/${contest.goals.length} épreuves réussies, jugement ${contest.daysLeft === 0 ? 'ce soir' : `dans ${plural(contest.daysLeft, 'jour')}`}.`));
     }
     return el('div.tip-rows', nodes);
+  }
+
+  /** « La moitié » (0,5), « Un quart »… de chaque vente pour le voisin. */
+  function shareText(share) {
+    if (share === 0.5) return 'La moitié';
+    if (share === 0.25) return 'Un quart';
+    return `${Math.round(share * 100)} %`;
+  }
+
+  /** Phrase d'état du fermage (fiche du fermage, bilan). */
+  function stateText(p) {
+    if (p.state === 'ok') return 'Vous avez déjà de quoi payer.';
+    if (p.state === 'warn') return `Il manque encore ${fmt(p.amount - p.money)} pièces : récoltez avant ce soir-là.`;
+    if (p.state === 'loan') return `Pas d'inquiétude : s'il manque un peu, Joseph pourra vous avancer environ ${fmt(p.lend)} pièces (à lui rendre avec 10 % de plus). Récoltez pour ne pas en avoir besoin !`;
+    return 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !';
   }
 
   function row(label, value, cls = '') {
@@ -244,9 +260,28 @@ export function createHud(root, app) {
         }
       }
     }
-    const projected = f.money + netTotal - loanTotal + crops + products;
-    const state = f.money >= bill.amount + loanTotal - Math.min(0, netTotal) ? 'ok' : projected >= bill.amount ? 'warn' : 'danger';
-    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, projected, state, rentAutoSell: !!f.rentAutoSell };
+    // Mode détente : tant qu'on doit de l'argent à Joseph, une part des ventes lui revient.
+    const nl = f.neighbourLoan;
+    const neighbourShare = nl && nl.debt > 0 ? Math.min(nl.debt, Math.ceil((crops + products) * nl.repayShare)) : 0;
+    const projected = f.money + netTotal - loanTotal + crops + products - neighbourShare;
+    let state = f.money >= bill.amount + loanTotal - Math.min(0, netTotal) ? 'ok' : projected >= bill.amount ? 'warn' : 'danger';
+    // Le compte n'y sera pas, mais Joseph avancera ce qui manque : état rassurant (orange), pas le rouge.
+    // Rouge seulement si ce serait vraiment la faillite (dette en cours, ou manque au-delà de son plafond).
+    let lend = 0;
+    let loanBlocked = null;
+    if (state === 'danger' && nl) {
+      const missing = bill.amount - projected;
+      const last = bill.seasonId === 'winter';
+      if (nl.available && missing <= nl.maxMissing) {
+        state = 'loan';
+        lend = missing + (last ? 0 : nl.cushion);
+      } else if (!nl.available) {
+        loanBlocked = `Vous devez encore ${fmt(nl.debt)} pièces à Joseph : il ne pourra pas vous aider cette fois. Récoltez, ou remboursez-le dans le Bilan.`;
+      } else {
+        loanBlocked = `Joseph peut avancer au plus ${fmt(nl.maxMissing)} pièces ; il en manquerait ${fmt(missing)}.`;
+      }
+    }
+    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell };
   }
 
   // ── Mises à jour ──────────────────────────────────────────────────────────────
@@ -277,9 +312,11 @@ export function createHud(root, app) {
     bill.setAttribute('aria-label', `Fermage : ${fmt(p.amount)} pièces, ${billDays.textContent}`);
     const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
     bill.classList.toggle('is-ok', state === 'ok');
-    bill.classList.toggle('is-warn', state === 'warn');
+    bill.classList.toggle('is-warn', state === 'warn' || state === 'loan');
+    bill.classList.toggle('is-loan', state === 'loan');
     bill.classList.toggle('is-danger', state === 'danger');
-    bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && p.state !== 'ok');
+    // Pas d'alarme qui clignote quand Joseph couvrira le manque : le jeu reste calme.
+    bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && (p.state === 'warn' || p.state === 'danger'));
 
     const sp = game.state.speed;
     setIcon(speedIcon, sp === 0 ? 'pause' : sp === 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
@@ -348,7 +385,7 @@ export function createHud(root, app) {
   }
 
   function onEvent(ev) {
-    if (app.sheets?.current?.startsWith('info-') && ['moneyChanged', 'dawn', 'weather', 'productSold', 'processingStarted', 'processingSoldRaw', 'contestProgress'].includes(ev.type)) refreshInfo();
+    if (app.sheets?.current?.startsWith('info-') && ['moneyChanged', 'dawn', 'weather', 'productSold', 'processingStarted', 'processingSoldRaw', 'contestProgress', 'loanRepayment', 'neighbourLoan'].includes(ev.type)) refreshInfo();
     if (ev.type === 'moneyChanged') {
       targetMoney = ev.money;
       if (ev.delta) popDelta(ev.delta);
@@ -370,5 +407,5 @@ export function createHud(root, app) {
     });
   }
 
-  return { bind, refresh, frame, onEvent, refreshMute, projection, openInfo, el: root };
+  return { bind, refresh, frame, onEvent, refreshMute, projection, stateText, openInfo, el: root };
 }

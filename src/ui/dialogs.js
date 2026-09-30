@@ -10,6 +10,7 @@
 import { SEASONS } from '../data/balance.js';
 import { gameCrops } from '../core/perks.js';
 import { LEVELS, yearLength } from '../data/levels.js';
+import { DIFFICULTIES, DIFFICULTY_IDS, levelFor } from '../data/difficulty.js';
 import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { achievementIcon, cropIcon, ecuIcon, icon, investmentIcon, productIcon, sprite, spriteAny } from './icons.js';
 import { swipeToClose } from './sheets.js';
@@ -248,9 +249,89 @@ export function createDialogs(layer, app) {
     return el('div.perks-bar', sw, grange);
   }
 
+  /**
+   * Choix du mode de difficulté (nouvelles parties) : deux grandes options, Détente recommandée.
+   * @param onChange appelé après un changement (ex. rafraîchir les cartes des niveaux)
+   */
+  function difficultySwitch(onChange) {
+    const TEXTS = {
+      detente: { title: 'Détente', tag: 'recommandé', sub: 'Pour jouer tranquille' },
+      classique: { title: 'Classique', tag: null, sub: 'Pour les fermiers aguerris' },
+    };
+    const group = el('div.diff-switch', { role: 'radiogroup', 'aria-label': 'Difficulté des nouvelles parties', id: 'diff-switch' });
+    const desc = el('p.diff-desc');
+    const buttons = DIFFICULTY_IDS.map((id) => {
+      const t = TEXTS[id] || { title: DIFFICULTIES[id].name, sub: '' };
+      const b = el(
+        `button.diff-opt.is-${id}`,
+        {
+          type: 'button',
+          role: 'radio',
+          id: `diff-${id}`,
+          onclick: () => {
+            if (app.difficulty() === id) return;
+            app.audio.play('toggle');
+            app.setDifficulty(id);
+            sync();
+            onChange?.(id);
+          },
+        },
+        el('span.diff-radio', { 'aria-hidden': 'true' }),
+        el('span.diff-text', el('b.diff-title', t.title, t.tag ? el('span.diff-tag', t.tag) : null), el('small.diff-sub', t.sub)),
+      );
+      return b;
+    });
+    group.append(...buttons);
+    const sync = () => {
+      const cur = app.difficulty();
+      for (const b of buttons) {
+        const on = b.id === `diff-${cur}`;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      }
+      desc.textContent = '';
+      desc.append(DIFFICULTIES[cur]?.description || '');
+    };
+    // Flèches du clavier : passer d'une option à l'autre (groupe radio).
+    group.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      e.preventDefault();
+      const i = DIFFICULTY_IDS.indexOf(app.difficulty());
+      const next = DIFFICULTY_IDS[(i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1) + DIFFICULTY_IDS.length) % DIFFICULTY_IDS.length];
+      buttons[DIFFICULTY_IDS.indexOf(next)].click();
+      buttons[DIFFICULTY_IDS.indexOf(next)].focus();
+    });
+    sync();
+    return el('div.diff-box', el('div.diff-head', 'Difficulté'), group, desc);
+  }
+
+  /** Petite étiquette du mode d'une partie (« Détente », « Classique »). */
+  function modeBadge(id) {
+    const d = DIFFICULTIES[id];
+    return d ? el(`span.mode-badge.is-${id}`, d.name) : null;
+  }
+
   function levelSelect() {
+    const grid = el('div.level-grid');
+    const fill = () => grid.replaceChildren(...levelCards(app.difficulty()));
+    fill();
+    const node = frame({
+      title: 'Choisir une année',
+      ribbon: 'ribbon',
+      cls: 'dialog--levels',
+      body: [difficultySwitch(() => fill()), perksBar(), grid],
+      actions: [btn('Retour', () => closeTop(), '', { 'data-autofocus': '' })],
+      onClose: () => closeTop(),
+    });
+    return open(node, { id: 'levels' });
+  }
+
+  /** Cartes des niveaux, avec les nombres du mode choisi (départ, fermages, objectifs). */
+  function levelCards(mode) {
     const progress = app.progress();
-    const cards = LEVELS.map((lvl) => {
+    return LEVELS.map((base) => {
+      const lvl = levelFor(base.id, mode) || base;
       const p = progress.levels[lvl.id] || {};
       const unlocked = app.isLevelUnlocked(lvl.id);
       const systems = lvl.id >= 9 ? levelSystems(lvl) : [];
@@ -280,7 +361,8 @@ export function createDialogs(layer, app) {
           'div.level-meta',
           el('span', icon('coin', 'xs'), `Départ ${fmt(lvl.startMoney)}`),
           el('span', icon('seed', 'xs'), `${lvl.unlockedPlots}${lvl.maxPlots > lvl.unlockedPlots ? `/${lvl.maxPlots}` : ''} parcelles`),
-          el('span', { 'data-tip': `Fermage d'hiver, le plus cher de l'année (printemps : ${fmt(lvl.rents[0])})` }, icon('bill', 'xs'), `Hiver ${fmt(lvl.rents[3])}`),
+          el('span.level-rents', { 'data-tip': 'Fermages du printemps à l\'hiver' }, icon('bill', 'xs'), `Fermages ${lvl.rents.map((r) => fmt(r)).join(' · ')}`),
+          el('span.level-goals', icon('star', 'xs'), `2★ dès ${fmt(lvl.starThresholds[0])} · 3★ dès ${fmt(lvl.starThresholds[1])}`),
         ),
         el(
           'div.level-foot',
@@ -290,15 +372,6 @@ export function createDialogs(layer, app) {
       );
       return card;
     });
-    const node = frame({
-      title: 'Choisir une année',
-      ribbon: 'ribbon',
-      cls: 'dialog--levels',
-      body: [perksBar(), el('div.level-grid', cards)],
-      actions: [btn('Retour', () => closeTop(), '', { 'data-autofocus': '' })],
-      onClose: () => closeTop(),
-    });
-    return open(node, { id: 'levels' });
   }
 
   // ── Options ───────────────────────────────────────────────────────────────────
@@ -352,8 +425,18 @@ export function createDialogs(layer, app) {
       sync();
       return b;
     };
+    const inRun = app.game && !app.inMenu && app.game.state.status === 'playing' ? app.game : null;
+    const runNote = el('p.opt-note');
+    const syncRunNote = () => {
+      runNote.hidden = !inRun || inRun.difficulty === app.difficulty();
+      runNote.textContent = inRun ? `S'applique à la prochaine année : la partie en cours reste en mode ${DIFFICULTIES[inRun.difficulty]?.name || ''}.` : '';
+    };
+    syncRunNote();
     const body = el(
       'div.options',
+      el('h3.opt-section', 'Difficulté'),
+      difficultySwitch(() => syncRunNote()),
+      runNote,
       el('h3.opt-section', 'Volumes'),
       slider('musicVolume', 'Musique'),
       slider('sfxVolume', 'Sons'),
@@ -483,7 +566,7 @@ export function createDialogs(layer, app) {
     const lvl = g.query.level();
     const body = el(
       'div.pause',
-      el('p.pause-info', `Niveau ${lvl.id} · ${lvl.name}`),
+      el('p.pause-info', `Niveau ${lvl.id} · ${lvl.name}`, g.difficulty ? modeBadge(g.difficulty) : null),
       el('p.pause-sub', icon(c.seasonId, 'sm'), `Jour ${c.day} · ${c.seasonName}`, el('span.pause-money', icon('coin', 'sm'), fmt(g.state.money))),
       el(
         'div.menu-buttons',
@@ -532,6 +615,11 @@ export function createDialogs(layer, app) {
     if (s.investmentsSpent) lines.push(moneyLine('Investissements achetés', loss(s.investmentsSpent), 'neg'));
     const rentValue = rent ?? s.rentsPaid;
     if (rentValue) lines.push(moneyLine(rent !== null ? 'Fermage' : 'Fermages', loss(rentValue), 'neg'));
+    // Bilan de l'année (pas de la saison) : le prêt de Joseph compte (prêté − rendu).
+    if (rent === null && s.neighbourLoan) {
+      if (s.neighbourLoan.borrowed) lines.push(moneyLine('Prêté par Joseph', gain(s.neighbourLoan.borrowed), 'pos'));
+      if (s.neighbourLoan.repaid) lines.push(moneyLine('Rendu à Joseph', loss(s.neighbourLoan.repaid), 'neg'));
+    }
     lines.push(el('div.sum-total', moneyLine('Bilan', signed(s.net), s.net >= 0 ? 'pos' : 'neg')));
     return el('div.sum-lines', lines);
   }
@@ -617,9 +705,16 @@ export function createDialogs(layer, app) {
       next === 'autumn' ? el('p.next-warn', icon('winter', 'sm'), 'Pensez à l\'hiver : les cultures qui ne résistent pas au gel seront perdues le premier jour d\'hiver.') : null,
     );
 
+    const loan = extra.loan || null;
+    const debt = g.query.finance().neighbourLoan?.debt || 0;
     const body = el(
       'div.season-end',
       el('div.rent-paid', icon('coin', 'lg'), el('div', el('div.rent-paid-title', `Fermage payé : ${plural(ev.amount, 'pièce')}`), el('div.rent-paid-sub', `Il vous reste ${plural(g.state.money, 'pièce')}.`))),
+      loan
+        ? el('p.next-warn.is-loan', sprite('farmer', 'sprite--sm'), `Joseph vous a avancé ${plural(loan.amount, 'pièce')}. Vous lui devez ${plural(debt, 'pièce')} : la moitié de vos ventes le rembourse.`)
+        : debt > 0
+          ? el('p.next-warn.is-loan', sprite('farmer', 'sprite--sm'), `Vous devez encore ${plural(debt, 'pièce')} à Joseph : tant que ce n'est pas réglé, il ne pourra pas vous dépanner.`)
+          : null,
       el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold)), nextBlock),
     );
     const node = frame({
@@ -632,13 +727,100 @@ export function createDialogs(layer, app) {
     return open(node, { id: 'season-end', pauses: true, onClose: extra.onClose });
   }
 
+  // ── Prêt du voisin (mode détente) ─────────────────────────────────────────────
+  /**
+   * Joseph avance l'argent du fermage : fenêtre chaleureuse, avant le bilan de fin de saison.
+   * @param ev neighbourLoan ({ amount, debt, missing, rent, seasonId, surcharge, repayShare })
+   */
+  function neighbourLoan(ev, { onClose } = {}) {
+    const share = ev.repayShare === 0.5 ? 'La moitié' : `${Math.round((ev.repayShare || 0.5) * 100)} %`;
+    const cushion = Math.max(0, ev.amount - ev.missing);
+    // Taux annoncé : celui du mode (10 %), pas l'écart arrondi à la pièce supérieure.
+    const rate = app.game?.query.finance().neighbourLoan?.surcharge;
+    const pct = Math.round((rate ?? (ev.amount > 0 ? ev.surcharge / ev.amount : 0.1)) * 100);
+    const body = el(
+      'div.loan-screen',
+      el(
+        'div.loan-head',
+        el('span.loan-avatar', sprite('farmer', 'sprite--hero')),
+        el(
+          'div.loan-speech',
+          el('div.tuto-name', 'Joseph, votre voisin'),
+          el('p.loan-quote', `« Il vous manquait ${plural(ev.missing, 'pièce')} pour le fermage ${season(ev.seasonId, 'of')} ? Pas de souci, entre voisins on s'entraide ! »`),
+        ),
+      ),
+      el(
+        'div.loan-facts',
+        el('div.sum-line', el('span', 'Joseph vous avance'), el('b.pos', `${plural(ev.amount, 'pièce')}`)),
+        cushion > 0 ? el('p.loan-small', `(${fmt(ev.missing)} pour le fermage + ${fmt(cushion)} pour ressemer)`) : null,
+        el('div.sum-line.loan-owe', el('span', `Vous lui devez (+${pct} %)`), el('b.warn', `${plural(ev.debt, 'pièce')}`)),
+      ),
+      el(
+        'ul.loan-list',
+        el('li', icon('coin', 'sm'), el('span', `${share} de chacune de vos ventes lui revient automatiquement, jusqu'au remboursement.`)),
+        el('li', icon('bill', 'sm'), el('span', 'Vous pouvez le rembourser plus tôt dans le Bilan.')),
+        el('li', icon('info', 'sm'), el('span', 'Tant que vous lui devez de l\'argent, il ne pourra pas vous aider une deuxième fois.')),
+      ),
+    );
+    const node = frame({
+      title: 'Joseph vous dépanne',
+      ribbon: 'ribbon',
+      cls: 'dialog--loan',
+      body,
+      actions: [btn(['Merci Joseph !'], () => closeTop(), 'btn--red', { 'data-autofocus': '', id: 'loan-ok' })],
+    });
+    const handle = open(node, { id: 'neighbour-loan', pauses: true, onClose, sound: false });
+    app.audio.play('unlock', { volume: 0.55, pitch: 0 });
+    return handle;
+  }
+
+  /** Premier lancement après l'arrivée des modes : message court (une seule fois). */
+  function detenteNotice({ savedClassique = false } = {}) {
+    const body = el(
+      'div.notice',
+      el(
+        'div.loan-head',
+        el('span.loan-avatar', sprite('farmer', 'sprite--hero')),
+        el(
+          'div.loan-speech',
+          el('div.tuto-name', 'Joseph, votre voisin'),
+          el('p.loan-quote', '« Bonne nouvelle : le jeu est plus doux maintenant ! »'),
+        ),
+      ),
+      el(
+        'ul.loan-list',
+        el('li', icon('star', 'sm'), el('span', 'Nouveau mode Détente (par défaut) : charges et fermages plus doux, les cultures poussent même sans arrosage.')),
+        el('li', sprite('farmer', 'sprite--xs'), el('span', 'Un soir de fermage difficile ? Joseph vous avance l\'argent.')),
+        el('li', icon('bill', 'sm'), el('span', 'Envie de défi ? Le mode Classique garde l\'équilibre d\'origine (Nouvelle partie).')),
+        savedClassique ? el('li', icon('calendar', 'sm'), el('span', 'Votre partie en cours continue en mode Classique.')) : null,
+      ),
+    );
+    const node = frame({
+      title: 'Le jeu est plus doux',
+      ribbon: 'ribbon',
+      cls: 'dialog--notice',
+      body,
+      actions: [btn('Super !', () => closeTop(), 'btn--red', { 'data-autofocus': '', id: 'notice-ok' })],
+      onClose: () => closeTop(),
+    });
+    return open(node, { id: 'notice' });
+  }
+
   // ── Faillite ──────────────────────────────────────────────────────────────────
   function bankrupt(ev, record = null) {
     const s = ev.summary;
     const lvl = app.game.query.level();
     const missing = ev.amountDue - ev.money;
+    const nl = app.game.query.finance().neighbourLoan;
+    // Mode détente : pourquoi Joseph n'a pas pu aider.
+    let why = null;
+    if (nl) {
+      if ((ev.neighbourDebt || 0) > 0) why = `Vous deviez encore ${plural(ev.neighbourDebt, 'pièce')} à Joseph : il ne pouvait plus vous aider.`;
+      else why = `Il manquait trop : Joseph avance au plus ${plural(nl.maxMissing, 'pièce')} pour ce fermage.`;
+    }
     let tip;
-    if (!s.investmentsSpent) tip = 'Les investissements (poulailler, ruche…) rapportent chaque matin, même quand rien ne pousse.';
+    if ((ev.neighbourDebt || 0) > 0) tip = 'La prochaine fois, remboursez Joseph dès que possible (Bilan) : une fois la dette réglée, il peut de nouveau vous dépanner.';
+    else if (!s.investmentsSpent) tip = 'Les investissements (poulailler, ruche…) rapportent chaque matin, même quand rien ne pousse.';
     else if (ev.seasonId === 'winter') tip = 'L\'hiver rapporte peu : gardez des réserves en automne et plantez navets et choux.';
     else if (s.cropsLost?.frost) tip = 'Récoltez avant l\'hiver : le gel détruit les cultures fragiles.';
     else tip = 'Surveillez la prévision du fermage en haut de l\'écran : elle vire au rouge quand le compte n\'y est pas.';
@@ -649,6 +831,7 @@ export function createDialogs(layer, app) {
         ? `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous étiez à découvert (${fmt(ev.money)}).`
         : `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
       el('p.end-missing', `Il manquait ${plural(missing, 'pièce')}.`),
+      why ? el('p.end-why', sprite('farmer', 'sprite--xs'), why) : null,
       el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
       el('p.end-tip', icon('info', 'sm'), tip),
       rewardsBlock(record),
@@ -664,6 +847,23 @@ export function createDialogs(layer, app) {
       ],
     });
     return open(node, { id: 'bankrupt', closable: false, sound: false });
+  }
+
+  /** Fin d'année (détente) : ce que Joseph a prêté, ce qui lui a été rendu, ce qu'il a effacé. */
+  function loanBlock(loan) {
+    if (!loan || !loan.borrowed) return null;
+    return el(
+      'div.end-loan',
+      el('span.loan-avatar', sprite('farmer', 'sprite--md')),
+      el(
+        'div',
+        el('b', 'Joseph, votre voisin'),
+        el('div.sum-line', el('span', `Prêté (${plural(loan.loans, 'fois', 'fois')})`), el('b', fmt(loan.borrowed))),
+        el('div.sum-line', el('span', 'Rendu'), el('b.pos', fmt(loan.repaid))),
+        loan.forgiven ? el('div.sum-line', el('span', 'Effacé par Joseph'), el('b', fmt(loan.forgiven))) : null,
+        el('p.loan-small', loan.forgiven ? '« Gardez le reste, c\'est cadeau. À l\'année prochaine ! »' : '« Tout est réglé, merci voisin ! »'),
+      ),
+    );
   }
 
   // ── Victoire ──────────────────────────────────────────────────────────────────
@@ -682,6 +882,7 @@ export function createDialogs(layer, app) {
       record.newBest && !record.firstTime ? el('p.end-record', icon('star', 'sm'), 'Nouveau record !') : null,
       el('p.end-thresholds', `2 étoiles dès ${fmt(t2)} pièces · 3 étoiles dès ${fmt(t3)} pièces`),
       next && record.firstTime ? el('p.end-unlock', icon('lock', 'sm'), `Nouveau niveau débloqué : « ${next.name} »`) : null,
+      loanBlock(s.neighbourLoan),
       rewardsBlock(record),
       el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
     );
@@ -786,6 +987,8 @@ export function createDialogs(layer, app) {
     bankrupt,
     victory,
     contestResult,
+    neighbourLoan,
+    detenteNotice,
     confirm,
     frame,
     btn,
