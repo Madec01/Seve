@@ -327,3 +327,95 @@ export function marketChip(mult, { offSeason = false, fair = 1 } = {}) {
 export function capitalize(t) {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
 }
+
+// ── « Ce que fait ce bâtiment » (retour d'un joueur : chaque fiche explique son rôle) ────────────────
+const ABOUT_TITLES = {
+  building: 'Ce que fait ce bâtiment',
+  shelter: 'Ce que fait cet abri',
+  workshop: 'Ce que fait cet atelier',
+  machine: 'Ce que fait cette machine',
+  animal: 'Ce que fait cet animal',
+  item: 'À quoi ça sert',
+  lotType: 'Ce que fait ce terrain',
+};
+
+/** Liste de lignes d'effet (« Loge jusqu'à 4 poules »). */
+export function aboutList(lines, cls = '') {
+  return el(`ul.c-about-lines${cls ? `.${cls}` : ''}`, (lines || []).map((l) => el('li', l)));
+}
+
+/** Bloc « Au niveau suivant » (au-dessus du bouton d'amélioration). */
+export function nextLines(lines, title = 'Au niveau suivant') {
+  if (!lines?.length) return null;
+  return el('div.c-about-next', el('small.c-about-label', title), aboutList(lines, 'is-next'));
+}
+
+/** Tous les niveaux (section repliable, état retenu) : niveau, nom, prix, rang, lignes. */
+export function levelsFold(app, key, levels, current = 0) {
+  if (!levels || levels.length < 2) return null;
+  return foldSection(app, {
+    key: `about-levels-${key}`,
+    id: `c-levels-${key}`,
+    title: `Tous les niveaux (${levels.length})`,
+    content: () =>
+      el(
+        'ol.c-levels',
+        levels.map((l) =>
+          el(
+            `li.c-level${l.level === current ? '.is-current' : ''}${l.level < current ? '.is-done' : ''}`,
+            el(
+              'div.c-level-top',
+              el('b', `${l.level}. ${l.name || `Niveau ${l.level}`}`),
+              el('small', [l.cost ? `${fmt(l.cost)} pièces` : 'offert', l.rank > 1 ? `rang ${l.rank}` : null, l.level === current ? 'actuel' : null].filter(Boolean).join(' · ')),
+            ),
+            aboutList(l.lines),
+          ),
+        ),
+      ),
+  });
+}
+
+/**
+ * Section « Ce que fait ce bâtiment » en haut d'une fiche.
+ * about : { role, tips, effectLines, nextEffectLines, levelLines | levels } (requêtes du cœur, descriptions.js)
+ * opts : { app, kind ('building' | 'shelter' | 'machine' | 'animal' | 'item' | 'lotType' | 'workshop'), key, level
+ *          (0 = pas encore construit), title, levels (false : pas de liste des niveaux), next (true : lignes du niveau
+ *          suivant ici, sinon à côté du bouton d'amélioration), tips (true) }
+ */
+export function aboutSection(about, opts = {}) {
+  if (!about || (!about.role && !about.effectLines?.length)) return null;
+  const level = opts.level ?? about.level ?? 1;
+  const lines = about.effectLines || [];
+  const levels = about.levelLines || about.levels || [];
+  const tips = opts.tips === false ? [] : about.tips || [];
+  const multi = levels.length > 1;
+  const label = level > 0 ? (multi ? `Maintenant (niveau ${level})` : 'En bref') : multi ? 'Au niveau 1' : 'En bref';
+  return el(
+    'section.c-about',
+    { id: opts.id || null },
+    el('h3.stats-title', icon('info', 'sm'), opts.title || ABOUT_TITLES[opts.kind] || ABOUT_TITLES.building),
+    about.role ? el('p.c-about-role', about.role) : null,
+    lines.length ? el('div.c-about-now', el('small.c-about-label', label), aboutList(lines)) : null,
+    opts.next ? nextLines(about.nextEffectLines) : null,
+    opts.app && opts.levels !== false && multi ? levelsFold(opts.app, opts.key || opts.kind || 'x', levels, level) : null,
+    tips.length ? el('div.c-about-tips', tips.map((t) => el('p.c-about-tip', el('b', 'Conseil'), ` : ${t}`))) : null,
+  );
+}
+
+/** Une phrase courte « à quoi ça sert » pour une carte (catalogue Acheter). */
+export function roleLine(role) {
+  return role ? el('div.card-desc.c-role', role) : null;
+}
+
+// ── Position d'un terrain sur la carte 2D ─────────────────────────────────────────────────────────────
+/** « Au-dessus de la ferme », « À gauche de la basse-cour », « En haut à droite »… (col, row du cœur). */
+export function lotWhere(lot) {
+  const col = Number(lot?.col) || 0;
+  const row = Number(lot?.row) || 0;
+  if (lot?.fixed || ['home', 'start', 'yard'].includes(lot?.id)) return 'La ferme de départ';
+  const side = col < 0 ? 'à gauche' : 'à droite';
+  const far = Math.abs(col) >= 2 ? ' (tout au bord)' : '';
+  if (col === 0) return row <= 1 ? 'Juste au-dessus de la ferme' : `Au-dessus de la ferme, rangée ${row}`;
+  if (row === 0) return `${capitalize(side)} de la basse-cour${far}`;
+  return `En haut ${side}, rangée ${row}${far}`;
+}

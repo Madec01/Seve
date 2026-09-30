@@ -1571,3 +1571,36 @@ sur une case `(lot.col, lot.row)` et donne `query.career.grid()` ; le rendu en f
 - **Aperçu** : `tools/scene-preview.html?career=1&stage=8&sides=6&minimap=1` (glisser en 2D, toucher la mini-carte) ;
   `sides=N` achète N terrains de côté (grille simulée si le cœur n'a pas `grid()`), `scrollx=px`.
 - Tests : `tests/career-render-layout.test.js` (blocs, cases, cibles des côtés, forêt, allées reliées, trajets).
+
+## Carrière v2 — interface (UI, 2026-09-30)
+
+- **Gestes** (`src/ui/gestures.js`) : en carrière (`scene.careerMode`), glisser = `scrollBy(dx, dy)` et `fling(vx, vy)` ;
+  verrou d'axe au départ (angle < ≈ 23° d'un axe) ; un glissé parti d'une parcelle ne fait une série
+  (arroser / récolter) que si cette parcelle a cette action, sinon il fait défiler. Molette : `deltaX` ou Maj + molette
+  = horizontal. `canScroll()` regarde `maxScroll().x` et `.y`. Niveaux : chemin d'avant (un axe).
+- **Mini-carte** (`src/ui/career/minimap.js`) : `createMinimap(app, { active, openLot, openMap })` →
+  `{ frame(), setHidden(v), hidden, shown, root }` ; `#minimap` (fixe, `z-index` 18, au-dessus de `--inset-bottom`),
+  canevas `w × h` CSS × `devicePixelRatio`, `scene.getMinimap({ w, h, ctx })` à chaque image (appelé par
+  `careerUI.frame()` depuis la boucle de `main.js`, après `scene.render`). Visible seulement en carrière, sans feuille,
+  fenêtre, bulle (`hints.active`, `tutorial.active`) ni décoration. Choix « cachée » : `localStorage`
+  `une-annee-a-la-ferme.minimap` (`hidden` / `shown`). Toucher → `minimapToWorld` + `focusWorld(animate)`, glisser →
+  `focusWorld(animate: false)`, appui long → `minimapLotAt` → `open.lot`, sinon `open.map`.
+- **careerUI** : + `frame()`, `minimap`, `buyLot(lotId)` (achète ce terrain, ouvre sa fiche, `revealLot` deux images
+  plus tard, après la reconstruction de la disposition), `showLot(lotId)` (ferme la feuille, `focusLot` animé) ; le
+  contexte `ui` des contenus a aussi `buyLot`, `showLot`, `minimap`, `mapHere`. `onHit('lotForSale')` ouvre la fiche de
+  `hit.lotId`. Messages : `questReminder`, `questWithdrawn`, `offerReminder`, `questExpired` (doux), `questOffered.asked`
+  (pas de message : la feuille s'ouvre).
+- **Carte des terrains** (`mapContent`, `src/ui/career/lots.js`) : grille `grid().cells` (+ `lots()` pour les
+  anciennes carrières au-delà de la rangée 6), boutons `#c-cell-<lotId>` (`.is-home | .is-owned.t-<type> |
+  .is-buyable | .is-locked | .is-forest`, `.is-here` = terrain au centre de la vue à l'ouverture, `lotInView(app)` via
+  `scene.viewRect()` + `layout.bandAt`), puis listes « À vendre » / « Vos terrains ». `lotWhere(lot)` (util) : place d'un
+  terrain en mots.
+- **Fiches** : `aboutSection(about, { app, kind, key, level, levels, next, tips, title })`, `nextLines(lines, title)`,
+  `levelsFold(app, key, levels, current)` (`foldSection`, état retenu d'une reconstruction à l'autre), `roleLine(role)`
+  (`src/ui/career/util.js`) ; lus sur `building(id)` / `about(kind, id)` / `investments()` / `lotTypes()` /
+  `machineCatalog()` / `machines()`. `buildingCard(ui, b, { lines: true })` : lignes du niveau suivant au-dessus du
+  bouton. `src/ui/buildings.js` (fiche d'atelier) et `field.openInvestmentInfo` ajoutent la section en carrière ;
+  `field.openBuilding(id)` d'un atelier de carrière (absent d'`investments()`) ouvre `careerUI.open.building(id)`.
+- **Quêtes** (`src/ui/career/events.js`) : `questTimeFacts(quest)` (proposition : `deadline` + `daysLeft` « si vous
+  acceptez », `offerDaysLeft` ; acceptée : `deadlineText`, « plus que N jours », « demain soir », « ce soir »),
+  `askJosephBlock(ui)` (`#c-ask-joseph`, `joseph().ask`, `actions.career.askQuest()`).

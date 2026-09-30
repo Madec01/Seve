@@ -4,7 +4,7 @@
 
 import { el, fmt, plural } from '../dom.js';
 import { icon, seasonIncomes, spriteAny } from '../icons.js';
-import { animalIcon, buildingIcon, buyButton, cBtn, cIcon, foldSection, lotIcon, machineIcon, pips, lotPhrase } from './util.js';
+import { animalIcon, buildingIcon, buyButton, cBtn, cIcon, foldSection, lotIcon, machineIcon, pips, lotPhrase, lotWhere, nextLines, roleLine } from './util.js';
 
 const WORKSHOP_IDS = ['jamWorkshop', 'dairy', 'mill', 'cannery', 'spinningMill'];
 
@@ -26,12 +26,17 @@ export function effectsText(e = {}) {
   return out.join(' · ');
 }
 
-/** Carte d'un bâtiment à niveaux (Acheter, fiches de terrain). */
-export function buildingCard(ui, b, { compact = false } = {}) {
+/**
+ * Carte d'un bâtiment à niveaux (Acheter, fiches de terrain).
+ * opts : { compact (sans le niveau suivant), lines (fiche du bâtiment : les lignes du niveau suivant au-dessus du
+ *          bouton, sans rappeler le rôle déjà écrit en haut de la fiche) }
+ */
+export function buildingCard(ui, b, { compact = false, lines = false } = {}) {
   const { app } = ui;
   const maxed = b.level >= b.maxLevel;
   const built = b.level > 0;
   const label = built ? (maxed ? 'Niveau max' : `Niveau ${b.level + 1}`) : 'Construire';
+  const nextTitle = `${built ? 'Niveau suivant' : 'Niveau 1'}${b.nextName ? ` : ${b.nextName}` : ''}`;
   return el(
     `article.card.c-card${built ? '.is-owned' : ''}${maxed ? '.is-maxed' : ''}`,
     { id: `c-bld-${b.id}` },
@@ -39,8 +44,10 @@ export function buildingCard(ui, b, { compact = false } = {}) {
     el(
       'div.card-main',
       el('div.card-top', el('span.card-name', b.name), built ? pips(b.level, b.maxLevel) : el('span.card-owned', 'à construire')),
-      built && b.effects ? el('div.card-desc', effectsText(b.effects)) : null,
-      !maxed && b.nextName && !compact ? el('div.card-desc.c-next', `${built ? 'Ensuite' : 'Niveau 1'} : ${b.nextName}${b.nextEffects ? ` · ${effectsText(b.nextEffects)}` : ''}`) : null,
+      !lines ? roleLine(b.role) : null,
+      built && b.effects && !lines ? el('div.card-desc', effectsText(b.effects)) : null,
+      !maxed && lines && b.nextEffectLines?.length ? nextLines(b.nextEffectLines, nextTitle) : null,
+      !maxed && b.nextName && !compact && !(lines && (b.nextEffectLines?.length || !built)) ? el('div.card-desc.c-next', `${built ? 'Ensuite' : 'Niveau 1'} : ${b.nextName}${b.nextEffects ? ` · ${effectsText(b.nextEffects)}` : ''}`) : null,
     ),
     maxed
       ? null
@@ -71,28 +78,11 @@ export function shopContent(ui) {
     id: 'c-shop-lots',
     title: 'Terrains',
     iconNode: cIcon('land', 'sprite--sm', 'seed'),
-    badge: next?.canBuy ? 'à vendre' : null,
+    badge: lots.some((l) => l.forSale && l.canBuy) ? 'à vendre' : null,
     open: true,
     content: () => [
-      next
-        ? el(
-            'article.card.c-card.c-lot-card',
-            el('div.card-icon', lotIcon('forSale', 'sprite--card')),
-            el(
-              'div.card-main',
-              el('div.card-top', el('span.card-name', next.name), next.special ? el('span.card-owned.is-some', 'offre spéciale') : null),
-              el('div.card-desc', `Le terrain au-dessus de la ferme, en friche. Charges de saison : +${fmt(next.chargeIncrease)} par saison.`),
-            ),
-            el(
-              'div.card-foot',
-              buyButton(app, { id: 'c-shop-lot', label: 'Acheter le terrain', cost: next.price, can: next.canBuy, reason: next.reason, onClick: () => {
-                const res = ui.act('buyLot');
-                if (res?.ok) ui.open.lot(res.lotId);
-              } }),
-              !next.canBuy && next.reason ? el('p.card-reason', next.reason) : null,
-            ),
-          )
-        : el('p.sheet-empty', 'Tous les terrains sont achetés : la ferme est complète !'),
+      next ? lotSaleCard(ui, next, { main: true }) : el('p.sheet-empty', 'Tous les terrains sont achetés : la ferme est complète !'),
+      otherSales(ui, lots, next),
       unbuiltLots(ui, lots),
       cBtn(app, [cIcon('map', 'sprite--sm', 'seed'), 'Voir la carte des terrains'], () => ui.open.map(), { id: 'c-shop-map', cls: 'btn--wide' }),
     ],
@@ -158,6 +148,45 @@ export function shopContent(ui) {
   return el('div.c-shop', lotSection, bldSection, animalSection, machineSection, workshopSection, itemSection);
 }
 
+/** Carte d'un terrain à vendre : nom, place sur la carte, prix, charges, « Acheter » (ce terrain-là) et « Voir ». */
+export function lotSaleCard(ui, lot, { main = false } = {}) {
+  const { app } = ui;
+  const locked = !lot.buyable && !lot.canBuy;
+  const why = lot.lockedReason || lot.reason;
+  return el(
+    `article.card.c-card.c-lot-card${locked ? '.is-locked' : ''}`,
+    { id: `c-sale-${lot.id}` },
+    el('div.card-icon', lotIcon('forSale', 'sprite--card')),
+    el(
+      'div.card-main',
+      el('div.card-top', el('span.card-name', lot.name), lot.special ? el('span.card-owned.is-some', 'offre spéciale') : lot.lockedByRank ? el('span.card-owned', `Rang ${lot.lockedByRank}`) : null),
+      el('div.card-desc.c-where', lotWhere(lot)),
+      el('div.card-desc', `En friche : vous choisirez son aménagement (champ, pré, verger…). Charges de saison : +${fmt(lot.chargeIncrease ?? 0)} par saison.`),
+    ),
+    el(
+      'div.card-foot',
+      buyButton(app, { id: main ? 'c-shop-lot' : `c-shop-buy-${lot.id}`, label: 'Acheter ce terrain', cost: lot.price, can: lot.canBuy, reason: why, onClick: () => ui.buyLot(lot.id) }),
+      !lot.canBuy && why ? el('p.card-reason', why) : null,
+      typeof app.scene?.focusLot === 'function' ? cBtn(app, 'Voir sur la ferme', () => ui.showLot(lot.id), { id: `c-shop-see-${lot.id}`, cls: 'btn--wide.btn--small' }) : null,
+    ),
+  );
+}
+
+/** Les autres terrains de la lisière (à gauche, à droite, au-dessus) : achetables d'abord, puis verrouillés. */
+function otherSales(ui, lots, next) {
+  const rest = lots.filter((l) => l.forSale && l.id !== next?.id).sort((a, b) => Number(b.buyable) - Number(a.buyable) || a.price - b.price || Math.abs(a.col) - Math.abs(b.col) || a.row - b.row);
+  if (!rest.length) return null;
+  const { app } = ui;
+  const row = (l) =>
+    el(
+      'article.c-map-row.is-forsale',
+      { id: `c-sale-${l.id}` },
+      el('button.c-map-open', { type: 'button', onclick: () => ui.open.lot(l.id), 'aria-label': `Voir : ${l.name}` }, el('span.c-map-icon', l.buyable ? lotIcon('forSale', 'sprite--md') : icon('lock', 'md')), el('div.c-map-main', el('b', l.name), el('small', lotWhere(l)), l.buyable ? null : el('small', l.lockedReason || l.reason || 'Plus tard'))),
+      l.buyable ? buyButton(app, { id: `c-shop-buy-${l.id}`, label: 'Acheter', cost: l.price, can: l.canBuy, reason: l.reason, cls: 'btn--compact', onClick: () => ui.buyLot(l.id) }) : null,
+    );
+  return el('div.c-sales', el('h3.stats-title', `Autres terrains à vendre (${rest.length})`), el('div.c-map-list', rest.map(row)));
+}
+
 function safeBuilding(cq, id) {
   try {
     return typeof cq.building === 'function' ? cq.building(id) : null;
@@ -198,7 +227,7 @@ function animalCard(ui, a, buildings) {
     el(
       'div.card-main',
       el('div.card-top', el('span.card-name', a.name), el('span.card-owned', sh?.built ? `${a.owned}/${a.max}` : locked ? `Rang ${locked}` : 'pas d\'abri')),
-      el('div.card-desc', a.description || ''),
+      a.role ? roleLine(a.role) : el('div.card-desc', a.description || ''),
       el(
         'div.card-stats',
         perDay ? el('span.stat.stat--wide', el('span.stat-label', 'Par jour'), seasonIncomes(a.incomeBySeason, 1, ui.game.query.calendar().seasonId)) : null,
@@ -236,7 +265,7 @@ function itemCard(ui, i) {
     el(
       'div.card-main',
       el('div.card-top', el('span.card-name', i.name), el('span.card-owned', `${i.owned}/${i.max}`)),
-      el('div.card-desc', i.description || ''),
+      i.role ? roleLine(i.role) : el('div.card-desc', i.description || ''),
       el(
         'div.card-stats',
         Object.values(i.incomeBySeason || {}).some((v) => v > 0) ? el('span.stat.stat--wide', el('span.stat-label', 'Par jour'), seasonIncomes(i.incomeBySeason, 1, ui.game.query.calendar().seasonId)) : null,
@@ -261,7 +290,7 @@ function itemIcon(id) {
 function workshopCard(ui, b) {
   const { app } = ui;
   const card = buildingCard(ui, b);
-  const open = cBtn(app, 'Ouvrir l\'atelier', () => app.field.openBuilding(b.id), { id: `c-open-${b.id}`, cls: 'btn--wide.btn--small', sound: 'page' });
+  const open = cBtn(app, 'Ouvrir l\'atelier', () => app.field.openBuilding(b.id), { id: `c-open-${b.id}`, cls: 'btn--wide.btn--small', sound: 'page' }); // fiche de l'atelier (ou de la carrière)
   card.querySelector('.card-foot')?.prepend(open);
   if (!card.querySelector('.card-foot')) card.append(el('div.card-foot', open));
   return card;
@@ -282,7 +311,7 @@ function buildSlotCard(ui, b, courts, money) {
     `article.card.c-card${b.nextRank > ui.game.state.career.rank ? '.is-locked' : ''}`,
     { id: `c-bld-${b.id}` },
     el('div.card-icon', buildingIcon(b.id, 1, 'sprite--card')),
-    el('div.card-main', el('div.card-top', el('span.card-name', b.name), el('span.card-owned', b.nextRank > ui.game.state.career.rank ? `Rang ${b.nextRank}` : 'à construire')), b.nextEffects ? el('div.card-desc', effectsText(b.nextEffects)) : null),
+    el('div.card-main', el('div.card-top', el('span.card-name', b.name), el('span.card-owned', b.nextRank > ui.game.state.career.rank ? `Rang ${b.nextRank}` : 'à construire')), roleLine(b.role), b.nextEffects ? el('div.card-desc', effectsText(b.nextEffects)) : null),
     el(
       'div.card-foot',
       buyButton(app, {
@@ -312,7 +341,7 @@ function machineCard(ui, m, machines) {
     el(
       'div.card-main',
       el('div.card-top', el('span.card-name', m.name), el('span.card-owned', locked ? `Rang ${locked}` : mine.length ? (m.scope === 'farm' ? 'installé' : `${mine.length} installé${mine.length > 1 ? 's' : ''}`) : m.scope === 'farm' ? 'pour la ferme' : m.scope === 'shelter' ? 'par abri' : 'par terrain')),
-      m.description ? el('div.card-desc', m.description) : null,
+      m.role ? roleLine(m.role) : m.description ? el('div.card-desc', m.description) : null,
       el(
         'div.card-stats',
         el('span.stat', el('span.stat-label', 'Prix'), el('b', fmt(m.cost))),

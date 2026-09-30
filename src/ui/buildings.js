@@ -14,6 +14,7 @@ import { getInvestment } from '../data/investments.js';
 import { v3 } from './v3.js';
 import { el, fmt, plural } from './dom.js';
 import { icon, inputIcon, investmentIcon, productIcon } from './icons.js';
+import { aboutSection, nextLines } from './career/util.js';
 
 /** L'investissement est-il un atelier (transformation) ? */
 export function isProcessing(inv) {
@@ -135,6 +136,18 @@ export function buildingContent(app, id, actions) {
   const maxed = inv.nextCost === null;
   const nodes = [];
 
+  // Carrière : « Ce que fait cet atelier » en haut (rôle, niveau actuel, tous les niveaux, conseils).
+  let about = null;
+  if (game.mode === 'career') {
+    try {
+      about = game.query.career.about?.('building', id) || null;
+    } catch {
+      about = null;
+    }
+    const node = aboutSection(about, { app, kind: 'workshop', key: id, level: inv.owned || 0 });
+    if (node) nodes.push(node);
+  }
+
   if (inv.owned && proc) {
     const on = !!proc.on;
     nodes.push(
@@ -177,7 +190,7 @@ export function buildingContent(app, id, actions) {
       );
       nodes.push(el('p.sheet-hint', 'Vendus en l\'état, les produits rapportent le prix de la matière première. Utile avant un fermage.'));
     }
-  } else {
+  } else if (!about) {
     nodes.push(el('p.bld-desc', inv.description));
   }
 
@@ -198,6 +211,7 @@ export function buildingContent(app, id, actions) {
   if (inv.upkeep) facts.push(el('span.neg', `Entretien −${fmt(inv.upkeep)} / jour`));
   if (facts.length) nodes.push(el('div.bld-facts', facts));
 
+  if (!maxed && about?.nextEffectLines?.length) nodes.push(nextLines(about.nextEffectLines, inv.owned ? `Au niveau ${inv.owned + 1}` : 'Une fois construit'));
   if (!maxed && !inv.canBuy && inv.reason) nodes.push(el('p.card-reason', inv.reason));
   nodes.push(
     el(

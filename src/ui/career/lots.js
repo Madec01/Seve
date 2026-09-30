@@ -7,7 +7,8 @@ import { icon } from '../icons.js';
 import { season } from '../text.js';
 import { getCrop } from '../../data/crops.js';
 import {
-  animalIcon, animalProductIcon, buildingIcon, buyButton, cBtn, cIcon, cropIcon, lotIcon, machineIcon, pips, portrait, SEASON_ORDER, toggle, jobName,
+  aboutSection, animalIcon, animalProductIcon, buildingIcon, buyButton, cBtn, cIcon, cropIcon, lotIcon, lotWhere, machineIcon, pips, portrait, roleLine,
+  SEASON_ORDER, toggle, jobName,
 } from './util.js';
 import { buildingCard, effectsText } from './shop.js';
 
@@ -43,41 +44,147 @@ export function lotSummary(ui, lot) {
 }
 
 // ── Carte ───────────────────────────────────────────────────────────────────────
+/** Nom court du type d'un terrain, pour une case de la carte (« Ateliers » plutôt que « Cour des ateliers »). */
+const SHORT_TYPE = { field: 'Champ', meadow: 'Pré', orchard: 'Verger', workshops: 'Ateliers', pond: 'Mare', greenhouse: 'Serre', wild: 'Friche', yard: 'Basse-cour', home: 'Ferme' };
+
+/**
+ * Cases de la carte 2D : grid().cells (toute la grille), complétées par lots() (anciennes carrières : colonne 0
+ * au-delà de la rangée 6). → { cols: [min, max], rows: [max … 0], at(col, row) → case }
+ */
+function mapCells(ui) {
+  const { q } = ui;
+  const grid = q('grid', null);
+  const lots = q('lots', []) || [];
+  const byKey = new Map();
+  const key = (c, r) => `${c},${r}`;
+  for (const c of grid?.cells || []) byKey.set(key(c.col, c.row), { ...c });
+  for (const l of lots) {
+    if (!Number.isInteger(l.col) || !Number.isInteger(l.row)) continue;
+    if (l.fixed || ['home', 'start', 'yard'].includes(l.id)) continue;
+    const k = key(l.col, l.row);
+    const cur = byKey.get(k) || { col: l.col, row: l.row, id: l.id, name: l.name };
+    cur.id = l.id;
+    cur.name = l.name;
+    cur.lot = l;
+    cur.state = l.forSale ? (l.buyable ? 'buyable' : 'locked') : 'owned';
+    cur.type = l.type;
+    byKey.set(k, cur);
+  }
+  const home = byKey.get(key(0, 0)) || { col: 0, row: 0 };
+  byKey.set(key(0, 0), { ...home, id: 'home', name: ui.q('summary', null)?.farmName || 'La ferme', state: 'home', type: 'home' });
+  const bounds = grid?.bounds || { cols: [-2, 2], rows: [0, 6] };
+  const shown = grid?.rows || [0, Math.max(1, ...lots.map((l) => l.row || 0))];
+  const maxRow = Math.max(shown[1], Math.min(bounds.rows[1], shown[1] + 1), ...[...byKey.values()].filter((c) => c.state !== 'forest').map((c) => c.row));
+  const cols = [Math.min(bounds.cols[0], grid?.cols?.[0] ?? 0), Math.max(bounds.cols[1], grid?.cols?.[1] ?? 0)];
+  const rows = [];
+  for (let r = maxRow; r >= 0; r--) rows.push(r);
+  return { cols, rows, at: (c, r) => byKey.get(key(c, r)) || { col: c, row: r, id: null, state: 'forest' } };
+}
+
+/** Terrain regardé au centre de l'écran (id), pour « vous êtes ici ». */
+export function lotInView(app) {
+  const s = app.scene;
+  try {
+    const v = s?.viewRect?.();
+    const b = v ? s.layout?.bandAt?.(v.y + v.h / 2, v.x + v.w / 2) : null;
+    if (!b) return null;
+    return ['start', 'yard', 'home'].includes(b.id) ? 'home' : b.id;
+  } catch {
+    return null;
+  }
+}
+
+function cellLabel(c) {
+  if (c.state === 'home') return 'Ferme';
+  if (c.state === 'owned') return SHORT_TYPE[c.type] || c.lot?.typeName || 'Terrain';
+  if (c.state === 'buyable') return c.lot?.price !== undefined ? fmt(c.lot.price) : 'À vendre';
+  if (c.state === 'locked') return c.lot?.lockedByRank ? `Rang ${c.lot.lockedByRank}` : 'Fermé';
+  return '';
+}
+
+function cellIcon(c) {
+  if (c.state === 'home') return cIcon('house', 'sprite--sm', 'seed');
+  if (c.state === 'owned') return lotIcon(c.type || 'wild', 'sprite--sm');
+  if (c.state === 'buyable') return lotIcon('forSale', 'sprite--sm');
+  if (c.state === 'locked') return icon('lock', 'sm');
+  return null;
+}
+
+/** Toucher une case : le terrain à l'écran et sa fiche (ou sa feuille d'achat) ; forêt lointaine : un mot. */
+function tapCell(ui, c) {
+  const { app } = ui;
+  if (c.state === 'forest' || !c.id) {
+    app.audio.play('error', { volume: 0.5 });
+    app.toasts.show({ kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
+    return;
+  }
+  ui.open.lot(c.id);
+}
+
 export function mapContent(ui) {
   const { app, q } = ui;
   const lots = (q('lots', []) || []).slice();
-  // De haut en bas, comme la ferme : le terrain à vendre en tête, la maison en bas.
-  lots.sort((a, b) => b.index - a.index);
   const canGo = typeof app.scene?.focusLot === 'function';
-  const rows = lots.map((lot) => {
-    if (lot.forSale) {
-      return el(
-        'article.c-map-row.is-forsale',
-        { id: `c-map-${lot.id}` },
-        el('span.c-map-icon', lotIcon('forSale', 'sprite--md')),
-        el('div.c-map-main', el('b', lot.name), el('small', lot.lockedByRank ? `À vendre · ${lot.reason || `Rang ${lot.lockedByRank} requis`}` : `À vendre · ${fmt(lot.price)} · +${fmt(lot.chargeIncrease)} de charges par saison`)),
-        buyButton(app, { id: 'c-map-buy', label: 'Acheter', cost: lot.price, can: lot.canBuy, reason: lot.reason, cls: 'btn--compact', onClick: () => {
-          const res = ui.act('buyLot');
-          if (res?.ok) ui.open.lot(res.lotId);
-        } }),
-      );
-    }
-    return el(
+  const cells = mapCells(ui);
+  const here = ui.mapHere ?? lotInView(app); // vue retenue à l'ouverture (la feuille couvre ensuite l'écran)
+  const nCols = cells.cols[1] - cells.cols[0] + 1;
+  const gridNode = el(
+    'div.c-grid',
+    { style: { gridTemplateColumns: `repeat(${nCols}, minmax(0, 1fr))` }, role: 'group', 'aria-label': 'Carte des terrains' },
+    cells.rows.map((r) => {
+      const out = [];
+      for (let col = cells.cols[0]; col <= cells.cols[1]; col++) {
+        const c = cells.at(col, r);
+        const label = cellLabel(c);
+        const isHere = here && c.id && (c.id === here || (c.state === 'home' && here === 'home'));
+        out.push(
+          el(
+            `button.c-cell.is-${c.state}${c.type ? `.t-${c.type}` : ''}${isHere ? '.is-here' : ''}`,
+            { type: 'button', id: c.id ? `c-cell-${c.id}` : null, 'aria-label': `${c.name || 'Forêt'}${label ? ` : ${label}` : ''}`, onclick: () => tapCell(ui, c) },
+            cellIcon(c),
+            label ? el('span.c-cell-label', label) : null,
+          ),
+        );
+      }
+      return out;
+    }),
+  );
+  const sale = lots.filter((l) => l.forSale).sort((a, b) => Number(b.buyable) - Number(a.buyable) || a.price - b.price || Math.abs(a.col) - Math.abs(b.col) || a.row - b.row);
+  const owned = lots.filter((l) => !l.forSale).sort((a, b) => (b.row ?? b.index) - (a.row ?? a.index) || (a.col ?? 0) - (b.col ?? 0));
+  const saleRows = sale.map((lot) =>
+    el(
+      'article.c-map-row.is-forsale',
+      { id: `c-map-${lot.id}` },
+      el('button.c-map-open', { type: 'button', onclick: () => ui.open.lot(lot.id), 'aria-label': `Voir : ${lot.name}` }, el('span.c-map-icon', lot.buyable ? lotIcon('forSale', 'sprite--md') : icon('lock', 'md')), el('div.c-map-main', el('b', lot.name), el('small', lotWhere(lot)), el('small', lot.buyable ? `${fmt(lot.price)} pièces · +${fmt(lot.chargeIncrease ?? 0)} de charges par saison` : lot.lockedReason || lot.reason || 'Pas encore à vendre'))),
+      lot.buyable ? buyButton(app, { id: `c-map-buy-${lot.id}`, label: 'Acheter', cost: lot.price, can: lot.canBuy, reason: lot.reason, cls: 'btn--compact', onClick: () => ui.buyLot(lot.id) }) : null,
+    ),
+  );
+  const ownedRows = owned.map((lot) =>
+    el(
       'article.c-map-row',
       { id: `c-map-${lot.id}` },
       el('button.c-map-open', { type: 'button', onclick: () => ui.open.lot(lot.id), 'aria-label': `Fiche : ${lot.name}` }, el('span.c-map-icon', lotIcon(lot.type, 'sprite--md')), el('div.c-map-main', el('b', lot.name), el('small', lotSummary(ui, lot)))),
-      canGo
-        ? cBtn(app, 'Aller', () => {
-            app.sheets.close();
-            app.scene.focusLot(lot.id, { animate: true });
-          }, { id: `c-go-${lot.id}`, cls: 'btn--compact' })
-        : null,
-    );
-  });
+      canGo ? cBtn(app, 'Aller', () => ui.showLot(lot.id), { id: `c-go-${lot.id}`, cls: 'btn--compact' }) : null,
+    ),
+  );
+  const mm = ui.minimap;
   return el(
     'div.c-map',
-    el('p.shop-intro', 'Votre ferme, de la forêt (en haut) jusqu\'à la route (en bas). Touchez un terrain pour voir sa fiche.'),
-    el('div.c-map-list', rows),
+    el('p.shop-intro', 'Votre ferme vue d\'en haut : la route en bas, la forêt tout autour. Touchez un terrain pour y aller et ouvrir sa fiche.'),
+    gridNode,
+    el(
+      'div.c-legend',
+      el('span.c-legend-item.is-owned', el('i'), 'À vous'),
+      el('span.c-legend-item.is-buyable', el('i'), 'À vendre'),
+      el('span.c-legend-item.is-locked', el('i'), 'Plus tard'),
+      el('span.c-legend-item.is-forest', el('i'), 'Forêt'),
+    ),
+    mm ? toggle(app, { id: 'c-minimap-toggle', label: 'Mini-carte à l\'écran', sub: 'En bas à droite : touchez-la pour aller quelque part', on: !mm.hidden, onChange: (v) => {
+      mm.setHidden(!v);
+      ui.schedule();
+    } }) : null,
+    sale.length ? el('section.c-sec', el('h3.stats-title', lotIcon('forSale', 'sprite--sm'), `À vendre (${sale.length})`), el('div.c-map-list', saleRows)) : el('p.stats-note', 'Tous les terrains sont achetés : la ferme est complète !'),
+    el('section.c-sec', el('h3.stats-title', cIcon('land', 'sprite--sm', 'seed'), `Vos terrains (${owned.length})`), el('div.c-map-list', ownedRows)),
   );
 }
 
@@ -88,6 +195,12 @@ export function lotContent(ui, lotId) {
   if (!lot) return el('p.sheet-empty', 'Ce terrain n\'existe plus.');
   if (lot.forSale) return forSaleContent(ui, lot);
   const parts = [el('p.c-lot-type', lotIcon(lot.type, 'sprite--sm'), el('span', lotSummary(ui, lot)))];
+  // Ce que fait ce terrain (la friche, elle, se présente par le choix de son aménagement juste dessous).
+  if (lot.type !== 'home' && lot.type !== 'wild') {
+    const about = q('about', null, 'lotType', lot.type);
+    const node = aboutSection(about, { kind: 'lotType', levels: false, key: lot.type });
+    if (node) parts.push(node);
+  }
   if (lot.type === 'wild') parts.push(developSection(ui, lot, false));
   else if (lot.type === 'home') parts.push(homeSection(ui));
   else {
@@ -108,19 +221,17 @@ export function lotContent(ui, lotId) {
 
 function forSaleContent(ui, lot) {
   const { app } = ui;
+  const why = lot.lockedReason || lot.reason;
   return el(
     'div.info-sheet.c-lot',
-    el('p', `Un terrain en friche au-dessus de votre ferme. Une fois acheté, vous choisirez son aménagement (champ, pré, verger…).`),
+    el('p.c-lot-type', lotIcon('forSale', 'sprite--sm'), el('span', lotWhere(lot))),
+    el('p', lot.buyable ? 'Un terrain en friche, à vendre. Une fois acheté, vous choisirez son aménagement (champ, pré, verger, mare…).' : 'Un terrain en friche au bord de votre ferme. Il ne sera à vendre que plus tard.'),
+    lot.special ? el('p.stats-note.is-ok', `${lot.special} : ${fmt(lot.price)} au lieu de ${fmt(lot.basePrice ?? lot.price)}.`) : null,
     el('div.stats-line', el('span.stats-label', 'Prix'), el('b.stats-value', `${fmt(lot.price)} pièces`)),
-    el('div.stats-line', el('span.stats-label', 'Charges de saison'), el('b.stats-value.neg', `+${fmt(lot.chargeIncrease)} par saison`)),
-    el(
-      'div.sheet-actions',
-      buyButton(app, { id: 'c-lot-buy', label: 'Acheter', cost: lot.price, can: lot.canBuy, reason: lot.reason, onClick: () => {
-        const res = ui.act('buyLot');
-        if (res?.ok) ui.open.lot(res.lotId);
-      } }),
-    ),
-    !lot.canBuy && lot.reason ? el('p.card-reason', lot.reason) : null,
+    el('div.stats-line', el('span.stats-label', 'Charges de saison'), el('b.stats-value.neg', `+${fmt(lot.chargeIncrease ?? 0)} par saison`)),
+    !lot.canBuy && why ? el('p.card-reason', why) : null,
+    buyButton(app, { id: 'c-lot-buy', label: 'Acheter ce terrain', cost: lot.price, can: lot.canBuy, reason: why, onClick: () => ui.buyLot(lot.id) }),
+    cBtn(app, [cIcon('map', 'sprite--sm', 'seed'), 'Voir tous les terrains (carte)'], () => ui.open.map(), { id: 'c-lot-map', cls: 'btn--wide.btn--small' }),
   );
 }
 
@@ -136,7 +247,8 @@ function developSection(ui, lot, redevelop) {
       el(
         'div.card-main',
         el('div.card-top', el('span.card-name', t.name), el('span.card-owned', t.max ? `${t.count}/${t.max}` : ''), t.phase === 'B' ? el('span.card-owned', 'bientôt') : null),
-        el('div.card-desc', TYPE_TEXT[t.type] || ''),
+        el('div.card-desc', t.role || TYPE_TEXT[t.type] || ''),
+        t.effectLines?.length ? el('div.card-desc.c-effect', t.effectLines.filter((x) => !/^Aménagement/.test(x)).join(' · ')) : null,
       ),
       el(
         'div.card-foot',
@@ -266,12 +378,25 @@ function machinesSection(ui, lot) {
       'div.c-machine',
       { id: `c-mach-${m.key}` },
       el('span.c-slot-icon', machineIcon(m.id, 'sprite--md')),
-      el('div.c-slot-main', el('b', `${m.name || m.id}${m.buildingId ? ` · ${ui.q('building', null, m.buildingId)?.name || ''}` : ''}`), el('small', [m.maxLevel > 1 ? `Niveau ${m.level}/${m.maxLevel}` : null, m.text || null].filter(Boolean).join(' · ') || ' '), m.on && !m.working && m.why ? el('small.warn', m.why) : null),
+      el(
+        'div.c-slot-main',
+        el('b', `${m.name || m.id}${m.buildingId ? ` · ${ui.q('building', null, m.buildingId)?.name || ''}` : ''}`),
+        el('small', [m.maxLevel > 1 ? `Niveau ${m.level}/${m.maxLevel}` : null, m.text || null].filter(Boolean).join(' · ') || ' '),
+        m.role ? el('small.c-mach-role', m.role) : null,
+        m.level < (m.maxLevel || 1) && m.nextEffectLines?.length ? el('small.c-mach-next', `Niveau ${m.level + 1} : ${m.nextEffectLines.join(' · ')}`) : null,
+        m.on && !m.working && m.why ? el('small.warn', m.why) : null,
+      ),
       toggle(app, { id: `c-mach-on-${m.key}`, label: m.on ? 'En marche' : 'Éteinte', on: !!m.on, onChange: (v) => ui.act('setMachine', m.id, m.buildingId || m.lotId, v) }),
       m.level < (m.maxLevel || 1) ? buyButton(app, { id: `c-mach-up-${m.key}`, label: 'Niveau 2', cost: m.nextCost, can: m.canUpgrade, reason: m.reason, cls: 'btn--compact', onClick: () => ui.act('upgradeMachine', m.id, m.buildingId || m.lotId) }) : null,
     ),
   );
-  const buy = offers.map(({ m, p }) => buyButton(app, { id: `c-mach-buy-${m.id}-${p.place}`, label: `Installer : ${m.name}${p.buildingId ? ` (${p.name})` : ''}`, cost: m.cost, can: p.canBuy, reason: p.reason, onClick: () => ui.act('buyMachine', m.id, p.place) }));
+  const buy = offers.map(({ m, p }) =>
+    el(
+      'div.c-mach-offer',
+      m.role ? el('small.c-mach-role', m.role) : null,
+      buyButton(app, { id: `c-mach-buy-${m.id}-${p.place}`, label: `Installer : ${m.name}${p.buildingId ? ` (${p.name})` : ''}`, cost: m.cost, can: p.canBuy, reason: p.reason, onClick: () => ui.act('buyMachine', m.id, p.place) }),
+    ),
+  );
   return el('section.c-sec', el('h3.stats-title', machineIcon('sprinklers', 'sprite--sm'), 'Machines'), rows, buy.length ? el('div.c-offers', buy) : null);
 }
 
@@ -311,7 +436,7 @@ export function buildOptionsContent(ui, lotId, slot) {
         `article.card.c-card${o.canBuild ? '' : '.is-locked'}`,
         { id: `c-opt-${o.buildingId}` },
         el('div.card-icon', animalOf[o.buildingId] ? animalIcon(animalOf[o.buildingId], 'sprite--card') : buildingIcon(o.buildingId, 1, 'sprite--card')),
-        el('div.card-main', el('div.card-top', el('span.card-name', o.name), o.rank > ui.game.state.career.rank ? el('span.card-owned', `Rang ${o.rank}`) : null), b?.nextEffects ? el('div.card-desc', effectsText(b.nextEffects)) : null),
+        el('div.card-main', el('div.card-top', el('span.card-name', o.name), o.rank > ui.game.state.career.rank ? el('span.card-owned', `Rang ${o.rank}`) : null), roleLine(b?.role), b?.nextEffects ? el('div.card-desc', effectsText(b.nextEffects)) : null),
         el(
           'div.card-foot',
           buyButton(app, { id: `c-opt-build-${o.buildingId}`, label: 'Construire', cost: o.cost, can: o.canBuild, reason: o.reason, onClick: () => {

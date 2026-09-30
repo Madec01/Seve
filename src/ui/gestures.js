@@ -10,12 +10,16 @@
 //   - toucher bref sur un bâtiment → sa fiche (revenus, achat)
 //   - appui long (450 ms) sur une parcelle ou un bâtiment → sa fiche, avec une petite vibration
 //   - glisser en partant d'une parcelle : arroser / récolter en série toutes les parcelles
-//     traversées (la première action trouvée fixe l'action de la série), sans faire défiler
-//   - glisser ailleurs : faire défiler la scène (scene.scrollBy), avec une légère inertie
+//     traversées (la première action trouvée fixe l'action de la série), sans faire défiler ; en
+//     carrière, seulement si cette parcelle est à arroser ou à récolter (sinon, on fait défiler)
+//   - glisser ailleurs : faire défiler la scène (scene.scrollBy), avec une légère inertie ; en carrière
+//     (carte 2D), dans les deux sens : scrollBy(-dx, -dy), puis fling(vx, vy). Un glissé presque
+//     vertical (ou horizontal) au départ reste sur son axe (pas de dérive de côté en remontant la ferme).
 //   Souris
 //   - clic : action immédiate au moment de l'appui (comme la V1), glisser = série ; clic sur une
 //     parcelle sans action ou sur un bâtiment → fiche ; molette ou glisser dans le vide = défiler ;
-//     survol = infobulle.
+//     survol = infobulle. Carrière : Maj + molette (ou molette horizontale du pavé tactile) = défiler
+//     de côté.
 // La cible est cherchée avec une tolérance pour le doigt (scene.hitTest(x, y, { touch: true })).
 // Mode décoration (src/ui/decor.js, aussi sur la ferme de démonstration du menu) : seuls les
 // emplacements, le panneau et le fermier réagissent (toucher ou clic → app.decor.onHit) ; glisser
@@ -24,6 +28,7 @@
 const LONG_PRESS_MS = 450;
 const TOUCH_SLOP = 10; // px avant de considérer qu'on glisse
 const MOUSE_SLOP = 5;
+const AXIS_LOCK = 0.42; // tan(≈ 23°) : en deçà, le glissé reste sur l'axe principal
 
 export function createSceneInput(canvas, app) {
   let g = null; // geste en cours
@@ -34,7 +39,15 @@ export function createSceneInput(canvas, app) {
   /** La scène réagit-elle aux gestes ? (partie en cours, ou mode décoration) */
   const live = () => decorOn() || (!!app.game && !app.inMenu);
   const DECOR_TYPES = ['decorSlot', 'sign', 'farmer'];
-  const canScroll = () => typeof scene()?.scrollBy === 'function' && (scene().maxScroll?.() ?? 1) > 0;
+  /** Carte 2D (carrière) : la scène défile aussi de côté. */
+  const twoD = () => !!scene()?.careerMode;
+  const canScroll = () => {
+    const s = scene();
+    if (typeof s?.scrollBy !== 'function') return false;
+    const m = s.maxScroll?.();
+    if (m === undefined || m === null) return true;
+    return twoD() ? (m.x || 0) > 0 || Number(m) > 0 : Number(m) > 0;
+  };
 
   function local(e) {
     const r = canvas.getBoundingClientRect();
@@ -132,13 +145,18 @@ export function createSceneInput(canvas, app) {
   // ── Défilement avec inertie ─────────────────────────────────────────────────
   function stopInertia() {
     inertia = null;
-    if (typeof scene()?.fling === 'function') scene().fling(0);
+    if (typeof scene()?.fling === 'function') {
+      if (twoD()) scene().fling(0, 0);
+      else scene().fling(0);
+    }
   }
-  function startInertia(v) {
-    if (!canScroll() || Math.abs(v) < 0.05 || app.reducedMotion()) return;
+  /** Élan après un glissé : v (px / ms, vertical), vx (px / ms, carte 2D). */
+  function startInertia(v, vx = 0) {
+    if (!canScroll() || Math.hypot(v, vx) < 0.05 || app.reducedMotion()) return;
     // La scène gère elle-même l'élan (frottement) quand elle sait le faire.
     if (typeof scene().fling === 'function') {
-      scene().fling(v * 1000);
+      if (twoD()) scene().fling(vx * 1000, v * 1000);
+      else scene().fling(v * 1000);
       return;
     }
     inertia = { v, last: performance.now() };
@@ -172,7 +190,7 @@ export function createSceneInput(canvas, app) {
     } catch {
       /* rien */
     }
-    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastY: p.y, lastT: performance.now(), v: 0, hit, mode: null, action: null, done: new Set(), long: false, timer: null, decor: decorOn() };
+    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastX: p.x, lastY: p.y, lastT: performance.now(), v: 0, vx: 0, axis: null, hit, mode: null, action: null, done: new Set(), long: false, timer: null, decor: decorOn() };
 
     if (g.decor) {
       // Mode décoration : à la souris, le clic agit tout de suite ; au doigt, au lever.
@@ -234,11 +252,22 @@ export function createSceneInput(canvas, app) {
     if (!g.mode && !g.long && dx * dx + dy * dy > slop * slop) {
       clearTimeout(g.timer);
       scene()?.setHover(null);
-      if (g.hit?.type === 'plot' && !g.decor) {
+      // Carrière (grande ferme, carte 2D) : un glissé qui part d'une parcelle sans rien à arroser ni à récolter
+      // fait défiler la vue (sinon on ne pourrait pas bouger en partant du champ). Niveaux : inchangé.
+      const act = g.hit?.type === 'plot' && twoD() ? app.game?.query.plot(g.hit.index)?.action : null;
+      const seriesOk = g.hit?.type === 'plot' && (!twoD() || act === 'water' || act === 'harvest');
+      if (seriesOk && !g.decor) {
         g.mode = 'field';
         dragOver(g.hit.index);
       } else {
         g.mode = 'scroll';
+        // Carte 2D : un glissé nettement vertical (ou horizontal) au départ garde son axe.
+        const ax = Math.abs(dx);
+        const ay = Math.abs(dy);
+        g.axis = !twoD() ? 'y' : ax <= ay * AXIS_LOCK ? 'y' : ay <= ax * AXIS_LOCK ? 'x' : null;
+        // Le seuil franchi : on repart du point de départ (le premier pas n'est pas perdu).
+        g.lastX = g.x0;
+        g.lastY = g.y0;
       }
     }
     if (g.mode === 'field') {
@@ -252,12 +281,16 @@ export function createSceneInput(canvas, app) {
       }
     } else if (g.mode === 'scroll' && canScroll()) {
       const now = performance.now();
-      const d = g.lastY - p.y; // doigt vers le haut → on descend dans la scène
-      scene().scrollBy(d);
+      const d = g.axis === 'x' ? 0 : g.lastY - p.y; // doigt vers le haut → on descend dans la scène
+      const dxs = g.axis === 'y' ? 0 : g.lastX - p.x; // doigt vers la gauche → on va vers la droite
+      if (twoD()) scene().scrollBy(dxs, d);
+      else scene().scrollBy(d);
       const dt = Math.max(1, now - g.lastT);
       g.v = 0.8 * (d / dt) + 0.2 * g.v;
+      g.vx = 0.8 * (dxs / dt) + 0.2 * g.vx;
       g.lastT = now;
     }
+    g.lastX = p.x;
     g.lastY = p.y;
     g.px = p.x;
     g.py = p.y;
@@ -273,7 +306,7 @@ export function createSceneInput(canvas, app) {
     if (cancelled) return;
     if (cur.decor) {
       if (cur.touch && !cur.mode && cur.hit) app.decor.onHit(cur.hit);
-      else if (cur.mode === 'scroll' && performance.now() - cur.lastT < 80) startInertia(cur.v);
+      else if (cur.mode === 'scroll' && performance.now() - cur.lastT < 80) startInertia(cur.v, cur.vx);
       return;
     }
     if (cur.touch && !cur.mode && !cur.long && cur.hit) {
@@ -282,7 +315,7 @@ export function createSceneInput(canvas, app) {
       else tapOther(cur.hit);
     } else if (cur.mode === 'scroll') {
       // Pas d'inertie si le doigt s'est arrêté avant de se lever.
-      if (performance.now() - cur.lastT < 80) startInertia(cur.v);
+      if (performance.now() - cur.lastT < 80) startInertia(cur.v, cur.vx);
     }
   }
 
@@ -299,7 +332,13 @@ export function createSceneInput(canvas, app) {
       if (!live() || !canScroll()) return;
       e.preventDefault();
       stopInertia();
-      scene().scrollBy(e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY);
+      const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      if (twoD()) {
+        // Maj + molette : de côté ; pavé tactile : les deux axes.
+        const sx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
+        const sy = e.shiftKey && !e.deltaX ? 0 : e.deltaY;
+        scene().scrollBy(sx * k, sy * k);
+      } else scene().scrollBy(e.deltaY * k);
     },
     { passive: false },
   );
