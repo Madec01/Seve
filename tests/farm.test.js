@@ -200,11 +200,11 @@ test('récolte : paiement, parcelle vidée, refus avant maturité', () => {
   assert.equal(g.query.plot(1).harvestValue, carrot.sellPrice);
   assert.equal(g.actions.water(1).reason, 'Cette culture est mûre : récoltez-la !');
   const r = g.actions.harvest(1);
-  assert.deepEqual(r, { ok: true, amount: carrot.sellPrice, cropId: 'carrot' });
+  assert.deepEqual(r, { ok: true, amount: carrot.sellPrice, cropId: 'carrot', tree: false, processed: null });
   assert.equal(g.state.money, money + carrot.sellPrice);
   assert.equal(g.query.plot(1).cropId, null);
   assert.equal(g.state.plots[1].lastHarvested, 'carrot');
-  assert.deepEqual(rec.of('harvested')[0], { type: 'harvested', plotIndex: 1, cropId: 'carrot', amount: carrot.sellPrice, fatigue: false });
+  assert.deepEqual(rec.of('harvested')[0], { type: 'harvested', plotIndex: 1, cropId: 'carrot', amount: carrot.sellPrice, fatigue: false, tree: false, processed: null });
   assert.equal(g.actions.harvest(1).reason, 'Rien à récolter ici.');
   assert.equal(g.state.stats.year.cropsHarvested.carrot, 1);
   assert.equal(g.state.stats.year.harvestIncome, carrot.sellPrice);
@@ -273,7 +273,12 @@ test('plantableCrops : saison, prix courant, gel annoncé', () => {
   const c = g.query.plantableCrops()[0];
   assert.deepEqual(Object.keys(c).sort(), [
     'basePrice', 'canAfford', 'daysToMature', 'fatigue', 'frostHardy', 'growDays', 'id', 'marketMultiplier', 'name', 'profit', 'seedCost', 'sellPrice', 'willFreeze',
+    'kind', 'product', 'tree', 'noWater', 'sowAll',
   ].sort());
+  assert.equal(c.kind, 'crop');
+  assert.equal(c.product, null);
+  assert.equal(c.tree, null);
+  assert.equal(c.sowAll, true);
   assert.equal(c.sellPrice, carrot.sellPrice);
   assert.equal(c.profit, carrot.sellPrice - carrot.seedCost);
   rich(g);

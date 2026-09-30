@@ -496,8 +496,82 @@ const v3 = {
 export const CROP_IDS_V3 = ['pumpkin', 'potato', 'strawberry', 'zucchini'];
 for (const id of CROP_IDS_V3) v3[`crop.${id}.0`] = SEED;
 
+/** Sprite de chaque produit transformé (le fromage de chèvre réutilise la meule). */
+export const PRODUCT_SPRITES = Object.freeze({
+  strawberryJam: 'product.jam',
+  appleJuice: 'product.juice',
+  cowCheese: 'product.cheese',
+  goatCheese: 'product.cheese',
+  flour: 'product.flour',
+  bread: 'product.bread',
+});
+
+/** Nom du sprite d'un produit (id de src/data/products.js), avec repli. */
+export function productSprite(productId) {
+  return PRODUCT_SPRITES[productId] || 'crate.empty';
+}
+
+/** Décorations de la personnalisation (id de src/data/cosmetics.js) → sprite. */
+export const DECOR_SPRITES = Object.freeze({
+  'flowers.red': 'deco.flowerbed.red',
+  'flowers.yellow': 'deco.flowerbed.yellow',
+  'flowers.blue': 'deco.flowerbed.blue',
+  'flowers.white': 'deco.flowerbed.white',
+  'flowers.pink': 'deco.flowerbed.pink',
+  bench: 'deco.bench',
+  lamp: 'deco.lamppost',
+  scarecrow: 'deco.scarecrow',
+  wheelbarrow: 'deco.wheelbarrow',
+  birdhouse: 'deco.birdhouse',
+  gnome: 'deco.gnome',
+  mailbox: 'deco.mailbox',
+  'hedge.bush': 'deco.hedge',
+  pond: 'deco.pond',
+});
+
+/** Sprite d'une décoration (accepte aussi « decor.<id> » ou un nom de sprite « deco.* »), ou null. */
+export function decorSprite(itemId) {
+  if (!itemId) return null;
+  const id = String(itemId).replace(/^decor\./, '');
+  if (DECOR_SPRITES[id]) return DECOR_SPRITES[id];
+  if (SPRITES[id]) return id;
+  if (SPRITES[`deco.${id}`]) return `deco.${id}`;
+  return null;
+}
+
+/** Tenue du fermier (id de src/data/cosmetics.js) → indice de sprite farmer.outfit.N. */
+const OUTFIT_INDEX = { 'outfit.classic': 0, 'outfit.checked': 1, 'outfit.raincoat': 2, 'outfit.blue': 2, 'outfit.gardener': 3 };
+export const OUTFIT_COUNT = 4;
+export function outfitSprite(outfitId, nohat = false) {
+  let i = OUTFIT_INDEX[outfitId];
+  if (i === undefined) {
+    const m = /(\d+)$/.exec(String(outfitId ?? ''));
+    i = m ? Math.min(OUTFIT_COUNT - 1, Number(m[1])) : 0;
+  }
+  return `farmer.outfit.${i}${nohat ? '.nohat' : ''}`;
+}
+
 /** Zone (pixels du sprite 32 × 16) où écrire le nom de la ferme sur 'deco.sign.farm'. */
 export const FARM_SIGN_TEXT_RECT = Object.freeze({ x: 3, y: 3, w: 26, h: 6 });
+/**
+ * Panneau de la ferme de la scène : la planche 'deco.sign.farm' élargie à 3 tuiles (48 × 16, milieu
+ * répété) pour que le nom se lise sur téléphone. Zone de texte correspondante (pixels du panneau).
+ */
+export const FARM_SIGN_WIDE_W = 48;
+export const FARM_SIGN_WIDE_TEXT_RECT = Object.freeze({ x: 2, y: 2, w: 44, h: 7 });
+
+/**
+ * Dessine le panneau élargi : moitié gauche du sprite, colonne du milieu répétée, moitié droite.
+ * @param images  planches (d'origine ou d'une saison)
+ */
+export function drawWideFarmSign(ctx, images, dx, dy) {
+  const r = spriteRect('deco.sign.farm');
+  const img = images[r.sheet];
+  const extra = FARM_SIGN_WIDE_W - r.w;
+  ctx.drawImage(img, r.x, r.y, 16, 16, dx, dy, 16, 16);
+  for (let i = 0; i < extra; i++) ctx.drawImage(img, r.x + 15, r.y, 1, 16, dx + 16 + i, dy, 1, 16);
+  ctx.drawImage(img, r.x + 16, r.y, r.w - 16, 16, dx + 16 + extra, dy, r.w - 16, 16);
+}
 /** Centre des ailes du moulin (pixels du sprite 48 × 64). */
 export const WINDMILL_HUB = Object.freeze({ x: 24, y: 20 });
 export const WINDMILL_FRAMES = 4;

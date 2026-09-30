@@ -1,16 +1,38 @@
 // Interactions avec le champ, en feuilles du bas : choix de la graine (une touche = semer ;
 // option « semer partout »), ouverture d'une parcelle, fiche d'une parcelle (pousse, arrosage,
-// gel…) et fiche d'un bâtiment. Les mêmes contenus servent d'infobulles à la souris.
+// gel…, pommier : étape et « Arracher »), fiche d'un bâtiment et fiche d'un atelier
+// (src/ui/buildings.js). Les mêmes contenus servent d'infobulles à la souris.
 //
 // createField(app) → { openSeedPicker(i), openUnlock(i), openPlotInfo(i), openInvestmentInfo(id),
 //                      close(), isOpen(), plotTip(i), investmentTip(id), refresh(), onEvent(ev),
 //                      onKey(e), current }
 
 import { el, fmt, plural, dec } from './dom.js';
-import { cropIcon, icon, investmentIcon, seasonIncomes } from './icons.js';
-import { incomeProfile, season } from './text.js';
+import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
+import { incomeProfile, season, seasonList } from './text.js';
+import { buildingContent, buildingSignature, isProcessing, processingOf } from './buildings.js';
 
-const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment'];
+const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
+
+/** Étape d'un pommier en une phrase (fiche, infobulle). */
+export function treeStatus(p) {
+  const t = p.tree;
+  if (!t) return '';
+  if (t.stage !== 'adult') {
+    const what = t.stage === 'sapling' ? 'Jeune plant' : 'Jeune arbre';
+    return t.dormant ? `${what} · au repos pour l'hiver` : `${what} · adulte dans ${plural(Math.max(1, t.adultInDays), 'jour')}`;
+  }
+  if (t.fruitReady) return `Pommes mûres : ${fmt(p.harvestValue ?? 0)}`;
+  if (t.dormant) return 'Au repos pour l\'hiver';
+  if (t.blossom) return 'En fleurs · pommes dès l\'été';
+  return `Pommes dans ${plural(Math.max(1, t.fruitDaysLeft), 'jour')}`;
+}
+
+/** Avancement affiché d'un pommier (0..1) : pousse, puis fruits. */
+function treeProgress(t) {
+  if (t.stage !== 'adult') return Math.max(0, Math.min(1, t.growth / Math.max(1, t.growDays)));
+  return Math.max(0, Math.min(1, t.fruit / Math.max(1, t.fruitDays)));
+}
 
 export function createField(app) {
   let current = null; // { kind: 'seeds' | 'unlock' | 'plot' | 'investment', index?, id? }
@@ -58,11 +80,18 @@ export function createField(app) {
     const freeOthers = game.query.plots().filter((p) => p.action === 'plant' && p.index !== index).length;
 
     const rows = crops.map((c, i) => {
+      const isTree = c.kind === 'tree' || !!c.tree;
       const perDay = c.profit / Math.max(1, c.daysToMature);
       const warnings = [];
-      if (c.willFreeze) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), 'Gèlera avant d\'être mûre'));
+      if (isTree) {
+        warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Ne gèle pas · sans arrosage'));
+        if (c.tree && c.tree.harvestsBeforeYearEnd === 0) warnings.push(el('span.warn-chip.is-frost', 'Aucune pomme avant la fin de l\'année'));
+      }
+      if (c.noWater) warnings.push(el('span.warn-chip.is-hardy', icon('water', 'xs'), 'Pousse sans arrosage'));
+      if (c.product?.owned) warnings.push(el('span.warn-chip.is-product', productIcon(c.product.productId, 'sprite--xs'), `Atelier : ${fmt(c.product.value)}`));
+      if (c.willFreeze && !isTree) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), 'Gèlera avant d\'être mûre'));
       if (c.fatigue) warnings.push(el('span.warn-chip.is-fatigue', icon('info', 'xs'), `Sol fatigué −${Math.round(lvl.modifiers.soilFatigue * 100)} %`));
-      if (c.frostHardy && cal.seasonId !== 'winter') warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Résiste au gel'));
+      if (c.frostHardy && !isTree && cal.seasonId !== 'winter') warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Résiste au gel'));
       if (lvl.modifiers.priceVolatility && Math.abs(c.marketMultiplier - 1) > 0.01) {
         warnings.push(el(`span.warn-chip.${c.marketMultiplier > 1 ? 'is-up' : 'is-down'}`, `Cours ×${dec(c.marketMultiplier)}`));
       }
@@ -81,15 +110,24 @@ export function createField(app) {
         el(
           'span.seed-main',
           el('span.seed-name', c.name),
-          el(
-            'span.seed-facts',
-            el('span', icon('calendar', 'xs'), plural(c.daysToMature, 'jour')),
-            el('span', icon('seed', 'xs'), fmt(c.seedCost)),
-            el('span', icon('coin', 'xs'), fmt(c.sellPrice)),
-          ),
+          isTree
+            ? el(
+                'span.seed-facts',
+                el('span', icon('seed', 'xs'), fmt(c.seedCost)),
+                el('span', icon('calendar', 'xs'), `adulte en ${plural(c.daysToMature ?? c.growDays, 'jour')}`),
+              )
+            : el(
+                'span.seed-facts',
+                el('span', icon('calendar', 'xs'), plural(c.daysToMature, 'jour')),
+                el('span', icon('seed', 'xs'), fmt(c.seedCost)),
+                el('span', icon('coin', 'xs'), fmt(c.sellPrice)),
+              ),
+          isTree ? el('span.seed-tree', `puis un panier (${fmt(c.tree?.basketPrice ?? c.sellPrice)}) tous les ${plural(c.tree?.fruitDays ?? 3, 'jour')} ${seasonList(c.tree?.fruitSeasons || ['summer', 'autumn'])}`) : null,
           warnings.length ? el('span.seed-warns', warnings) : null,
         ),
-        el(`span.seed-profit${perDay > 0 ? '.pos' : '.neg'}`, el('b', `+${dec(perDay)}`), el('small', 'par jour')),
+        isTree
+          ? el(`span.seed-profit${(c.tree?.harvestsBeforeYearEnd ?? 1) > 0 ? '.pos' : '.neg'}`, el('b', `×${c.tree?.harvestsBeforeYearEnd ?? '?'}`), el('small', 'paniers'))
+          : el(`span.seed-profit${perDay > 0 ? '.pos' : '.neg'}`, el('b', `+${dec(perDay)}`), el('small', 'par jour')),
       );
     });
 
@@ -132,12 +170,15 @@ export function createField(app) {
     show('seeds', { index }, { title: 'Que semer ?', icon: icon('seed', 'md'), content: seedContent(index) }, silent);
     const first = app.sheets.body.querySelector('.seed-row:not(.is-disabled)');
     if (first && app.keyboardMode && !silent) first.focus({ preventScroll: true });
+    // Premier pommier proposé : un conseil (une fois pour toutes).
+    if (!silent && app.sheets.body.querySelector('#seed-apple')) app.hints?.maybe('tree', { selector: '#seed-apple' });
   }
 
   function choose(crop, all) {
     if (!current || current.kind !== 'seeds') return;
     const index = current.index;
-    if (all) {
+    // « Semer partout » ne plante jamais d'arbre.
+    if (all && !(crop.kind === 'tree' || crop.tree || crop.sowAll === false)) {
       const n = app.plantAll(crop.id, index);
       if (n > 0) close(false);
       return;
@@ -194,20 +235,45 @@ export function createField(app) {
     const f = game.query.finance();
     const nodes = [plotTip(index, { sheet: true })];
     const actions = [];
+    const toWorkshop = p.action === 'harvest' && p.processTarget?.hasRoom;
     if (p.action === 'water') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-water', onclick: () => { app.water(index); } }, icon('water', 'sm'), f.waterCost ? `Arroser (${fmt(f.waterCost)})` : 'Arroser'));
     } else if (p.action === 'harvest') {
-      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), `Récolter (+${fmt(p.harvestValue)})`));
+      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), toWorkshop ? 'Récolter → atelier' : `Récolter (+${fmt(p.harvestValue)})`));
     } else if (p.action === 'plant') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-plant', onclick: () => openSeedPicker(index) }, icon('seed', 'sm'), 'Semer'));
     }
     if (actions.length) nodes.push(el('div.sheet-actions', actions));
+    if (p.kind === 'tree' && typeof game.actions.removeTree === 'function') {
+      nodes.push(
+        el(
+          'button.btn.btn--wide.btn--danger-soft',
+          {
+            type: 'button',
+            id: 'plot-remove-tree',
+            onclick: async () => {
+              const ok = await app.dialogs.confirm({
+                title: 'Arracher le pommier ?',
+                text: 'La parcelle redeviendra libre. Le pommier ne sera pas remboursé.',
+                ok: 'Arracher',
+                danger: true,
+              });
+              if (!ok) return;
+              const res = app.removeTree(index);
+              if (res?.ok) close(false);
+            },
+          },
+          'Arracher le pommier',
+        ),
+      );
+    }
     return el('div.info-sheet', nodes);
   }
 
   function plotTitle(p) {
     if (!p.unlocked) return 'Parcelle en friche';
     if (!p.cropId) return 'Parcelle libre';
+    if (p.kind === 'tree') return p.tree?.fruitReady ? 'Pommier : pommes mûres' : p.cropName || 'Pommier';
     return p.mature ? `${p.cropName} mûre` : p.cropName;
   }
 
@@ -246,7 +312,30 @@ export function createField(app) {
   function openInvestmentInfo(id, silent = false) {
     const inv = app.game?.query.investments().find((i) => i.id === id);
     if (!inv) return;
+    if (isProcessing(inv)) return openBuilding(id, silent);
     show('investment', { id }, { title: inv.name, icon: investmentIcon(id, 'sprite--md'), content: investmentContent(id) }, silent);
+  }
+
+  // ── Fiche d'un atelier (src/ui/buildings.js) ──────────────────────────────────
+  const buildingActions = {
+    toggle: (id, on) => app.setProcessing(id, on),
+    sellRaw: async (id, proc) => {
+      const n = (proc.places || []).filter(Boolean).length;
+      const ok = await app.dialogs.confirm({
+        title: 'Vendre en l\'état ?',
+        text: `${plural(n, 'produit')} en cours ${n > 1 ? 'seront vendus' : 'sera vendu'} tout de suite au prix de la matière première : +${fmt(proc.rawValue)} pièces (au lieu de ${fmt(proc.value)} à l'aube).`,
+        ok: 'Vendre',
+      });
+      if (ok) app.sellProcessing(id);
+    },
+    buy: (id) => app.buyInvestment(id),
+    shop: (id) => app.panel.focusInvestment(id),
+  };
+
+  function openBuilding(id, silent = false) {
+    const inv = app.game?.query.investments().find((i) => i.id === id);
+    if (!inv) return;
+    show('building', { id }, { title: inv.name, icon: investmentIcon(id, 'sprite--md'), content: buildingContent(app, id, buildingActions) }, silent);
   }
 
   // ── Contenus (infobulle à la souris, fiche au toucher) ────────────────────────
@@ -264,9 +353,22 @@ export function createField(app) {
       if (!sheet) rows.push(el('div.tip-title', icon('seed', 'sm'), 'Parcelle libre'));
       rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : évitez de replanter la même culture.'));
+    } else if (p.kind === 'tree' && p.tree) {
+      const t = p.tree;
+      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), p.cropName || 'Pommier'));
+      rows.push(el('div.tip-strong', treeStatus(p)));
+      if (!t.fruitReady && !t.dormant && !(t.stage === 'adult' && t.blossom)) {
+        rows.push(el('div.tip-progress', el('span.tip-bar', el('span.tip-bar-fill', { style: { width: `${Math.round(treeProgress(t) * 100)}%` } })), el('span', t.stage === 'adult' ? 'fruits' : 'pousse')));
+      }
+      if (t.fruitReady) processRow(rows, p, sheet);
+      rows.push(el('div.tip-ok', icon('winter', 'xs'), 'Pas d\'arrosage, ne gèle jamais.'));
+      if (t.stage === 'adult' && Number.isFinite(t.harvestsLeftEstimate)) rows.push(el('div.tip-sub', t.harvestsLeftEstimate > 0 ? `Encore environ ${plural(t.harvestsLeftEstimate, 'panier')} d'ici la fin de l'année.` : 'Plus de pommes d\'ici la fin de l\'année.'));
+      else if (t.stage !== 'adult') rows.push(el('div.tip-sub', 'Adulte, il donne un panier de pommes tous les 3 jours en été et en automne.'));
+      if (verb) rows.push(el('div.tip-sub', t.fruitReady ? `${verb} pour cueillir les pommes.` : `${verb} pour voir sa fiche.`));
     } else if (p.mature) {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.harvestValue, 'pièce')}`));
+      processRow(rows, p, sheet);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else {
@@ -275,13 +377,35 @@ export function createField(app) {
       rows.push(
         p.watered
           ? el('div.tip-ok', icon('water', 'xs'), 'Arrosée aujourd\'hui')
-          : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? 'Pas arrosée : ne poussera pas (canicule) !' : 'Pas arrosée : pousse deux fois moins vite'),
+          : p.needsWater === false
+            ? el('div.tip-ok', icon('water', 'xs'), 'Pousse sans arrosage (sauf en canicule)')
+            : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? 'Pas arrosée : ne poussera pas (canicule) !' : 'Pas arrosée : pousse deux fois moins vite'),
       );
+      if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
       if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
-      if (!p.watered && verb) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));
+      if (!p.watered && verb && p.needsWater !== false) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));
     }
     return el('div.tip-rows', rows);
+  }
+
+  /** « À la récolte : part à l'atelier (1 place libre) → confiture de fraises 46 » / « Atelier plein : vendue 26 ». */
+  function processRow(rows, p, sheet) {
+    const t = p.processTarget;
+    if (!t) return;
+    if (t.hasRoom) {
+      const proc = processingOf(app.game, t.buildingId);
+      const free = proc ? (proc.places || []).filter((x) => !x).length : null;
+      rows.push(
+        el(
+          `div.tip-note.is-product${sheet ? '' : '.tip-small'}`,
+          productIcon(t.productId, 'sprite--xs'),
+          `À la récolte : part à l'atelier${free ? ` (${plural(free, 'place libre', 'places libres')})` : ''} → ${t.productName.toLowerCase()} ${fmt(t.value)}`,
+        ),
+      );
+    } else {
+      rows.push(el('div.tip-note.warn', `Atelier plein : vendue ${fmt(p.harvestValue ?? 0)}`));
+    }
   }
 
   function investmentTip(id, { sheet = false } = {}) {
@@ -289,6 +413,17 @@ export function createField(app) {
     const inv = game?.query.investments().find((i) => i.id === id);
     if (!inv) return null;
     const rows = [];
+    if (!sheet && isProcessing(inv)) {
+      const proc = inv.owned ? processingOf(game, id) : null;
+      rows.push(el('div.tip-title', investmentIcon(id, 'sprite--xs'), inv.owned ? `${inv.name} (niveau ${inv.owned})` : `À vendre : ${inv.name}`));
+      if (proc) {
+        const used = (proc.places || []).filter(Boolean).length;
+        rows.push(el('div', proc.on ? `${used}/${proc.places.length} places occupées` : 'Interrupteur éteint : rien n\'entre'));
+        if (used) rows.push(el('div', icon('coin', 'xs'), `En cours : ${fmt(proc.value)} à la vente`));
+      } else rows.push(el('div', inv.description));
+      rows.push(el('div.tip-sub', 'Cliquez pour voir la fiche.'));
+      return el('div.tip-rows', rows);
+    }
     if (!sheet) rows.push(el('div.tip-title', investmentIcon(id, 'sprite--xs'), inv.owned ? `${inv.name}${inv.kind === 'upgrade' ? ` (niveau ${inv.owned})` : inv.owned > 1 ? ` ×${inv.owned}` : ''}` : `À vendre : ${inv.name}`));
     else rows.push(el('div.tip-sub', inv.owned ? (inv.kind === 'upgrade' ? `Niveau ${inv.owned} sur ${inv.max}` : `Vous en avez ${inv.owned} (maximum ${inv.max})`) : 'Pas encore acheté'));
     const units = inv.kind === 'upgrade' ? 1 : Math.max(1, inv.owned);
@@ -315,16 +450,18 @@ export function createField(app) {
     const g = app.game;
     if (!g) return '';
     if (c.kind === 'investment') return JSON.stringify(g.query.investments().find((i) => i.id === c.id));
+    if (c.kind === 'building') return buildingSignature(g, c.id);
     const p = g.query.plot(c.index);
     if (c.kind === 'seeds') {
       const free = g.query.plots().filter((q) => q.action === 'plant').length;
-      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money])]);
+      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd])]);
     }
     if (c.kind === 'unlock') {
       const can = g.state.money >= (p.unlockCost ?? Infinity);
       return JSON.stringify([p.unlocked, p.unlockCost, can, can ? 0 : g.state.money]);
     }
-    return JSON.stringify([p, g.query.finance().waterCost, g.state.weather.today]);
+    const proc = p.processTarget ? processingOf(g, p.processTarget.buildingId) : null;
+    return JSON.stringify([p, g.query.finance().waterCost, g.state.weather.today, proc ? proc.places.filter(Boolean).length : null]);
   }
   let lastSig = '';
 
@@ -336,6 +473,7 @@ export function createField(app) {
     if (sig === lastSig) return;
     lastSig = sig;
     if (c.kind === 'investment') return openInvestmentInfo(c.id, true);
+    if (c.kind === 'building') return openBuilding(c.id, true);
     const p = app.game?.query.plot(c.index);
     if (!p) return close(false);
     if (c.kind === 'seeds') {
@@ -357,7 +495,7 @@ export function createField(app) {
       close(false);
       return;
     }
-    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased'].includes(ev.type) && !refreshQueued) {
+    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved'].includes(ev.type) && !refreshQueued) {
       // Une aube émet plusieurs événements : une seule reconstruction par image.
       refreshQueued = true;
       requestAnimationFrame(() => {
@@ -386,6 +524,7 @@ export function createField(app) {
     openUnlock: (i) => openUnlock(i),
     openPlotInfo: (i) => openPlotInfo(i),
     openInvestmentInfo: (id) => openInvestmentInfo(id),
+    openBuilding: (id) => openBuilding(id),
     close,
     isOpen,
     plotTip,

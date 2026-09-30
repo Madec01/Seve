@@ -15,6 +15,13 @@ export function createToasts(stack, bannerNode) {
     setTimeout(() => node.remove(), 260);
   }
 
+  /** Efface les plus anciens messages qui passeraient sous la barre du haut (le plus récent reste). */
+  function trim() {
+    const limit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inset-top')) || 0;
+    const live = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
+    for (const n of live.slice(1)) if (n.getBoundingClientRect().top < limit + 2) dismiss(n);
+  }
+
   /**
    * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick? }
    */
@@ -48,11 +55,9 @@ export function createToasts(stack, bannerNode) {
     for (const extra of items.slice(4)) dismiss(extra);
     // Place limitée (feuille haute ouverte) : les plus anciens qui passeraient sous la barre du
     // haut s'effacent (le plus récent reste toujours).
-    requestAnimationFrame(() => {
-      const limit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inset-top')) || 0;
-      const live = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
-      for (const n of live.slice(1)) if (n.getBoundingClientRect().top < limit + 2) dismiss(n);
-    });
+    // (vérifié deux fois : tout de suite, puis une fois l'animation d'entrée finie)
+    requestAnimationFrame(trim);
+    setTimeout(trim, 320);
     const entry = { node, timer: setTimeout(() => dismiss(node), o.duration || 3200) };
     recent.set(key, entry);
     setTimeout(() => {
@@ -96,5 +101,5 @@ export function createToasts(stack, bannerNode) {
     bannerNode.classList.remove('is-visible');
   }
 
-  return { show, banner, hideBanner, clearAll };
+  return { show, banner, hideBanner, clearAll, trim };
 }

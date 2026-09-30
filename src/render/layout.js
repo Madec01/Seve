@@ -1,8 +1,12 @@
 // Disposition de la scène, en « pixels du monde » (tuiles de 16 px), pour un niveau donné.
 //
-// Le monde fait toujours 32 × 20 tuiles (512 × 320 px), quel que soit le niveau : seule la taille
-// du champ change. Tout ce qui dépasse du monde (bandes autour, à l'écran) est de la forêt, sauf la
-// route qui traverse la scène de part en part.
+// Le monde fait 32 × 20 tuiles (512 × 320 px) : seule la taille du champ change. Tout ce qui dépasse
+// du monde (bandes autour, à l'écran) est de la forêt, sauf la route qui traverse la scène de part en
+// part. (v3) Quand un niveau propose à la fois les vaches et les chèvres (ou le moulin), une bande de
+// 6 lignes s'ajoute en haut (monde de 32 × 26) : enclos des chèvres + fromagerie à gauche, moulin et
+// four à pain à droite ; tout le reste descend de 6 lignes. Sans vaches, les chèvres prennent le pré
+// des vaches et la fromagerie la place de la grange. L'atelier de confitures se pose sous le champ,
+// à droite du chemin.
 //
 // Plan (x → droite, y → bas, en tuiles) :
 //
@@ -18,17 +22,16 @@
 // Aucune dépendance au DOM.
 
 import { TILE } from './atlas.js';
-import { seededRandom, tileHash, px, sprinklerHeads, makeQueries } from './layout-common.js';
+import { seededRandom, tileHash, px, sprinklerHeads, makeQueries, findFreeArea, decorSlot, levelTheme, pickDeco } from './layout-common.js';
 import { createPortraitLayout } from './layout-portrait.js';
 
 export const WORLD_COLS = 32;
 export const WORLD_ROWS = 20;
 export const WORLD_W = WORLD_COLS * TILE;
 export const WORLD_H = WORLD_ROWS * TILE;
+const BAND_ROWS = 6; // (v3) bande du haut : chèvres, fromagerie, moulin
 
-const ROAD_Y = 17; // route : lignes 17 et 18
 const MAIN_PATH_X = 15; // chemin du portail du champ jusqu'à la route
-const FIELD_BOTTOM_ROW = 8; // dernière ligne de parcelles (grille ancrée en bas)
 const FIELD_CENTER_X = 16;
 
 export { seededRandom, tileHash };
@@ -44,6 +47,15 @@ export function createLayout(level, opts = {}) {
   const available = new Set(
     (level.availableInvestments || []).filter((id) => !(id === 'sprinkler' && level.modifiers?.noSprinkler)),
   );
+  const has = (id) => available.has(id);
+  const theme = levelTheme(level);
+  // (v3) Bande du haut : seulement si chèvres/fromagerie ET vaches, ou moulin.
+  const band = ((has('goat') || has('dairy')) && has('cow')) || has('mill');
+  const BY = band ? BAND_ROWS : 0;
+  const ROWS_N = WORLD_ROWS + BY;
+  const WH = ROWS_N * TILE;
+  const ROAD_Y = 17 + BY; // route : 2 lignes
+  const FIELD_BOTTOM_ROW = 8 + BY; // dernière ligne de parcelles (grille ancrée en bas)
 
   // ── Champ ─────────────────────────────────────────────────────────────────────────
   const gx = FIELD_CENTER_X - Math.ceil(cols / 2);
@@ -63,43 +75,43 @@ export function createLayout(level, opts = {}) {
   }
 
   // ── Bâtiments et emplacements fixes (tuiles) ──────────────────────────────────────
-  const house = { x: 3, y: 11, w: 4, h: 3, door: { x: 5, y: 13 } };
-  const well = { x: 1, y: 12, w: 1, h: 2 };
+  const house = { x: 3, y: 11 + BY, w: 4, h: 3, door: { x: 5, y: 13 + BY } };
+  const well = { x: 1, y: 12 + BY, w: 1, h: 2 };
 
   // Arrosage automatique : têtes dans les marges haute et basse du champ, selon le niveau (2/4/6).
   const sprinklerTiles = sprinklerHeads(gx, gy, cols, rows, gate);
 
   const slots = {
     chickenCoop: {
-      shed: { x: 1, y: 4, w: 2, h: 3 },
-      fence: { x: 3, y: 3, w: 6, h: 5 },
-      pen: { x: 4, y: 4, w: 4, h: 3 },
+      shed: { x: 1, y: 4 + BY, w: 2, h: 3 },
+      fence: { x: 3, y: 3 + BY, w: 6, h: 5 },
+      pen: { x: 4, y: 4 + BY, w: 4, h: 3 },
       gate: null,
-      sign: { x: 5, y: 5 },
+      sign: { x: 5, y: 5 + BY },
       perUnit: 3, // poules par poulailler
     },
     beehive: {
-      hives: [{ x: 2, y: 9 }, { x: 3, y: 9 }, { x: 4, y: 9 }],
-      area: { x: 1, y: 8, w: 5, h: 2 },
-      sign: { x: 3, y: 9 },
+      hives: [{ x: 2, y: 9 + BY }, { x: 3, y: 9 + BY }, { x: 4, y: 9 + BY }],
+      area: { x: 1, y: 8 + BY, w: 5, h: 2 },
+      sign: { x: 3, y: 9 + BY },
     },
     cow: {
-      barn: { x: 28, y: 3, w: 3, h: 6 },
-      fence: { x: 22, y: 3, w: 6, h: 6 },
-      pen: { x: 23, y: 4, w: 4, h: 4 },
-      sign: { x: 24, y: 5 },
+      barn: { x: 28, y: 3 + BY, w: 3, h: 6 },
+      fence: { x: 22, y: 3 + BY, w: 6, h: 6 },
+      pen: { x: 23, y: 4 + BY, w: 4, h: 4 },
+      sign: { x: 24, y: 5 + BY },
     },
     sheep: {
-      fence: { x: 22, y: 10, w: 6, h: 5 },
-      pen: { x: 23, y: 11, w: 4, h: 3 },
-      extras: { x: 28, y: 11, w: 3, h: 3 },
-      sign: { x: 24, y: 12 },
+      fence: { x: 22, y: 10 + BY, w: 6, h: 5 },
+      pen: { x: 23, y: 11 + BY, w: 4, h: 3 },
+      extras: { x: 28, y: 11 + BY, w: 3, h: 3 },
+      sign: { x: 24, y: 12 + BY },
     },
     roadsideStand: {
-      cart: { x: 19, y: 16 },
-      crates: [{ x: 18, y: 16 }, { x: 20, y: 16 }, { x: 21, y: 16 }],
-      area: { x: 18, y: 16, w: 4, h: 1 },
-      sign: { x: 19, y: 16 },
+      cart: { x: 19, y: 16 + BY },
+      crates: [{ x: 18, y: 16 + BY }, { x: 20, y: 16 + BY }, { x: 21, y: 16 + BY }],
+      area: { x: 18, y: 16 + BY, w: 4, h: 1 },
+      sign: { x: 19, y: 16 + BY },
     },
     sprinkler: {
       units: sprinklerTiles,
@@ -107,16 +119,33 @@ export function createLayout(level, opts = {}) {
       sign: { x: fence.x + fence.w, y: fence.y + fence.h - 1 }, // juste à droite du coin bas du champ
     },
     solarPanel: {
-      units: [{ x: 7, y: 13 }, { x: 8, y: 13 }],
-      area: { x: 7, y: 13, w: 2, h: 1 },
-      sign: { x: 7, y: 13 },
+      units: [{ x: 7, y: 13 + BY }, { x: 8, y: 13 + BY }],
+      area: { x: 7, y: 13 + BY, w: 2, h: 1 },
+      sign: { x: 7, y: 13 + BY },
     },
     guestHouse: {
-      house: { x: 10, y: 12, w: 4, h: 3, door: { x: 12, y: 14 } },
-      garden: { x: 9, y: 15, w: 5, h: 2 },
-      sign: { x: 11, y: 13 },
+      house: { x: 10, y: 12 + BY, w: 4, h: 3, door: { x: 12, y: 14 + BY } },
+      garden: { x: 9, y: 15 + BY, w: 5, h: 2 },
+      sign: { x: 11, y: 13 + BY },
     },
   };
+  // (v3) Chèvres et fromagerie : bande du haut, ou pré et grange des vaches si le niveau n'en a pas.
+  if (has('goat')) {
+    slots.goat = band
+      ? { fence: { x: 2, y: 2, w: 6, h: 5 }, pen: { x: 3, y: 3, w: 4, h: 3 }, sign: { x: 4, y: 4 } }
+      : { fence: { x: 22, y: 3, w: 6, h: 6 }, pen: { x: 23, y: 4, w: 4, h: 4 }, sign: { x: 24, y: 5 } };
+  }
+  if (has('dairy')) {
+    slots.dairy = band
+      ? { building: { x: 8, y: 3, w: 3, h: 3 }, sign: { x: 9, y: 4 } }
+      : { building: { x: 28, y: 4, w: 3, h: 3 }, sign: { x: 29, y: 5 } };
+  }
+  if (has('mill')) {
+    slots.mill = band
+      ? { building: { x: 22, y: 2, w: 3, h: 4 }, bakery: { x: 25, y: 4, w: 2, h: 2 }, sign: { x: 23, y: 4 } }
+      : { building: { x: 9, y: 3 + BY, w: 3, h: 4 }, bakery: null, sign: { x: 10, y: 5 + BY } };
+  }
+  if (has('jamWorkshop')) slots.jamWorkshop = { building: { x: 17, y: 12 + BY, w: 3, h: 3 }, sign: { x: 18, y: 13 + BY } };
   // Le panneau « à vendre » de l'arrosage ne doit pas tomber sur le pré des vaches ou le chemin.
   if (slots.sprinkler.sign.x >= 22) slots.sprinkler.sign = { x: fence.x - 1, y: fence.y + fence.h - 1 };
 
@@ -142,16 +171,16 @@ export function createLayout(level, opts = {}) {
   /** true si la tuile (même hors du monde) est de la forêt. */
   function isForest(tx, ty) {
     if (ty === ROAD_Y || ty === ROAD_Y + 1) return false;
-    if (ty <= 1 || ty >= WORLD_ROWS - 1) return true;
+    if (ty <= 1 || ty >= ROWS_N - 1) return true;
     return tx <= 0 || tx >= WORLD_COLS - 1;
   }
 
   // ── Occupation (pour le décor) ───────────────────────────────────────────────────
-  const occ = new Uint8Array(WORLD_COLS * WORLD_ROWS);
+  const occ = new Uint8Array(WORLD_COLS * ROWS_N);
   const mark = (r, pad = 0) => {
     for (let y = r.y - pad; y < r.y + r.h + pad; y++) {
       for (let x = r.x - pad; x < r.x + r.w + pad; x++) {
-        if (x >= 0 && y >= 0 && x < WORLD_COLS && y < WORLD_ROWS) occ[y * WORLD_COLS + x] = 1;
+        if (x >= 0 && y >= 0 && x < WORLD_COLS && y < ROWS_N) occ[y * WORLD_COLS + x] = 1;
       }
     }
   };
@@ -162,11 +191,10 @@ export function createLayout(level, opts = {}) {
   mark(well);
   // Accessoires fixes autour de la maison
   const props = [
-    { name: 'barrel', x: 2, y: 13, dy: 1 },
-    { name: 'bucket.water', x: 2, y: 14, dx: 2, dy: -3 },
+    { name: 'barrel', x: 2, y: 13 + BY, dy: 1 },
+    { name: 'bucket.water', x: 2, y: 14 + BY, dx: 2, dy: -3 },
   ];
   for (const p of props) mark({ x: p.x, y: p.y, w: 1, h: 1 });
-  const has = (id) => available.has(id);
   if (has('chickenCoop')) {
     mark(slots.chickenCoop.shed);
     mark(slots.chickenCoop.fence);
@@ -181,11 +209,17 @@ export function createLayout(level, opts = {}) {
     mark(slots.sheep.fence);
     mark(slots.sheep.extras);
   }
-  if (has('roadsideStand')) mark({ x: 17, y: 15, w: 6, h: 2 }); // étal et ses abords
-  else mark({ x: 17, y: 16, w: 5, h: 1 });
+  if (has('roadsideStand')) mark({ x: 17, y: 15 + BY, w: 6, h: 2 }); // étal et ses abords
+  else mark({ x: 17, y: 16 + BY, w: 5, h: 1 });
   if (has('solarPanel')) {
     mark(slots.solarPanel.area);
-    mark({ x: 7, y: 12, w: 2, h: 1 });
+    mark({ x: 7, y: 12 + BY, w: 2, h: 1 });
+  }
+  if (slots.goat) mark(slots.goat.fence);
+  for (const id of ['dairy', 'jamWorkshop']) if (slots[id]) mark({ ...slots[id].building, h: slots[id].building.h + 1 });
+  if (slots.mill) {
+    mark({ ...slots.mill.building, h: slots.mill.building.h + 1 });
+    if (slots.mill.bakery) mark({ ...slots.mill.bakery, h: 3 });
   }
   if (has('guestHouse')) {
     mark(gh);
@@ -202,6 +236,35 @@ export function createLayout(level, opts = {}) {
   }
   const free = (x, y) => x >= 1 && y >= 2 && x < WORLD_COLS - 1 && y < ROAD_Y && !occ[y * WORLD_COLS + x];
 
+  // ── (v3) Emplacements de décoration ─────────────────────────────────────────────
+  const sign = { x: 12, y: 16 + BY, w: 3, h: 1 }; // panneau de la ferme, 3 tuiles
+  const decorSlots = [];
+  // force : emplacement sur une ligne réservée (devant la maison, jardin) mais libre.
+  const addSlot = (id, x, y, kind = 'small', w = 1, h = 1, force = false) => {
+    if (!force) for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) if (!free(i, j)) return;
+    decorSlots.push(decorSlot(id, kind, x, y, w, h));
+    mark({ x, y, w, h });
+  };
+  addSlot('sign', sign.x, sign.y, 'sign', 3, 1, true);
+  addSlot('porch.left', house.door.x - 1, house.y + house.h, 'small', 1, 1, true);
+  addSlot('porch.right', house.door.x + 1, house.y + house.h, 'small', 1, 1, true);
+  addSlot('yard.1', 1, 15 + BY);
+  addSlot('yard.2', 7, 15 + BY);
+  // Devant le portail : la ligne est réservée (marquée) ; on la libère pour ses deux emplacements.
+  for (const dx of [-1, 1]) {
+    const gx2 = gate.x + dx;
+    const gy2 = gate.y + 1;
+    decorSlots.push(decorSlot(dx < 0 ? 'gate.left' : 'gate.right', 'small', gx2, gy2));
+  }
+  addSlot('road.1', 3, 16 + BY);
+  addSlot('road.2', 24, 16 + BY);
+  addSlot('road.3', 27, 16 + BY);
+  if (!sprinklerTiles.some((t) => t.x === gx && t.y === gy - 1)) decorSlots.push(decorSlot('field.corner', 'small', gx, gy - 1));
+  {
+    const spot = findFreeArea(free, { x0: 1, y0: 2, x1: WORLD_COLS - 2, y1: ROAD_Y - 1 }, 2, 2, { x: house.x + 2, y: house.y });
+    if (spot) addSlot('pond', spot.x, spot.y, 'large', 2, 2);
+  }
+
   // ── Décor fixe (graine du niveau) ─────────────────────────────────────────────────
   // kind : 'tree' (1×1), 'treeTall' (1×2, ancré en bas), 'bush', 'berry', 'rocks', 'rocksBig',
   //        'stump', 'log', 'mushrooms', 'fern', 'weeds', 'flowers' (tuile de sol), 'tufts' (sol)
@@ -212,7 +275,7 @@ export function createLayout(level, opts = {}) {
   for (let y = 3; y < ROAD_Y - 1; y++) {
     for (const x of [1, WORLD_COLS - 2]) {
       if (free(x, y) && free(x, y - 1) && rnd() < 0.55) {
-        deco.push({ kind: 'treeTall', x: x * TILE + (x === 1 ? -3 : 3), y: y * TILE, tx: x, ty: y });
+        deco.push({ kind: theme === 'mountain' ? 'pineTall' : 'treeTall', x: x * TILE + (x === 1 ? -3 : 3), y: y * TILE, tx: x, ty: y });
         take(x, y);
         take(x, y - 1);
       }
@@ -221,14 +284,15 @@ export function createLayout(level, opts = {}) {
   // Sous la forêt du haut : quelques arbres.
   for (let x = 1; x < WORLD_COLS - 1; x++) {
     if (free(x, 2) && rnd() < 0.3) {
-      deco.push({ kind: rnd() < 0.5 ? 'tree' : 'bush', x: x * TILE, y: 2 * TILE, tx: x, ty: 2 });
+      const k0 = rnd() < 0.5 ? 'tree' : 'bush';
+      deco.push({ kind: theme === 'mountain' && k0 === 'tree' ? 'pine' : k0, x: x * TILE, y: 2 * TILE, tx: x, ty: 2 });
       take(x, 2);
     }
   }
   // Parterre de fleurs autour des ruches (sol).
-  for (let y = 8; y <= 10; y++) {
+  for (let y = 8 + BY; y <= 10 + BY; y++) {
     for (let x = 1; x <= 6; x++) {
-      const isHive = y === 9 && x >= 2 && x <= 4;
+      const isHive = y === 9 + BY && x >= 2 && x <= 4;
       if (!isHive && !(x === house.x && y === 10)) deco.push({ kind: 'flowerbed', x: x * TILE, y: y * TILE, tx: x, ty: y });
     }
   }
@@ -236,31 +300,19 @@ export function createLayout(level, opts = {}) {
   for (let y = 2; y < ROAD_Y; y++) {
     for (let x = 1; x < WORLD_COLS - 1; x++) {
       if (!free(x, y)) continue;
-      const r = rnd();
-      let kind = null;
-      if (r < 0.07 && free(x, y - 1)) kind = 'treeTall';
-      else if (r < 0.13) kind = 'tree';
-      else if (r < 0.17) kind = 'bush';
-      else if (r < 0.19) kind = 'berry';
-      else if (r < 0.215) kind = 'rocks';
-      else if (r < 0.225) kind = 'rocksBig';
-      else if (r < 0.235) kind = 'stump';
-      else if (r < 0.245) kind = 'log';
-      else if (r < 0.265) kind = 'mushrooms';
-      else if (r < 0.29) kind = 'fern';
-      else if (r < 0.31) kind = 'weeds';
+      const kind = pickDeco(rnd(), theme, free(x, y - 1));
       if (!kind) continue;
       const jx = Math.floor(rnd() * 5) - 2;
       const jy = Math.floor(rnd() * 3) - 1;
       deco.push({ kind, x: x * TILE + jx, y: y * TILE + jy, tx: x, ty: y });
       take(x, y);
-      if (kind === 'treeTall') take(x, y - 1);
+      if (kind === 'treeTall' || kind === 'pineTall') take(x, y - 1);
     }
   }
   // Jardin de la chambre d'hôte (visible seulement si achetée) : fleurs et haie.
-  const gardenFlowers = [{ x: 9, y: 15 }, { x: 10, y: 15 }, { x: 11, y: 15 }, { x: 10, y: 16 }, { x: 11, y: 16 }];
-  const gardenBushes = [{ x: 9, y: 13 }, { x: 9, y: 14 }, { x: 9, y: 16 }];
-  const gardenPlants = [{ x: 10, y: 15, dx: 2, dy: -2 }, { x: 11, y: 15, dx: -1, dy: 1 }];
+  const gardenFlowers = [{ x: 9, y: 15 + BY }, { x: 10, y: 15 + BY }, { x: 11, y: 15 + BY }, { x: 10, y: 16 + BY }, { x: 11, y: 16 + BY }];
+  const gardenBushes = [{ x: 9, y: 13 + BY }, { x: 9, y: 14 + BY }, { x: 9, y: 16 + BY }];
+  const gardenPlants = [{ x: 10, y: 15 + BY, dx: 2, dy: -2 }, { x: 11, y: 15 + BY, dx: -1, dy: 1 }];
 
   // ── Fermier : maison, et trajet jusqu'au champ ───────────────────────────────────
   const T = TILE;
@@ -291,7 +343,7 @@ export function createLayout(level, opts = {}) {
   }
 
   // ── Requêtes ─────────────────────────────────────────────────────────────────────
-  const q = makeQueries({ plots, slots, available, field, width: WORLD_W, height: WORLD_H, solarExtendUp: 1 });
+  const q = makeQueries({ plots, slots, available, field, width: WORLD_W, height: WH, solarExtendUp: 1 });
 
   /** Voisines (même ligne à l'écran) d'une parcelle : index à gauche / à droite, ou -1. */
   function plotNeighbors(index) {
@@ -302,9 +354,9 @@ export function createLayout(level, opts = {}) {
   return {
     TILE,
     cols: WORLD_COLS,
-    rows: WORLD_ROWS,
+    rows: ROWS_N,
     width: WORLD_W,
-    height: WORLD_H,
+    height: WH,
     level,
     available,
     field,
@@ -313,6 +365,8 @@ export function createLayout(level, opts = {}) {
     well,
     props,
     slots,
+    decorSlots,
+    sign,
     slotIds: Object.keys(slots),
     roadY: ROAD_Y,
     mainPathX: MAIN_PATH_X,
@@ -323,11 +377,12 @@ export function createLayout(level, opts = {}) {
     isPath,
     isForest,
     mode: 'landscape',
+    theme,
     plotSize: TILE, // côté d'une parcelle (px du monde)
     plotScale: 1, // échelle de dessin des cultures et de la terre
     transposed: false,
     // Partie à toujours garder visible (px du monde) : ici tout le monde.
-    essential: { x: 0, y: 0, w: WORLD_W, h: WORLD_H },
+    essential: { x: 0, y: 0, w: WORLD_W, h: WH },
     fieldRect: px(fence),
     plotNeighbors,
     slotTiles: q.slotTiles,

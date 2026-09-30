@@ -12,7 +12,7 @@
 //
 // Pas d'allocation par image : toutes les particules viennent de réserves préallouées.
 
-import { TILE, drawSprite } from './atlas.js';
+import { TILE, drawSprite, productSprite } from './atlas.js';
 
 const OUTLINE = '#3f2631';
 const GOLD = '#ffe27a';
@@ -153,6 +153,7 @@ function dayGrade(p, out) {
   return out;
 }
 
+const CONFETTI_COLORS = ['#e04a4a', '#fdbe53', '#5aa0e8', '#72c85a', '#ffffff', '#ff8fc0'];
 const LEAF_COLORS = ['#e3862a', '#c8552f', '#fdbe53', '#b5462a'];
 const PETAL_COLORS = ['#ffd3e2', '#ffffff', '#ffb3cc'];
 const BUTTERFLY_COLORS = ['#fff3b0', '#ffffff', '#ffb3cc', '#9ccfff'];
@@ -174,8 +175,10 @@ export function createEffects(images) {
   const parts = makePool(400, {
     kind: '', x: 0, y: 0, vx: 0, vy: 0, g: 0, t: 0, life: 1, delay: 0, color: '', floor: 0, frame: 0,
   });
-  const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false });
-  const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '', scale: 1 });
+  const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false, sprite: '' });
+  const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '', scale: 1, set: null, h: 16 });
+  // (v3) Icônes qui volent (récolte → atelier) ou qui sautent (produit prêt) : sprites 16 × 16.
+  const flyers = makePool(32, { sprite: '', x0: 0, y0: 0, x1: 0, y1: 0, t: 0, life: 0.8, delay: 0, arc: 0, kind: '' });
   const clouds = makePool(10, { x: 0, y: 0, vx: 0 });
 
   const env = { season: 'spring', weather: 'sunny', dayProgress: 0.4, view: { x: 0, y: 0, w: 512, h: 320 } };
@@ -198,7 +201,51 @@ export function createEffects(images) {
     p.life = opts.life || 1.9;
     p.delay = opts.delay || 0;
     p.icon = opts.icon === undefined ? /^\+/.test(p.text) : !!opts.icon;
+    p.sprite = opts.sprite || '';
     return p;
+  }
+
+  /** Icône qui vole d'un point à un autre en cloche (px du monde, coin haut-gauche du sprite). */
+  function fly(sprite, x0, y0, x1, y1, opts = {}) {
+    const f = flyers.spawn();
+    f.sprite = sprite;
+    f.x0 = x0; f.y0 = y0; f.x1 = x1; f.y1 = y1;
+    f.t = 0;
+    f.life = opts.life || 0.85;
+    f.delay = opts.delay || 0;
+    f.arc = opts.arc ?? 22;
+    f.kind = opts.kind || 'fly';
+    return f;
+  }
+
+  /** Produit prêt : l'icône saute au-dessus du bâtiment puis s'efface (px du monde, centre). */
+  function popIcon(sprite, cx, cy, delay = 0) {
+    fly(sprite, cx - 8, cy - 8, cx - 8, cy - 26, { life: 1.3, delay, arc: 0, kind: 'pop' });
+  }
+
+  /** Confettis (remise des prix du concours). */
+  function confetti(rect, n = 40, delay = 0) {
+    for (let i = 0; i < n; i++) {
+      const c = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      particle('confetti', rect.x + rand(0, rect.w), rect.y + rand(-6, 6), rand(-30, 30), rand(-80, -30), 70, rand(1.8, 2.8), c, delay + rand(0, 0.4), rect.y + rect.h + rand(0, 12));
+    }
+  }
+
+  /** Arbre arraché : il s'enfonce dans la terre (découpé net au ras du sol), poussière et feuilles. */
+  function sinkTree(rect, sprite, set, k = 1) {
+    const g = ghosts.spawn();
+    g.x = rect.x;
+    g.y = rect.y;
+    g.scale = k;
+    g.sprite = sprite;
+    g.set = set || null;
+    g.t = 0;
+    g.life = 1.1;
+    g.delay = 0;
+    g.kind = 'sink';
+    g.h = rect.h;
+    dirt(rect.x + rect.w / 2, rect.y + rect.h * 0.7, 14 * k, k);
+    leafBurst(rect.x + rect.w / 2, rect.y + rect.h * 0.3, 6 * k, k);
   }
 
   function particle(kind, x, y, vx, vy, g, life, color = '', delay = 0, floor = Infinity) {
@@ -255,10 +302,21 @@ export function createEffects(images) {
     g.life = 3.2;
     g.delay = delay;
     g.kind = kind;
+    g.set = null;
   }
 
   function flies(wx, wy) {
     for (let i = 0; i < 2; i++) particle('fly', wx, wy, 0, 0, 0, 2.6, OUTLINE, i * 0.4);
+  }
+
+  const contestDone = new Set();
+
+  function flyToBuilding(info, from, layout, delay) {
+    if (!info || !info.buildingId) return;
+    const a = layout.investmentAnchor(info.buildingId, 1);
+    const sprite = productSprite(info.productId);
+    fly(sprite, from.x - 8, from.y - 12, a.x - 8, a.y + 14, { delay, life: 0.9, arc: 26 });
+    sparkle({ x: a.x - 8, y: a.y + 8, w: 16, h: 12 }, 5, 'gold', delay + 0.85);
   }
 
   // ── Événements du jeu ────────────────────────────────────────────────────────────
@@ -275,9 +333,59 @@ export function createEffects(images) {
       case 'harvested': {
         const c = layout.plotCenter(payload.plotIndex);
         if (!c) return;
-        coins(c.x, c.y - 4 * k, 7 + (k - 1) * 3);
         leafBurst(c.x, c.y, 5 * k, k);
+        if (payload.processed) {
+          // Part à l'atelier : pas de pièces, l'icône du produit s'envole (processingStarted).
+          floatText(c.x, c.y - 10 * k, '→ atelier', '#fff3b0', { icon: false, life: 1.5 });
+          if (!payload.processed._flown) flyToBuilding(payload.processed, c, layout, 0);
+          break;
+        }
+        coins(c.x, c.y - 4 * k, 7 + (k - 1) * 3);
         if (payload.amount) floatText(c.x, c.y - 10 * k, `+${payload.amount}`, GOLD);
+        break;
+      }
+      case 'processingStarted': {
+        // Récolte : déjà traitée par « harvested » (processed). Lait : du pré à la fromagerie.
+        if (payload.source === 'harvest' && payload.plotIndex !== undefined) break;
+        const from = layout.investmentAnchor(payload.input === 'cow' ? 'cow' : 'goat', 1);
+        flyToBuilding(payload, { x: from.x, y: from.y + 10 }, layout, 0.2 + (payload.placeIndex || 0) * 0.15);
+        break;
+      }
+      case 'productSold': {
+        const a = layout.investmentAnchor(payload.buildingId, 1);
+        const d = 0.35 + (payload.placeIndex || 0) * 0.25;
+        popIcon(productSprite(payload.productId), a.x, a.y + 10, d);
+        if (payload.amount) floatText(a.x, a.y - 6, `+${payload.amount}`, GOLD, { delay: d + 0.15, icon: true });
+        coins(a.x, a.y + 8, 3, d + 0.15);
+        break;
+      }
+      case 'processingSoldRaw': {
+        const a = layout.investmentAnchor(payload.buildingId, 1);
+        if (payload.amount) floatText(a.x, a.y, `+${payload.amount}`, '#f3e9dc', { icon: true });
+        coins(a.x, a.y + 8, Math.min(6, 2 + (payload.count || 1)));
+        break;
+      }
+      case 'treeRemoved':
+        // Le rendu (scene.js) connaît le sprite de l'arbre et appelle sinkTree().
+        break;
+      case 'contestProgress': {
+        // Une seule fois par épreuve (l'événement repart à chaque changement de progression).
+        if (!payload.done || contestDone.has(payload.goalId)) break;
+        contestDone.add(payload.goalId);
+        const f = layout.fieldRect;
+        sparkle({ x: f.x, y: f.y, w: f.w, h: 16 }, 18, 'gold');
+        floatText(f.x + f.w / 2, f.y + 6, 'Épreuve réussie !', '#fff3b0', { icon: false, life: 2.4 });
+        break;
+      }
+      case 'contestAwarded': {
+        const s = layout.sign || { x: layout.house.x, y: layout.house.y, w: 2 };
+        const cx = (s.x + (s.w || 2) / 2) * TILE;
+        const cy = s.y * TILE;
+        confetti({ x: cx - 64, y: cy - 60, w: 128, h: 40 }, 60);
+        if (payload.amount) {
+          floatText(cx, cy - 8, `+${payload.amount}`, GOLD, { icon: true, life: 2.6 });
+          coins(cx, cy, 10, 0.1);
+        }
         break;
       }
       case 'watered': {
@@ -310,7 +418,10 @@ export function createEffects(images) {
         let i = 0;
         for (const inc of incomes) {
           if (!inc.amount) continue;
-          const a = layout.investmentAnchor(inc.source, inc.owned || 1);
+          if (inc.kind === 'processed') continue; // déjà montré par « productSold »
+          const a = inc.kind === 'refund' && layout.house
+            ? { x: (layout.house.x + layout.house.w / 2) * TILE, y: layout.house.y * TILE - 10 }
+            : layout.investmentAnchor(inc.source, inc.owned || 1);
           const label = inc.kind === 'shearing' ? `+${inc.amount} tonte` : `+${inc.amount}`;
           floatText(a.x, a.y, label, GOLD, { delay: 0.35 + i * 0.3, icon: true });
           coins(a.x, a.y + 6, 3, 0.35 + i * 0.3);
@@ -615,6 +726,12 @@ export function createEffects(images) {
       g.t += dt;
       if (g.t >= g.life) g.alive = false;
     }
+    for (const f of flyers.items) {
+      if (!f.alive) continue;
+      if (f.delay > 0) { f.delay -= dt; continue; }
+      f.t += dt;
+      if (f.t >= f.life) f.alive = false;
+    }
   }
 
   /**
@@ -640,6 +757,20 @@ export function createEffects(images) {
       const fade = g.t < g.life - 1 ? 1 : Math.max(0, g.life - g.t);
       ctx.globalAlpha = fade;
       const k = g.scale || 1;
+      if (g.kind === 'sink') {
+        // L'arbre descend sous la ligne du sol : on découpe tout ce qui passe sous la parcelle.
+        const u = Math.min(1, g.t / g.life);
+        const depth = Math.round(u * u * g.h);
+        const shake = g.t < 0.25 ? (Math.floor(g.t * 40) % 2 ? k : -k) : 0;
+        ctx.globalAlpha = u > 0.8 ? (1 - u) / 0.2 : 1;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(g.x - 4 * k, g.y - g.h, g.h + 8 * k, g.h * 2 - 2 * k);
+        ctx.clip();
+        drawSprite(ctx, g.set || sheets, g.sprite, g.x + shake, g.y - 2 * k + depth, k === 1 ? undefined : { scale: k });
+        ctx.restore();
+        continue;
+      }
       let dy = 0;
       if (g.kind === 'rot' && g.t > 0.4) dy = Math.min(2, Math.floor((g.t - 0.4) * 2));
       drawSprite(ctx, sheets, g.sprite, g.x, g.y + (-2 + dy) * k, k === 1 ? undefined : { scale: k });
@@ -692,6 +823,14 @@ export function createEffects(images) {
           ctx.drawImage(frames[f], x - 2, y - 2);
           break;
         }
+        case 'confetti': {
+          ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
+          ctx.fillStyle = p.color;
+          const flip = Math.sin(p.t * 14 + p.frame * 2) > 0;
+          ctx.fillRect(x, y, flip ? 2 : 1, flip ? 1 : 2);
+          if (p.vy > 0) p.vx *= 0.98;
+          break;
+        }
         case 'fly':
           ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
           ctx.fillStyle = OUTLINE;
@@ -700,6 +839,25 @@ export function createEffects(images) {
         default:
           break;
       }
+    }
+    ctx.globalAlpha = 1;
+    for (const f of flyers.items) {
+      if (!f.alive || f.delay > 0) continue;
+      const u = f.t / f.life;
+      let x;
+      let y;
+      if (f.kind === 'pop') {
+        const e = 1 - (1 - Math.min(1, u * 1.8)) ** 3;
+        x = f.x0;
+        y = f.y0 + (f.y1 - f.y0) * e;
+        ctx.globalAlpha = u > 0.7 ? (1 - u) / 0.3 : 1;
+      } else {
+        const e = u < 0.5 ? 2 * u * u : 1 - 2 * (1 - u) ** 2;
+        x = f.x0 + (f.x1 - f.x0) * e;
+        y = f.y0 + (f.y1 - f.y0) * e - Math.sin(Math.PI * u) * f.arc;
+        ctx.globalAlpha = u > 0.9 ? (1 - u) / 0.1 : 1;
+      }
+      drawSprite(ctx, images, f.sprite, Math.round(x), Math.round(y));
     }
     ctx.globalAlpha = 1;
   }
@@ -868,7 +1026,7 @@ export function createEffects(images) {
       ctx.globalAlpha = alpha;
       if (p.icon && sheets) {
         // La pièce du pack occupe environ le centre 8 × 10 de sa tuile.
-        drawSprite(ctx, sheets, 'coin', x - 4 * iconScale, y - 8 * iconScale, { scale: iconScale });
+        drawSprite(ctx, sheets, p.sprite || 'coin', x - 4 * iconScale, y - 8 * iconScale, { scale: iconScale });
       }
       ctx.lineWidth = Math.max(3, Math.round(size / 7));
       ctx.strokeStyle = OUTLINE;
@@ -880,14 +1038,19 @@ export function createEffects(images) {
   }
 
   function clear() {
-    for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds]) pool.clear();
+    for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers]) pool.clear();
     flash = 0;
     primed = false;
+    contestDone.clear();
   }
 
   return {
     onEvent,
     floatText,
+    fly,
+    popIcon,
+    confetti,
+    sinkTree,
     coins,
     droplets,
     dirt,
@@ -906,7 +1069,7 @@ export function createEffects(images) {
     /** Particules vivantes par réserve (débogage, mesures de performance). */
     stats() {
       const out = {};
-      for (const [k, pool] of Object.entries({ rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds })) {
+      for (const [k, pool] of Object.entries({ rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers })) {
         out[k] = countAlive(pool);
       }
       return out;

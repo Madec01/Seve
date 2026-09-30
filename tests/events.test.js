@@ -39,7 +39,7 @@ test("contenu de l'événement dawn", () => {
   const rec = record(g);
   nextDay(g, 'cloudy');
   const d = rec.of('dawn')[0];
-  assert.deepEqual(Object.keys(d).sort(), ['charges', 'chargesDetail', 'day', 'incomes', 'net', 'seasonId', 'sprinkled', 'type', 'weather'].sort());
+  assert.deepEqual(Object.keys(d).sort(), ['charges', 'chargesDetail', 'day', 'incomes', 'milkToDairy', 'net', 'seasonId', 'sprinkled', 'type', 'weather'].sort());
   assert.equal(d.day, 2);
   assert.equal(d.seasonId, 'spring');
   assert.equal(d.weather, 'cloudy');
@@ -108,7 +108,7 @@ test('la simulation tourne (fumée)', () => {
   const res = spawnSync(process.execPath, [script, '--seeds', '2', '--json'], { encoding: 'utf8' });
   assert.equal(res.status, 0, res.stderr);
   const out = JSON.parse(res.stdout);
-  assert.equal(out.length, 8);
+  assert.equal(out.length, 12);
   for (const lv of out) {
     assert.deepEqual(
       lv.rows.map((r) => r.strategy),

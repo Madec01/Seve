@@ -4,6 +4,10 @@
 // Paramètres d'URL (pour les captures automatiques) :
 //   level=1..8  season=0..3  weather=sunny|cloudy|rain|storm|heatwave|snow  day=0..1
 //   inv=all|none  crops=1  unlock=1  seed=123  panel=0 (masque le panneau)  grid=8x5 (maquette)
+//   (v3) level=9..12  trees=1 (pommiers à toutes les étapes)  proc=1 (ateliers au travail)
+//   decor=all (toutes les décorations posées)  outfit=0..3  fence=wood|picket|stone|hedge
+//   path=dirt|stone  name=Nom%20de%20la%20ferme  decorMode=1  contest=1 (fanions + coupe)  off=1
+//   (ateliers éteints)
 //   Vue téléphone : w=412&h=915&dpr=2.625 (canvas de w × h px CSS, centré, densité imposée)
 //   Bandeaux simulés : top=64&bottom=72 (px CSS couverts par la barre du haut et les onglets ;
 //   par défaut 64 / 72 en vue téléphone, 0 sinon) ; mode=portrait|landscape|auto ; scroll=px
@@ -38,6 +42,10 @@ try {
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const MOCK_INV = { chickenCoop: 3, beehive: 3, roadsideStand: 1, cow: 3, sheep: 3, sprinkler: 3, solarPanel: 2, guestHouse: 1 };
+const DECOR_ITEMS = ['flowers.red', 'bench', 'lamp', 'scarecrow', 'wheelbarrow', 'birdhouse', 'gnome', 'mailbox', 'hedge.bush', 'flowers.yellow', 'flowers.blue', 'flowers.pink', 'flowers.white'];
+const OUTFITS = ['outfit.classic', 'outfit.checked', 'outfit.raincoat', 'outfit.gardener'];
+const FENCES = ['fence.wood', 'fence.picket', 'fence.stone', 'fence.hedge'];
+const PRODUCT_OF = { jamWorkshop: ['strawberryJam', 'appleJuice'], dairy: ['cowCheese', 'goatCheese'], mill: ['flour', 'bread'] };
 
 function mockGame(levelId, grid) {
   let lvl = (LEVELS && LEVELS.find((l) => l.id === levelId)) || {
@@ -107,6 +115,14 @@ const insets = {
   right: 0,
 };
 const scene = createScene(canvas, images, game.level || game.query.level(), { layoutMode: params.get('mode') || 'auto' });
+const cos = {
+  farmName: params.get('name') || 'Ferme des Tilleuls',
+  outfit: OUTFITS[Number(params.get('outfit')) || 0] || 'outfit.classic',
+  fence: params.get('fence') ? `fence.${params.get('fence')}` : 'fence.wood',
+  path: params.get('path') ? `path.${params.get('path')}` : 'path.dirt',
+  decor: {},
+};
+scene.setCosmetics(cos);
 scene.setInsets(insets);
 let unsub = null;
 
@@ -223,6 +239,70 @@ const api = {
     const incomes = availableIds().filter((id) => game.state.investments[id] > 0).map((id) => ({ source: id, amount: 5 + Math.floor(rand() * 20), owned: game.state.investments[id], kind: 'daily' }));
     scene.onEvent('dawn', { incomes, charges: 7 });
   },
+  // ── v3 ──
+  /** Pommiers sur un tiers des parcelles ouvertes, à toutes les étapes (jeune plant → pommes mûres). */
+  trees() {
+    const steps = [[1, 0], [4, 0], [6, 0], [6, 1], [6, 2], [6, 3]];
+    let k = 0;
+    game.state.plots.forEach((p, i) => {
+      if (!p.unlocked || (i % 3 !== 0 && !(game.level?.startTrees || []).includes(i))) return;
+      const [g, f] = steps[k++ % steps.length];
+      p.cropId = 'apple'; p.growth = g; p.fruit = f; p.watered = false;
+    });
+  },
+  /** Ateliers possédés : places remplies (sauf une), interrupteurs allumés (ou éteints avec off=1). */
+  proc(on = params.get('off') !== '1') {
+    game.state.processing = game.state.processing || {};
+    for (const id of Object.keys(PRODUCT_OF)) {
+      const lvl = game.state.investments[id] || 0;
+      if (!lvl) continue;
+      const cap = (INVESTMENTS?.find((i) => i.id === id)?.effects?.processing?.places || [2, 3, 4])[lvl - 1] || 2;
+      const prods = PRODUCT_OF[id].filter((pid) => (id !== 'mill' ? true : lvl >= 3 ? pid === 'bread' : pid === 'flour'));
+      game.state.processing[id] = { on, places: Array.from({ length: cap }, (_, j) => (j === cap - 1 ? null : { productId: prods[j % prods.length], input: 'x', source: 'harvest', daysLeft: 1, rawValue: 10, yieldFactor: 1 })) };
+    }
+  },
+  decorAll() {
+    const slots = {};
+    (scene.layout.decorSlots || []).forEach((d, j) => {
+      if (d.kind === 'small') slots[d.id] = DECOR_ITEMS[j % DECOR_ITEMS.length];
+      if (d.kind === 'large') slots[d.id] = 'pond';
+    });
+    cos.decor = slots;
+    scene.setCosmetics(cos);
+  },
+  decorNone() { cos.decor = {}; scene.setCosmetics(cos); },
+  nextOutfit() { cos.outfit = OUTFITS[(OUTFITS.indexOf(cos.outfit) + 1) % OUTFITS.length]; scene.setCosmetics(cos); return cos.outfit; },
+  nextFence() { cos.fence = FENCES[(FENCES.indexOf(cos.fence) + 1) % FENCES.length]; scene.setCosmetics(cos); return cos.fence; },
+  togglePath() { cos.path = cos.path === 'path.stone' ? 'path.dirt' : 'path.stone'; scene.setCosmetics(cos); return cos.path; },
+  setCosmetics(c) { Object.assign(cos, c); scene.setCosmetics(cos); },
+  toggleDecor() { scene.setDecorMode(!scene.decorMode); return scene.decorMode; },
+  contest(on = true) {
+    scene.setContestDay(on);
+    if (on) game.state.contest = { awarded: true, result: { goalsMet: ['pumpkins', 'terroir', 'cheese'], amount: 480 } };
+  },
+  /** Aube v3 : produits vendus et fromage qui part à la fromagerie. */
+  dawnV3() {
+    let j = 0;
+    for (const id of Object.keys(PRODUCT_OF)) {
+      if (!(game.state.investments[id] > 0)) continue;
+      scene.onEvent('productSold', { buildingId: id, productId: PRODUCT_OF[id][id === 'mill' && game.state.investments.mill >= 3 ? 1 : 0], amount: 44, placeIndex: j++ });
+    }
+    if (game.state.investments.dairy > 0) scene.onEvent('processingStarted', { buildingId: 'dairy', productId: 'goatCheese', input: 'goat', source: 'animal', placeIndex: 0 });
+  },
+  /** Récolte envoyée à l'atelier (vol de l'icône). */
+  toWorkshop() {
+    const i = game.state.plots.findIndex((p) => p.unlocked);
+    const id = ['jamWorkshop', 'mill', 'dairy'].find((b) => game.state.investments[b] > 0);
+    if (i < 0 || !id) return;
+    scene.onEvent('harvested', { plotIndex: i, cropId: 'strawberry', amount: 0, processed: { buildingId: id, productId: PRODUCT_OF[id][0], placeIndex: 0 } });
+  },
+  removeTree() {
+    const i = game.state.plots.findIndex((p) => p.cropId === 'apple');
+    if (i < 0) return;
+    scene.onEvent('treeRemoved', { plotIndex: i });
+    const p = game.state.plots[i];
+    p.cropId = null; p.growth = 0; p.fruit = 0;
+  },
   frost() {
     const lost = [];
     game.state.plots.forEach((p, i) => { if (p.cropId) { lost.push({ plotIndex: i, cropId: p.cropId }); p.cropId = null; p.growth = 0; } });
@@ -246,7 +326,7 @@ levelSel.onchange = () => api.set({ level: levelSel.value });
 $('season').onchange = () => api.set({ season: $('season').value });
 $('weather').onchange = () => api.set({ weather: $('weather').value });
 $('day').oninput = () => api.set({ day: $('day').value });
-for (const k of ['buyAll', 'buyOne', 'sellAll', 'fill', 'unlock', 'empty', 'dawn', 'frost', 'harvestAll']) $(k).onclick = () => api[k]();
+for (const k of ['buyAll', 'buyOne', 'sellAll', 'fill', 'unlock', 'empty', 'dawn', 'frost', 'harvestAll', 'trees', 'proc', 'decorAll', 'decorNone', 'nextOutfit', 'nextFence', 'togglePath', 'toggleDecor', 'contest', 'dawnV3', 'toWorkshop', 'removeTree']) $(k).onclick = () => api[k]();
 
 // Glisser pour défiler (avec élan), toucher bref pour agir.
 let drag = null;
@@ -285,8 +365,15 @@ canvas.addEventListener('pointerup', (e) => {
     return;
   }
   const p = local(e);
-  act(scene.hitTest(p.x, p.y, { touch: d.touch }));
+  const hit = scene.hitTest(p.x, p.y, { touch: d.touch });
+  if (scene.decorMode) {
+    if (hit) console.info('décor :', JSON.stringify(hit));
+    lastDecorHit = hit;
+    return;
+  }
+  act(hit);
 });
+let lastDecorHit = null;
 canvas.addEventListener('pointercancel', () => { drag = null; });
 canvas.addEventListener('mouseleave', () => scene.setHover(null));
 canvas.addEventListener('wheel', (e) => { scene.scrollBy(e.deltaY); e.preventDefault(); }, { passive: false });
@@ -311,6 +398,7 @@ function act(hit) {
 api.insets = insets;
 api.setInsets = (ins) => { Object.assign(insets, ins); scene.setInsets(insets); fit(); };
 api.act = act;
+Object.defineProperty(api, 'lastDecorHit', { get: () => lastDecorHit });
 
 // ── État initial depuis l'URL ─────────────────────────────────────────────────────────
 api.set({
@@ -321,7 +409,13 @@ api.set({
 if (params.get('unlock') === '1') api.unlock();
 if (params.get('inv') === 'all') api.buyAll();
 if (params.get('crops') === '1') api.fill();
+if (params.get('trees') === '1') api.trees();
+if (params.get('proc') === '1') api.proc();
+if (params.get('decor') === 'all') api.decorAll();
+if (params.get('decorMode') === '1') scene.setDecorMode(true);
+if (params.get('contest') === '1') api.contest(true);
 if (params.get('panel') === '0') $('panel').classList.add('hidden');
+if (params.get('panel') === 'none') $('panel').style.display = 'none';
 if (params.get('scroll') !== null) scene.setScroll(Number(params.get('scroll')));
 
 // ── Boucle ────────────────────────────────────────────────────────────────────────────

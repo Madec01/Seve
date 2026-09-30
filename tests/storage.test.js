@@ -10,12 +10,13 @@ window.localStorage = {
   removeItem: (k) => store.delete(k),
 };
 const storage = await import('../src/storage.js');
+const { defaultProgress } = await import('../src/core/progression.js');
 const KEY = (k) => `une-annee-a-la-ferme.${k}`;
 
 test('JSON invalide : valeurs par défaut', () => {
   for (const k of ['run', 'progress', 'settings', 'tutorial']) store.set(KEY(k), '{pas du json');
   assert.equal(storage.loadRun(), null);
-  assert.deepEqual(storage.loadProgress(), { levels: {} });
+  assert.deepEqual(storage.loadProgress(), defaultProgress());
   assert.deepEqual(storage.loadSettings(), { ...storage.DEFAULT_SETTINGS });
   assert.deepEqual(storage.loadTutorial(), { done: false, step: null });
   store.clear();
@@ -37,17 +38,18 @@ test('réglages : types et bornes vérifiés, vitesse inconnue ignorée', () => 
 
 test('progression abîmée : entrées nettoyées, niveaux verrouillés par défaut', () => {
   store.set(KEY('progress'), JSON.stringify({ levels: [1, 2, 3] }));
-  assert.deepEqual(storage.loadProgress(), { levels: {} });
+  assert.deepEqual(storage.loadProgress(), defaultProgress());
   store.set(KEY('progress'), JSON.stringify({ levels: { 1: { stars: 12, completed: 'yes' }, 2: null, 3: { stars: 2, bestMoney: 400, completed: true } } }));
   const p = storage.loadProgress();
-  assert.deepEqual(p.levels[1], { stars: 3, bestMoney: null, completed: false });
+  assert.deepEqual(p.levels[1], { stars: 3, bestMoney: null, completed: false, played: false });
   assert.equal(p.levels[2], undefined);
-  assert.deepEqual(p.levels[3], { stars: 2, bestMoney: 400, completed: true });
+  assert.deepEqual(p.levels[3], { stars: 2, bestMoney: 400, completed: true, played: true });
+  assert.equal(p.schema, 2);
   assert.equal(storage.isLevelUnlocked(2, p), false);
   assert.equal(storage.isLevelUnlocked(4, p), true);
   const rec = storage.recordVictory(1, 2, 300);
   assert.equal(rec.firstTime, true);
-  assert.deepEqual(storage.loadProgress().levels[1], { stars: 3, bestMoney: 300, completed: true });
+  assert.deepEqual(storage.loadProgress().levels[1], { stars: 3, bestMoney: 300, completed: true, played: true });
   store.clear();
 });
 
@@ -61,11 +63,33 @@ test('stockage indisponible : aucune exception', () => {
   try {
     assert.equal(storage.saveRun({ a: 1 }), false);
     assert.equal(storage.loadRun(), null);
-    assert.deepEqual(storage.loadProgress(), { levels: {} });
+    assert.deepEqual(storage.loadProgress(), defaultProgress());
     storage.clearRun();
     storage.resetProgress();
     assert.equal(storage.saveSettings({}), false);
   } finally {
     window.localStorage = saved;
   }
+});
+
+test('progression v1 : migrée au schéma 2, succès des anciennes parties débloqués une fois', () => {
+  const levels = {};
+  for (let id = 1; id <= 8; id++) levels[id] = { stars: id <= 5 ? 3 : 2, bestMoney: 500 + id, completed: true };
+  store.set(KEY('progress'), JSON.stringify({ levels }));
+  const p = storage.loadProgress();
+  assert.equal(p.schema, 2);
+  assert.deepEqual(p.levels[4], { stars: 3, bestMoney: 504, completed: true, played: true });
+  assert.deepEqual(Object.keys(p.achievements).sort(), ['firstYear', 'risingStar', 'veteran'].sort());
+  assert.equal(p.ecus, 10 + 20 + 30);
+  assert.deepEqual(p.perks, {});
+  const m = storage.progressMigration();
+  assert.deepEqual(m.retroactive.sort(), ['firstYear', 'risingStar', 'veteran'].sort());
+  assert.deepEqual(m.rewards, { stars: 2, ecus: 60 });
+  assert.equal(storage.progressMigration(), null);
+  // Enregistrée : le rechargement ne redébloque rien.
+  assert.equal(JSON.parse(store.get(KEY('progress'))).schema, 2);
+  const again = storage.loadProgress();
+  assert.deepEqual(again, p);
+  assert.equal(storage.progressMigration(), null);
+  store.clear();
 });

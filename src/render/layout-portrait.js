@@ -13,24 +13,26 @@
 // au niveau 1, dans l'ordre de lecture du cœur), et les parcelles à acheter l'entourent
 // (placeVisualCells).
 //
-// Plan (x → droite, y → bas, en tuiles ; grille 6 × 4, tous les investissements) :
+// Plan (x → droite, y → bas, en tuiles ; bandes de haut en bas, chacune retirée si le niveau ne
+// propose pas ce qu'elle contient) :
 //
 //   y 0-1    forêt ──────────────────────────────
 //   y 2      lisière (arbres, buissons)
-//   y 3-8    pré des vaches (clôture x 2-7) │ grange (x 8-10)
-//   y 9      seau de lait, foin
-//   y 10-14  poulailler (cabane x 1-2, cour x 3-7) │ moutons (x 8-12)
-//   y 15     foin, abreuvoir des moutons
-//   y 16-31  champ clôturé (x 2-11), ruches à gauche (x 1), portail en bas (x 7)
-//   y 32     panneaux solaires (x 5-6), chemin du portail (x 7)
-//   y 33-35  maison (x 1-4), puits (x 5), tonneau (x 6) │ chemin │ chambre d'hôte (x 8-11), jardin
-//   y 36     chemins vers la route
-//   y 37-38  route ──────────────────────────────
-//   y 39     étal au bord de la route (x 8-11)
-//   y 40-41  forêt ──────────────────────────────
+//   7 lignes pré des vaches (clôture x 2-7) │ grange (x 8-10), puis seau de lait, foin
+//   6 lignes (v3) enclos des chèvres (x 2-6) │ fromagerie (x 8-10)
+//   6 lignes poulailler (cabane x 1-2, cour x 3-7) │ moutons (x 8-12), puis foin, abreuvoir
+//   champ    champ clôturé, ruches à gauche (x 1), portail en bas (x 7) ; coin haut-gauche : décor
+//   5 lignes (v3) ateliers : confitures (x 2-4) │ chemin │ four à pain (x 8-9), moulin (x 10-12)
+//   1 ligne  panneaux solaires (x 4-5), chemin du portail (x 7)
+//   3 lignes maison (x 1-4), puits (x 5), tonneau (x 6) │ chemin │ chambre d'hôte (x 8-11), jardin
+//   1 ligne  devant la maison (décors du perron et de la cour), jardin de la chambre d'hôte
+//   1 ligne  bord de la route : décors, panneau de la ferme (x 4-6) au pied du chemin
+//   2 lignes route ──────────────────────────────
+//   1 ligne  étal au bord de la route (x 8-11)
+//   2 lignes forêt ──────────────────────────────
 
 import { TILE } from './atlas.js';
-import { seededRandom, px, sprinklerHeads, makeQueries } from './layout-common.js';
+import { seededRandom, px, sprinklerHeads, makeQueries, findFreeArea, decorSlot, levelTheme, pickDeco } from './layout-common.js';
 import { initialUnlockedIndices } from '../core/farm.js';
 
 export const PORTRAIT_COLS = 14;
@@ -109,6 +111,7 @@ export function createPortraitLayout(level) {
     (level.availableInvestments || []).filter((id) => !(id === 'sprinkler' && level.modifiers?.noSprinkler)),
   );
   const has = (id) => available.has(id);
+  const theme = levelTheme(level);
 
   // Grille affichée : transposée si elle est plus large que haute.
   const transposed = cols > rows;
@@ -126,6 +129,19 @@ export function createPortraitLayout(level) {
     sign: { x: 4, y: cowY + 2 },
   };
   if (has('cow')) y += 7; // 6 lignes + l'avant de la grange
+
+  // ── (v3) Chèvres : enclos + fromagerie ─────────────────────────────────────────────
+  const goatY = y;
+  const goat = {
+    fence: { x: 2, y: goatY, w: 5, h: 5 },
+    pen: { x: 3, y: goatY + 1, w: 3, h: 3 },
+    sign: { x: 4, y: goatY + 2 },
+  };
+  const dairy = {
+    building: { x: 8, y: goatY + 1, w: 3, h: 3 },
+    sign: { x: 9, y: goatY + 2 },
+  };
+  if (has('goat') || has('dairy')) y += 6; // 5 lignes + une ligne de passage
 
   // ── Poulailler et moutons ─────────────────────────────────────────────────────────
   const penY = y;
@@ -176,6 +192,20 @@ export function createPortraitLayout(level) {
   const byVisual = new Map(plots.map((p) => [`${p.vcol},${p.vrow}`, p.index]));
 
   const sprinklerTiles = sprinklerHeads(gx, gy, vCols * PLOT_TILES, vRows * PLOT_TILES, gate);
+  const gateRow = fence.y + fence.h; // ligne juste sous la clôture (décors du portail)
+
+  // ── (v3) Ateliers : confitures à gauche, moulin (et son four à pain) à droite ─────
+  const ws = y;
+  const jamWorkshop = {
+    building: { x: 2, y: ws + 1, w: 3, h: 3 },
+    sign: { x: 3, y: ws + 2 },
+  };
+  const mill = {
+    building: { x: 10, y: ws, w: 3, h: 4 },
+    bakery: { x: 8, y: ws + 2, w: 2, h: 2 },
+    sign: { x: 11, y: ws + 2 },
+  };
+  if (has('jamWorkshop') || has('mill')) y += 5;
 
   // Ruches : à gauche du champ s'il y a la place, sinon sur la lisière du haut.
   const sideL = fx - USABLE_X0; // colonnes libres à gauche du champ
@@ -192,17 +222,19 @@ export function createPortraitLayout(level) {
   }
 
   // ── Maison, puits, panneaux solaires, chambre d'hôte ──────────────────────────────
-  const yb = y; // ligne juste sous le champ
+  const yb = y; // ligne juste sous le champ (ou sous les ateliers)
   const house = { x: 1, y: yb + 1, w: 4, h: 3, door: { x: 3, y: yb + 3 } };
   const well = { x: 5, y: yb + 2, w: 1, h: 2 };
   const guest = { x: 8, y: yb + 1, w: 4, h: 3, door: { x: 10, y: yb + 3 } };
-  const ROAD_Y = yb + 5; // route : 2 lignes
+  const porchY = yb + 4; // devant la maison
+  const roadsideY = yb + 5; // bord de la route (panneau de la ferme)
+  const ROAD_Y = yb + 6; // route : 2 lignes
   const standY = ROAD_Y + 2;
   const ROWS = ROAD_Y + 5; // étal, puis 2 lignes de forêt
 
   // Panneau « à vendre » de l'arrosage : à droite du coin bas du champ, sinon sous le champ.
   let sprinklerSign = { x: fence.x + fence.w, y: fence.y + fence.h - 1 };
-  if (sprinklerSign.x > USABLE_X1) sprinklerSign = { x: gate.x + 1, y: yb };
+  if (sprinklerSign.x > USABLE_X1) sprinklerSign = { x: gate.x + 2, y: yb };
 
   const slots = {
     chickenCoop,
@@ -225,9 +257,9 @@ export function createPortraitLayout(level) {
       sign: sprinklerSign,
     },
     solarPanel: {
-      units: [{ x: 5, y: yb }, { x: 6, y: yb }],
-      area: { x: 5, y: yb, w: 2, h: 1 },
-      sign: { x: 5, y: yb },
+      units: [{ x: 4, y: yb }, { x: 5, y: yb }],
+      area: { x: 4, y: yb, w: 2, h: 1 },
+      sign: { x: 4, y: yb },
     },
     guestHouse: {
       house: guest,
@@ -235,6 +267,11 @@ export function createPortraitLayout(level) {
       sign: { x: 9, y: yb + 2 },
     },
   };
+  // (v3) Emplacements présents seulement si le niveau les propose (bandes retirées sinon).
+  if (has('goat')) slots.goat = goat;
+  if (has('dairy')) slots.dairy = dairy;
+  if (has('jamWorkshop')) slots.jamWorkshop = jamWorkshop;
+  if (has('mill')) slots.mill = mill;
 
   // Accessoires des emplacements (px ; dessinés quand l'emplacement est acheté).
   {
@@ -310,6 +347,13 @@ export function createPortraitLayout(level) {
     mark(sheep.extras);
   }
   if (has('beehive')) mark(hiveBed);
+  if (has('goat')) mark(goat.fence);
+  if (has('dairy')) mark({ x: dairy.building.x, y: dairy.building.y, w: 3, h: 4 });
+  if (has('jamWorkshop')) mark({ x: jamWorkshop.building.x, y: jamWorkshop.building.y, w: 3, h: 4 });
+  if (has('mill')) {
+    mark({ x: mill.building.x, y: mill.building.y, w: 3, h: 5 });
+    mark({ x: mill.bakery.x, y: mill.bakery.y, w: 2, h: 3 });
+  }
   mark(slots.roadsideStand.area);
   mark(slots.solarPanel.area);
   if (has('guestHouse')) {
@@ -322,6 +366,34 @@ export function createPortraitLayout(level) {
     one(x, yy);
   }
   const free = (x, yy) => x >= USABLE_X0 && yy >= 2 && x <= USABLE_X1 && yy < ROWS - 2 && yy !== ROAD_Y && yy !== ROAD_Y + 1 && !occ[yy * COLS + x];
+
+  // ── (v3) Emplacements de décoration (identifiants communs à tous les niveaux) ──────
+  const sign = { x: 4, y: roadsideY, w: 3, h: 1 }; // panneau de la ferme, 3 tuiles (le nom doit se lire)
+  const decorSlots = [];
+  // force : emplacement sur une ligne réservée (devant la maison, devant le portail) mais libre.
+  const addSlot = (id, x, yy, kind = 'small', w = 1, h = 1, force = false) => {
+    if (!force) for (let j = yy; j < yy + h; j++) for (let i = x; i < x + w; i++) if (!free(i, j)) return;
+    decorSlots.push(decorSlot(id, kind, x, yy, w, h));
+    mark({ x, y: yy, w, h });
+  };
+  addSlot('sign', sign.x, sign.y, 'sign', 3, 1);
+  addSlot('porch.left', house.door.x - 1, porchY, 'small', 1, 1, true);
+  addSlot('porch.right', house.door.x + 1, porchY, 'small', 1, 1, true);
+  addSlot('yard.1', 5, porchY);
+  addSlot('yard.2', 6, porchY);
+  addSlot('gate.left', gate.x - 1, gateRow, 'small', 1, 1, true);
+  addSlot('gate.right', gate.x + 1, gateRow, 'small', 1, 1, true);
+  addSlot('road.1', 1, roadsideY);
+  addSlot('road.2', 8, roadsideY);
+  addSlot('road.3', 12, roadsideY);
+  // Coin haut-gauche du champ, dans la marge de la clôture (libre des arroseurs).
+  if (!sprinklerTiles.some((t) => t.x === gx && t.y === gy - 1)) {
+    decorSlots.push(decorSlot('field.corner', 'small', gx, gy - 1));
+  }
+  {
+    const spot = findFreeArea(free, { x0: USABLE_X0, y0: 2, x1: USABLE_X1, y1: ROWS - 3 }, 2, 2, { x: house.x + 2, y: house.y });
+    if (spot) addSlot('pond', spot.x, spot.y, 'large', 2, 2);
+  }
 
   // ── Décor fixe (graine du niveau) ─────────────────────────────────────────────────
   const deco = [];
@@ -339,7 +411,7 @@ export function createPortraitLayout(level) {
   for (let yy = 3; yy < ROWS - 2; yy++) {
     for (const x of [USABLE_X0, USABLE_X1]) {
       if (free(x, yy) && free(x, yy - 1) && rnd() < 0.5) {
-        deco.push({ kind: 'treeTall', x: x * T + (x === USABLE_X0 ? -3 : 3), y: yy * T, tx: x, ty: yy });
+        deco.push({ kind: theme === 'mountain' ? 'pineTall' : 'treeTall', x: x * T + (x === USABLE_X0 ? -3 : 3), y: yy * T, tx: x, ty: yy });
         take(x, yy);
         take(x, yy - 1);
       }
@@ -348,7 +420,8 @@ export function createPortraitLayout(level) {
   // Sous la forêt du haut : quelques arbres.
   for (let x = USABLE_X0; x <= USABLE_X1; x++) {
     if (free(x, 2) && rnd() < 0.35) {
-      deco.push({ kind: rnd() < 0.5 ? 'tree' : 'bush', x: x * T, y: 2 * T, tx: x, ty: 2 });
+      const k0 = rnd() < 0.5 ? 'tree' : 'bush';
+      deco.push({ kind: theme === 'mountain' && k0 === 'tree' ? 'pine' : k0, x: x * T, y: 2 * T, tx: x, ty: 2 });
       take(x, 2);
     }
   }
@@ -356,25 +429,13 @@ export function createPortraitLayout(level) {
   for (let yy = 2; yy < ROWS - 2; yy++) {
     for (let x = USABLE_X0; x <= USABLE_X1; x++) {
       if (!free(x, yy)) continue;
-      const r = rnd();
-      let kind = null;
-      if (r < 0.07 && free(x, yy - 1) && yy > 2) kind = 'treeTall';
-      else if (r < 0.14) kind = 'tree';
-      else if (r < 0.19) kind = 'bush';
-      else if (r < 0.215) kind = 'berry';
-      else if (r < 0.24) kind = 'rocks';
-      else if (r < 0.25) kind = 'rocksBig';
-      else if (r < 0.26) kind = 'stump';
-      else if (r < 0.27) kind = 'log';
-      else if (r < 0.29) kind = 'mushrooms';
-      else if (r < 0.32) kind = 'fern';
-      else if (r < 0.34) kind = 'weeds';
+      const kind = pickDeco(rnd(), theme, free(x, yy - 1) && yy > 2);
       if (!kind) continue;
       const jx = Math.floor(rnd() * 5) - 2;
       const jy = Math.floor(rnd() * 3) - 1;
       deco.push({ kind, x: x * T + jx, y: yy * T + jy, tx: x, ty: yy });
       take(x, yy);
-      if (kind === 'treeTall') take(x, yy - 1);
+      if (kind === 'treeTall' || kind === 'pineTall') take(x, yy - 1);
     }
   }
   // Jardin de la chambre d'hôte (visible seulement si achetée) : fleurs et haie.
@@ -420,6 +481,8 @@ export function createPortraitLayout(level) {
     well,
     props,
     slots,
+    decorSlots,
+    sign,
     slotIds: Object.keys(slots),
     roadY: ROAD_Y,
     mainPathX: MAIN_PATH_X,
@@ -430,6 +493,7 @@ export function createPortraitLayout(level) {
     isPath,
     isForest,
     mode: 'portrait',
+    theme,
     plotSize: PLOT_TILES * T,
     plotScale: PLOT_TILES,
     transposed,

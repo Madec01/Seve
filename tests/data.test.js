@@ -21,7 +21,9 @@ test('cultures : champs complets et cohérents', () => {
     assert.ok(c.seasons.length > 0 && c.seasons.every((s) => SEASONS.includes(s)), c.id);
     assert.ok(Number.isInteger(c.growDays) && c.growDays > 0);
     assert.ok(Number.isInteger(c.seedCost) && c.seedCost > 0);
-    assert.ok(Number.isInteger(c.sellPrice) && c.sellPrice > c.seedCost, `${c.id} doit être rentable`);
+    // Un arbre rapporte plusieurs paniers : un panier seul peut valoir moins que le jeune plant.
+    if (c.kind === 'tree') assert.ok(Number.isInteger(c.sellPrice) && c.sellPrice * 3 > c.seedCost, `${c.id} doit être rentable`);
+    else assert.ok(Number.isInteger(c.sellPrice) && c.sellPrice > c.seedCost, `${c.id} doit être rentable`);
     assert.equal(typeof c.frostHardy, 'boolean');
     // Une culture plantable en hiver doit résister au gel.
     if (c.seasons.includes('winter')) assert.ok(c.frostHardy, c.id);
@@ -34,8 +36,9 @@ test('cultures : champs complets et cohérents', () => {
 });
 
 test('investissements : champs complets et cohérents', () => {
-  const expected = ['chickenCoop', 'beehive', 'roadsideStand', 'cow', 'sheep', 'sprinkler', 'solarPanel', 'guestHouse'];
-  assert.deepEqual(INVESTMENTS.map((i) => i.id).sort(), [...expected].sort());
+  const expected = ['chickenCoop', 'beehive', 'roadsideStand', 'cow', 'sheep', 'sprinkler', 'solarPanel', 'guestHouse', 'goat', 'jamWorkshop', 'dairy', 'mill'];
+  // Ordre fixé : les 8 d'origine d'abord (parité v2), puis les nouveautés v3.
+  assert.deepEqual(INVESTMENTS.map((i) => i.id), expected);
   for (const inv of INVESTMENTS) {
     assert.equal(typeof inv.name, 'string');
     assert.ok(inv.description.length > 10);
@@ -53,10 +56,10 @@ test('investissements : champs complets et cohérents', () => {
   assert.equal(getInvestment('guestHouse').costs.length, 1);
 });
 
-test('niveaux 1 à 8 : champs complets et cohérents', () => {
+test('niveaux 1 à 12 : champs complets et cohérents', () => {
   assert.deepEqual(
     LEVELS.map((l) => l.id),
-    [1, 2, 3, 4, 5, 6, 7, 8],
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
   );
   for (const l of LEVELS) {
     assert.equal(getLevel(l.id), l);
@@ -78,7 +81,9 @@ test('niveaux 1 à 8 : champs complets et cohérents', () => {
       assert.ok(Object.values(table).reduce((a, b) => a + b, 0) > 0);
     }
     assert.ok(l.availableInvestments.every((id) => getInvestment(id)));
-    for (const k of ['waterCost', 'rotChance', 'priceVolatility', 'loan', 'soilFatigue', 'noSprinkler']) assert.ok(k in l.modifiers, `${l.id} ${k}`);
+    for (const k of ['waterCost', 'rotChance', 'priceVolatility', 'loan', 'soilFatigue', 'noSprinkler', 'rawPriceFactor', 'pollination']) assert.ok(k in l.modifiers, `${l.id} ${k}`);
+    assert.ok(Array.isArray(l.crops) && l.crops.length > 0 && l.crops.every((id) => getCrop(id)), `${l.id} cultures`);
+    assert.ok(Array.isArray(l.startTrees) && l.startTrees.every((i) => Number.isInteger(i) && i >= 0 && i < l.gridCols * l.gridRows));
     assert.equal(yearLength(l), l.seasonLengths.reduce((a, b) => a + b, 0));
   }
   assert.equal(getLevel(1).tutorial, true);

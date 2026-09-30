@@ -211,6 +211,9 @@ export function cosmeticIcon(item, cls = 'sprite--md', index = 0) {
 /** Aperçu d'une tenue du fermier. `index` = rang de la tenue dans le catalogue (dessins numérotés). */
 export function outfitIcon(outfitId, cls = 'sprite--md', index = 0) {
   const short = String(outfitId).replace(/^outfit\./, '');
+  // Dessins numérotés de l'agent graphique : 0 salopette, 1 carreaux, 2 chemise jaune, 3 tablier vert.
+  const drawn = { classic: 0, checked: 1, raincoat: 2, gardener: 3 }[short];
+  if (drawn !== undefined) index = drawn;
   return spriteAny([`farmer.${outfitId}`, `farmer.outfit.${short}`, `farmer.outfit.${index}`, index === 0 ? 'farmer' : null, 'farmer'].filter(Boolean), cls, 'star');
 }
 

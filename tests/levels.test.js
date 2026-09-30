@@ -82,7 +82,7 @@ test('marché fou : cours par culture dans [0,5 ; 1,8], qui change chaque jour',
   let prev = { ...g.state.market };
   for (let d = 0; d < 27; d++) {
     nextDay(g);
-    for (const c of CROPS) {
+    for (const c of CROPS.filter((x) => getLevel(6).crops.includes(x.id))) {
       const m = g.state.market[c.id];
       assert.ok(m >= MARKET.min && m <= MARKET.max, `${c.id} ${m}`);
       seen.add(m);
@@ -91,7 +91,7 @@ test('marché fou : cours par culture dans [0,5 ; 1,8], qui change chaque jour',
     prev = { ...g.state.market };
   }
   assert.ok(seen.size > 20);
-  assert.ok(changes > 27 * CROPS.length * 0.7);
+  assert.ok(changes > 27 * getLevel(6).crops.length * 0.7);
 });
 
 test('marché fou : prix affiché et prix de récolte suivent le cours du jour', () => {

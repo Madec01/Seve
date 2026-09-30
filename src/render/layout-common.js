@@ -50,6 +50,78 @@ export function distToRect(r, x, y) {
 }
 
 /**
+ * Cherche une zone libre de w × h tuiles dans une grille d'occupation, la plus proche d'un point
+ * (tuiles). `ok(x, y)` dit si une tuile est libre. Renvoie { x, y } ou null. Déterministe.
+ */
+export function findFreeArea(ok, bounds, w, h, near) {
+  let best = null;
+  let bestD = Infinity;
+  for (let y = bounds.y0; y + h - 1 <= bounds.y1; y++) {
+    for (let x = bounds.x0; x + w - 1 <= bounds.x1; x++) {
+      let free = true;
+      for (let yy = y; yy < y + h && free; yy++) for (let xx = x; xx < x + w && free; xx++) if (!ok(xx, yy)) free = false;
+      if (!free) continue;
+      const d = Math.hypot(x + w / 2 - near.x, (y + h / 2 - near.y) * 1.3);
+      if (d < bestD - 1e-9) { bestD = d; best = { x, y }; }
+    }
+  }
+  return best;
+}
+
+/**
+ * Ambiance du décor d'un niveau : 'mountain' (niveau 11 : sapins, rochers), 'orchard' (niveau 10 :
+ * pommiers dans le décor), 'village' (niveau 12 : concours), sinon 'default'. Un niveau peut aussi
+ * porter un champ `theme` explicite.
+ */
+export function levelTheme(level) {
+  if (level && typeof level.theme === 'string') return level.theme;
+  if (level?.startTrees?.length) return 'orchard';
+  if (level?.contest) return 'village';
+  const w = level?.weather?.winter;
+  if (w && !w.rain && (w.snow || 0) >= 5 && !level?.weather?.summer?.heatwave) return 'mountain';
+  return 'default';
+}
+
+/**
+ * Semis aléatoire du décor : kind selon un tirage r ∈ [0, 1) et l'ambiance.
+ * @returns 'treeTall' | 'tree' | 'bush' | … | null
+ */
+export function pickDeco(r, theme, canTall) {
+  if (theme === 'mountain') {
+    if (r < 0.1 && canTall) return 'pineTall';
+    if (r < 0.17) return 'pine';
+    if (r < 0.2) return 'bush';
+    if (r < 0.25) return 'rocks';
+    if (r < 0.28) return 'rocksBig';
+    if (r < 0.29) return 'stump';
+    if (r < 0.3) return 'log';
+    if (r < 0.32) return 'fern';
+    if (r < 0.345) return 'weeds';
+    return null;
+  }
+  if (r < 0.07 && canTall) return 'treeTall';
+  if (r < 0.14) return theme === 'orchard' && r > 0.1 ? 'appleTree' : 'tree';
+  if (r < 0.19) return 'bush';
+  if (r < 0.215) return 'berry';
+  if (r < 0.24) return 'rocks';
+  if (r < 0.25) return 'rocksBig';
+  if (r < 0.26) return 'stump';
+  if (r < 0.27) return 'log';
+  if (r < 0.29) return 'mushrooms';
+  if (r < 0.32) return 'fern';
+  if (r < 0.34) return 'weeds';
+  return null;
+}
+
+/** Rectangle (px) d'un emplacement de décoration, à partir de tuiles. */
+export function decorSlot(id, kind, tx, ty, tw = 1, th = 1) {
+  return { id, kind, tx, ty, tw, th, x: tx * TILE, y: ty * TILE, w: tw * TILE, h: th * TILE };
+}
+
+/** Investissements v3 dont l'emplacement est un bâtiment de transformation. */
+export const PROCESSING_SLOTS = ['jamWorkshop', 'dairy', 'mill'];
+
+/**
  * Têtes d'arrosage automatique dans les marges haute et basse du champ (tuiles), 6 au plus,
  * en évitant le portail. Même logique pour les deux dispositions.
  * @param gx, gy   première tuile des parcelles ; tw, th : largeur / hauteur des parcelles (tuiles)
@@ -106,6 +178,11 @@ export function makeQueries(d) {
       }
       case 'guestHouse': return s.house;
       case 'sprinkler': return null; // plusieurs têtes : voir hitTest
+      // v3
+      case 'goat': return s.fence;
+      case 'dairy':
+      case 'jamWorkshop': return s.building;
+      case 'mill': return n >= 3 && s.bakery ? union(s.building, s.bakery) : s.building;
       default: return null;
     }
   }
@@ -146,6 +223,10 @@ export function makeQueries(d) {
       case 'solarPanel': r = px(slotTiles(id, n > 0 ? n : 2)); break;
       case 'guestHouse': r = px(s.house); break;
       case 'sprinkler': r = px({ x: gate.x, y: fence.y, w: 1, h: 1 }); break;
+      case 'goat': r = px(s.pen); break;
+      case 'dairy':
+      case 'jamWorkshop':
+      case 'mill': r = px(s.building); break;
       default: r = investmentRect(id, n);
     }
     return { x: r.x + (r.w >> 1), y: r.y - 2 };

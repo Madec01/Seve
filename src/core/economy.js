@@ -2,6 +2,7 @@
 
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
 import { INVESTMENTS, getInvestment } from '../data/investments.js';
+import { perkValue } from './perks.js';
 
 /** Liste des investissements proposés dans ce niveau (dans l'ordre des données). */
 export function levelInvestments(level) {
@@ -18,10 +19,12 @@ export function maxOf(inv) {
   return inv.costs.length;
 }
 
-/** Prix de la prochaine unité / du prochain niveau, ou null si le maximum est atteint. */
+/** Prix de la prochaine unité / du prochain niveau (après « Marchandage »), ou null si le maximum est atteint. */
 export function nextCost(state, inv) {
   const n = owned(state, inv.id);
-  return n < inv.costs.length ? inv.costs[n] : null;
+  if (n >= inv.costs.length) return null;
+  const factor = perkValue(state, 'investmentFactor');
+  return factor === 1 ? inv.costs[n] : Math.round(inv.costs[n] * factor);
 }
 
 /** Somme d'un effet numérique sur toutes les unités possédées. */
@@ -35,15 +38,15 @@ export function effectTotal(state, effectKey) {
   return total;
 }
 
-/** Bonus de vitesse de pousse (ruches). Aucun effet en hiver. */
+/** Bonus de vitesse de pousse (ruches + « Main verte »). Aucun effet en hiver. */
 export function growthBonus(state, seasonIndex) {
   if (SEASONS[seasonIndex] === 'winter') return 0;
-  return effectTotal(state, 'growthBonus');
+  return effectTotal(state, 'growthBonus') + perkValue(state, 'growthBonus');
 }
 
-/** Bonus sur le prix de vente (étal). */
+/** Bonus sur le prix de vente (étal + « Réputation »). */
 export function priceBonus(state) {
-  return effectTotal(state, 'priceBonus');
+  return effectTotal(state, 'priceBonus') + perkValue(state, 'priceBonus');
 }
 
 /** Nombre de parcelles arrosées automatiquement chaque matin. */
@@ -79,7 +82,7 @@ export function dawnIncomes(state, level, seasonIndex, weatherId, lastDayOfSeaso
 
 /** Charges quotidiennes fixes : ferme + entretien des investissements − panneaux solaires (≥ 0). */
 export function dailyCharges(state, level) {
-  let upkeep = BASE_DAILY_CHARGE;
+  let upkeep = BASE_DAILY_CHARGE - perkValue(state, 'farmChargeReduction');
   for (const inv of levelInvestments(level)) {
     const n = owned(state, inv.id);
     if (n === 0) continue;
@@ -120,9 +123,12 @@ export function nextLoanDay(level, day, totalDays) {
   return null;
 }
 
-/** Fermage de la saison. */
-export function rentFor(level, seasonIndex) {
-  return level.rents[seasonIndex];
+/** Fermage de la saison (« Bon voisinage » : printemps réduit si `state` est donné). */
+export function rentFor(level, seasonIndex, state = null) {
+  const rent = level.rents[seasonIndex];
+  if (!state || seasonIndex !== 0) return rent;
+  const factor = perkValue(state, 'springRentFactor');
+  return factor === 1 ? rent : Math.round(rent * factor);
 }
 
 /**
@@ -142,8 +148,17 @@ export function checkBuy(state, level, id) {
       reason: inv.kind === 'upgrade' ? 'Niveau maximal atteint.' : `Vous avez déjà le maximum (${maxOf(inv)}).`,
     };
   }
+  if (inv.requiresAny && !inv.requiresAny.some((req) => owned(state, req) > 0)) {
+    return { ok: false, reason: requirementText(inv.requiresAny) };
+  }
   if (state.money < cost) return { ok: false, reason: notEnoughMoney(cost - state.money) };
   return { ok: true, cost, inv };
+}
+
+/** « Il faut d'abord une vache ou une chèvre. » */
+export function requirementText(ids) {
+  const names = ids.map((id) => ({ cow: 'une vache', goat: 'une chèvre' })[id] || `« ${getInvestment(id)?.name ?? id} »`);
+  return `Il faut d'abord ${names.length > 1 ? `${names.slice(0, -1).join(', ')} ou ${names[names.length - 1]}` : names[0]}.`;
 }
 
 export function notEnoughMoney(missing) {

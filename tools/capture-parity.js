@@ -5,6 +5,9 @@
 //
 //   node tools/capture-parity.js            écrit tests/fixtures/parity-v2.json (à ne lancer qu'une fois, en v2)
 //   node tools/capture-parity.js --check    rejoue et compare au fichier (sans l'écrire)
+//   node tools/capture-parity.js --v1-saves <dossier>   écrit tests/fixtures/v1-saves.json : vraies sauvegardes
+//        v1 (en pleine journée) produites par le code v2 extrait dans <dossier> (git archive c938af8 src | tar -x -C <dossier>),
+//        et la fin de leur partie en v2 (tests/migration.test.js)
 //
 // tests/parity.test.js importe `playParity` et `PARITY_CASES` d'ici et vérifie l'égalité exacte,
 // sans bonus permanent (`perks = {}`), après les changements de la v3.
@@ -16,7 +19,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createGame } from '../src/core/game.js';
 import { DAY_SECONDS } from '../src/data/balance.js';
 
@@ -41,7 +44,7 @@ const STAT_KEYS = [
 /** Clés ajoutées par la v3 dans les événements et résumés : retirées avant l'empreinte. */
 const V3_EVENT_KEYS = new Set([
   'tree', 'processed', 'refund', 'milkToDairy', 'productIncome', 'productsSold', 'rawSales', 'frostRefund',
-  'contestPrize', 'minMoneyAfterRent', 'perks', 'processing', 'contest', 'fruit',
+  'contestPrize', 'minMoneyAfterRent', 'bestSeasonHarvestIncome', 'perks', 'processing', 'contest', 'fruit',
 ]);
 
 const pick = (o, keys) => Object.fromEntries(keys.map((k) => [k, o[k]]));
@@ -81,12 +84,12 @@ export function projectState(s) {
 const hash = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
 // ── Robots scriptés (API publique v2 seulement) ──────────────────────────────────────────
-function lcg(seed) {
+export function lcg(seed) {
   let r = (Number(seed) * 7919 + 17) >>> 0;
   return () => (r = (Math.imul(r, 1103515245) + 12345) >>> 0) / 4294967296;
 }
 
-const BOTS = {
+export const BOTS = {
   // Récolte, achète un poulailler au-delà de 250, ouvre une parcelle au-delà de 300,
   // plante en alternant les cultures qui ne gèleront pas, arrose tout.
   scripted(g) {
@@ -214,8 +217,36 @@ async function captureSim() {
   return out;
 }
 
+/** Sauvegardes v1 réelles (code v2 extrait dans `dir`), pour tests/migration.test.js. */
+async function captureV1Saves(dir) {
+  const { createGame: createV2 } = await import(pathToFileURL(join(dir, 'src/core/game.js')).href);
+  const out = [];
+  for (const levelId of PARITY_LEVELS) {
+    for (const [bot, seed, stopDay] of [['sponsored', 3, 5], ['patron', 42, 17], ['patron', 11, 12], ['scripted', 7, 9]]) {
+      const g = createV2({ levelId, seed });
+      const rnd = lcg(seed + levelId * 1000);
+      while (g.state.status === 'playing' && g.state.time.day < stopDay) {
+        BOTS[bot](g, rnd);
+        g.update(DAY_SECONDS);
+      }
+      BOTS[bot](g, rnd);
+      g.update(7.3); // en pleine journée
+      const saved = JSON.parse(JSON.stringify(g.serialize()));
+      for (let d = 0; d < 80 && g.state.status === 'playing'; d++) {
+        BOTS[bot](g, rnd);
+        g.update(DAY_SECONDS);
+      }
+      out.push({ levelId, bot, seed, stopDay, saved, final: hash(JSON.stringify(projectState(g.state))), money: g.state.money, status: g.state.status });
+    }
+  }
+  writeFileSync(join(ROOT, 'tests/fixtures/v1-saves.json'), JSON.stringify(out) + '\n');
+  console.log(`Capturé : ${out.length} sauvegardes v1 → tests/fixtures/v1-saves.json`);
+}
+
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
-if (isMain) {
+if (isMain && process.argv.includes('--v1-saves')) {
+  await captureV1Saves(process.argv[process.argv.indexOf('--v1-saves') + 1]);
+} else if (isMain) {
   const check = process.argv.includes('--check');
   const results = captureAll();
   const sim = await captureSim();

@@ -8,8 +8,14 @@
 // portrait d'abord ; grand écran en paysage (body.layout-wide) : onglets dans la barre du haut,
 // feuilles « Acheter » et « Bilan » rangées à droite.
 //
+// Contenu v3 : progression permanente (src/ui/progress.js → src/core/progression.js), grange aux
+// souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), conseils « première fois »
+// (src/ui/hints.js), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
+// démarrage (src/ui/v3.js) et tout est vérifié avant usage : sans eux, le jeu reste le jeu v2.
+//
 // Débogage (seulement avec ?debug=1 dans l'adresse) : window.__game (partie en cours),
-// window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId) }.
+// window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId),
+// progress(), setProgress(p), grange(tab), decor() }.
 
 import { SHEETS } from './render/atlas.js';
 import { loadImage, loadImages } from './render/assets.js';
@@ -36,6 +42,14 @@ import { createField } from './ui/field.js';
 import { createDialogs } from './ui/dialogs.js';
 import { createTutorial } from './ui/tutorial.js';
 import { season, seasonArrives, cropName, incomePhrase } from './ui/text.js';
+import { loadV3, v3 } from './ui/v3.js';
+import { createProgress } from './ui/progress.js';
+import { createGrange } from './ui/grange.js';
+import { createDecor } from './ui/decor.js';
+import { createHints } from './ui/hints.js';
+import { isProcessing } from './ui/buildings.js';
+import { productIcon } from './ui/icons.js';
+import { productName } from './ui/panel.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -66,7 +80,7 @@ window.addEventListener('pointerdown', () => {
 let images = null;
 let attract = null; // ferme de démonstration derrière le menu
 let unwire = null;
-let pending = { billPaid: null, frost: null, end: null };
+let pending = { billPaid: null, frost: null, end: null, contest: null };
 let queuedBanner = null;
 const pauseReasons = new Set();
 let resumeSpeed = 1;
@@ -84,6 +98,10 @@ app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
 app.tutorial = createTutorial($('#tutorial'), app);
 app.input = createSceneInput(canvas, app);
+app.progression = createProgress(app, storage);
+app.grange = createGrange(app);
+app.decor = createDecor(app);
+app.hints = createHints(app);
 
 applyDisplaySettings();
 
@@ -160,12 +178,73 @@ app.toggleFullscreen = () => {
 };
 
 app.saveTutorial = (t) => storage.saveTutorial(t);
-app.progress = () => storage.loadProgress();
-app.isLevelUnlocked = (id) => storage.isLevelUnlocked(id);
+app.progress = () => app.progression.get();
+app.isLevelUnlocked = (id) => app.progression.isLevelUnlocked(id);
 
 app.resetProgress = () => {
   storage.resetProgress();
+  app.progression.reload();
+  uiMemo.write({});
+  app.applyCosmetics();
   if (app.inMenu) app.dialogs.mainMenu();
+};
+
+// ── Petite mémoire de l'interface (succès déjà vus dans la grange) ────────────────
+// Pas une donnée de jeu : si le stockage est indisponible, la pastille « nouveau » ne s'affiche
+// simplement pas.
+const uiMemo = {
+  key: 'une-annee-a-la-ferme.ui',
+  read() {
+    try {
+      const v = JSON.parse(window.localStorage.getItem(this.key) || '{}');
+      return v && typeof v === 'object' ? v : {};
+    } catch {
+      return {};
+    }
+  },
+  write(v) {
+    try {
+      window.localStorage.setItem(this.key, JSON.stringify(v));
+    } catch {
+      /* stockage indisponible */
+    }
+  },
+};
+const doneAchievements = () => Object.keys(app.progression.get().achievements || {}).length;
+app.hasNewAchievements = () => app.progression.available() && doneAchievements() > (uiMemo.read().achSeen ?? 0);
+app.markAchievementsSeen = () => {
+  const m = uiMemo.read();
+  m.achSeen = doneAchievements();
+  uiMemo.write(m);
+};
+
+// ── Personnalisation : la scène reçoit les choix du joueur (lot RENDER : scene.setCosmetics) ──
+app.applyCosmetics = () => {
+  const s = app.scene;
+  if (!s || typeof s.setCosmetics !== 'function' || !app.progression.available()) return;
+  const c = app.progression.cosmetics();
+  try {
+    s.setCosmetics({ farmName: c.farmName, outfit: c.outfit, path: c.path, fence: c.fence, decor: { ...c.decor } });
+  } catch (err) {
+    console.warn('setCosmetics :', err);
+  }
+};
+
+/** Écran de fin d'année → grange (la partie est terminée : retour au menu, puis la grange). */
+app.openGrangeFromEnd = (tab = 'bonus') => {
+  app.quitToMenu({ ended: true });
+  app.grange.open(tab);
+};
+
+/** Menu principal affiché : conseils de la grange et du décor (une fois pour toutes). */
+app.onMainMenu = () => {
+  const P = app.progression;
+  if (!P.available()) return;
+  if (P.canSpendStars()) app.hints.maybe('grange', { selector: '#menu-grange' });
+  else if (P.ecus() >= 10) app.hints.maybe('decor', { selector: '#menu-grange' });
+};
+app.onProgressChange = () => {
+  app.grange?.refresh();
 };
 
 // ── Écran allumé pendant la partie (Wake Lock, option) ─────────────────────────────
@@ -265,8 +344,14 @@ app.openTab = (id, { fromUser = false } = {}) => {
 
 app.onSheetChange = () => {
   app.tabbar?.refresh();
+  requestAnimationFrame(() => app.toasts.trim?.());
   updateInsets();
   updateSheetOverlay();
+};
+app.onDecorChange = () => {
+  insetsKey = '';
+  updateInsets();
+  app.tabbar?.refresh();
 };
 app.onDialogChange = () => {
   app.tabbar?.refresh();
@@ -314,6 +399,24 @@ app.water = (i) => report(app.game?.actions.water(i));
 app.harvest = (i) => report(app.game?.actions.harvest(i));
 app.unlockPlot = (i) => report(app.game?.actions.unlockPlot(i));
 app.buyInvestment = (id) => report(app.game?.actions.buyInvestment(id));
+app.removeTree = (i) => (typeof app.game?.actions.removeTree === 'function' ? report(app.game.actions.removeTree(i)) : null);
+/** Interrupteur « Transformer » d'un atelier. */
+app.setProcessing = (id, on) => {
+  const g = app.game;
+  if (!g || typeof g.actions.setProcessing !== 'function') return null;
+  const res = report(g.actions.setProcessing(id, on));
+  if (res?.ok) {
+    audio.play('toggle');
+    app.vibrate(12);
+  }
+  return res;
+};
+/** « Vendre en l'état » : tout ce qui est en cours dans l'atelier, au prix de la matière première. */
+app.sellProcessing = (id) => {
+  const g = app.game;
+  if (!g || typeof g.actions.sellProcessing !== 'function') return null;
+  return report(g.actions.sellProcessing(id));
+};
 
 /** Sème la même culture sur la parcelle choisie puis sur toutes les parcelles libres. */
 app.plantAll = (cropId, firstIndex) => {
@@ -325,6 +428,8 @@ app.plantAll = (cropId, firstIndex) => {
     return 0;
   }
   let n = 1;
+  const crop = getCrop(cropId);
+  if (crop?.kind === 'tree') return n; // « Semer partout » ne plante jamais d'arbre
   for (const p of g.query.plots()) {
     if (p.action !== 'plant') continue;
     const res = g.actions.plant(p.index, cropId);
@@ -377,6 +482,17 @@ app.fieldPageRect = () => {
   return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
 };
 
+/** Rectangle d'un bâtiment (investissement) en pixels de la page, ou null. */
+app.investmentPageRect = (id) => {
+  const scene = app.scene;
+  const r = scene?.layout.investmentRect?.(id, app.game?.state.investments[id] || 0);
+  if (!r) return null;
+  const s = canvas.getBoundingClientRect();
+  const a = scene.worldToScreen(r.x, r.y);
+  const b = scene.worldToScreen(r.x + r.w, r.y + r.h);
+  return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
+};
+
 function worldToPage(wx, wy) {
   const s = canvas.getBoundingClientRect();
   const p = app.scene.worldToScreen(wx, wy);
@@ -402,8 +518,10 @@ function updateInsets() {
   // Tailles sans les transformations (la barre glisse à l'entrée en partie).
   const hudH = $('#hud').offsetHeight;
   const tabH = $('#tabbar').offsetHeight;
+  // Mode décoration depuis le menu : la barre de décoration remplace les onglets.
+  const decorH = app.decor?.active && app.inMenu ? $('#decorbar')?.offsetHeight || 0 : 0;
   insets.top = inGame ? hudH : 0;
-  insets.bottom = inGame && !app.isWide() ? tabH : 0;
+  insets.bottom = inGame && !app.isWide() ? tabH : decorH && !app.isWide() ? decorH : 0;
   insets.left = 0;
   // Grand écran : le panneau rangé à droite (achats, bilan) réduit la scène visible.
   insets.right = inGame && app.isWide() && app.sheets.isOpen() ? Math.round(app.sheets.box.getBoundingClientRect().width) : 0;
@@ -428,6 +546,8 @@ function resizeScene() {
     const level = (app.game && !app.inMenu ? app.game : attract)?.level || getLevel(1);
     app.scene = createScene(canvas, images, level, { minZoom: mz });
     insetsKey = '';
+    app.applyCosmetics();
+    if (app.decor.active && typeof app.scene.setDecorMode === 'function') app.scene.setDecorMode(true);
   }
   app.scene.resize(w, h, dpr);
   updateInsets();
@@ -496,11 +616,11 @@ function sameHit(a, b) {
 
 function updateHoverTip() {
   const h = hover.hit;
-  if (!h || app.dialogs.isOpen() || app.field.isOpen()) {
+  if (!h || app.dialogs.isOpen() || app.field.isOpen() || (app.decor.active && app.sheets.isOpen())) {
     app.tooltip.hide('scene');
     return;
   }
-  const content = h.type === 'plot' ? app.field.plotTip(h.index) : app.field.investmentTip(h.id);
+  const content = app.decor.active ? app.decor.hoverText(h) : h.type === 'plot' ? app.field.plotTip(h.index) : app.field.investmentTip(h.id);
   if (content) app.tooltip.showAtPoint(content, hover.x, hover.y, 'scene');
   else app.tooltip.hide('scene');
 }
@@ -511,7 +631,8 @@ app.onSceneHover = (hit, e) => {
   if (changed) {
     app.scene?.setHover(hit);
     let pointer = false;
-    if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
+    if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
+    else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
@@ -543,6 +664,10 @@ window.addEventListener('keydown', (e) => {
   if (tag === 'INPUT' && e.target.type !== 'range') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
 
+  if (app.decor.active && app.decor.onKey(e)) {
+    e.preventDefault();
+    return;
+  }
   if (e.key === 'Escape') {
     e.preventDefault();
     if (app.dialogs.isOpen()) {
@@ -569,6 +694,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'b' || e.key === 'B') app.openTab('shop', { fromUser: true });
   else if (e.key === 'n' || e.key === 'N') app.openTab('stats', { fromUser: true });
   else if (e.key === 'f' || e.key === 'F') app.openTab('farm', { fromUser: true });
+  else if ((e.key === 'd' || e.key === 'D') && app.decor.available() && !app.decor.active) app.decor.enter();
 });
 
 // ── Événements du jeu ─────────────────────────────────────────────────────────────
@@ -606,12 +732,58 @@ function wire(game) {
       case 'victory':
         pending.end = ev;
         break;
+      case 'contestAwarded':
+        pending.contest = ev;
+        break;
+      case 'purchased':
+        if (isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
+          // Premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur.
+          app.field.openBuilding(ev.investmentId);
+        }
+        queueAchievementCheck(game);
+        break;
+      case 'harvested':
+        queueAchievementCheck(game);
+        break;
       default:
         break;
     }
+    if (ev.type === 'dawn') app.progression.checkGame(game);
     scheduleRefresh();
   });
   return off;
+}
+
+// Succès vérifiés à chaque aube, et un peu après un achat ou une récolte (une fois par image).
+let achQueued = false;
+function queueAchievementCheck(game) {
+  if (achQueued) return;
+  achQueued = true;
+  requestAnimationFrame(() => {
+    achQueued = false;
+    if (app.game === game && game.state.status === 'playing') app.progression.checkGame(game);
+  });
+}
+
+// Messages groupés : les récoltes parties à l'atelier (un glissé peut en envoyer plusieurs) et
+// les produits vendus à l'aube font un seul message par image.
+const grouped = { toWorkshop: new Map(), sold: [] };
+function flushGrouped() {
+  const t = app.toasts;
+  if (grouped.toWorkshop.size) {
+    for (const [productId, n] of grouped.toWorkshop) {
+      t.show({ kind: 'success', sprite: productIcon(productId, 'sprite--sm'), text: n > 1 ? `${n} récoltes parties à l'atelier (${productName(productId).toLowerCase()}).` : `Récolte partie à l'atelier : ${productName(productId).toLowerCase()} en préparation.`, duration: 2600 });
+    }
+    grouped.toWorkshop.clear();
+  }
+  if (grouped.sold.length) {
+    const total = grouped.sold.reduce((a, x) => a + (x.amount || 0), 0);
+    const n = grouped.sold.length;
+    const first = grouped.sold[0].productId;
+    const names = [...new Set(grouped.sold.map((x) => productName(x.productId).toLowerCase()))];
+    t.show({ kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
+    grouped.sold = [];
+  }
 }
 
 function reactAudio(ev, game) {
@@ -624,7 +796,20 @@ function reactAudio(ev, game) {
       break;
     case 'harvested':
       audio.play('harvest');
-      audio.play('coin', { delay: 0.06 });
+      if (!ev.processed) audio.play('coin', { delay: 0.06 });
+      else audio.play('build', { delay: 0.08, volume: 0.45 });
+      break;
+    case 'productSold':
+      audio.play('coin', { delay: 0.5, volume: 0.7 });
+      break;
+    case 'processingSoldRaw':
+      audio.play('coin');
+      break;
+    case 'treeRemoved':
+      audio.play('dig');
+      break;
+    case 'contestProgress':
+      if (ev.done) audio.play('unlock', { volume: 0.7 });
       break;
     case 'purchased':
       audio.play('buy');
@@ -721,10 +906,38 @@ function reactMessages(ev, game) {
     }
     case 'harvested':
       if (ev.fatigue) t.show({ kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
+      if (ev.processed) grouped.toWorkshop.set(ev.processed.productId, (grouped.toWorkshop.get(ev.processed.productId) || 0) + 1);
+      break;
+    case 'productSold':
+      grouped.sold.push(ev);
+      break;
+    case 'processingSoldRaw': {
+      const texts = {
+        player: `Produits vendus en l'état : +${fmt(ev.amount)} pièces.`,
+        rent: `L'argent manquait : ${plural(ev.count, 'produit')} vendu${ev.count > 1 ? 's' : ''} en l'état avant le fermage (+${fmt(ev.amount)}).`,
+        yearEnd: `Fin de l'année : ${plural(ev.count, 'produit')} en cours vendu${ev.count > 1 ? 's' : ''} en l'état (+${fmt(ev.amount)}).`,
+      };
+      t.show({ kind: ev.reason === 'player' ? 'money' : 'warn', icon: 'coin', text: texts[ev.reason] || texts.player, duration: 4200 });
+      break;
+    }
+    case 'processingToggled':
+      t.show({ kind: 'info', icon: 'info', text: ev.on ? 'Atelier allumé : les récoltes compatibles y partiront.' : 'Atelier éteint : tout se vend comme d\'habitude.', duration: 2400 });
+      break;
+    case 'treeRemoved':
+      t.show({ kind: 'info', icon: 'seed', text: 'Pommier arraché : la parcelle est libre.' });
+      break;
+    case 'contestProgress':
+      if (ev.done) {
+        const goal = game.query.contest?.()?.goals.find((x) => x.id === ev.goalId);
+        t.show({ kind: 'success', icon: 'star', title: 'Épreuve réussie !', text: `${goal?.label || 'Concours'} : ${fmt(ev.progress)} / ${fmt(ev.target)}. Prix au jugement.`, duration: 4200 });
+      }
       break;
     case 'dawn': {
       for (const inc of ev.incomes || []) {
         if (inc.kind === 'shearing') t.show({ kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
+      }
+      for (const inc of ev.incomes || []) {
+        if (inc.kind === 'refund' && inc.amount > 0) t.show({ kind: 'money', icon: 'winter', title: 'Assurance gel', text: `Graines remboursées : +${fmt(inc.amount)} pièces` });
       }
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
       if (loan) t.show({ kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
@@ -744,24 +957,32 @@ function frostHardy(cropId) {
 function processPending() {
   const g = app.game;
   if (!g) return;
+  flushGrouped();
   if (pending.end) {
     const ev = pending.end;
-    pending = { billPaid: null, frost: null, end: null };
+    pending = { billPaid: null, frost: null, end: null, contest: null };
     queuedBanner = null;
     app.sheets.close('silent');
     app.tooltip.hide();
+    app.hints.clear();
+    if (app.decor.active) app.decor.exit();
     pauseReasons.clear();
     updateWakeLock();
-    if (ev.type === 'victory') {
-      const rec = storage.recordVictory(g.level.id, ev.stars, ev.money);
-      storage.clearRun();
-      app.dialogs.victory(ev, rec);
-    } else {
-      storage.clearRun();
-      app.dialogs.bankrupt(ev);
-    }
+    const rec = recordEnd(g, ev.type === 'victory' ? 'victory' : 'bankrupt', ev);
+    storage.clearRun();
+    if (ev.type === 'victory') app.dialogs.victory(ev, rec);
+    else app.dialogs.bankrupt(ev, rec);
     return;
   }
+  // Concours (niveau 12) : la remise des prix passe avant le bilan de fin d'automne.
+  if (pending.contest && !app.dialogs.isOpen()) {
+    const ev = pending.contest;
+    pending.contest = null;
+    app.sheets.close('silent');
+    app.dialogs.contestResult(ev, { onClose: () => processPending() });
+    return;
+  }
+  if (pending.billPaid && app.dialogs.top() === 'contest') return;
   if (pending.billPaid) {
     const ev = pending.billPaid;
     const frost = pending.frost;
@@ -781,6 +1002,50 @@ function processPending() {
   if (queuedBanner && !app.dialogs.isOpen()) {
     app.toasts.banner(queuedBanner);
     queuedBanner = null;
+  }
+}
+
+/**
+ * Fin de partie (victoire, faillite, abandon) : cumul, écus, étoiles, succès (progression.js).
+ * Sans le module de progression v3 : seule la victoire est notée (jeu v2).
+ */
+function recordEnd(game, outcome, ev = null) {
+  let summary = ev?.summary;
+  if (!summary) {
+    try {
+      summary = game.query.summary();
+    } catch {
+      summary = null;
+    }
+  }
+  // Contexte de la partie pour les succès de fin d'année (arbres adultes, investissements…).
+  let ctx = {};
+  try {
+    if (typeof game.query.achievementContext === 'function') ctx = game.query.achievementContext() || {};
+  } catch {
+    ctx = {};
+  }
+  return app.progression.recordRunEnd({
+    levelId: game.level.id,
+    outcome,
+    stars: outcome === 'victory' ? ev?.stars || 0 : 0,
+    money: ev?.money ?? game.state.money,
+    summary,
+    perksActive: Object.keys(game.state.perks || {}).length > 0,
+    adultTrees: ctx.adultTrees,
+    investments: ctx.investments,
+    availableInvestments: ctx.availableInvestments,
+    dailyCharges: ctx.dailyCharges,
+  });
+}
+
+/** Une partie en cours est abandonnée (« Recommencer », ou nouvelle partie par-dessus) : cumul. */
+function recordAbandon(game) {
+  if (!game || game.state.status !== 'playing' || !app.progression.available()) return;
+  try {
+    recordEnd(game, 'abandon');
+  } catch (err) {
+    console.warn('Abandon non enregistré :', err);
   }
 }
 
@@ -847,9 +1112,13 @@ document.addEventListener('freeze', () => save());
 // ── Parties ───────────────────────────────────────────────────────────────────────
 function startRun(game, { resumed = false } = {}) {
   if (unwire) unwire();
+  if (app.decor.active) app.decor.exit();
   app.tutorial.stop();
+  app.hints.clear();
   pauseReasons.clear();
-  pending = { billPaid: null, frost: null, end: null };
+  pending = { billPaid: null, frost: null, end: null, contest: null };
+  grouped.toWorkshop.clear();
+  grouped.sold = [];
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
@@ -877,14 +1146,25 @@ function startRun(game, { resumed = false } = {}) {
   updateAmbience(game);
 
   const lvl = game.level;
+  const farm = app.progression.available() ? `${app.progression.farmName()} · ` : '';
   if (resumed) {
     app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()}.` });
+  } else if (lvl.contest) {
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `Concours du village : jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
   } else {
-    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `Niveau ${lvl.id} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
+    app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
   }
 
   const tuto = storage.loadTutorial();
   if (lvl.tutorial && !tuto.done) app.tutorial.start(game, resumed ? tuto.step ?? 0 : 0);
+
+  // Conseils « première fois » (une fois pour toutes, après le tutoriel s'il y en a un).
+  const offered = new Set(lvl.availableInvestments || []);
+  const invs = game.query.investments();
+  if (invs.some(isProcessing)) app.hints.maybe('processing', { selector: '#tab-shop' });
+  if (offered.has('goat')) app.hints.maybe('goat', { selector: '#tab-shop' });
+  if (lvl.modifiers?.pollination) app.hints.maybe('pollination', { selector: '#tab-shop' });
+  if (lvl.contest) app.hints.maybe('contest', { selector: '#tab-stats' });
 
   save();
   scheduleRefresh();
@@ -904,8 +1184,19 @@ app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
     });
     if (!ok) return;
   }
+  // La partie en cours (ou sauvegardée) est abandonnée : ses chiffres vont au cumul.
+  if (inGame) recordAbandon(app.game);
+  else if (saved) {
+    try {
+      recordAbandon(loadGame(saved.data.state));
+    } catch {
+      /* sauvegarde illisible : rien à compter */
+    }
+  }
   storage.clearRun();
-  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0 });
+  // Bonus permanents copiés dans la partie au lancement ({} si l'interrupteur est éteint).
+  const perks = app.progression.runPerks();
+  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks });
   startRun(game);
 };
 
@@ -938,9 +1229,14 @@ app.restartLevel = () => {
   if (!app.game) return;
   app.startLevel(app.game.level.id, { skipConfirm: true });
 };
+app.onStarsEarned = () => {
+  /* une étoile gagnée par un succès : la pastille du menu la montrera au retour */
+};
 
 app.quitToMenu = ({ ended = false } = {}) => {
   if (!ended) save();
+  if (app.decor.active) app.decor.exit();
+  app.hints.clear();
   app.tutorial.stop();
   if (unwire) unwire();
   unwire = null;
@@ -1007,6 +1303,7 @@ function frame(t) {
   if (g) app.scene.render(g, t);
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
+  app.hints.frame();
   app.hud.frame(dt);
 }
 
@@ -1100,6 +1397,11 @@ async function boot() {
   }
 
   initSprites(images);
+  // Contenu v3 (progression permanente, bonus, succès, cosmétiques) : modules du cœur chargés
+  // maintenant ; sans eux, le jeu reste le jeu v2.
+  await loadV3();
+  app.progression.reload();
+  const legacyAchievements = app.progression.checkBoot();
   applyViewport();
   attract = createAttractGame();
   resizeScene();
@@ -1136,6 +1438,10 @@ async function boot() {
     setTimeout(() => loading.remove(), 500);
     audio.playMusic('menu', { fade: 1 });
     app.dialogs.mainMenu();
+    if (legacyAchievements.length) {
+      app.audio.play('unlock', { delay: 0.4, volume: 0.7 });
+      app.toasts.show({ kind: 'achievement', icon: 'star', title: 'Grange aux souvenirs', text: `${plural(legacyAchievements.length, 'succès débloqué', 'succès débloqués')} grâce à vos anciennes parties !`, duration: 5200 });
+    }
     if (DEBUG && params.get('level')) app.startLevel(Number(params.get('level')), { skipConfirm: true });
   };
   startBtn.addEventListener('click', go, { once: true });
@@ -1185,6 +1491,18 @@ if (DEBUG) {
     },
     insets: () => ({ ...insets }),
     levels: LEVELS.map((l) => l.id),
+    /** Progression permanente (objet normalisé). */
+    progress: () => app.progression.get(),
+    /** Remplace la progression (tests) : elle est normalisée puis enregistrée. */
+    setProgress(p) {
+      app.progression.commit(v3.progression?.normalizeProgress ? v3.progression.normalizeProgress(p) : p);
+      app.applyCosmetics();
+      if (app.inMenu && app.dialogs.top() === 'main-menu') app.dialogs.mainMenu();
+      return app.progression.get();
+    },
+    grange: (tab) => app.grange.open(tab),
+    decor: () => app.decor.enter(),
+    v3: () => v3,
   };
 }
 
