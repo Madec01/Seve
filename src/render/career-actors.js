@@ -277,9 +277,10 @@ export function createCareerActors() {
       seen.add(o.id);
       if (!visitors.has(o.id)) {
         const kind = o.kind;
+        // Sous la route, en file devant l'étal (la bulle tient sur la route, sans cacher le panneau).
         const spot = kind === 'pet'
-          ? { x: (h.well.x) * T + 12, y: (h.well.y + h.well.h) * T + 2 }
-          : kind === 'merchant' ? { x: 5 * T, y: road } : { x: (h.stand.x - 1) * T + 8 - k * 14, y: road };
+          ? { x: (h.house.door.x + 3) * T + 4, y: (h.y0 + 6) * T + 14 }
+          : { x: h.stand.x * T - 8 - k * 18, y: (h.roadY + 2) * T + 13 };
         const sprite = kind === 'pet' ? (o.data?.petId === 'dog' ? 'pet.dog' : 'pet.cat') : kind === 'merchant' ? 'npc.visitor.3' : VISITOR_SPRITES[Math.floor(tileHash(String(o.id).length, k, 5) * 2)];
         // Déjà là au chargement de la partie ; sinon il arrive par la route.
         visitors.set(o.id, { id: o.id, kind, sprite, x: kind === 'pet' || !initialized ? spot.x : -24, y: spot.y, tx: spot.x, ty: spot.y, facing: 1, walkD: 0, cropId: o.data?.cropId || null });

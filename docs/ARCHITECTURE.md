@@ -55,6 +55,8 @@ src/
     grange.js, decor.js, hints.js, buildings.js, progress.js, v3.js   contenu v3 (voir « Interface »)
     tutorial.js            tutoriel du niveau 1 (bulles ancrées en haut ou en bas en portrait)
     toasts.js, tooltip.js, icons.js, text.js, dom.js
+    career/                mode Carrière : menu « Ma ferme », création, Acheter, carte, terrains, équipe, Carnet,
+                           offres, fenêtres (voir « Mode Carrière — interface livrée »)
   audio/
     audio.js               musique (fondus), ambiances, effets sonores, volumes
   storage.js               localStorage (partie, carrière + copie de secours, progression, options) avec try/catch
@@ -1143,3 +1145,51 @@ tools/sim-career-staff.js     robots : staffDecisions(game, me) (utilisé par si
 CORE-C) : employés sans affectation remis au travail ; cheval (écurie) pour tirer semoir et moissonneuse avant le
 tracteur ; machines niv. 2 avec le tracteur ; collecteur du poulailler et cueilleuse (rang 3), château d'eau (rang 5) ;
 réserve de 2 saisons de charges + 14 jours de salaires. Aussi `crewDay` (robot autonome complet) et `automatedLots`.
+
+## Mode Carrière — interface livrée (lot UI, 2026-09-30)
+
+```
+src/ui/career/index.js     createCareerUI(app) → app.careerUI : active(), bind(game, { resumed, created }), unbind(),
+                           onGameEvent(ev), processPending(), openTab(id), activeTab(), onHit(hit, { long }),
+                           onPlotTap(i) (corbeau), open.{shop,map,lot,buildOptions,plan,building,storage,team,
+                           employee,hire,journal,charges,quest,offer}, q(name, défaut, ...args), act(name, ...args)
+src/ui/career/menu.js      careerMenuButtons(app, btn) (menu principal), openNewFarm(app, { replacing })
+src/ui/career/shop.js      Acheter (sections repliables) ; buildingCard, effectsText, requiresText
+src/ui/career/lots.js      carte, fiche de terrain, construire sur un emplacement, plan de culture d'une saison
+src/ui/career/buildings.js fiche de bâtiment, « Grenier et marché » (marketSection)
+src/ui/career/staff.js     équipe, fiche d'un employé, candidats
+src/ui/career/journal.js   Carnet (Ferme · Bilan · Marché · Agenda · Joseph), fiche des charges
+src/ui/career/events.js    cartes d'offre (forme offerInfo de CORE-C) et de quête
+src/ui/career/windows.js   fenêtres en file : faillite → prêt → vente de secours → coup dur → rang → bilan annuel,
+                           puis le bandeau de la saison ; intro (3 bulles de Joseph), au revoir d'un employé
+src/ui/career/util.js      icônes (icon.career.*, portraits, blasons), boutons d'achat, barres, sections repliables
+```
+
+- **Feuilles vivantes** : une feuille de carrière est reconstruite (au plus une fois par image, après chaque événement)
+  seulement si son HTML change, et jamais pendant qu'un doigt est posé dessus. Requêtes protégées (`q`) : requête
+  absente ou en erreur → valeur par défaut ; actions (`act`) : refus → message d'erreur, réussite → vibration.
+- **main.js** : `wire(game)` envoie les événements de carrière à `app.careerUI.onGameEvent` (les messages des niveaux
+  ne servent que pour `frost`, `harvested`, produits, prêt de Joseph, concours) ; `processPending()` de carrière :
+  remise des prix du comice (`contestAwarded`, titre « Comice agricole »), puis `careerUI.processPending()`.
+  `save()` → `storage.saveCareer(state, careerMetaOf(game))` (aube, gros achats via `app.saveNow`, bilan, arrière-plan).
+  `startRun(game, { resumed, created })` : en carrière, pas de panneau des niveaux ni de tutoriel ; `app.tabbar.setTabs(CAREER_TABS)`.
+  `app.startCareer(opts, { archiveExisting })` (+ `recordCareerStart`), `app.continueCareer()` (copie de secours
+  proposée si illisible ; code `newer` : message, rien n'est effacé), `app.restartCareer()` (archive puis création),
+  `app.careerEnded(ev)` (faillite Classique : `storage.clearCareer({ archive: ev.archive })`), `app.savedCareerInfo()`.
+  `app.revealLot(lotId, sheetId)` → `scene.focusLot` (le terrain reste visible au-dessus de sa feuille) ;
+  `scene.setCareer(on)` à la création de la scène, au lancement et après lotBought / lotDeveloped / buildingBuilt /
+  buildingUpgraded / rankUp. `body.is-career` (styles), `body.has-dialog` (les messages passent sous les fenêtres).
+- **Barre du haut** (`hud.js`, `#hud.is-career`) : « An N · j/L », charges de saison, case `#hud-rank` (blason +
+  progression moyenne patrimoine / objectifs → Carnet) ; fiches « Argent » et « Charges » propres à la carrière.
+- **Onglets** (`tabbar.js`) : `setTabs(list | null)`, `setLocked(id, on)` ; carrière : `farm, buy, staff, journal, menu`.
+- **Gestes** (`gestures.js`) : les cibles `lotSign` (avec `slot` : emplacement vide → construire), `lotForSale`,
+  `shelter` (ramasser, sinon fiche), `building`, `machine`, `employee`, `pond` (pêcher), `crow`, `joseph` vont à
+  `careerUI.onHit` ; appui long → fiche ; toucher d'une parcelle marquée d'un corbeau → `chaseCrow`.
+- **Progression** (`progress.js`) : `careerStart()`, `careerYear(run)`, `careerRank(rank)` (succès annoncés),
+  `careerAchievementList(ctx)` (grange, section « Ma ferme (carrière) » + anciennes fermes archivées).
+- **Conseils** (`hints.js`) : `career.start`, `collect`, `lotForSale`, `plan`, `hire`, `leave`, `machine`, `storage`,
+  `quest`, `crows`, `yearEnd` (`who: 'joseph'` : portrait de Joseph).
+- **Débogage** : `__debug.career()`, `careerStart(opts)`, `careerSkipYears(n)`, `careerRank(n)`, `careerMoney(n)`,
+  `careerEvent(id)` (→ `actions.career.triggerEvent`), `lotPoint(id)`.
+- Pas encore fait : ferme de carrière derrière le menu, « Suivre le tutoriel » en carrière, décor propre à la carrière
+  (`career.cosmetics.decor` : pas d'action du cœur), ramassage en série (`collectAll`).
