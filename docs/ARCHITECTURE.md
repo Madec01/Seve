@@ -168,3 +168,251 @@ Mise en page : la scène (`#stage`, canvas) occupe **tout l'écran** ; par-dessu
 - Les textes affichés au joueur sont en français ; les identifiants (`carrot`, `chickenCoop`…) en anglais.
 - Rendu pixel art : `imageSmoothingEnabled = false`, zoom entier, canvas redimensionné à la fenêtre.
 - Chemins relatifs uniquement (le jeu doit fonctionner dans un sous-dossier, ex. GitHub Pages).
+
+---
+
+## v3 — Contrats pour les trois lots (CORE · UI · RENDER)
+
+> Conception : `docs/GAME_DESIGN.md` § 12. Ce qui suit fixe les **noms, formes et comportements** que les trois lots se promettent, pour travailler en parallèle. Tout ajout est **compatible** avec le contrat v2 ci-dessus (rien n'est retiré ni renommé). Tant que CORE n'a pas livré, UI et RENDER peuvent simuler ces requêtes avec des objets factices de la même forme.
+
+### Nouveaux fichiers
+
+```
+src/data/products.js       recettes de transformation (PRODUCTS, getProduct, productsFor(buildingId, level))
+src/data/perks.js          bonus permanents (PERKS, PERK_TIERS, getPerk)
+src/data/achievements.js   succès (ACHIEVEMENTS, getAchievement) : conditions en données
+src/data/cosmetics.js      décorations, allées, clôtures, tenues (COSMETICS, DECOR_SLOTS, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX)
+src/core/trees.js          pommiers : croissance, fruits, dormance, récolte, arrachage
+src/core/processing.js     ateliers : places, entrée des récoltes et du lait, avancement, ventes, vente en l'état
+src/core/perks.js          lecture des bonus d'une partie : perkValue(state, key)
+src/core/contest.js        concours du niveau 12 : progression des épreuves, remise des prix
+src/core/progression.js    progression permanente PURE (étoiles, bonus, succès, écus, cosmétiques, cumuls)
+src/ui/grange.js           « La grange aux souvenirs » (onglets Bonus · Succès · Ma ferme)
+src/ui/decor.js            mode décoration (barre, feuilles d'emplacement, nom, tenue)
+src/ui/hints.js            conseils « première fois » (bulle + « Compris »)
+src/ui/buildings.js        fiche d'un atelier (interrupteur, places, vendre en l'état)
+tools/capture-parity.js    capture des résultats v2 (niveaux 1 à 8) avant toute modification du cœur
+tests/fixtures/parity-v2.json, tests/parity.test.js, tests/trees.test.js, tests/processing.test.js,
+tests/perks.test.js, tests/contest.test.js, tests/progression.test.js, tests/migration.test.js
+```
+
+### Données (formes exactes)
+
+**Cultures** (`crops.js`) — nouveaux champs facultatifs (absents = comportement v2) :
+
+```js
+{ id, name, seasons, growDays, seedCost, sellPrice, frostHardy,
+  kind: 'crop' | 'tree',            // défaut 'crop'
+  dryGrowth: 1,                     // pomme de terre : pousse non arrosée (défaut GROWTH.dry = 0.5)
+  dryHeatwaveGrowth: 0.5,           // pomme de terre : pousse non arrosée en canicule (défaut 0)
+  // arbres seulement :
+  fruitDays: 3, fruitSeasons: ['summer', 'autumn'], needsWater: false }
+export const BASE_CROPS = ['carrot','turnip','wheat','cabbage','tomato','corn','sunflower'];
+export const NEW_CROPS  = ['potato','strawberry','zucchini','pumpkin','apple'];
+```
+
+Ordre de `CROPS` : les 7 d'origine d'abord, puis `potato, strawberry, zucchini, pumpkin, apple`.
+
+**Investissements** (`investments.js`) — `ALL_INVESTMENTS` de `levels.js` reste la liste des 8 d'origine (niveaux 1 à 8). Ajouts :
+
+```js
+category: 'animal' | 'crop' | 'processing' | 'utility'   // pour les sections de l'onglet Acheter
+effects.milk: true                                         // vache (sans autre changement), chèvre
+effects.processing: { places: [2, 3, 4], source: 'harvest' | 'animal' }
+requiresAny: ['cow', 'goat']                               // fromagerie : au moins un des deux possédé
+// nouveaux ids : 'goat' (unit), 'jamWorkshop', 'dairy', 'mill' (upgrade)
+```
+
+**Produits** (`products.js`) :
+
+```js
+{ id: 'strawberryJam', name: 'Confiture de fraises', building: 'jamWorkshop', source: 'harvest', input: 'strawberry', days: 2, value: 46 }
+{ id: 'appleJuice',    name: 'Jus de pomme',         building: 'jamWorkshop', source: 'harvest', input: 'apple',      days: 1, value: 44 }
+{ id: 'cowCheese',     name: 'Fromage de vache',     building: 'dairy',       source: 'animal',  input: 'cow',        days: 2, value: 30 }
+{ id: 'goatCheese',    name: 'Fromage de chèvre',    building: 'dairy',       source: 'animal',  input: 'goat',       days: 2, value: 20 }
+{ id: 'flour',         name: 'Farine',               building: 'mill',        source: 'harvest', input: 'wheat',      days: 1, value: 28, maxLevel: 2 }
+{ id: 'bread',         name: 'Pain',                 building: 'mill',        source: 'harvest', input: 'wheat',      days: 2, value: 44, minLevel: 3 }
+// recipeFor(buildingId, buildingLevel, input) → produit actif ou null
+```
+
+**Niveaux** (`levels.js`) — `crops` devient une liste explicite partout (`BASE_CROPS` pour 1 à 8). Nouveaux champs, avec défauts dans `level()` / `BASE_MODIFIERS` : `startTrees: []`, `contest: null`, `modifiers.rawPriceFactor: 1`, `modifiers.pollination: false`. Concours :
+
+```js
+contest: { deadlineDay: 21, prizePerGoal: 120, bonusAll: 120, goals: [
+  { id: 'pumpkins', label: 'Citrouilles géantes', type: 'harvest', cropId: 'pumpkin', target: 6 },
+  { id: 'terroir',  label: 'Étal du terroir',     type: 'productsSold', target: 12 },
+  { id: 'cheese',   label: 'Fromage de la ferme', type: 'productsSold', productIds: ['cowCheese', 'goatCheese'], target: 3 } ] }
+```
+
+**Bonus** (`perks.js`) :
+
+```js
+PERK_TIERS = [{ tier: 1, starsRequired: 0 }, { tier: 2, starsRequired: 8 }, { tier: 3, starsRequired: 18 }];
+{ id, name, description, tier, costs: [2, 3] /* un prix par rang */, effect: { key, values: [15, 30] /* par rang */ } }
+// clés d'effet : forecastDays (almanac: 1), startMoney (15/30), seedFactor (0.9), springRentFactor (0.85),
+// growthBonus (0.05), investmentFactor (0.95), plotDiscount (10), farmChargeReduction (1), productBonus (0.1),
+// priceBonus (0.05), extraPlaces (1), treeDiscount (10), treeGrowReduction (2), frostRefund (true), extraCrops (NEW_CROPS)
+```
+
+**Succès** (`achievements.js`) : `{ id, name, description, reward: { stars: 0|1, ecus }, check: { type, ...params } }`. Types de condition (évalués dans `progression.js`) : `lifetimeHarvests {n}`, `lifetimeCropSet {cropIds}`, `seasonHarvestIncome {n}`, `winNoLoss {minLevel}`, `yearHarvest {cropId, n}`, `adultTrees {n}`, `owned {id, n}`, `ownedTogether {ids}`, `ownAllInLevel`, `zeroCharges`, `lifetimeProducts {n}`, `anyProductSold {productIds?}`, `yearProducts {productIds, n}`, `levelsWon {ids}`, `threeStars {n}`, `threeStarsAll`, `yearEndMoney {n}`, `closeCall {n}`, `purist {minLevel}`, `winNoInvestment {minLevel}`, `decorationsPlaced {n}`.
+
+**Cosmétiques** (`cosmetics.js`) : `{ id, name, category: 'small'|'large'|'path'|'fence'|'outfit', price, isDefault? }` ; `DECOR_SLOTS = [{ id: 'porch.left', name: 'Devant la maison, à gauche', kind: 'small' }, …, { id: 'pond', kind: 'large' }]` (ids du § 12.7 de la conception) ; `DEFAULT_COSMETICS = { farmName: 'Ferme des Tilleuls', outfit: 'outfit.classic', path: 'path.dirt', fence: 'fence.wood', decor: {}, owned: ['outfit.classic','path.dirt','fence.wood'] }`.
+
+### État de partie v2 (`STATE_VERSION = 2`)
+
+```js
+state.perks = { [perkId]: rank }            // copiés au lancement ; {} = aucun bonus (jeu v2)
+state.plots[i].fruit = 0                    // arbres : jours de fruits accumulés (0 pour une culture)
+                                            // arbre : cropId 'apple', growth = maturité de l'arbre (0 → growDays effectif)
+state.processing = {                        // une entrée par atelier possédé (créée au 1er achat, on: true)
+  [buildingId]: { on: true, places: [ null | { productId, input, source: 'harvest'|'animal',
+                                              daysLeft, rawValue, yieldFactor } ] } }
+                                            // places.length = capacité (niveau + bonus Artisan) ; amélioration → nulls ajoutés
+state.contest = null | { awarded: false, result: null | { goalsMet: [goalId], amount } }
+stats (year et season), nouveaux champs : productIncome, productsSold: { [productId]: n }, rawSales,
+  frostRefund, contestPrize, minMoneyAfterRent (null tant qu'aucun fermage payé)
+```
+
+- `buildSummary().net` inclut `productIncome + rawSales + frostRefund + contestPrize`.
+- Parité : avec `perks = {}` sur un niveau 1 à 8, aucune nouvelle règle ne s'applique et **aucun tirage aléatoire** supplémentaire n'est fait (pas de nouveau flux ; l'almanach lit la météo d'après-demain en tirant sur une **copie** du flux `weather` avec la saison du jour + 2, sans modifier `state.rng`).
+- `loadGame()` : `migrateState(saved)` transforme une v1 en v2 (champs ci-dessus à leurs valeurs vides) ; `checkState` vérifie aussi `perks` (ids et rangs connus), `fruit`, `processing` (bâtiments possédés, places ≤ capacité, produits connus), `contest`.
+
+### createGame
+
+```js
+createGame({ levelId, seed, perks = {} })   // perks : progression.runPerks(progress) ({} si l'interrupteur est éteint)
+```
+
+Effets appliqués à la création : argent de départ + `startMoney` ; pommiers de `level.startTrees` plantés adultes ; `state.processing = {}`, `state.contest` si le niveau en a un. Liste des cultures de la partie : `level.crops` (+ `NEW_CROPS` avec `seedMerchant`, dans l'ordre de `CROPS`).
+
+### Actions (ajouts)
+
+```js
+game.actions.plant(i, 'apple')           // pommier : coût seedCost − treeDiscount ; saisons de plantation ; pas en hiver
+game.actions.harvest(i)                  // → { ok, amount, cropId, tree: bool,
+                                         //     processed: null | { buildingId, productId, placeIndex } }
+                                         //   amount = 0 si la récolte part à l'atelier
+game.actions.removeTree(i)               // → { ok } ; parcelle vidée, lastHarvested = null
+game.actions.setProcessing(buildingId, on)   // → { ok, on }
+game.actions.sellProcessing(buildingId)  // → { ok, amount, count } ; vend les places au prix brut
+game.actions.water(i)                    // arbre : refus « Le pommier n'a pas besoin d'eau. » ;
+                                         // pomme de terre hors canicule : refus « Pas besoin : elle pousse sans arrosage. »
+```
+
+### Requêtes (ajouts)
+
+```js
+game.query.plot(i) → { ...v2,
+  kind: 'crop' | 'tree' | null,
+  tree: null | { stage: 'sapling'|'young'|'adult', growth, growDays, adultInDays,
+                 fruit, fruitDays, fruitReady, fruitDaysLeft, fruitStage: 0..3,
+                 dormant /* hiver */, blossom /* printemps, adulte */, harvestsLeftEstimate },
+  needsWater,                         // false pour arbre et pomme de terre hors canicule
+  processTarget: null | { buildingId, productId, productName, value, hasRoom } }
+  // action : arbre → 'harvest' si fruitReady, sinon null ; stage 0..4 reste défini pour les cultures
+game.query.plantableCrops(i?) → [{ ...v2, kind, seedCost /* après bonus */,
+  product: null | { buildingId, productId, name, value, days, owned /* atelier possédé */ },
+  tree: null | { fruitDays, fruitSeasons, basketPrice, harvestsBeforeYearEnd },
+  noWater /* pomme de terre */, sowAll /* false pour l'arbre */ }]
+game.query.investments() → [{ ...v2, category, nextCost /* après Marchandage */, requiresAny,
+  processing: null | { level, places, nextPlaces, on, used, recipes: [{ input, inputName, productId, productName, days, value, active }] } }]
+game.query.processing() → [{ buildingId, name, level, on, capacity,
+  places: [null | { productId, productName, input, daysLeft, days, value /* vente prévue */, rawValue }],
+  value /* somme des ventes prévues */, rawValue /* somme en l'état */ }]
+game.query.contest() → null | { deadlineDay, daysLeft, awarded, prizePerGoal, bonusAll,
+  goals: [{ id, label, target, progress, done }], potentialPrize }
+game.query.perks() → [{ id, name, rank, description }]          // bonus de cette partie
+game.query.forecast() → { today, tomorrow, afterTomorrow /* null sans Almanach */ }
+game.query.finance() → { ...v2, processingValue, processingRawValue, rentAutoSell /* true si le filet de sécurité vendra ce soir */ }
+game.query.achievementContext() → { levelId, status, day, seasonId, money, perksActive, stats: { year, season },
+  investments, availableInvestments, adultTrees, dailyCharges }
+```
+
+### Événements (ajouts)
+
+| Type | Données |
+|---|---|
+| `harvested` | v2 + `tree: bool`, `processed: null \| { buildingId, productId, placeIndex }` |
+| `processingStarted` | `{ buildingId, placeIndex, productId, input, source: 'harvest'\|'animal', plotIndex? }` |
+| `productSold` | `{ buildingId, productId, amount, placeIndex }` (aube, étape 8) |
+| `processingSoldRaw` | `{ buildingId, amount, count, reason: 'player'\|'rent'\|'yearEnd' }` |
+| `processingToggled` | `{ buildingId, on }` |
+| `treeRemoved` | `{ plotIndex }` |
+| `contestProgress` | `{ goalId, progress, target, done }` (à chaque changement) |
+| `contestAwarded` | `{ amount, goalsMet: [goalId], goals }` (soir du jour limite, avant le fermage) |
+| `frost` | v2 + `refund` (Assurance gel, 0 sinon) |
+| `rot` | v2 + `tree: bool` (pommes mûres perdues, l'arbre reste) |
+| `dawn` | `incomes[].kind` : `'daily' \| 'shearing' \| 'processed' \| 'refund'` ; `processed` porte `productId` ; le lait parti à la fromagerie **n'apparaît pas** dans les revenus (`milkToDairy: [{ animalId, count }]` en plus) |
+| `purchased` | v2 ; pour un atelier, `state.processing[id]` existe déjà quand l'événement part |
+
+Ordre de l'aube et de la fin de journée : § 12.2 de la conception (`src/core/game.js` met à jour son en-tête).
+
+### Progression permanente (`src/core/progression.js`, pur, testé sous Node)
+
+Objet de progression (sérialisé tel quel par `storage.js`, clé `une-annee-a-la-ferme.progress`) :
+
+```js
+{ schema: 2,
+  levels: { [id]: { stars, bestMoney, completed, played } },
+  perks: { [perkId]: rank }, perksEnabled: true,
+  achievements: { [id]: { at /* horodatage */ } },
+  lifetime: { harvests, cropsHarvested: { [cropId]: n }, productsSold: { [productId]: n },
+              yearsWon, yearsLost, rentsPaid },
+  ecus: 0,
+  cosmetics: { farmName, outfit, path, fence, decor: { [slotId]: itemId }, owned: [itemId] },
+  hintsSeen: [hintId] }
+```
+
+```js
+PROGRESS_SCHEMA = 2
+normalizeProgress(raw) → progress            // v1 → v2, champs abîmés → défauts, références inconnues ignorées
+starsEarned(p) / starsSpent(p) / starsAvailable(p)
+perkList(p) → [{ id, name, description, tier, rank, maxRank, nextCost, unlocked, canBuy, reason }]
+buyPerk(p, perkId) → { ok, progress } | { ok: false, reason }        // renvoie un NOUVEL objet
+refundPerks(p) → progress
+setPerksEnabled(p, bool) → progress
+runPerks(p) → { [perkId]: rank }               // {} si perksEnabled est faux
+isLevelUnlocked(p, levelId) → bool             // 1 toujours ; n si n − 1 terminé
+checkAchievements(p, ctx | null) → [achievementId]   // nouveaux succès remplis (ctx = query.achievementContext(), + runStats)
+unlockAchievements(p, ids) → { progress, rewards: { stars, ecus } }
+achievementList(p, ctx | null) → [{ id, name, description, reward, done, at, progress: null | { value, target } }]
+recordRunEnd(p, { levelId, outcome: 'victory'|'bankrupt'|'abandon', stars, money, summary, perksActive })
+  → { progress, rewards: { ecus, newStars, newBest, firstTime }, achievements: [id] }
+  // met à jour levels, lifetime (cumul de la partie), écus, puis évalue et débloque les succès
+buyCosmetic(p, itemId) → { ok, progress } | { ok: false, reason }
+placeDecor(p, slotId, itemId | null) → { ok, progress } | { ok: false, reason }   // objet possédé et du bon type
+setPath(p, itemId) / setFence(p, itemId) / setOutfit(p, itemId) → { ok, progress }
+setFarmName(p, text) → progress                // espaces retirés, 1..18 caractères, sinon nom par défaut
+markHint(p, hintId) → progress
+ecusForRun({ outcome, stars, money }) → n      // 10 + 5 × étoiles + min(20, ⌊money/100⌋) ; faillite 3 ; abandon 0
+```
+
+`storage.js` : `loadProgress()` → `normalizeProgress(read())` ; `saveProgress(p)` ; `recordVictory` et `isLevelUnlocked` deviennent des enveloppes de `progression.js` (compatibilité) ; `resetProgress()` inchangé (tout effacer).
+
+### Contrat du rendu (lot RENDER)
+
+- **Dispositions** (`layout-portrait.js`, `layout.js`) : nouveaux emplacements d'investissement `goat`, `dairy`, `jamWorkshop`, `mill` (même forme que les autres : zone, `sign`, `investmentRect`, `investmentAnchor`, présence selon `level.availableInvestments`, bande retirée si absente). En portrait : bande « chèvres + fromagerie » sous le pré des vaches, bande « ateliers » (atelier de confitures à gauche, moulin à droite, 4 tuiles de haut) entre le champ et la maison ; en paysage, le monde peut grandir en hauteur si les nouveaux bâtiments ne tiennent pas dans 32 × 20.
+- `layout.decorSlots = [{ id, kind: 'small'|'large'|'sign', x, y, w, h }]` (px du monde) avec les ids de `DECOR_SLOTS` ; un emplacement sans place dans un niveau est simplement absent.
+- **Scène** (ajouts à `createScene`) :
+
+```js
+scene.setCosmetics({ farmName, outfit, path, fence, decor })   // relu à chaque changement ; redessine les couches en cache
+scene.setDecorMode(on)                  // repères « + » sur les emplacements, fermier et panneau touchables
+scene.hitTest(x, y, opts) → v2 | { type: 'decorSlot', id } | { type: 'sign' } | { type: 'farmer' }   // ces 3 types seulement en mode décoration
+scene.onEvent('harvested' { processed }) // vol de l'icône du produit de la parcelle vers le bâtiment
+scene.onEvent('productSold')             // « +46 » au-dessus du bâtiment
+```
+
+- La scène lit `game.state.plots` (arbres : `cropId === 'apple'`, `growth`, `fruit`) et `game.query.processing()` (places occupées, `on`) ; elle ne modifie rien. Arbre : sprite choisi par étape (`sapling`/`young`/`adult`) et saison (`blossom` printemps, `summer`, `autumn`, `bare` hiver) ; fruits dessinés à partir de `fruitStage ≥ 2`.
+- **Noms de sprites** (atlas) : `crop.<id>.<0..4>`, `crop.<id>.icon`, `seed.<id>` ; `tree.apple.<sapling|young>`, `tree.apple.adult.<spring|summer|autumn|winter>`, `tree.apple.fruit` ; `goat` (+ variantes d'animation comme `sheep`) ; `product.<productId>` (le fromage de chèvre peut réutiliser la meule, teintée) ; `building.<jamWorkshop|dairy|mill>` ; `decor.<itemId>` ; `fence.<picket|stone|hedge>.*`, `path.stone.*` ; `farmer.<outfitId>.*` ; `icon.perk.<id>`, `icon.ach.<id>`. L'UI les obtient par `sprite(name)` / `spriteURL(name)` d'`icons.js` (déjà en place) : RENDER fournit l'atlas, UI ne dessine rien elle-même.
+- Le nom de la ferme est écrit sur le panneau avec la police « Ferme », à l'échelle entière, tronqué avec « … » s'il ne tient pas.
+
+### Découpage et frontières
+
+| Lot | Possède (seul à modifier) | Livre aux autres | Attend des autres |
+|---|---|---|---|
+| **CORE** | `src/data/*`, `src/core/*`, `src/storage.js`, `tests/*`, `tools/simulate.js`, `tools/capture-parity.js` | données, actions, requêtes, événements et `progression.js` ci-dessus ; tableaux chiffrés du § 12 mis à jour après équilibrage | rien (commence par la capture de parité) |
+| **UI** | `src/ui/*`, `css/style.css`, `src/main.js`, `src/index.template.html` | appels `scene.setCosmetics`, `setDecorMode`, gestion des nouveaux `hitTest` | CORE : API ci-dessus ; RENDER : sprites et API de scène ci-dessus (factices en attendant) |
+| **RENDER** | `src/render/*`, `assets/sprites/*` (intégration), `tools/atlas-preview.html` | atlas, dispositions, scène | CORE : forme de `state.plots`, `query.processing()`, ids ; agent graphique : planches |
+
+Règles communes : aucun lot ne modifie les fichiers d'un autre (une demande passe par le chef de projet) ; `index.html`, `dev.html`, `dist/` restent générés (`node tools/build.js`) ; textes du jeu en français, identifiants en anglais ; `node --test tests/` vert à chaque livraison.

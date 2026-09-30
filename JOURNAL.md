@@ -125,6 +125,12 @@ Bug signalé : sur le téléphone, le jeu restait **bloqué sur l'écran de char
 - Écran de chargement : jamais plus large que l'écran (grille `minmax(0, 1fr)`, défilement vertical si « Détails » est long).
 - **Vérifié** (Playwright, Pixel 7, serveur local en sous-dossier `/Seve/` avec `Cache-Control: max-age=600` comme GitHub Pages) : premier chargement (prêt en ~0,3 s, service worker installé) ; **bug reproduit** avec les anciennes versions (page neuve + styles/modules du cache HTTP → police Pixelify, jeu bloqué, « Réparer » inutile) puis passage à la nouvelle version sans action ; mise à jour B → C sans mélange (anciens paquets toujours servis) et message de mise à jour ; réseau instable (30 % des requêtes coupées une fois) : **8/8 démarrages** (ancienne version : 0/4, jauge vide, exactement le symptôme du téléphone) ; « Slow 3G » : **prêt en 19 s** (ancienne version : 79 s, écran vide pendant 24 s) ; hors ligne ; page serveur lente → page installée en 5 s ; paquet introuvable → erreur claire + Détails + Réparer → nouvelle version ; niveau 1 semé et arrosé au doigt, aucune erreur console.
 
+### 2026-09-30 — Conception du contenu v3
+
+- `docs/GAME_DESIGN.md` § 12 (« Contenu v3 ») : nouvelles cultures (pomme de terre, fraise, courgette, citrouille) et pommier ; transformation (atelier de confitures, fromagerie + chèvres, moulin / four à pain) avec un interrupteur par atelier ; bonus permanents (14 bonus, 3 paliers, 41 étoiles) et 26 succès ; niveaux 9 à 12 (atelier de confitures, verger de grand-père, ferme de montagne, concours du village) ; personnalisation en écus (décorations sur emplacements prédéfinis, allées, clôture, nom de la ferme, tenue) ; écrans téléphone ; migration des sauvegardes ; cibles de simulation ; plan en trois lots.
+- `docs/ARCHITECTURE.md`, section « v3 » : contrats des lots CORE / UI / RENDER (données, état v2, actions, requêtes, événements, `progression.js`, API de scène, noms de sprites).
+- Niveaux 1 à 8 inchangés : sans bonus, parité exacte avec la v2 (test à écrire avant toute modification du cœur).
+
 ---
 
 ## Idées (à étudier plus tard)
@@ -135,6 +141,29 @@ Bug signalé : sur le téléphone, le jeu restait **bloqué sur l'écran de char
 - Bonus permanents achetés avec les étoiles entre les niveaux.
 - Commandes des voisins (« 5 tomates, payées le double »).
 - Festival de fin d'été avec concours du plus gros légume.
+
+Idées étudiées pendant la conception v3 (2026-09-30) et **écartées** (raison entre parenthèses) :
+
+- File d'attente devant les ateliers, avec ordre de priorité réglable (trop de gestion au doigt ; remplacée par « place libre, sinon vendu normalement »).
+- Choisir récolte par récolte « vendre ou transformer » (une question à chaque toucher, casse le glisser pour récolter en série ; remplacé par un interrupteur par atelier).
+- Stock de produits à vendre soi-même au meilleur moment (un écran d'inventaire de plus ; les produits se vendent seuls à l'aube).
+- Boulangerie séparée alimentée par la farine du moulin (chaîne à deux étapes, stock intermédiaire ; remplacé par le « four à pain » au niveau 3 du moulin).
+- Pressoir séparé pour le jus de pomme (un bâtiment de plus pour une seule recette ; le jus se fait à l'atelier de confitures).
+- Lait de brebis / fromage de brebis (brouille le rôle des moutons, qui restent la tonte).
+- Arbres qui survivent d'une année à l'autre, verger permanent entre les niveaux (chaque niveau est une année indépendante ; un bonus rendrait les niveaux 1 à 8 trop faciles).
+- Arbres qui meurent au gel ou qu'il faut arroser (contredit leur intérêt : peu de clics, pas de gel).
+- Poiriers, cerisiers, vigne (pas de sprites ; le pommier suffit à introduire le système).
+- Bonus permanents qui augmentent le nombre de parcelles ouvertes au départ (change la disposition du champ et trop fort au niveau 4).
+- Bonus « revenu des animaux +x % » (trop fort : les animaux sont déjà le cœur de l'hiver) et bonus de remise sur le fermage d'hiver (retire la tension principale du jeu).
+- Bonus permanents non remboursables (piège pour le joueur ; remboursement libre retenu).
+- Étoiles consommées par les achats (les étoiles des niveaux disparaîtraient ; on dépense les « étoiles disponibles », les étoiles gagnées restent affichées).
+- Acheter des écus ou des étoiles avec les pièces d'une partie (mélange la partie et la progression ; les écus viennent des résultats et des succès).
+- Décorations avec effet (ex. épouvantail qui protège des oiseaux, mare qui arrose) : la personnalisation doit rester sans aucun effet.
+- Placement libre des décorations sur une grille (précision impossible au doigt, risques de chevauchement avec les bâtiments ; emplacements prédéfinis).
+- Concours avec objectif obligatoire (faillite ou défaite si raté) : trop punitif ; retenu : prix par épreuve réussie.
+- Niveau « grêle » qui détruit des cultures au hasard (frustrant, sans décision possible).
+- Commandes des voisins à délai (bonne idée, mais un système de plus en v3 ; gardée pour plus tard).
+- Afficher la météo d'après-demain en tirant la météo plus tôt (changerait la suite des tirages des niveaux 1 à 8 ; l'almanach lit une copie du flux aléatoire).
 
 ---
 
