@@ -9,7 +9,8 @@
 //   recordRunEnd(info), ecus(), cosmetics(), cosmeticsList(category?), buyCosmetic(id),
 //   placeDecor(slotId, itemId|null), setPath(id), setFence(id), setOutfit(id), setFarmName(text),
 //   farmName(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars(),
-//   difficulty(), setDifficulty(id) }
+//   difficulty(), setDifficulty(id), careerStart(), careerYear(run), careerRank(rank),
+//   careerAchievementList(ctx) }
 //
 // Toute la logique est dans src/core/progression.js (pur) ; ici, seulement l'état courant,
 // l'enregistrement et les messages. Sans ce module (lot CORE pas encore livré), available()
@@ -217,6 +218,32 @@ export function createProgress(app, storage) {
     return { rewards: res.rewards || { ecus: 0 }, achievements: res.achievements || [], starsAvailable: starsAvailable() };
   }
 
+  // ── Carrière (docs/CARRIERE.md § 1.6) ─────────────────────────────────────────
+  /** Applique { progress, rewards, achievements } d'une fonction de carrière et annonce les succès. */
+  function careerRecord(name, ...args) {
+    if (!available() || !has(name)) return null;
+    let res;
+    try {
+      res = P()[name](get(), ...args);
+    } catch (err) {
+      console.warn(`${name} :`, err);
+      return null;
+    }
+    if (!res?.progress) return null;
+    commit(res.progress);
+    const ids = res.achievements || [];
+    if (ids.length) announce(ids, { ecus: res.rewards?.achievementEcus || 0 });
+    return { rewards: res.rewards || { ecus: 0 }, achievements: ids };
+  }
+  /** Une carrière commence : « Première pierre ». */
+  const careerStart = () => careerRecord('recordCareerStart');
+  /** Bilan de l'année : écus, cumuls, succès. run = { year, rank, net, report, career } */
+  const careerYear = (run) => careerRecord('recordCareerYear', run);
+  /** Passage de rang : 20 × rang écus, succès. */
+  const careerRank = (rank) => careerRecord('recordCareerRank', rank);
+  /** Succès de la carrière pour la grange (section « Carrière »). ctx : contexte d'une carrière en cours ou null. */
+  const careerAchievementList = (ctx = null) => call('careerAchievementList', ctx) || [];
+
   // ── Écus et cosmétiques ───────────────────────────────────────────────────────
   const ecus = () => Math.max(0, Math.floor(get().ecus || 0));
   function cosmetics() {
@@ -311,6 +338,10 @@ export function createProgress(app, storage) {
     levelInfo,
     difficulty,
     setDifficulty,
+    careerStart,
+    careerYear,
+    careerRank,
+    careerAchievementList,
     fmtEcus: (n) => `${fmt(n)} écu${Math.abs(n) > 1 ? 's' : ''}`,
   };
 }

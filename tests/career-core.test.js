@@ -285,7 +285,8 @@ test('Détente, coup dur étape par étape : ateliers → grenier → Joseph →
   nextDay(g);
   assert.equal(ev.of('neighbourLoan').length, 0);
   assert.equal(ev.of('billPaid').length, 1, 'les charges sont payées quand même');
-  assert.equal(g.state.money, 5 - 35 - 2 + 0, 'découvert (charges de saison, puis charge de l\'aube)');
+  // Charges de l'aube : ferme 2 + entretien des 2 moutons 4 ; les œufs s'accumulent au poulailler (CORE-B : à ramasser).
+  assert.equal(g.state.money, 5 - 35 - 2 - 4, 'découvert (charges de saison, puis charge de l\'aube)');
   assert.equal(ev.of('hardship')[0].stage, 'overdraft');
   assert.equal(g.state.status, 'playing');
   assert.equal(g.query.career.summary().paused, true);
@@ -428,9 +429,11 @@ test('points d\'accroche : saison, aube, tranches de journée, soir, fin d\'ann�
   } finally {
     ext.off();
   }
-  // Actions des lots pas encore livrés : refus doux.
+  // Actions des lots CORE-B (livrés) : refus motivé (embauche au rang 2), aucune machine au départ.
   const g = newCareer();
-  assert.deepEqual(g.actions.career.hire('x'), { ok: false, reason: 'Bientôt disponible.' });
+  const hire = g.actions.career.hire('x');
+  assert.equal(hire.ok, false);
+  assert.notEqual(hire.reason, 'Bientôt disponible.');
   assert.deepEqual(g.query.career.machines(), []);
 });
 
@@ -454,10 +457,12 @@ test('points d\'accroche : récolte mise de côté (commande), animaux ramassés
   } finally {
     ext.off();
   }
+  // Avec l'extension des animaux (CORE-B) : les œufs s'accumulent au poulailler, à ramasser.
   const g = newCareer();
   const ev = record(g);
   nextDay(g);
-  assert.deepEqual(ev.of('dawn')[0].incomes.find((i) => i.source === 'hen'), { source: 'hen', amount: 4, owned: 2, kind: 'daily', key: 'animals' });
+  assert.equal(ev.of('dawn')[0].incomes.find((i) => i.source === 'hen'), undefined);
+  assert.equal(g.state.career.buildings.coop.pending, 4);
 });
 
 test('mode Niveaux intact : aucune branche de carrière', () => {

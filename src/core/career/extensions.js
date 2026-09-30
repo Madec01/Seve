@@ -6,4 +6,11 @@
 //   import './staff.js';
 //   import './machines.js';
 
+import './events.js';
+import './quests.js';
+import './animals.js';
+import './machines.js';
+import './staff.js';
+import './work.js';
+
 export {};

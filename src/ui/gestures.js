@@ -67,6 +67,8 @@ export function createSceneInput(canvas, app) {
     const game = app.game;
     const p = game?.query.plot(index);
     if (!p || game.state.status !== 'playing') return null;
+    // Carrière : une parcelle marquée d'un corbeau → on le chasse d'abord (docs/CARRIERE.md § 10.9).
+    if (app.careerUI?.onPlotTap?.(index)) return 'crow';
     switch (p.action) {
       case 'plant':
         app.field.openSeedPicker(index);
@@ -106,6 +108,13 @@ export function createSceneInput(canvas, app) {
     app.audio.play('page', { volume: 0.7 });
     if (hit.type === 'plot') app.field.openPlotInfo(hit.index);
     else if (hit.type === 'investment') app.field.openInvestmentInfo(hit.id);
+    else app.careerUI?.onHit?.(hit, { long: true });
+  }
+
+  /** Cibles propres à la carrière (terrains, abris, employés, corbeaux…) : src/ui/career/index.js. */
+  function tapOther(hit) {
+    if (!hit || hit.type === 'plot' || hit.type === 'investment') return false;
+    return !!app.careerUI?.onHit?.(hit);
   }
 
   /** Glisser sur le champ : même action sur chaque parcelle traversée. */
@@ -193,6 +202,8 @@ export function createSceneInput(canvas, app) {
       } else if (hit?.type === 'investment') {
         tapInvestment(hit.id);
         g.mode = 'none';
+      } else if (tapOther(hit)) {
+        g.mode = 'none';
       }
       app.tooltip.hide('scene');
       return;
@@ -268,6 +279,7 @@ export function createSceneInput(canvas, app) {
     if (cur.touch && !cur.mode && !cur.long && cur.hit) {
       if (cur.hit.type === 'plot') tapPlot(cur.hit.index);
       else if (cur.hit.type === 'investment') tapInvestment(cur.hit.id);
+      else tapOther(cur.hit);
     } else if (cur.mode === 'scroll') {
       // Pas d'inertie si le doigt s'est arrêté avant de se lever.
       if (performance.now() - cur.lastT < 80) startInertia(cur.v);

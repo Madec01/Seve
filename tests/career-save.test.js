@@ -262,6 +262,7 @@ test('bilan de l\'année : revenus et dépenses par poste, meilleure culture, hi
   const ev = record(g);
   for (let d = 0; d < 28; d++) {
     tendAll(g);
+    g.actions.career.collect('coop'); // œufs à ramasser (CORE-B)
     nextDay(g);
   }
   const ye = ev.of('yearEnd')[0];

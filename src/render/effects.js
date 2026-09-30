@@ -9,10 +9,13 @@
 //   - « écran »  : pixels réels du canvas (après zoom entier).
 // La scène (scene.js) appelle update/draw* au bon moment ; l'interface n'utilise que
 // onEvent(type, payload, layout) et floatText(worldX, worldY, text, color).
+// (Carrière) Réactions aux événements du mode Carrière (ramassage, grenier, truffes, pêche, naissances,
+// passage de rang, arrosage des machines…) et shift(dx, dy) : le monde a grandi, tout ce qui est en
+// coordonnées du monde se décale.
 //
 // Pas d'allocation par image : toutes les particules viennent de réserves préallouées.
 
-import { TILE, drawSprite, productSprite } from './atlas.js';
+import { TILE, SPRITES, drawSprite, productSprite } from './atlas.js';
 
 const OUTLINE = '#3f2631';
 const GOLD = '#ffe27a';
@@ -340,6 +343,19 @@ export function createEffects(images) {
           if (!payload.processed._flown) flyToBuilding(payload.processed, c, layout, 0);
           break;
         }
+        if (payload.stored) {
+          // (Carrière) Mise en réserve au grenier : l'icône de la culture part vers le grenier.
+          floatText(c.x, c.y - 10 * k, '→ grenier', '#fff3b0', { icon: false, life: 1.5 });
+          const a = layout.investmentAnchor('storage', 1);
+          const icon = `crop.${payload.cropId}.icon`;
+          if (SPRITES[icon]) fly(icon, c.x - 8, c.y - 12, a.x - 8, a.y + 14, { life: 1.1, arc: 30 });
+          break;
+        }
+        if (payload.diverted) {
+          // (Carrière) Mise de côté pour un visiteur ou une quête.
+          floatText(c.x, c.y - 10 * k, `→ ${payload.diverted.label || payload.divertLabel || 'commande'}`, '#fff3b0', { icon: false, life: 1.6 });
+          break;
+        }
         coins(c.x, c.y - 4 * k, 7 + (k - 1) * 3);
         if (payload.amount) floatText(c.x, c.y - 10 * k, `+${payload.amount}`, GOLD);
         break;
@@ -457,6 +473,77 @@ export function createEffects(images) {
         if (!r) return;
         ghostCrop(r, payload.cropId, 'rot', 0, k);
         flies(r.x + r.w / 2, r.y + 4 * k);
+        break;
+      }
+      // ── Mode Carrière (ces événements n'existent pas dans les niveaux) ──
+      case 'collected': {
+        const a = layout.investmentAnchor(payload.buildingId, 1);
+        if (!payload.amount) break;
+        coins(a.x, a.y + 6, Math.min(8, 3 + Math.round(payload.amount / 10)));
+        floatText(a.x, a.y - 4, `+${payload.amount}`, GOLD, { icon: true });
+        break;
+      }
+      case 'stockSold': {
+        if (!payload.amount) break;
+        const a = layout.investmentAnchor('storage', 1);
+        coins(a.x, a.y + 10, Math.min(10, 3 + (payload.count || 1)));
+        floatText(a.x, a.y - 2, `+${payload.amount}`, GOLD, { icon: true, life: 2.2 });
+        break;
+      }
+      case 'truffleFound': {
+        const a = layout.investmentAnchor('pig', 1);
+        popIcon('product.truffle', a.x, a.y + 12);
+        if (payload.amount) floatText(a.x, a.y - 6, `+${payload.amount}`, GOLD, { icon: true, delay: 0.3 });
+        break;
+      }
+      case 'fishCaught': {
+        const a = layout.investmentAnchor('duckPond', 1);
+        const n = 1 + (Math.abs(String(payload.fishId || '').length) % 3);
+        popIcon(SPRITES[`product.fish.${n}`] ? `product.fish.${n}` : 'product.fish.1', a.x, a.y + 30);
+        droplets(a.x, a.y + 36, 12, 1);
+        if (payload.amount) floatText(a.x, a.y + 10, `+${payload.amount}`, GOLD, { icon: true, delay: 0.3 });
+        break;
+      }
+      case 'animalBorn': {
+        const r = layout.investmentRect(payload.animalId, 99);
+        if (!r) break;
+        sparkle(r, 12, 'gold');
+        floatText(r.x + r.w / 2, r.y + 8, `+${payload.count || 1}`, '#ffd6e8', { icon: false, life: 2 });
+        break;
+      }
+      case 'rankUp': {
+        const a = layout.investmentAnchor('house', 1);
+        confetti({ x: a.x - 64, y: a.y - 50, w: 128, h: 40 }, 70);
+        sparkle({ x: a.x - 40, y: a.y, w: 80, h: 40 }, 20, 'gold', 0.2);
+        break;
+      }
+      case 'josephHeart': {
+        const a = layout.investmentAnchor('house', 1);
+        if (SPRITES['icon.career.heart']) popIcon('icon.career.heart', a.x + 30, a.y + 40, 0.6);
+        break;
+      }
+      case 'crowChased': {
+        const c = layout.plotCenter(payload.plotIndex);
+        if (c) leafBurst(c.x, c.y, 4 * k, k);
+        break;
+      }
+      case 'lotBought': {
+        const r = layout.lotRect ? layout.lotRect(payload.lotId) : null;
+        if (!r) break;
+        dirt(r.x + r.w / 2, r.y + r.h / 2, 18, 2);
+        leafBurst(r.x + r.w / 2, r.y + r.h / 2, 12, 2);
+        if (payload.cost) floatText(r.x + r.w / 2, r.y + r.h / 2 - 10, `-${payload.cost}`, '#ff9a8a', { icon: true, life: 2.2 });
+        break;
+      }
+      case 'machineWorked': {
+        if (payload.kind !== 'water') break;
+        (payload.plots || []).slice(0, 24).forEach((pl, j) => {
+          const c = layout.plotCenter(typeof pl === 'number' ? pl : pl.index);
+          if (!c) return;
+          for (let d = 0; d < 3 * k; d++) {
+            particle('drop', c.x + rand(-7, 7) * k, c.y - rand(8, 14) * k, rand(-5, 5), rand(10, 30), 260, 0.8, d % 2 ? '#8fd0ff' : '#dff3ff', 0.1 + j * 0.03 + d * 0.03, c.y + rand(-3, 6) * k);
+          }
+        });
         break;
       }
       default:
@@ -1037,6 +1124,15 @@ export function createEffects(images) {
     ctx.globalAlpha = 1;
   }
 
+  /** (Carrière) Le monde a grandi : décale tout ce qui est en coordonnées du monde. */
+  function shift(dx, dy) {
+    if (!dx && !dy) return;
+    for (const p of parts.items) if (p.alive) { p.x += dx; p.y += dy; p.floor += dy; }
+    for (const p of texts.items) if (p.alive) { p.x += dx; p.y += dy; }
+    for (const g of ghosts.items) if (g.alive) { g.x += dx; g.y += dy; }
+    for (const f of flyers.items) if (f.alive) { f.x0 += dx; f.x1 += dx; f.y0 += dy; f.y1 += dy; }
+  }
+
   function clear() {
     for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers]) pool.clear();
     flash = 0;
@@ -1063,6 +1159,7 @@ export function createEffects(images) {
     postProcess,
     drawScreen,
     clear,
+    shift,
     get env() {
       return env;
     },

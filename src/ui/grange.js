@@ -2,7 +2,8 @@
 // année). Fenêtre haute (plein écran en portrait) avec trois onglets segmentés (≥ 48 px) :
 //   Bonus    : étoiles disponibles / gagnées, interrupteur « Bonus pendant les parties », arbre des
 //              bonus par palier (achat immédiat, remboursement libre) ;
-//   Succès   : les 26 succès (obtenu le…, ou barre de progression), récompenses ;
+//   Succès   : les 26 succès des niveaux, puis ceux de la carrière (écus seulement) et les anciennes
+//              fermes archivées ;
 //   Ma ferme : écus, nom de la ferme, tenue, allées, clôture, boutique des décorations,
 //              « Décorer la ferme ».
 //
@@ -220,38 +221,65 @@ export function createGrange(app) {
   }
 
   // ── Succès ────────────────────────────────────────────────────────────────────
+  function achievementRow(a) {
+    const r = a.reward || {};
+    const date = a.at ? new Date(a.at) : null;
+    const prog = !a.done && a.progress && a.progress.target > 1 ? a.progress : null;
+    return el(
+      `article.ach-row${a.done ? '.is-done' : ''}`,
+      { id: `ach-${a.id}` },
+      el('span.ach-icon', achievementIcon(a.id, a.done, 'sprite--md', r.stars || 0)),
+      el(
+        'div.ach-main',
+        el('div.ach-top', el('span.ach-name', a.name), el('span.ach-reward', r.stars ? [icon('star', 'xs'), el('span', `+${r.stars}`)] : null, r.ecus ? [ecuIcon('sprite--xs'), el('span', fmt(r.ecus))] : null)),
+        el('p.ach-desc', a.description),
+        a.done
+          ? el('span.ach-date', date && !Number.isNaN(date.getTime()) ? `Obtenu le ${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Obtenu')
+          : prog
+            ? el('span.ach-prog', el('span.ach-bar', el('span.ach-bar-fill', { style: { width: `${Math.round(Math.min(1, prog.value / prog.target) * 100)}%` } })), el('span.ach-count', `${fmt(Math.min(prog.value, prog.target))} / ${fmt(prog.target)}`))
+            : el('span.ach-date.is-todo', 'Pas encore'),
+      ),
+    );
+  }
+
+  /** Contexte d'une carrière en cours (progression des succès de carrière), ou null. */
+  function careerContext() {
+    const g = app.game;
+    if (!g || g.mode !== 'career' || g.state.status !== 'playing') return null;
+    try {
+      return g.query.achievementContext();
+    } catch {
+      return null;
+    }
+  }
+
   function achievementsTab() {
     const list = P().achievementList(null);
+    const career = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
     const done = list.filter((a) => a.done).length;
-    const rows = list.map((a) => {
-      const r = a.reward || {};
-      const date = a.at ? new Date(a.at) : null;
-      const prog = !a.done && a.progress && a.progress.target > 1 ? a.progress : null;
-      return el(
-        `article.ach-row${a.done ? '.is-done' : ''}`,
-        { id: `ach-${a.id}` },
-        el('span.ach-icon', achievementIcon(a.id, a.done, 'sprite--md', r.stars || 0)),
-        el(
-          'div.ach-main',
-          el('div.ach-top', el('span.ach-name', a.name), el('span.ach-reward', r.stars ? [icon('star', 'xs'), el('span', `+${r.stars}`)] : null, r.ecus ? [ecuIcon('sprite--xs'), el('span', fmt(r.ecus))] : null)),
-          el('p.ach-desc', a.description),
-          a.done
-            ? el('span.ach-date', date && !Number.isNaN(date.getTime()) ? `Obtenu le ${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : 'Obtenu')
-            : prog
-              ? el('span.ach-prog', el('span.ach-bar', el('span.ach-bar-fill', { style: { width: `${Math.round(Math.min(1, prog.value / prog.target) * 100)}%` } })), el('span.ach-count', `${fmt(Math.min(prog.value, prog.target))} / ${fmt(prog.target)}`))
-              : el('span.ach-date.is-todo', 'Pas encore'),
-        ),
-      );
-    });
+    const cdone = career.filter((a) => a.done).length;
+    const pc = P().get().career || {};
+    const archive = (pc.archive || []).slice(0, 5);
     return el(
       'div.grange-ach',
       el(
         'div.ach-head',
-        el('b.ach-score', `${done} / ${list.length}`),
+        el('b.ach-score', `${done + cdone} / ${list.length + career.length}`),
         el('span', 'succès obtenus'),
-        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length ? Math.round((done / list.length) * 100) : 0}%` } })),
+        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length + career.length ? Math.round(((done + cdone) / (list.length + career.length)) * 100) : 0}%` } })),
       ),
-      el('div.ach-list', rows),
+      el('h3.farm-sec-title.ach-sec', `Les niveaux · ${done} / ${list.length}`),
+      el('div.ach-list', list.map(achievementRow)),
+      career.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-career' }, `Ma ferme (carrière) · ${cdone} / ${career.length}`) : null,
+      career.length ? el('p.sheet-hint', 'Les succès de la carrière rapportent des écus (pas d\'étoile).') : null,
+      career.length ? el('div.ach-list', career.map(achievementRow)) : null,
+      archive.length
+        ? el(
+            'section.farm-sec.ach-archive',
+            el('h3.farm-sec-title', 'Anciennes fermes'),
+            archive.map((a) => el('div.stats-line', el('span.stats-label', `${a.farmName} · ${plural(a.years, 'an')} · rang ${a.rank}`), el('b.stats-value', a.endedBy === 'bankrupt' ? 'vendue' : 'archivée'))),
+          )
+        : null,
       el('p.sheet-hint', 'Les succès se débloquent en jouant, pour toujours. Certains rapportent une étoile (★), tous rapportent des écus.'),
     );
   }

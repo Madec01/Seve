@@ -166,17 +166,20 @@ export function createDialogs(layer, app) {
     closeAll();
     const saved = app.savedRunInfo();
     const buttons = [];
+    // Mode Carrière : « Ma ferme » en premier (docs/CARRIERE.md § 1.1).
+    if (app.careerMenuButtons) buttons.push(...app.careerMenuButtons(btn));
+    // Mode Niveaux : son « Continuer » garde sa propre sauvegarde.
     if (saved) {
       buttons.push(
         btn(
-          [el('span.btn-main', 'Continuer'), el('span.btn-sub', saved.label)],
+          [el('span.btn-main', 'Continuer le niveau'), el('span.btn-sub', saved.label)],
           () => app.continueRun(),
-          'btn--red.btn--big',
-          { id: 'menu-continue', 'data-autofocus': '' },
+          'btn--big',
+          { id: 'menu-continue' },
         ),
       );
     }
-    buttons.push(btn('Nouvelle partie', () => levelSelect(), saved ? 'btn--big' : 'btn--red.btn--big', { id: 'menu-new', ...(saved ? {} : { 'data-autofocus': '' }) }));
+    buttons.push(btn([el('span.btn-main', 'Les niveaux'), el('span.btn-sub', '12 années à contraintes')], () => levelSelect(), 'btn--big', { id: 'menu-new' }));
     if (app.progression?.available()) {
       // Pastille dorée : une étoile peut être dépensée, ou un succès n'a pas encore été vu.
       const dot = app.progression.canSpendStars() || app.hasNewAchievements?.();
@@ -189,9 +192,8 @@ export function createDialogs(layer, app) {
         ),
       );
     }
-    buttons.push(btn('Options', () => options(), 'btn--big', { id: 'menu-options' }));
+    buttons.push(el('div.menu-row', btn('Options', () => options(), 'btn--big', { id: 'menu-options' }), btn('Crédits', () => credits(), 'btn--big', { id: 'menu-credits' })));
     if (app.canInstall()) buttons.push(btn('Installer le jeu', () => app.installApp(), 'btn--big', { id: 'menu-install' }));
-    buttons.push(btn('Crédits', () => credits(), 'btn--big', { id: 'menu-credits' }));
 
     const deco = el('div.menu-deco', ['carrot', 'turnip', 'wheat', 'cabbage', 'tomato', 'corn', 'sunflower'].map((id) => cropIcon(id, 'sprite--deco')));
     const node = el(
@@ -427,9 +429,10 @@ export function createDialogs(layer, app) {
     };
     const inRun = app.game && !app.inMenu && app.game.state.status === 'playing' ? app.game : null;
     const runNote = el('p.opt-note');
+    const inCareer = inRun?.mode === 'career';
     const syncRunNote = () => {
-      runNote.hidden = !inRun || inRun.difficulty === app.difficulty();
-      runNote.textContent = inRun ? `S'applique à la prochaine année : la partie en cours reste en mode ${DIFFICULTIES[inRun.difficulty]?.name || ''}.` : '';
+      runNote.hidden = !inRun || (!inCareer && inRun.difficulty === app.difficulty());
+      runNote.textContent = inCareer ? `Pour les niveaux seulement : votre ferme garde la difficulté choisie à sa création (${DIFFICULTIES[inRun.difficulty]?.name || ''}).` : inRun ? `S'applique à la prochaine année : la partie en cours reste en mode ${DIFFICULTIES[inRun.difficulty]?.name || ''}.` : '';
     };
     syncRunNote();
     const body = el(
@@ -464,13 +467,13 @@ export function createDialogs(layer, app) {
       el('h3.opt-section', 'Progression'),
       el(
         'div.opt-danger',
-        el('p', app.progression?.available() ? 'Efface les étoiles, les niveaux débloqués, les bonus, les succès, les écus, les décorations, le tutoriel et la partie en cours.' : 'Efface les étoiles, les niveaux débloqués, le tutoriel et la partie en cours.'),
+        el('p', app.progression?.available() ? 'Efface les étoiles, les niveaux débloqués, les bonus, les succès, les écus, les décorations, le tutoriel, la partie en cours et votre ferme (mode Carrière).' : 'Efface les étoiles, les niveaux débloqués, le tutoriel, la partie en cours et votre ferme.'),
         btn('Réinitialiser la progression', async () => {
           const ok = await confirm({
             title: 'Tout effacer ?',
             text: app.progression?.available()
-              ? 'Les étoiles, les niveaux débloqués, les bonus achetés, les succès, les écus, les décorations et la partie en cours seront perdus. Cette action est définitive.'
-              : 'Les étoiles, les niveaux débloqués et la partie en cours seront perdus. Cette action est définitive.',
+              ? 'Les étoiles, les niveaux débloqués, les bonus achetés, les succès, les écus, les décorations, la partie en cours ET votre ferme de carrière (sans archive) seront perdus. Cette action est définitive.'
+              : 'Les étoiles, les niveaux débloqués, la partie en cours et votre ferme de carrière seront perdus. Cette action est définitive.',
             ok: 'Tout effacer',
             danger: true,
           });
@@ -562,6 +565,7 @@ export function createDialogs(layer, app) {
   function pauseMenu() {
     if (top() === 'pause') return null;
     const g = app.game;
+    if (g?.mode === 'career') return careerPauseMenu(g);
     const c = g.query.calendar();
     const lvl = g.query.level();
     const body = el(
@@ -588,6 +592,41 @@ export function createDialogs(layer, app) {
         }, 'btn--big', { id: 'pause-quit' }),
       ),
       el('p.pause-hint', 'La partie est sauvegardée automatiquement chaque matin et quand vous quittez.'),
+    );
+    const node = frame({ title: 'Pause', ribbon: 'ribbon', cls: 'dialog--pause', body, onClose: () => closeTop() });
+    return open(node, { id: 'pause', pauses: true });
+  }
+
+  /** Pause de la carrière : ferme, année, rang ; « Recommencer une ferme » (double confirmation, archive). */
+  function careerPauseMenu(g) {
+    const c = g.query.calendar();
+    let s = null;
+    try {
+      s = g.query.career.summary();
+    } catch {
+      s = null;
+    }
+    const body = el(
+      'div.pause',
+      el('p.pause-info', s?.farmName || 'Ma ferme', modeBadge(g.state.career?.difficulty || 'detente')),
+      el('p.pause-sub', icon(c.seasonId, 'sm'), `Année ${g.state.time.year} · ${c.seasonName} ${c.dayOfSeason}/${c.seasonLength}`, el('span.pause-money', icon('coin', 'sm'), fmt(g.state.money))),
+      s ? el('p.pause-sub', spriteAny([`icon.career.rank.${s.rank}`], 'sprite--sm', 'star'), `${s.rankName} · ${s.title}`) : null,
+      el(
+        'div.menu-buttons',
+        btn('Reprendre', () => closeTop(), 'btn--red.btn--big', { id: 'pause-resume', 'data-autofocus': '' }),
+        btn('Options', () => options(), 'btn--big', { id: 'pause-options' }),
+        btn('Recommencer une ferme', async () => {
+          const ok = await confirm({ title: 'Recommencer une ferme ?', text: `« ${s?.farmName || 'Votre ferme'} » sera archivée dans la grange puis effacée. Vous choisirez ensuite une nouvelle ferme.`, ok: 'Continuer', danger: true });
+          if (!ok) return;
+          const sure = await confirm({ title: 'Vraiment ?', text: 'Dernière vérification : la ferme actuelle ne pourra plus être reprise.', ok: 'Recommencer', danger: true });
+          if (sure) app.restartCareer?.();
+        }, 'btn--big', { id: 'pause-restart' }),
+        btn('Quitter vers le menu', async () => {
+          const ok = await confirm({ title: 'Quitter la ferme ?', text: 'Votre ferme est sauvegardée : reprenez-la avec « Ma ferme » depuis le menu principal. Le temps s\'arrête pendant votre absence.', ok: 'Quitter', cancel: 'Rester' });
+          if (ok) app.quitToMenu();
+        }, 'btn--big', { id: 'pause-quit' }),
+      ),
+      el('p.pause-hint', 'La ferme est sauvegardée chaque matin, après chaque gros achat et quand vous quittez.'),
     );
     const node = frame({ title: 'Pause', ribbon: 'ribbon', cls: 'dialog--pause', body, onClose: () => closeTop() });
     return open(node, { id: 'pause', pauses: true });
@@ -928,7 +967,7 @@ export function createDialogs(layer, app) {
       el('p.contest-total', ev.amount > 0 ? `Prix : +${plural(ev.amount, 'pièce')}` : 'Prix : 0'),
     );
     const node = frame({
-      title: 'Concours du village',
+      title: ev.career ? 'Comice agricole' : 'Concours du village',
       ribbon: 'ribbon',
       cls: 'dialog--contest',
       body,

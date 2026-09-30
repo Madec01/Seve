@@ -994,3 +994,152 @@ prêt), `joseph.questsDone` (objectif du rang 4), `lifetime.contestsWon` (rang 6
 [--season 14] [--assume-objectives] [--trace --seed 3] [--json]` ; exporte `playCareer(opts)` et
 `simulateCareer(opts)`. Sans CORE-B/C, les objectifs « employés », « quêtes » et « comice » ne se remplissent pas
 (rang plafonné à 2) : `--assume-objectives` les suppose remplis pour mesurer le rythme du patrimoine.
+
+
+## Mode Carrière — livraison CORE-B (machines, employés, animaux, tâches, 2026-09-30)
+
+Quatre extensions enregistrées (`src/core/career/extensions.js`, une ligne chacune) : `animals`, `machines`,
+`staff`, `work`. Tout passe par les points d'accroche de CORE-A (`registry.js`) ; aucune ligne des niveaux ne change.
+Tests : `tests/career-{animals,machines,staff,tasks}.test.js` (51), outils `tests/career-crew-helpers.js`.
+
+### Fichiers
+
+```
+src/data/career/animals.js    CAREER_ANIMALS (8, remplacent DEFAULT_ANIMALS, mêmes ids) : product, productName, collect,
+                              truffles, breeding, rides, traction ; COLLECT.capDays = 3
+src/data/career/machines.js   MACHINES (8) : scope 'lot' | 'shelter' | 'farm', lotTypes, levels [{ cost, rank, capacity,
+                              requires: null | 'puller' | 'tractor', text }], fuel, upkeep, passes, kind, step ; machineKey()
+src/data/career/staff.js      JOBS (4), TRAITS (7, ids = icônes icon.career.trait.*), MOODS, XP_LEVELS, WAGE,
+                              GARDENER_ACTIONS, WORK (heures, durées, bonus), XP_GAIN, ARTISAN_PLACES, CANDIDATES
+src/data/career/names.js      FIRST_NAMES (40 prénoms, 20 f / 20 m : les 24 du § 7.1 + 16), genderOf, LOOK (64 apparences),
+                              lookId(look) (= lookKey de l'atlas), validLook
+src/core/career/crew.js       outils communs (sans enregistrement) : absDay, state.career.work, pausedOf, keeperBonus,
+                              gardenerDuration / actionsPerDay, effectiveLevel (cheval / tracteur), serpentin, sowChoice
+src/core/career/animals.js    extension « animals » : production à ramasser, collect / collectAll, naissances, truffes,
+                              tonte, balades ; exporte collectShelter(api, id, by)
+src/core/career/machines.js   extension « machines » : achat / amélioration / interrupteur, aube (semoir, arroseurs,
+                              château d'eau), convoyeur, passages (startPass, doRunStep), carburant et entretien
+src/core/career/staff.js      extension « staff » : candidats, embauche, renvoi, affectation, congés, salaires, humeur,
+                              expérience, artisan (places), vendeur (bonus) ; exporte cheerStaff(api) (fête : CORE-C)
+src/core/career/work.js       extension « work » : moteur des tâches (point d'accroche tick), workPlan()
+tools/sim-career-staff.js     robots : staffDecisions(game, me) (utilisé par simulate-career.js), crewDay, automatedLots
+```
+
+### État (en plus du contrat)
+
+- `state.career.staff[k]` : contrat + `look.gender` ('m' | 'f', suit le prénom), `leaveDays`, `hiredDay`, `suggestedJob`,
+  `plan: { round, queue }` (tournées du soigneur), `year: { actions, harvests, watered, sown, crows, collected, sold,
+  xp, wages, daysWorked }`. `lotId` : id de terrain, `'all'` (jardinier, soigneur) ou `'home'` (vendeur). `xp` peut être
+  décimal (« Vif » × 1,5). `joyUntilDay` : jour absolu (joyeux tant que jour < joyUntilDay).
+- `state.career.candidates[k]` : `{ id: 'c<n>', name, look, trait, level, xp, wage, suggestedJob }` ; ids de candidats et
+  d'employés tirés du même compteur `nextStaffId` (`c3` → `s4`). 3 candidats dès la création (flux `staff`).
+- `state.career.machines[key]` : contrat + `usedDay`, `used` (capacité du jour), `buildingId` (collecteur). Clés :
+  `<id>@<lotId>`, `collector@<abri>` (⚠ par abri, pas par terrain), `tractor` / `waterTower` / `conveyor` (terrain
+  `'home'`).
+- `state.career.work = { day, runs: [passage], fuel: { [jour]: { [key]: carburant } }, stats, year }` ; passage =
+  `{ key, id, lotId, kind, puller, startAt, endAt, plots: [{ index, at, done, ok }] }`. `stats` / `year` : actions des
+  employés et des machines, produits animaux perdus (abri plein), ramassages par `player | keeper | collector`,
+  salaires et carburant de l'année (simulation).
+- Jour absolu : `absDay(state) = (year − 1) × 4 × seasonLength + day`.
+
+### Actions (`game.actions.career.*`)
+
+| Action | Retour | Notes |
+|---|---|---|
+| `collect(buildingId)` | `{ ok, amount }` | abri construit, production > 0 |
+| `collectAll()` | `{ ok, amount, count }` | ajout : glisser sur les abris |
+| `buyMachine(id, place?)` | `{ ok, key, cost, level }` | `place` : terrain (machines de terrain), abri **ou** terrain (collecteur : 1er abri libre du terrain), rien (ferme) |
+| `upgradeMachine(id \| key, place?)` | `{ ok, key, level, cost }` | niveau 2 : rang 4 (arroseurs : rang 2) |
+| `setMachine(id \| key, place, on)` | `{ ok, key, on }` | aussi `setMachine('tractor', false)` ou `setMachine(key, on)` |
+| `hire(candidateId, job?, lotId?)` | `{ ok, staffId, staff }` | ⚠ affectation directe possible (sinon sans métier : repos à la maison, salaire payé) |
+| `fire(staffId)` · `assign(staffId, job, lotId)` · `setLeave(staffId, on)` · `setTeamLeave(on)` | `{ ok, … }` | `assign(id, null)` : sans métier ; vendeur : `lotId` ignoré (`'home'`) |
+
+### Requêtes (`game.query.career.*`)
+
+- `machines()` : contrat + `scope, lotName, buildingId, working, why` (raison de l'arrêt : éteinte, coup dur, pas de
+  cheval…), `effectiveLevel, puller ('horse'|'tractor'|null), capacity (null = tout le terrain), usedToday, workedToday,
+  nextRank, nextText, text, upkeep, coverage` (arroseurs : parcelles couvertes), `passes, run` (passage en cours).
+  `machine(key)` : une ligne.
+- `machineCatalog()` : contrat + `scope` (⚠ `'shelter'` pour le collecteur), `lockedByRank, fuel, upkeep, phase, levels,
+  places: [{ place, lotId, buildingId, name, key, owned, canBuy, reason }], owned`.
+- `machineWork()` : passages en cours (copie de `work.runs`, pour reprendre l'animation après un chargement).
+- `staff()` : contrat + `gender, levelXp, status ('working'|'leave'|'noMoney'|'unassigned'), assignable: [{ job, name,
+  lots: [{ lotId, name, type }] }]` ; `staffMember(id)` ; `candidates()` : contrat + `wages` (salaires par jour) ;
+  `jobs()`, `traits()` (textes).
+- `shelters()` / `shelter(id)` : `{ buildingId, name, level, lotId, slot, animalId, animalName, count, capacity, product,
+  productName, collect, pending, dailyValue, cap, pendingDays, full, keeperBonus, lastCollected, collector, keepers }`
+  (bulle de ramassage : `product` → sprite `product.<id>`, `pending` → montant).
+- `workPlan()` : `[{ staffId, name, look, job, lotId, status, mood, actionsToday, task, tool }]` ; `tool` : sprite
+  `tool.<can|basket|seedbag|pail|hoe>` tenu ; `workClock()` : `{ elapsed, day, daySeconds }`.
+
+### Tâches et animation (lu par RENDER)
+
+- `task = { kind, target, from, startAt, doneAt, lotId }` en secondes écoulées dans la journée (`state.time.elapsed`).
+  Le rendu fait marcher le personnage de `from` vers `target` (par exemple pendant les 60 premiers % de la tâche) puis
+  joue l'action jusqu'à `doneAt` ; à ×4 le temps de jeu va 4 fois plus vite, rien à faire de plus.
+- `kind` : `harvest | pick | water | sow | chase` (jardinier), `collect` (soigneur), `craft` (artisan), `sell` (vendeur),
+  `idle` (attente sur place : flâner près de la cible), `home` (retour à la maison) ; `task: null` : à la maison.
+- `target` / `from` : `{ type: 'plot', plotIndex, lotId }` · `{ type: 'building', buildingId, lotId }` ·
+  `{ type: 'lot', lotId }` · `{ type: 'home', lotId: 'home' }`.
+- Jardinier : de 15 % (« Matinal » 5 %) à 85 % du jour ; durée d'une action = 70 % du jour ÷ actions (14 / 18 / 22 / 26 /
+  30 × humeur × Costaud × tracteur × « tous » 0,8). Priorité : corbeau (via `chaseCrowAt` de CORE-C) > récolte >
+  arrosage > semis (plan, `sowChoice`) ; sinon `idle`. Deux employés ne visent jamais la même parcelle ; une parcelle
+  prise par un passage de machine est réservée. **Machines avant employés** : pas de récolte (semis) sur un terrain où
+  la moissonneuse / cueilleuse (le semoir) passera encore aujourd'hui ; ensuite, il fait le reste.
+- Soigneur : tournées à 25 %, 55 %, 85 % (3 % du jour par abri) ; artisan : séances de 10 % à tour de rôle dans les
+  ateliers de sa cour ; vendeur : grenier (4 %) puis étal (15 %), vend si cours ≥ 1,15 − 0,02 × (niv. − 1), hors saison
+  ou jour de fête (fournisseur `priceFactor` de `stock` > 1, raison `fair`).
+- Action faite à `doneAt` si elle est encore utile ; sinon `taskDone.result.ok = false`, pas d'expérience.
+- Événements : `taskStarted { staffId, kind, target, from, startAt, doneAt, lotId, job }`,
+  `taskDone { staffId, kind, target, startAt, doneAt, result: { ok, amount?, cropId?, … } }`.
+- Machines : `machineWorked { key, id, lotId, kind, plots: [{ index, at }], fuel, puller, startAt, endAt, dawn?,
+  buildingId?, amount?, moved?, count? }` au départ du passage (moissonneuse, semoir : rang par rang en serpentin, une
+  parcelle toutes les 1,2 % / 1 % du jour, chacune traitée à son `at` ; aube et arroseurs : `at: 0`) ;
+  **ajout** `machineRunDone { key, id, lotId, kind, count }` à la fin du passage (retour au garage).
+- Un grand `dt` et beaucoup de petits donnent exactement la même partie (tests) ; sauvegarde possible en pleine tâche ou
+  en plein passage.
+
+### Règles chiffrées (données, réglables)
+
+- Salaires 8 + 3 × (niv. − 1) (« Économe » −2), payés à l'aube (point d'accroche `charges`, source `wages`) pour chaque
+  employé pas en congé, à partir de l'aube qui suit l'embauche ; rien pendant un coup dur (`idleReason: 'noMoney'`).
+- Expérience : jardinier 1 par action utile, soigneur 2 par abri ramassé non vide, artisan 2 par produit vendu à l'aube
+  par un atelier de sa cour, vendeur 1 par 10 pièces ; niveaux 100 / 300 / 700 / 1 500 ; `staffLevelUp.text`.
+- Humeur : joyeux 7 jours après un congé ≥ 2 jours ou `cheerStaff` (fête du village, appelé par CORE-C) ; las après
+  21 jours de travail d'affilée (28 dès la grande maison), jamais pour « Fidèle » ; ±10 % d'actions.
+- Artisan : places + 1 / + 1 / + 2 / + 2 / + 2 (fournisseur `extraPlaces`, meilleur artisan de la cour, pas en congé) ;
+  niv. 5 : produits de sa cour × 1,1 (fournisseur `priceFactor`, `kind: 'product'`). Quand la capacité baisse (départ,
+  congé), les produits en cours sont tassés ; ce qui ne tient plus est vendu en l'état (`processingSoldRaw`, raison
+  `artisan`) — la sauvegarde reste valide.
+- Vendeur : fournisseur `effects('priceBonus')` = 0,02 × niveau (+ 0,03 « Bavard »), un seul vendeur compte.
+- Soigneur : production des abris de ses terrains × (1 + 0,05 × niveau (+ 0,05 « Ami des bêtes »)), le meilleur compte.
+- Animaux : production ajoutée à `buildings[abri].pending` à l'étape 9 (moins le lait parti à la fromagerie) ; plafond
+  3 jours (`COLLECT.capDays`), surplus perdu (`shelterFull { buildingId, lost, pending, cap }`) ; tonte payée à l'aube
+  du dernier jour de saison (le drapeau `collectAnimals` fait sauter la tonte de CORE-A : c'est CORE-B qui la paie) ;
+  truffes au point d'accroche `dawnEvents` (flux `career`) ; naissances au `seasonStart` ; balades (+8, poste `guests`).
+- Machines : carburant noté le jour du travail et payé à l'aube suivante (un jour de travail = au moins une parcelle) ;
+  tracteur : 4 les jours où il tire une machine ; entretien (source `upkeep`) : arroseurs 1 (même éteints, 0 avec le
+  château d'eau allumé), convoyeur 1 (allumé). Coup dur : semoir, moissonneuse, cueilleuse, tracteur à l'arrêt.
+- Niveau effectif : niv. 2 « tracteur » sans tracteur → niv. 1 avec un cheval ; niv. 1 « cheval ou tracteur » → cheval
+  d'abord (pas de carburant de tracteur), sinon tracteur.
+- Plan « même culture » : la dernière culture récoltée sur la parcelle si elle se sème encore, **sinon la plus rentable
+  sûre de la saison** (⚠ précision : parcelle neuve, changement de saison) ; culture choisie qui gèlerait → la plus
+  rentable qui résiste ; jamais sans l'argent de la graine.
+
+### Écarts au contrat (à connaître)
+
+- Collecteur par **abri** (`collector@coop`), `scope: 'shelter'` dans le catalogue.
+- `hire(candidateId, job?, lotId?)` accepte l'affectation ; `setMachine` accepte une clé.
+- `workPlan()` renvoie plus que `{ staffId, task, pos? }` (pas de `pos` : le rendu calcule la position).
+- Nouveaux événements : `shelterFull`, `machineRunDone`, `staffAssigned { staffId, job, lotId }`, `staffLeave { staffId,
+  on }` ; `truffleFound { count, amount, stored, buildingId }` ; `animalBorn { …, buildingId, total }`.
+- Paused (chômage technique) n'enlève pas les places de l'artisan (seuls le congé et le départ les enlèvent).
+- CORE-A : deux assertions de `tests/career-core.test.js` et une de `tests/career-save.test.js` décrivaient l'état
+  « avant CORE-B » (œufs payés à l'aube, `hire` « Bientôt disponible ») : mises à jour (œufs ramassés).
+
+### Simulation
+
+`tools/sim-career-staff.js` exporte `staffDecisions(game, me)` (chargé automatiquement par `simulate-career.js` de
+CORE-C) : employés sans affectation remis au travail ; cheval (écurie) pour tirer semoir et moissonneuse avant le
+tracteur ; machines niv. 2 avec le tracteur ; collecteur du poulailler et cueilleuse (rang 3), château d'eau (rang 5) ;
+réserve de 2 saisons de charges + 14 jours de salaires. Aussi `crewDay` (robot autonome complet) et `automatedLots`.

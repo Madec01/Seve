@@ -13,14 +13,21 @@
 // (src/ui/hints.js), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
 // démarrage (src/ui/v3.js) et tout est vérifié avant usage : sans eux, le jeu reste le jeu v2.
 //
+// Mode Carrière (docs/CARRIERE.md, src/ui/career/*) : « Ma ferme » au menu principal, création
+// (app.startCareer), reprise (app.continueCareer), sauvegarde propre (storage.saveCareer), onglets,
+// feuilles et fenêtres de la carrière (app.careerUI). Une seule partie active à la fois : la partie de
+// niveau est enregistrée avant d'ouvrir la carrière (retour au menu), et inversement.
+//
 // Débogage (seulement avec ?debug=1 dans l'adresse) : window.__game (partie en cours),
 // window.__app et window.__debug = { skipDays(n), plotPoint(i), investmentPoint(id), start(levelId),
-// progress(), setProgress(p), grange(tab), decor(), setMoney(n) }.
+// progress(), setProgress(p), grange(tab), decor(), setMoney(n), career(), careerStart(opts),
+// careerSkipYears(n), careerRank(n), careerMoney(n), careerEvent(id), lotPoint(id) }.
 
 import { SHEETS } from './render/atlas.js';
 import { loadImage, loadImages } from './render/assets.js';
 import { createScene } from './render/scene.js';
 import { createGame, loadGame } from './core/game.js';
+import { createCareer, loadCareer, careerMetaOf } from './core/career/career.js';
 import { DAY_SECONDS, SEASONS } from './data/balance.js';
 import { getLevel, LEVELS } from './data/levels.js';
 import { getInvestment } from './data/investments.js';
@@ -51,6 +58,8 @@ import { createHints } from './ui/hints.js';
 import { isProcessing } from './ui/buildings.js';
 import { productIcon } from './ui/icons.js';
 import { productName } from './ui/panel.js';
+import { createCareerUI } from './ui/career/index.js';
+import { careerMenuButtons, openNewFarm } from './ui/career/menu.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -103,6 +112,9 @@ app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
 app.hints = createHints(app);
+app.careerUI = createCareerUI(app);
+app.careerMenuButtons = (btn) => careerMenuButtons(app, btn);
+app.newFarm = () => openNewFarm(app, {});
 
 applyDisplaySettings();
 
@@ -186,6 +198,7 @@ app.progress = () => app.progression.get();
 app.isLevelUnlocked = (id) => app.progression.isLevelUnlocked(id);
 
 app.resetProgress = () => {
+  if (app.game?.mode === 'career' && !app.inMenu) app.quitToMenu({ ended: true });
   storage.resetProgress();
   app.progression.reload();
   uiMemo.write({});
@@ -321,6 +334,11 @@ app.openPauseMenu = () => {
 /** Onglet du bas : 'farm' | 'shop' | 'stats' | 'menu'. */
 app.openTab = (id, { fromUser = false } = {}) => {
   if (!app.game || app.inMenu) return;
+  if (app.careerUI.active()) {
+    app.careerUI.openTab(id, { fromUser });
+    app.tabbar.refresh();
+    return;
+  }
   if (id === 'menu') {
     app.openPauseMenu();
     return;
@@ -358,6 +376,7 @@ app.onDecorChange = () => {
   app.tabbar?.refresh();
 };
 app.onDialogChange = () => {
+  document.body.classList.toggle('has-dialog', app.dialogs?.isOpen() ?? false);
   app.tabbar?.refresh();
   updateWakeLock();
 };
@@ -379,7 +398,15 @@ function updateSheetOverlay() {
     revealIndex = null;
     revealDecor = null;
     revealInvestment = null;
+    revealLotId = null;
     return;
+  }
+  if (revealLotId && app.sheets.current === revealLotId.sheet) {
+    try {
+      s.focusLot(revealLotId.id, { margin: 14, animate: true });
+    } catch (err) {
+      console.warn('focusLot :', err);
+    }
   }
   const i = app.field.current?.index;
   if (revealIndex !== null && i === revealIndex) s.focusPlot(i, { margin: 14, animate: true });
@@ -407,6 +434,15 @@ app.revealDecorSlot = (id, sheetId) => {
   if (!s || typeof s.focusDecorSlot !== 'function') return;
   revealDecor = { id, sheet: sheetId };
   updateSheetOverlay(); // setOverlay d'abord : la feuille est comptée dans la zone couverte
+};
+
+/** Carrière : le terrain de la feuille ouverte reste visible au-dessus d'elle (scene.focusLot du rendu). */
+let revealLotId = null;
+app.revealLot = (lotId, sheetId) => {
+  const s = app.scene;
+  if (!s || typeof s.focusLot !== 'function') return;
+  revealLotId = { id: lotId, sheet: sheetId };
+  updateSheetOverlay();
 };
 
 /** Fait défiler la scène (en douceur) pour que la parcelle reste visible au-dessus de la feuille. */
@@ -602,12 +638,25 @@ function resizeScene() {
     const level = (app.game && !app.inMenu ? app.game : attract)?.level || getLevel(1);
     app.scene = createScene(canvas, images, level, { minZoom: mz });
     insetsKey = '';
+    syncSceneCareer();
     app.applyCosmetics();
     if (app.decor.active && typeof app.scene.setDecorMode === 'function') app.scene.setDecorMode(true);
   }
   app.scene.resize(w, h, dpr);
   updateInsets();
   app.tutorial.relayout();
+}
+
+/** Carrière : la scène passe en disposition « colonne de terrains » (lot RENDER : scene.setCareer). */
+function syncSceneCareer() {
+  const s = app.scene;
+  if (!s || typeof s.setCareer !== 'function') return;
+  const g = app.game && !app.inMenu ? app.game : attract;
+  try {
+    s.setCareer(g?.mode === 'career');
+  } catch (err) {
+    console.warn('setCareer :', err);
+  }
 }
 
 // Taille réelle de l'écran : Chrome Android affiche ou cache sa barre d'adresse, le clavier…
@@ -747,10 +796,15 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === '2') app.setSpeed(2, { fromUser: true });
   else if (e.key === '3') app.setSpeed(4, { fromUser: true });
   else if (e.key === 'm' || e.key === 'M') app.toggleMute();
+  else if (app.careerUI.active() && (e.key === 'b' || e.key === 'B')) app.openTab('buy', { fromUser: true });
+  else if (app.careerUI.active() && (e.key === 'e' || e.key === 'E')) app.openTab('staff', { fromUser: true });
+  else if (app.careerUI.active() && (e.key === 'j' || e.key === 'J')) app.openTab('journal', { fromUser: true });
+  else if (app.careerUI.active() && (e.key === 'c' || e.key === 'C')) app.careerUI.open.map();
+  else if (app.careerUI.active() && (e.key === 'f' || e.key === 'F')) app.openTab('farm', { fromUser: false });
   else if (e.key === 'b' || e.key === 'B') app.openTab('shop', { fromUser: true });
   else if (e.key === 'n' || e.key === 'N') app.openTab('stats', { fromUser: true });
   else if (e.key === 'f' || e.key === 'F') app.openTab('farm', { fromUser: true });
-  else if ((e.key === 'd' || e.key === 'D') && app.decor.available() && !app.decor.active) app.decor.enter();
+  else if ((e.key === 'd' || e.key === 'D') && app.decor.available() && !app.decor.active && !app.careerUI.active()) app.decor.enter();
 });
 
 // ── Événements du jeu ─────────────────────────────────────────────────────────────
@@ -765,37 +819,49 @@ function scheduleRefresh() {
   });
 }
 
+/** Messages des niveaux aussi valables en carrière (le reste passe par app.careerUI.onGameEvent). */
+const SHARED_MESSAGES = new Set(['frost', 'harvested', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'loanRepayment', 'loanRepaid', 'contestProgress']);
+
 function wire(game) {
+  const career = game.mode === 'career';
   const off = game.on('*', (ev) => {
     app.scene?.onEvent(ev.type, ev);
     app.hud.onEvent(ev);
-    app.panel.onEvent(ev);
+    if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
     reactAudio(ev, game);
-    reactMessages(ev, game);
+    if (!career || SHARED_MESSAGES.has(ev.type)) reactMessages(ev, game);
+    if (career) {
+      try {
+        app.careerUI.onGameEvent(ev, game);
+      } catch (err) {
+        console.warn('Carrière (événement) :', err);
+      }
+      if (['lotBought', 'lotDeveloped', 'buildingBuilt', 'buildingUpgraded', 'rankUp'].includes(ev.type)) syncSceneCareer();
+    }
     switch (ev.type) {
       case 'dawn':
         save();
         break;
       case 'billPaid':
-        pending.billPaid = ev;
+        if (!career) pending.billPaid = ev;
         break;
       case 'frost':
-        pending.frost = ev;
+        if (!career) pending.frost = ev;
         break;
       case 'bankrupt':
       case 'victory':
-        pending.end = ev;
+        if (!career) pending.end = ev;
         break;
       case 'contestAwarded':
         pending.contest = ev;
         break;
       case 'neighbourLoan':
-        pending.loan = ev;
+        if (!career) pending.loan = ev;
         break;
       case 'purchased':
-        if (isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
+        if (!career && isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
           // Premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur.
           app.field.openBuilding(ev.investmentId);
         }
@@ -1082,6 +1148,18 @@ function processPending() {
   const g = app.game;
   if (!g) return;
   flushGrouped();
+  if (g.mode === 'career') {
+    // Comice (concours de carrière, moteur contest.js) : remise des prix avant le reste.
+    if (pending.contest && !app.dialogs.isOpen()) {
+      const ev = pending.contest;
+      pending.contest = null;
+      app.sheets.close('silent');
+      app.dialogs.contestResult(ev, { onClose: () => processPending() });
+      return;
+    }
+    app.careerUI.processPending();
+    return;
+  }
   if (pending.end) {
     const ev = pending.end;
     pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
@@ -1202,6 +1280,16 @@ function save() {
   if (!g || app.inMenu || g.state.status !== 'playing') return;
   const data = g.serialize();
   data.speed = effectiveSpeed();
+  if (g.mode === 'career') {
+    let meta = null;
+    try {
+      meta = careerMetaOf(g);
+    } catch (err) {
+      console.warn('careerMetaOf :', err);
+    }
+    storage.saveCareer(data, meta || { farmName: g.state.career?.farmName, year: g.state.time.year });
+    return;
+  }
   const c = g.query.calendar();
   storage.saveRun(data, { levelId: g.level.id, levelName: g.level.name, day: c.day, seasonId: c.seasonId, money: g.state.money });
 }
@@ -1229,6 +1317,9 @@ app.savedRunInfo = () => {
   };
 };
 
+/** Enregistre tout de suite (achat important, bilan de l'année…). */
+app.saveNow = () => save();
+
 window.addEventListener('beforeunload', () => save());
 // Appli en arrière-plan (téléphone : bouton accueil, écran verrouillé) : sauvegarde, pause,
 // son coupé (audio.js suspend le contexte) ; au retour, le menu de pause attend le joueur.
@@ -1249,8 +1340,9 @@ window.addEventListener('pagehide', () => save());
 document.addEventListener('freeze', () => save());
 
 // ── Parties ───────────────────────────────────────────────────────────────────────
-function startRun(game, { resumed = false } = {}) {
+function startRun(game, { resumed = false, created = false } = {}) {
   if (unwire) unwire();
+  app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
   app.tutorial.stop();
   app.hints.clear();
@@ -1273,10 +1365,12 @@ function startRun(game, { resumed = false } = {}) {
   document.body.classList.remove('in-menu');
   document.body.classList.add('in-game');
 
+  const career = game.mode === 'career';
   app.hud.bind(game);
-  app.panel.bind(game);
+  if (!career) app.panel.bind(game);
   unwire = wire(game);
   resizeScene();
+  syncSceneCareer();
   if (typeof app.scene?.focusField === 'function') app.scene.focusField();
 
   if (!resumed) game.actions.setSpeed(1);
@@ -1285,6 +1379,18 @@ function startRun(game, { resumed = false } = {}) {
   const c = game.query.calendar();
   audio.playMusic(c.seasonId);
   updateAmbience(game);
+
+  if (career) {
+    // Mode Carrière : onglets, feuilles, fenêtres et conseils propres (src/ui/career/*).
+    app.careerUI.bind(game, { resumed, created });
+    save();
+    scheduleRefresh();
+    updateWakeLock();
+    if (pwa.isStandalone()) pwa.lockPortrait();
+    app.tabbar.refresh();
+    return;
+  }
+  app.tabbar.setTabs(null);
 
   const lvl = game.level;
   const farm = app.progression.available() ? `${app.progression.farmName()} · ` : '';
@@ -1379,6 +1485,7 @@ app.onStarsEarned = () => {
 
 app.quitToMenu = ({ ended = false } = {}) => {
   if (!ended) save();
+  app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
   app.hints.clear();
   app.tutorial.stop();
@@ -1399,10 +1506,137 @@ app.quitToMenu = ({ ended = false } = {}) => {
   document.body.classList.add('in-menu');
   attract = createAttractGame();
   resizeScene();
+  syncSceneCareer();
   audio.playMusic('menu');
   audio.setAmbience({});
   audio.setWorld({ active: false });
   app.dialogs.mainMenu();
+};
+
+// ── Carrière : création, reprise, archive ─────────────────────────────────────────
+/**
+ * Sauvegarde de carrière pour le menu : { meta, label, data } ; { broken: true, backup } si illisible ;
+ * { newer: true } si elle vient d'une version plus récente (gardée, jamais effacée) ; null sans carrière.
+ */
+app.savedCareerInfo = () => {
+  const data = storage.loadCareer();
+  if (!data) return null;
+  let meta = data.meta || null;
+  try {
+    const g = loadCareer(data.state);
+    if (g.state.status !== 'playing') return null;
+    meta = careerMetaOf(g);
+  } catch (err) {
+    if (err?.code === 'newer' || /récente/.test(err?.message || '')) return { meta, newer: true, label: 'Sauvegarde d\'une version plus récente du jeu', data };
+    console.info('Carrière illisible :', err?.message || err);
+    return { broken: true, backup: !!storage.loadCareerBackup(), data };
+  }
+  if (!meta) return null;
+  const sid = meta.seasonId || 'spring';
+  return {
+    meta,
+    data,
+    label: `Continuer · ${meta.farmName} · Année ${meta.year}, ${season(sid).toLowerCase()} · ${meta.rankName || `rang ${meta.rank}`}`,
+  };
+};
+
+/** Archive la carrière sauvegardée (« Recommencer une ferme », nouvelle ferme par-dessus), puis l'efface. */
+function archiveSavedCareer(endedBy = 'restart') {
+  const data = storage.loadCareer();
+  if (!data) return;
+  let entry = null;
+  try {
+    const g = loadCareer(data.state);
+    const sum = g.query.career.summary();
+    entry = { farmName: sum.farmName, years: g.state.time.year, rank: sum.rank, patrimony: Math.max(sum.patrimony || 0, sum.bestPatrimony || 0), endedBy };
+  } catch {
+    const m = data.meta || {};
+    entry = m.farmName ? { farmName: m.farmName, years: m.year || 1, rank: m.rank || 1, patrimony: m.patrimony || 0, endedBy } : null;
+  }
+  storage.clearCareer({ archive: entry });
+  app.progression.reload();
+}
+
+/**
+ * Nouvelle ferme. opts : { farmName, farmerGender, outfit, difficulty, seasonLength } (src/ui/career/menu.js).
+ * archiveExisting : la ferme sauvegardée est d'abord archivée (confirmée deux fois par le joueur).
+ */
+app.startCareer = (opts, { archiveExisting = false } = {}) => {
+  if (archiveExisting) archiveSavedCareer('restart');
+  // La partie de niveau en cours (s'il y en a une) reste sauvegardée de son côté.
+  if (app.game && !app.inMenu && app.game.mode !== 'career') save();
+  let game;
+  try {
+    const decor = app.progression.available() ? { ...(app.progression.cosmetics().decor || {}) } : {};
+    game = createCareer({ seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, ...opts, cosmetics: { decor } });
+  } catch (err) {
+    console.error(err);
+    audio.play('error');
+    app.toasts.show({ kind: 'error', text: `Impossible de créer la ferme : ${err.message}` });
+    return;
+  }
+  app.progression.careerStart?.();
+  startRun(game, { created: true });
+};
+
+/** « Ma ferme » → Continuer. Sauvegarde illisible : la copie de secours de la veille est proposée. */
+app.continueCareer = async () => {
+  const data = storage.loadCareer();
+  if (!data) return app.dialogs.mainMenu();
+  let game = null;
+  try {
+    game = loadCareer(data.state);
+  } catch (err) {
+    if (err?.code === 'newer' || /récente/.test(err?.message || '')) {
+      audio.play('error');
+      app.toasts.show({ kind: 'error', text: 'Cette sauvegarde vient d\'une version plus récente du jeu : mettez le jeu à jour (Options → Réparer le jeu).', duration: 6000 });
+      return;
+    }
+    console.warn('Carrière illisible :', err);
+    const bak = storage.loadCareerBackup();
+    let backup = null;
+    try {
+      backup = bak ? loadCareer(bak.state) : null;
+    } catch {
+      backup = null;
+    }
+    if (backup) {
+      const ok = await app.dialogs.confirm({ title: 'Sauvegarde abîmée', text: 'La sauvegarde de votre ferme ne se relit pas. Reprendre la sauvegarde de secours (celle de la veille) ?', ok: 'Reprendre la copie' });
+      if (!ok) return;
+      game = backup;
+    } else {
+      audio.play('error');
+      app.toasts.show({ kind: 'error', text: 'La sauvegarde de votre ferme est illisible, et il n\'y a pas de copie de secours.', duration: 6000 });
+      return;
+    }
+  }
+  try {
+    startRun(game, { resumed: true });
+  } catch (err) {
+    console.warn('Reprise de la carrière impossible :', err);
+    app.quitToMenu({ ended: true });
+    app.toasts.show({ kind: 'error', text: 'Impossible de reprendre la ferme pour l\'instant.' });
+  }
+};
+
+/** Pause → « Recommencer une ferme » (double confirmation faite) : archive, retour au menu, création. */
+app.restartCareer = () => {
+  if (app.game?.mode === 'career') save();
+  archiveSavedCareer('restart');
+  app.quitToMenu({ ended: true });
+  openNewFarm(app, {});
+};
+
+/** Faillite d'une carrière (Classique) : archivée puis effacée (la fenêtre suit). */
+app.careerEnded = (ev) => {
+  try {
+    storage.clearCareer({ archive: ev?.archive || null });
+  } catch (err) {
+    console.warn('clearCareer :', err);
+  }
+  app.progression.reload();
+  pauseReasons.clear();
+  updateWakeLock();
 };
 
 // ── Ferme de démonstration (fond du menu) ─────────────────────────────────────────
@@ -1658,7 +1892,8 @@ if (DEBUG) {
       if (!g) return null;
       g.state.money = n;
       app.hud.bind(g);
-      app.panel.refresh();
+      if (g.mode === 'career') app.careerUI.refresh();
+      else app.panel.refresh();
       return n;
     },
     levels: LEVELS.map((l) => l.id),
@@ -1674,6 +1909,64 @@ if (DEBUG) {
     grange: (tab) => app.grange.open(tab),
     decor: () => app.decor.enter(),
     v3: () => v3,
+    // ── Carrière ──
+    /** État de la carrière en cours (résumé), ou null. */
+    career() {
+      const g = app.game;
+      if (!g || g.mode !== 'career') return null;
+      return { summary: g.query.career.summary(), money: g.state.money, time: { ...g.state.time }, lots: g.query.career.lots().map((l) => ({ id: l.id, type: l.type, name: l.name, forSale: l.forSale })) };
+    },
+    /** Nouvelle carrière sans passer par la fenêtre (tests). */
+    careerStart(opts = {}) {
+      app.dialogs.closeAll();
+      app.startCareer({ farmName: 'Ferme de test', difficulty: 'detente', seasonLength: 7, ...opts }, { archiveExisting: !!storage.loadCareer() });
+      return !!app.game;
+    },
+    /** Passe des années entières (les fenêtres de fin d'année s'ouvrent puis se referment). */
+    careerSkipYears(n = 1) {
+      const g = app.game;
+      if (!g || g.mode !== 'career') return 0;
+      const target = g.state.time.year + n;
+      let guard = 0;
+      while (g.state.status === 'playing' && g.state.time.year < target && guard++ < 400) {
+        while (app.dialogs.isOpen()) app.dialogs.closeTop() || app.dialogs.closeAll();
+        app.hints.clear();
+        if (!window.__debug.skipDays(1)) {
+          processPending();
+        }
+      }
+      processPending();
+      return g.state.time.year;
+    },
+    /** Force le rang (tests de l'interface : contenu débloqué). */
+    careerRank(n) {
+      const g = app.game;
+      if (!g || g.mode !== 'career') return null;
+      g.state.career.rank = Math.max(1, Math.min(6, n));
+      g.refreshLevel?.();
+      app.hud.refresh();
+      app.careerUI.refresh();
+      return g.state.career.rank;
+    },
+    careerMoney(n) {
+      return window.__debug.setMoney(n);
+    },
+    /** Déclenche un événement de carrière (lot CORE-C : actions.career.debugEvent), si disponible. */
+    careerEvent(id) {
+      const g = app.game;
+      const fn = g?.actions.career?.debugEvent || g?.actions.career?.triggerEvent;
+      if (typeof fn !== 'function') return { ok: false, reason: 'indisponible' };
+      const res = fn(id);
+      processPending();
+      return res;
+    },
+    /** Centre du panneau d'un terrain (px de la page), si le rendu le connaît. */
+    lotPoint(id) {
+      const l = app.scene?.layout?.lots?.find?.((x) => x.id === id);
+      if (!l) return null;
+      const p = l.sign ? { x: l.sign.x, y: l.sign.y } : { x: l.rect.x + l.rect.w / 2, y: l.rect.y + l.rect.h / 2 };
+      return worldToPage(p.x, p.y);
+    },
   };
 }
 

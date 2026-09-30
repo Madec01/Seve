@@ -49,6 +49,26 @@
 //   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
 //
+// Mode Carrière (game.state.mode === 'career', détecté à chaque image) : disposition en colonne
+// (layout-career.js) qui grandit vers le haut, reconstruite quand les terrains, les bâtiments ou les
+// machines changent (le défilement reste sur ce qu'on regardait) ; acteurs (career-actors.js).
+//   scene.focusLot(lotId, opts?)        fait défiler (animé si opts.animate) pour montrer le terrain ;
+//                                       opts { animate, align: 'center' | 'fit' } → défilement visé (px CSS)
+//   scene.focusHouse(opts?)             montre la maison (bande du bas)
+//   scene.focusBuilding(id, opts?)      montre un bâtiment (maison, grenier, abri, atelier, serre…)
+//   scene.lotRect(lotId)                rectangle (px du monde) d'un terrain, ou null
+//   scene.lotScreenRect(lotId)          rectangle à l'écran (px CSS) d'un terrain, ou null
+//   scene.setCareer(on)                 force la reconstruction de la disposition (sinon automatique)
+//   scene.hitTest(x, y, opts?)          + { type: 'lotSign', lotId, slot? } | { type: 'lotForSale', lotId }
+//                                       | { type: 'shelter', buildingId } | { type: 'building', buildingId }
+//                                       | { type: 'machine', key } | { type: 'employee', staffId }
+//                                       | { type: 'pond', buildingId, lotId } | { type: 'crow', plotIndex }
+//                                       | { type: 'joseph' } | { type: 'visitor', offerId, kind }
+//                                       | { type: 'investment', id: 'beehive' | 'solarPanel' }
+//   scene.careerStats()                 acteurs dessinés, taille des tampons (mesures)
+//   Tampons : en carrière la vue ne couvre que l'écran ; la couche fixe couvre tout le monde et on en
+//   recopie la tranche visible à chaque image (monde très haut, 60 i/s au téléphone).
+//
 // Rendu : tout est dessiné à l'échelle 1 dans un tampon « vue » (le monde + la forêt autour, sur
 // toute la hauteur qu'on peut faire défiler), puis recopié sur le canvas avec un zoom entier
 // (imageSmoothingEnabled = false) et un décalage entier en pixels réels : le défilement reste net.
@@ -62,8 +82,10 @@
 
 import {
   TILE, SPRITES, drawSprite, cropSprite, soilSprite, spriteRect, treeSprite, productSprite, decorSprite, outfitSprite,
-  FARM_SIGN_WIDE_TEXT_RECT, WINDMILL_FRAMES, drawWideFarmSign,
+  FARM_SIGN_WIDE_TEXT_RECT, WINDMILL_FRAMES, drawWideFarmSign, playerSprite, BUBBLE_CONTENT,
 } from './atlas.js';
+import { createCareerLayout, careerLayoutKey, WORKSHOP_IDS } from './layout-career.js';
+import { createCareerActors } from './career-actors.js';
 import { getCrop } from '../data/crops.js';
 import { buildSeasonSheets } from './assets.js';
 import { createLayout, tileHash } from './layout.js';
@@ -82,6 +104,9 @@ const ANIMAL_KINDS = ['chicken', 'sheep', 'cow', 'goat'];
 const PROCESSING_IDS = ['jamWorkshop', 'dairy', 'mill'];
 const DEFAULT_COSMETICS = { farmName: 'Ferme des Tilleuls', outfit: 'outfit.classic', path: 'path.dirt', fence: 'fence.wood', decor: {} };
 const SEASON_INDEX = { spring: 0, summer: 1, autumn: 2, winter: 3 };
+const CAREER_VISIBLE_ROWS = 22;
+const FAIR_LANTERNS_X = [1.5, 9.5]; // lampions des fêtes (tuiles, au-dessus de la route) // ordinateur : tuiles visibles en hauteur (zoom par la hauteur)
+const PRODUCT_OF_ANIMAL = { hen: 'product.eggs', rabbit: 'product.angora', duck: 'product.duckEgg', cow: 'product.milk', goat: 'product.milk', pig: 'product.truffle', sheep: 'product.angora', horse: 'product.ride' };
 
 function makeCanvas(w, h) {
   const c = document.createElement('canvas');
@@ -115,6 +140,19 @@ export function createScene(canvas, images, level, opts = {}) {
   const modeOpt = opts.layoutMode || 'auto';
   let mode = modeOpt === 'portrait' ? 'portrait' : 'landscape';
   let layout = createLayout(level, { mode });
+
+  // ── Mode Carrière ────────────────────────────────────────────────────────────────
+  let careerMode = false;
+  let careerKey = '';
+  let windowed = false; // vue limitée à l'écran, couche fixe sur tout le monde (carrière)
+  let sBufY0 = 0; // haut de la couche fixe (px du monde) en mode fenêtré
+  let staticH = 1;
+  const actors = createCareerActors();
+  const careerInfo = { t: -1, nextLot: null, full: {}, today: null, active: null, contest: false };
+  const prevLevels = {}; // niveaux des bâtiments (apparition « pop » à la construction / amélioration)
+  const deferred = []; // événements de carrière, traités après la reconstruction de la disposition
+  let clearing = null; // défrichage d'un terrain acheté : { lotId, t0 }
+  let forceRebuild = false;
 
   // Tampons
   const view = makeCanvas(layout.width, layout.height);
@@ -191,13 +229,15 @@ export function createScene(canvas, images, level, opts = {}) {
   const entries = [];
   let entryCount = 0;
   function entry() {
-    if (entryCount >= entries.length) entries.push({ sortY: 0, name: '', x: 0, y: 0, flipX: false, scale: 1, set: null, alpha: 1, tool: null, toolFlip: false, img: null });
+    if (entryCount >= entries.length) entries.push({ sortY: 0, name: '', x: 0, y: 0, flipX: false, scale: 1, set: null, alpha: 1, tool: null, toolFlip: false, img: null, overlay: null, icon: null });
     const e = entries[entryCount++];
     e.img = null;
     e.flipX = false;
     e.scale = 1;
     e.alpha = 1;
     e.tool = null;
+    e.overlay = null;
+    e.icon = null;
     return e;
   }
   const byDepth = (a, b) => a.sortY - b.sortY;
@@ -253,20 +293,36 @@ export function createScene(canvas, images, level, opts = {}) {
     const m = wantedMode(cssW, cssH);
     if (m !== mode) {
       mode = m;
-      rebuildLayout(layout.level);
+      // (Carrière) une seule disposition en colonne : seul le zoom change.
+      if (!careerMode) rebuildLayout(layout.level);
     }
     computeCamera();
   }
 
-  /** Zoom, position du monde, taille des tampons ; garde (ou recentre) le défilement. */
-  function computeCamera() {
+  /** (Carrière) Ordonnée du monde (px) au centre de la bande visible. */
+  function worldCenterY() {
+    const cur = scrollAnim ? scrollAnim.to : scrollDev;
+    return (cur + band.y + band.h / 2 - baseY) / zoom;
+  }
+
+  /**
+   * Zoom, position du monde, taille des tampons ; garde (ou recentre) le défilement.
+   * @param keepWorldY  (carrière) ordonnée du monde à garder au centre de la bande (défaut : l'actuelle)
+   */
+  function computeCamera(keepWorldY) {
     const prevMax = maxScrollDev;
+    const keepY = careerMode && userScrolled ? (keepWorldY ?? (initialized ? worldCenterY() : null)) : null;
     band.x = Math.round(insets.left * dpr);
     band.y = Math.round(insets.top * dpr);
     band.w = Math.max(1, devW - band.x - Math.round(insets.right * dpr));
     band.h = Math.max(1, devH - band.y - Math.round(insets.bottom * dpr));
     const ess = layout.essential;
-    if (mode === 'portrait') {
+    if (careerMode && mode !== 'portrait') {
+      // Ordinateur : la même colonne, centrée, zoom par la hauteur (≈ 22 tuiles visibles).
+      const byWidth = Math.floor(band.w / ess.w);
+      const byHeight = Math.max(minZoom, Math.floor(band.h / (CAREER_VISIBLE_ROWS * TILE)));
+      zoom = Math.max(1, Math.min(byWidth, byHeight));
+    } else if (mode === 'portrait') {
       const byWidth = Math.floor(band.w / ess.w);
       // Le champ entier doit tenir en hauteur dans la bande (cas extrêmes : écran très bas).
       const byField = Math.floor(band.h / (layout.fieldRect.h + TILE));
@@ -291,16 +347,24 @@ export function createScene(canvas, images, level, opts = {}) {
     bufY0 = Math.floor(-baseY / zoom) - 1;
     const w = Math.ceil(devW / zoom) + 3;
     // + une hauteur d'écran : défilement au-delà du bas du monde quand une feuille est ouverte.
-    const h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
+    let h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
+    // (Carrière) Fenêtré : la vue ne couvre que l'écran ; la couche fixe garde toute la hauteur.
+    const sh = h;
+    if (windowed) {
+      sBufY0 = bufY0;
+      h = Math.ceil(devH / zoom) + 3;
+    }
     ox = -bufX0;
     oy = -bufY0;
-    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h) {
+    const wantStaticH = windowed ? sh : h;
+    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h || staticLayer.height !== wantStaticH) {
       viewW = w;
       viewH = h;
+      staticH = wantStaticH;
       view.width = viewW;
       view.height = viewH;
       staticLayer.width = viewW;
-      staticLayer.height = viewH;
+      staticLayer.height = staticH;
       scratch.width = viewW;
       scratch.height = viewH;
       vctx = noSmooth(view.getContext('2d'));
@@ -308,6 +372,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     staticKey = -1;
     if (!userScrolled) focusFieldDev();
+    else if (keepY !== null && keepY !== undefined) setScrollDev(baseY + keepY * zoom - (band.y + band.h / 2));
     else if (prevMax > 0 && maxScrollDev > 0) setScrollDev(Math.round((scrollDev / prevMax) * maxScrollDev));
     else setScrollDev(scrollDev);
   }
@@ -323,6 +388,11 @@ export function createScene(canvas, images, level, opts = {}) {
   function setScrollDev(v) {
     scrollDev = Math.max(0, Math.min(scrollLimitDev(), Math.round(v)));
     blitX = baseX + bufX0 * zoom;
+    if (windowed) {
+      // La vue suit le défilement : son haut est la première ligne de pixels du monde visible.
+      bufY0 = Math.max(sBufY0, Math.floor((scrollDev - baseY) / zoom) - 1);
+      oy = -bufY0;
+    }
     blitY = baseY - scrollDev + bufY0 * zoom;
   }
 
@@ -597,9 +667,49 @@ export function createScene(canvas, images, level, opts = {}) {
       const slop = hitOpts && hitOpts.touch ? Math.max(3, (16 * dpr) / zoom) : 1;
       return decorHit(w.x, w.y, slop);
     }
+    if (careerMode) return hitTestCareer(w.x, w.y, hitOpts);
     const owned = lastGame ? lastGame.state.investments : undefined;
     if (hitOpts && hitOpts.touch) return layout.hitTestNear(w.x, w.y, owned, (TOUCH_SLOP_CSS * dpr) / zoom);
     return layout.hitTest(w.x, w.y, owned);
+  }
+
+  /**
+   * (Carrière) Personnages (corbeau, Joseph, visiteurs, employés), bulles de ramassage, puis la
+   * disposition (parcelles, bâtiments, abris, machines garées, panneaux, terrain à vendre…).
+   */
+  function hitTestCareer(wx, wy, hitOpts) {
+    const touch = !!(hitOpts && hitOpts.touch);
+    const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
+    const a = actors.hitTest(wx, wy, slop);
+    if (a) return a;
+    const bs = lastGame?.state?.career?.buildings || {};
+    for (const [id, s0] of Object.entries(layout.slots)) {
+      if (!s0.animal || !(bs[id]?.pending > 0)) continue;
+      const bx = s0.bubble ? s0.bubble.x : s0.anchor.x - 16;
+      const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
+      if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
+    }
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop);
+  }
+
+  /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
+  function centerRect(r, opts = {}) {
+    if (!r) return scrollDev / dpr;
+    flingV = 0;
+    userScrolled = true;
+    scrollBeforeOverlay = null;
+    const visH = band.h - overlayDev;
+    let target;
+    if (opts.align === 'fit' || r.h * zoom > visH) {
+      // Trop haut pour tenir : on montre le bas (allée, panneau), là où l'on entre dans le terrain.
+      target = r.h * zoom > visH ? baseY + (r.y + r.h) * zoom - (band.y + visH) + 8 * dpr : baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
+    } else target = baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
+    if (opts.animate) animateScrollDev(target);
+    else {
+      scrollAnim = null;
+      setScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
   }
 
   function hasSlot(id) {
@@ -860,6 +970,190 @@ export function createScene(canvas, images, level, opts = {}) {
     c.setTransform(1, 0, 0, 1, 0, 0);
   }
 
+  // ── (Carrière) Couche fixe : toute la hauteur du monde ────────────────────────────
+  const COBBLE_PARTS = ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'];
+  /** Rectangle en autotuile 3 × 3 (pavés, eau) : bords et coins de la planche, centre varié. */
+  function drawAutoRect(c, sheets, prefix, r, center2, salt) {
+    for (let y = r.y; y < r.y + r.h; y++) {
+      for (let x = r.x; x < r.x + r.w; x++) {
+        const row = y === r.y ? 0 : y === r.y + r.h - 1 ? 2 : 1;
+        const col = x === r.x ? 0 : x === r.x + r.w - 1 ? 2 : 1;
+        let name = `${prefix}.${COBBLE_PARTS[row * 3 + col]}`;
+        if (row === 1 && col === 1 && center2 && tileHash(x, y, salt) < 0.28) name = center2;
+        drawSprite(c, sheets, name, x * TILE, y * TILE);
+      }
+    }
+  }
+
+  /** Pointillés clairs autour d'un emplacement libre (on peut y construire). */
+  function dottedRect(c, r, color) {
+    c.fillStyle = color;
+    const x0 = r.x * TILE + 2;
+    const y0 = r.y * TILE + 2;
+    const x1 = (r.x + r.w) * TILE - 3;
+    const y1 = (r.y + r.h) * TILE - 3;
+    for (let x = x0; x <= x1; x += 4) { c.fillRect(x, y0, 2, 1); c.fillRect(x, y1, 2, 1); }
+    for (let y = y0; y <= y1; y += 4) { c.fillRect(x0, y, 1, 2); c.fillRect(x1, y, 1, 2); }
+  }
+
+  function buildStaticCareer(season, st) {
+    const sheets = seasonSheets[season];
+    const L = layout;
+    const c = sctx;
+    const SOX = ox;
+    const SOY = -sBufY0;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, viewW, staticH);
+    c.translate(SOX, SOY);
+    const tx0 = Math.floor(-SOX / TILE) - 1;
+    const ty0 = Math.floor(-SOY / TILE) - 1;
+    const tx1 = Math.ceil((viewW - SOX) / TILE) + 1;
+    const ty1 = Math.min(Math.ceil((staticH - SOY) / TILE) + 1, L.rows + 40);
+    const fr = flowerRate(season);
+    const orchardSet = new Set();
+    for (const o of L.orchards) for (let y = o.rect.y; y < o.rect.y + o.rect.h; y++) for (let x = o.rect.x; x < o.rect.x + o.rect.w; x++) orchardSet.add(y * 64 + x);
+
+    // 1. Herbe (fleurs plus nombreuses au verger au printemps)
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        const h = tileHash(tx, ty, 11);
+        const rate = orchardSet.has(ty * 64 + tx) ? fr * 3 : fr;
+        const name = h < 0.14 ? 'ground.grass.tufts' : h > 1 - rate ? 'ground.grass.flowers' : 'ground.grass';
+        drawSprite(c, sheets, name, tx * TILE, ty * TILE);
+      }
+    }
+    // 2. Pavés des cours des ateliers, eau des mares, sol de la serre
+    for (const r of L.cobbles) drawAutoRect(c, sheets, 'ground.cobble', r, 'ground.cobble.c.2', 13);
+    for (const p of L.ponds) drawAutoRect(c, sheets, 'water', p.water, 'water.c.1', 17);
+    for (const g of L.greenhouses) {
+      for (let y = g.y + 2; y < g.y + 6; y++) for (let x = g.x + 1; x < g.x + g.w - 1; x++) drawSprite(c, sheets, 'path.c', x * TILE, y * TILE);
+    }
+    // 3. Chemins, allées, route
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!L.isPath(tx, ty)) continue;
+        if (cosmetics.path === 'path.stone') drawStonePathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
+        else drawPathTile(c, sheets, tx, ty, tx * TILE, ty * TILE);
+      }
+    }
+    // 4. Friches : herbes hautes, fleurs sauvages, souches, ronces
+    const wildFlowers = season === 'spring' || season === 'summer';
+    for (const w of L.wilds) {
+      for (let y = w.rect.y; y < w.rect.y + w.rect.h; y++) {
+        for (let x = w.rect.x; x < w.rect.x + w.rect.w; x++) {
+          const h = tileHash(x, y, 29 + w.seed);
+          let name = null;
+          if (h < 0.3) name = `land.tallgrass.${1 + Math.floor(h * 10) % 3}`;
+          else if (h < 0.37) name = wildFlowers ? `land.wildflower.${h < 0.335 ? 1 : 2}` : 'land.tallgrass.2';
+          else if (h < 0.4) name = 'land.stump';
+          else if (h < 0.42) name = season === 'winter' ? 'land.tallgrass.1' : 'land.bramble';
+          else if (h < 0.45) name = 'land.cleared.patch';
+          if (name && SPRITES[name]) drawSprite(c, sheets, name, x * TILE + Math.floor(tileHash(x, y, 3) * 5) - 2, y * TILE + Math.floor(tileHash(x, y, 4) * 3) - 1);
+        }
+      }
+    }
+    // 5. Forêt (bords, haut, terrain à vendre, bas) et lisières
+    const fset = season === 'autumn' ? 'forest.autumn' : 'forest.green';
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!L.isForest(tx, ty)) continue;
+        const up = L.isForest(tx, ty - 1);
+        const down = L.isForest(tx, ty + 1);
+        const part = !down ? 'bottom' : !up ? 'top' : 'fill';
+        drawSprite(c, sheets, `${fset}.${part}`, tx * TILE, ty * TILE);
+      }
+    }
+    const edgeGreen = season === 'winter' ? 'tree.pine' : season === 'autumn' ? 'tree.autumn' : 'tree.green';
+    for (let ty = ty0; ty <= ty1; ty++) {
+      for (let tx = tx0; tx <= tx1; tx++) {
+        if (!L.isForest(tx, ty)) continue;
+        const openRight = !L.isForest(tx + 1, ty) && !L.isPath(tx + 1, ty);
+        const openLeft = !L.isForest(tx - 1, ty) && !L.isPath(tx - 1, ty);
+        if (!openRight && !openLeft) continue;
+        const h = tileHash(tx, ty, 23);
+        const name = h < 0.3 ? 'tree.pine' : edgeGreen;
+        const dx = (openRight ? 6 : -6) + Math.floor(h * 5) - 2;
+        drawSprite(c, sheets, name, tx * TILE + dx, ty * TILE - 3 + (ty % 2) * 2);
+      }
+    }
+    // Terrain à vendre : forêt assombrie, souches et grand panneau dans la lisière.
+    const sale = L.saleBand;
+    if (sale) {
+      const y0 = sale.y0 * TILE;
+      const hh = (sale.rows - 1) * TILE;
+      c.fillStyle = 'rgba(18,30,26,0.30)';
+      c.fillRect(-SOX, y0, viewW, hh);
+      c.fillStyle = 'rgba(18,30,26,0.16)';
+      c.fillRect(-SOX, y0 + hh - 6, viewW, 6);
+      for (const [x, dy] of [[3, 0], [10, 0], [4, -1]]) drawSprite(c, sheets, 'land.stump', x * TILE + 2, (sale.y0 + sale.rows - 1) * TILE + dy * 4);
+      drawSprite(c, sheets, 'land.sale.sign.big', 6 * TILE, (sale.y0 + sale.rows - 2) * TILE + 2);
+    }
+    // 6. Clôtures (champs : style de la personnalisation ; enclos et verger : bois)
+    for (const f of L.fences) {
+      if (f.kind === 'field') drawFieldFence(c, sheets, f.rect, f.gateX);
+      else drawFence(c, sheets, f.rect, f.gateX);
+    }
+    // 7. Serre : toit vitré opaque au fond, montants, façade basse avec la porte
+    for (const g of L.greenhouses) {
+      const x1 = g.x + g.w - 1;
+      for (let x = g.x; x <= x1; x++) drawSprite(c, sheets, 'glass.roof.top', x * TILE, g.y * TILE);
+      for (let x = g.x; x <= x1; x++) drawSprite(c, sheets, x === g.x ? 'glass.roof.l' : x === x1 ? 'glass.roof.r' : 'glass.roof.c', x * TILE, (g.y + 1) * TILE);
+      for (let y = g.y + 2; y < g.y + 6; y++) {
+        drawSprite(c, sheets, 'glass.roof.l', g.x * TILE, y * TILE);
+        drawSprite(c, sheets, 'glass.roof.r', x1 * TILE, y * TILE);
+      }
+      const doorX = g.x + Math.floor(g.w / 2);
+      for (let x = g.x; x <= x1; x++) drawSprite(c, sheets, x === g.x ? 'glass.wall.l' : x === x1 ? 'glass.wall.r' : x === doorX ? 'glass.door' : 'glass.wall.c', x * TILE, (g.y + 6) * TILE);
+    }
+    // 8. Mares : roseaux et nénuphars, ponton
+    for (const p of L.ponds) {
+      const w = p.water;
+      drawSprite(c, sheets, 'water.reeds', w.x * TILE, (w.y + w.h - 2) * TILE);
+      drawSprite(c, sheets, 'water.reeds', (w.x + w.w - 1) * TILE, w.y * TILE + 4);
+      drawSprite(c, sheets, 'water.lily', (w.x + 2) * TILE + 3, (w.y + 1) * TILE + 2);
+      drawSprite(c, sheets, 'water.lily', (w.x + 5) * TILE, (w.y + 2) * TILE + 5);
+      drawSprite(c, sheets, 'pond.dock', p.dock.x * TILE, p.dock.y * TILE + 4);
+    }
+    // 9. Décor fixe (du haut vers le bas)
+    drawList.length = 0;
+    for (const d of L.deco) drawList.push(d);
+    drawList.sort((a, b) => a.y - b.y);
+    for (const d of drawList) {
+      const name = decoSprite(d.kind, season, tileHash(d.tx, d.ty, 7));
+      if (!name) continue;
+      drawSprite(c, sheets, name, d.x, name.endsWith('.tall') ? d.y - TILE : d.y);
+    }
+    drawList.length = 0;
+    // 10. Accessoires : puits, tonneau, panneau de la ferme, panneaux des terrains, enclos
+    for (const p of L.props) drawSprite(c, sheets, p.name, p.x * TILE + (p.dx || 0), p.y * TILE + (p.dy || 0));
+    drawSprite(c, sheets, 'well', L.well.x * TILE, L.well.y * TILE);
+    if (L.sign && hasSlot('sign')) drawWideFarmSign(c, sheets, L.sign.x * TILE, L.sign.y * TILE);
+    for (const s0 of L.lotSigns) drawSprite(c, sheets, 'land.sign', s0.x * TILE, s0.y * TILE - 2);
+    for (const s0 of Object.values(L.slots)) for (const p of s0.props || []) drawSprite(c, sheets, p.name, p.x, p.y);
+    // Jardin de la chambre d'hôte
+    for (const s0 of Object.values(L.slots)) {
+      for (const d of s0.gardenDeco || []) {
+        if (d.kind === 'flowers') drawSprite(c, sheets, season === 'winter' ? 'ground.grass.tufts' : 'ground.grass.flowers', d.x * TILE, d.y * TILE);
+        else if (d.kind === 'bush') drawSprite(c, sheets, season === 'winter' ? 'bush' : 'bush.berry', d.x * TILE, d.y * TILE);
+        else if (d.kind === 'bench' && SPRITES['decor.bench']) drawSprite(c, sheets, 'decor.bench', d.x * TILE, d.y * TILE);
+      }
+    }
+    // Emplacements libres (pré, basse-cour, cour des ateliers) et bâtiments pas encore construits.
+    const dots = season === 'winter' ? 'rgba(90,110,140,0.55)' : 'rgba(255,241,210,0.6)';
+    for (const e of L.emptySlots) {
+      dottedRect(c, e.rect, dots);
+      drawSprite(c, sheets, 'sign', e.sign.x * TILE, e.sign.y * TILE);
+    }
+    const H = L.home;
+    if (!(H.storage.level > 0)) {
+      dottedRect(c, { x: H.storage.x, y: H.storage.y + 1, w: H.storage.w, h: H.storage.h - 1 }, dots);
+      drawSprite(c, sheets, 'sign', (H.storage.x + (H.storage.w >> 1)) * TILE - 8, (H.storage.y + H.storage.h - 1) * TILE);
+    }
+    if (!(H.stand.level > 0)) drawSprite(c, sheets, 'sign', H.stand.cart.x * TILE, H.stand.cart.y * TILE);
+    void st;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
   // ── Synchronisation avec l'état du jeu ───────────────────────────────────────────
   function spawnAnimal(kind, pen, pop) {
     const minX = pen.x * TILE - 3;
@@ -985,6 +1279,10 @@ export function createScene(canvas, images, level, opts = {}) {
 
   // ── Fermier ───────────────────────────────────────────────────────────────────────
   function inField(x, y) {
+    if (careerMode) {
+      const b = layout.bandAt(y);
+      return !!b && b.type !== 'home' && !b.forSale;
+    }
     const f = layout.field.fence;
     return x > f.x * TILE && x < (f.x + f.w) * TILE && y > f.y * TILE && y < (f.y + f.h - 1) * TILE + 8;
   }
@@ -999,6 +1297,14 @@ export function createScene(canvas, images, level, opts = {}) {
     // Debout juste sous la parcelle (sur la rangée suivante en paysage, dans l'allée en portrait).
     const target = { x: r.x + r.w / 2, y: r.y + r.h + (layout.plotScale > 1 ? 3 : 11), tool, plot: plotIndex };
     farmer.path.length = 0;
+    if (careerMode) {
+      // Carrière : par les allées et l'épine (layout.route), le dernier point porte l'outil.
+      const pts = layout.route({ x: farmer.x, y: farmer.y }, target);
+      pts[pts.length - 1] = target;
+      for (const p of pts) farmer.path.push(p);
+      farmer.idle = 0;
+      return;
+    }
     if (!inField(farmer.x, farmer.y)) {
       const route = routePoints();
       // Reprend le trajet au point le plus proche (dans le sens maison → champ).
@@ -1015,6 +1321,11 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   function farmerGoHome() {
+    if (careerMode) {
+      farmer.path.length = 0;
+      for (const p of layout.route({ x: farmer.x, y: farmer.y }, layout.farmerHome)) farmer.path.push(p);
+      return;
+    }
     const route = routePoints().reverse();
     farmer.path.length = 0;
     for (const p of route) farmer.path.push(p);
@@ -1037,7 +1348,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const dy = next.y - farmer.y;
     const d = Math.hypot(dx, dy);
     // Il presse le pas sur les longs trajets (maison ↔ champ).
-    const step = FARMER_SPEED * (farmer.path.length > 2 ? 1.7 : 1) * dt;
+    const step = FARMER_SPEED * (farmer.path.length > 2 ? (careerMode ? 3 : 1.7) : 1) * dt;
     farmer.walkT += dt;
     if (Math.abs(dx) > 0.5) farmer.facing = dx > 0 ? 1 : -1;
     if (d <= step) {
@@ -1103,6 +1414,9 @@ export function createScene(canvas, images, level, opts = {}) {
       if (opts.flipX) e.flipX = true;
       if (opts.scale) e.scale = opts.scale;
       if (opts.tool) { e.tool = opts.tool; e.toolFlip = !!opts.toolFlip; }
+      if (opts.overlay) e.overlay = opts.overlay; // (carrière) outil tenu, dessiné à la même position
+      if (opts.icon) e.icon = opts.icon; // (carrière) icône dans une bulle ('@bubble')
+      if (opts.alpha !== undefined) e.alpha = opts.alpha;
     }
     return e;
   }
@@ -1153,7 +1467,17 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   /** (v3) Sprite d'un pommier selon son étape, la saison et ses fruits. */
-  function appleTreeSprite(info, season) {
+  function appleTreeSprite(info, season, cropId = 'apple') {
+    if (cropId !== 'apple' && SPRITES[`tree.${cropId}.sapling`]) {
+      // (Carrière, phase B) cerisier, poirier : mêmes étapes et saisons que le pommier.
+      if (info.stage === 'sapling') return `tree.${cropId}.sapling`;
+      if (info.stage === 'young') return `tree.${cropId}.young`;
+      const ripe = (info.fruitStage || 0) >= 2 || !!info.fruitReady;
+      if (season === 'winter') return `tree.${cropId}.winter`;
+      if (season === 'spring') return `tree.${cropId}.spring`;
+      const name = `tree.${cropId}.${season}${ripe ? '.ripe' : ''}`;
+      return SPRITES[name] ? name : `tree.${cropId}.summer`;
+    }
     if (info.stage === 'sapling') return 'tree.apple.sapling';
     if (info.stage === 'young') return 'tree.apple.young';
     return treeSprite(3, season, (info.fruitStage || 0) >= 2 || !!info.fruitReady);
@@ -1164,11 +1488,16 @@ export function createScene(canvas, images, level, opts = {}) {
     const k = L.plotScale || 1; // ×2 en portrait : terre et cultures dessinées en grand
     const c = vctx;
     const sc = k === 1 ? undefined : { scale: k };
+    // (Carrière) Monde très haut : seules les parcelles proches de la vue ; parcelles retirées ignorées.
+    const cy0 = windowed ? -oy - 40 : -Infinity;
+    const cy1 = windowed ? -oy + viewH + 8 : Infinity;
+    const skip = (r) => r.retired || r.y > cy1 || r.y + r.h < cy0;
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       const r = L.plots[i];
       if (!pv) continue;
       if (!pv.unlocked) continue;
+      if (windowed && skip(r)) continue;
       const wet = (pv.cropId && pv.watered) || raining;
       let left = false;
       let right = false;
@@ -1188,6 +1517,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const pv = plotViews[i];
       if (!pv || pv.unlocked) continue;
       const r = L.plots[i];
+      if (windowed && skip(r)) continue;
       const n = r.w;
       c.fillStyle = 'rgba(47,74,51,0.16)';
       c.fillRect(r.x + k, r.y + k, n - 2 * k, n - 2 * k);
@@ -1210,6 +1540,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const pv = plotViews[i];
       if (!pv || !pv.cropId) continue;
       const r = L.plots[i];
+      if (windowed && skip(r)) continue;
       if (pv.cropId === 'apple' || pv.kind === 'tree') {
         drawTree(c, i, pv, r, k, sc, season, sheetsEnv);
         continue;
@@ -1312,7 +1643,8 @@ export function createScene(canvas, images, level, opts = {}) {
         pushBuilding('building.bakery', k.x, k.y, k.w, k.h, objSet, 'mill.2');
       }
     } else {
-      pushBuilding(id === 'dairy' ? 'building.dairy' : 'building.jamworkshop', b.x, b.y, b.w, b.h, objSet, `${id}.main`);
+      const sprite = s0.kind === 'workshop' && s0.sprite ? s0.sprite : id === 'dairy' ? 'building.dairy' : 'building.jamworkshop';
+      pushBuilding(sprite, b.x, b.y, b.w, b.h, objSet, `${id}.main`);
     }
     for (const [need, name, side] of UPGRADE_PROPS[id] || []) {
       if (lvl < need || (id === 'mill' && lvl >= 3 && s0.bakery)) continue;
@@ -1330,7 +1662,7 @@ export function createScene(canvas, images, level, opts = {}) {
     for (let j = 0; j < pr.places.length; j++) {
       const pl = pr.places[j];
       if (!pl) continue;
-      const e = pushSprite(productSprite(pl.productId), x0 + j * step, bottom - 13, bottom + 0.5 + j * 0.01, images);
+      const e = pushSprite(anyProductSprite(pl.productId), x0 + j * step, bottom - 13, bottom + 0.5 + j * 0.01, images);
       void e;
     }
     if (!pr.on) {
@@ -1343,8 +1675,9 @@ export function createScene(canvas, images, level, opts = {}) {
   // Bulles au-dessus des ateliers qui travaillent : l'icône d'un produit en cours, par intermittence.
   function drawWorkBubbles(owned) {
     const c = vctx;
-    for (let k = 0; k < PROCESSING_IDS.length; k++) {
-      const id = PROCESSING_IDS[k];
+    const ids = careerMode ? WORKSHOP_IDS : PROCESSING_IDS;
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k];
       const s0 = layout.slots[id];
       if (!s0 || !(owned[id] > 0) || !working(id)) continue;
       const cyc = (time + k * 1.1) % 3.4;
@@ -1360,7 +1693,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const by = Math.round(b.y * TILE - 14 + bob + (1 - appear) * 3 + (id === 'mill' ? 10 : 0));
       c.globalAlpha = Math.max(0, Math.min(1, appear));
       c.drawImage(bubble, bx, by);
-      drawSprite(c, images, productSprite(item.productId), bx + 1, by + 1);
+      drawSprite(c, images, anyProductSprite(item.productId), bx + 1, by + 1);
       c.globalAlpha = 1;
     }
   }
@@ -1370,7 +1703,7 @@ export function createScene(canvas, images, level, opts = {}) {
 
   function drawTree(c, i, pv, r, k, sc, season, sheetsEnv) {
     const info = treeInfo(pv, lastGame?.state.plots[i]);
-    const name = appleTreeSprite(info, season);
+    const name = appleTreeSprite(info, season, pv.cropId);
     // Les arbres prennent la neige en hiver (planche d'hiver : « chapeaux » blancs).
     const set = season === 'winter' ? sheetsEnv : images;
     let dy = 1;
@@ -1532,16 +1865,324 @@ export function createScene(canvas, images, level, opts = {}) {
     void dayProgress;
   }
 
+  /** Sprite d'un produit : table des niveaux, sinon « product.<id> » de la carrière, sinon repli. */
+  function anyProductSprite(id) {
+    const n = productSprite(id);
+    if (n !== 'crate.empty') return n;
+    return SPRITES[`product.${id}`] ? `product.${id}` : n;
+  }
+
+  // ── (Carrière) Objets dynamiques : bâtiments à niveaux, machines, acteurs, fermier ──────
+  const viewRect = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  function collectCareer(owned, season, sheetsEnv) {
+    entryCount = 0;
+    const L = layout;
+    const H = L.home;
+    const objSet = season === 'winter' ? sheetsEnv : images;
+    const st = lastGame.state;
+    const car = st.career || {};
+    viewRect.x0 = -ox;
+    viewRect.y0 = -oy - 8;
+    viewRect.x1 = -ox + viewW;
+    viewRect.y1 = -oy + viewH + 40;
+
+    // Maison, grenier / silo, étal
+    pushBuilding(H.house.sprite, H.house.x, H.house.y, H.house.w, H.house.h, objSet, 'b.house');
+    if (H.storage.sprite) pushBuilding(H.storage.sprite, H.storage.x, H.storage.y, H.storage.w, H.storage.h, objSet, 'b.storage');
+    if (H.stand.level >= 2 && H.stand.sprite) {
+      pushBuilding(H.stand.sprite, H.stand.x, H.stand.y, H.stand.w, H.stand.h, objSet, 'b.roadsideStand');
+    } else if (H.stand.level === 1) {
+      const sd = H.stand;
+      pushBuilding('stall.cart', sd.cart.x, sd.cart.y, 1, 1, objSet, 'b.roadsideStand');
+      for (let k = 0; k < sd.crates.length; k++) {
+        const t = sd.crates[k];
+        const cropId = recentCrops[k];
+        const crate = cropId && (SPRITES[`crate.${cropId}`] ? `crate.${cropId}` : cropId === 'apple' ? 'perk.basket' : 'crate.empty');
+        const name = cropId ? crate : k === 0 ? 'crate.empty' : k === 1 ? 'sack.empty' : null;
+        if (name) pushSprite(name, t.x * TILE, t.y * TILE + 1, (t.y + 1) * TILE, images);
+      }
+    }
+    // Panneaux solaires, ruches
+    const ns = Math.min(H.solar.length, owned.solarPanel || 0);
+    for (let k = 0; k < ns; k++) pushBuilding('solar.panel', H.solar[k].x, H.solar[k].y, 1, 1, objSet, `solarPanel.${k}`);
+    const nh = Math.min(L.hives.length, owned.beehive || 0);
+    for (let k = 0; k < nh; k++) pushBuilding('beehive', L.hives[k].x, L.hives[k].y, 1, 1, objSet, `beehive.${k}`);
+    // Arroseurs (niv. 1 : la moitié des têtes, niv. 2 : toutes) et convoyeur
+    let conveyor = null;
+    for (const m of Object.values(car.machines || {})) {
+      if (!m) continue;
+      if (m.id === 'conveyor') conveyor = m;
+      if (m.id !== 'sprinklers') continue;
+      const sp = L.sprinklers[m.lotId];
+      if (!sp) continue;
+      const n = (m.level || 1) >= 2 ? sp.heads.length : Math.ceil(sp.heads.length / 2);
+      for (let k = 0; k < n; k++) pushBuilding('sprinkler', sp.heads[k].x, sp.heads[k].y + (sp.onFence ? -0.25 : 0), 1, 1, objSet, `sprinklers.${m.lotId}`);
+    }
+    if (conveyor) {
+      const on = conveyor.on !== false;
+      const frame = on && Math.floor(time * 6) % 2 ? '.1' : '';
+      for (const cv of L.conveyors) {
+        for (let x = cv.x0; x <= cv.x1; x++) pushSprite(`machine.conveyor.h${frame}`, x * TILE, cv.y * TILE, cv.y * TILE + 4, objSet);
+        // Branches montant vers la porte de chaque atelier de la cour.
+        for (const s0 of Object.values(L.slots)) {
+          if (s0.kind !== 'workshop' || s0.lotId !== cv.lotId) continue;
+          const bx = s0.building.x + (s0.building.w >> 1) + (s0.slot === 0 ? 1 : -1);
+          for (let y = s0.building.y + s0.building.h; y < cv.y; y++) pushSprite(`machine.conveyor.v${frame}`, bx * TILE, y * TILE, y * TILE + 2, objSet);
+        }
+      }
+    }
+    // Abris, chambre d'hôte, ateliers
+    for (const [id, s0] of Object.entries(L.slots)) {
+      const b = s0.building;
+      if (s0.kind === 'shelter' || s0.kind === 'guest') {
+        if (s0.sprite) pushBuilding(s0.sprite, b.x, b.y, b.w, b.h, objSet, `b.${id}`);
+      } else if (s0.kind === 'workshop') {
+        pushWorkshop(id, owned, objSet);
+        const lvl = car.buildings?.[id]?.level || owned[id] || 0;
+        if (lvl >= 4) pushBuilding('part.sign.gold', b.x + b.w - 1, b.y + b.h - 2, 1, 1, objSet, `${id}.3`).y -= 2;
+        if (lvl >= 5) pushBuilding('part.annex', s0.slot === 0 ? b.x - 1 : b.x + b.w, b.y + b.h - 2, 1, 2, objSet, `${id}.4`);
+      }
+    }
+    // Décorations posées sur les emplacements
+    for (const d of L.decorSlots || []) {
+      if (d.kind !== 'small') continue;
+      const name = decorSprite(cosmetics.decor[d.id]);
+      if (!name || name === 'deco.pond') continue;
+      const tall = (SPRITES[name].h || 1) > 1;
+      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
+    }
+    const pond = (L.decorSlots || []).find((d) => d.id === 'pond');
+    if (pond && decorSprite(cosmetics.decor.pond) === 'deco.pond') pushSprite('deco.pond', pond.x, pond.y, pond.y + 1, objSet);
+    // Coupe du comice sur le panneau de la ferme ; cocarde pendant le comice
+    const cres = car.contest?.result || st.contest?.result;
+    const met = cres && Array.isArray(cres.goalsMet) ? cres.goalsMet.length : 0;
+    if (L.sign && hasSlot('sign')) {
+      if (met > 0) {
+        const trophy = met >= 3 ? 'icon.trophy.gold' : met === 2 ? 'icon.trophy.silver' : 'icon.trophy.bronze';
+        pushSprite(trophy, L.sign.x * TILE + 32, L.sign.y * TILE - 12, (L.sign.y + 1) * TILE + 0.2, images);
+      } else if (careerInfo.contest && SPRITES['fair.ribbon']) {
+        pushSprite('fair.ribbon', L.sign.x * TILE + 34, L.sign.y * TILE - 10, (L.sign.y + 1) * TILE + 0.2, images);
+      }
+    }
+    // Décor de fête du jour
+    pushFair(objSet);
+    // Animaux, employés, machines, corbeaux, visiteurs, Joseph
+    actors.collect(pushSprite, viewRect, { base: images, obj: objSet });
+    // Fermier (ou fermière)
+    {
+      const walking = farmer.path.length > 0;
+      const hop = walking && Math.sin(farmer.walkT * 5 * Math.PI) > 0 ? -1 : 0;
+      const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
+      const x = Math.round(farmer.x) - 8;
+      const y = Math.round(farmer.y) - 15 + hop + workBob;
+      pushSprite(farmerSprite(), x, y, farmer.y + 1, images, { flipX: farmer.facing < 0, tool: farmer.tool, toolFlip: farmer.facing < 0 });
+    }
+  }
+
+  /** Sprite du joueur : tenue choisie, fermier ou fermière (carrière). */
+  function farmerSprite() {
+    const female = careerMode && lastGame?.state?.career?.farmerGender === 'fermiere';
+    const name = female ? playerSprite(cosmetics.outfit, { female: true }) : outfitSprite(cosmetics.outfit);
+    return SPRITES[name] ? name : outfitSprite(cosmetics.outfit);
+  }
+
+  /** Thème de la fête du jour selon la saison (id de CORE-C : seedFair, villageFete, harvestFestival, christmasMarket). */
+  function fairTheme() {
+    const id = careerInfo.today;
+    if (!id) return null;
+    if (/christmas|noel|xmas/i.test(id)) return 'christmas';
+    if (/harvest|recolte/i.test(id)) return 'harvest';
+    if (/seed|semis/i.test(id)) return 'seed';
+    return 'village';
+  }
+
+  function pushFair(objSet) {
+    const theme = fairTheme();
+    if (!theme) return;
+    const H = layout.home;
+    const y0 = H.y0;
+    const put = (name, tx, ty, dy = 0) => {
+      if (!SPRITES[name]) return;
+      const sz = SPRITES[name];
+      pushBuilding(name, tx, ty - ((sz.h || 1) - 1), sz.w || 1, sz.h || 1, objSet, `fair.${name}`).y += dy;
+    };
+    const blink = Math.floor(time * 2) % 2 ? '.1' : '';
+    const leftX = layout.machineParking && Object.values(layout.machineParking).some((m) => m.id === 'waterTower') ? 4 : 2;
+    if (theme === 'christmas') {
+      put(`fair.chalet${SPRITES[`fair.chalet${blink}`] ? blink : ''}`, leftX, y0 + 11);
+      put('fair.xmasTree', 1, y0 + 11);
+    } else {
+      put('fair.stand', leftX, y0 + 11);
+      put('fair.balloons', leftX + 2, y0 + 11);
+      if (theme === 'harvest') put('fair.pumpkins', leftX, y0 + 12);
+      if (theme === 'seed' && SPRITES['sack.wheat']) put('sack.wheat', leftX + 2, y0 + 12);
+    }
+    // Lampions suspendus au-dessus du bord de la route (devant le tracteur garé).
+    const lan = `fair.lanterns${SPRITES[`fair.lanterns${blink}`] ? blink : ''}`;
+    if (SPRITES[lan]) for (const lx of FAIR_LANTERNS_X) pushSprite(lan, lx * TILE, H.roadY * TILE - 13, H.roadY * TILE + 6, objSet);
+  }
+
+  /** Guirlandes des jours de fête : au-dessus de la route et entre la maison et le grenier. */
+  function drawFairGarlands() {
+    const theme = fairTheme();
+    if (!theme) return;
+    const H = layout.home;
+    const T = TILE;
+    drawGarland(1 * T, H.roadY * T - 4, 13 * T, 6, 0.4);
+    drawGarland((H.house.x + H.house.w) * T - 4, (H.y0 + 2) * T, H.storage.x * T + 4, 8, 2.2);
+  }
+
+  /** Arc-en-ciel (événement au hasard) : en surimpression dans le ciel de la vue, qui apparaît doucement. */
+  let rainbowT = 0;
+  function drawRainbow(dt) {
+    const on = careerInfo.active === 'rainbow';
+    rainbowT = Math.max(0, Math.min(1, rainbowT + (on ? dt : -dt) * 0.6));
+    if (rainbowT <= 0 || !SPRITES['effect.rainbow']) return;
+    const c = vctx;
+    const k = Math.max(1, Math.floor((layout.essential.w) / 64));
+    const w = 64 * k;
+    const x = Math.round(-ox + (viewW - w) / 2);
+    // Haut de la bande visible (sous la barre du haut), pas du canvas.
+    const y = Math.round(-oy + (band.y - blitY) / zoom + 10);
+    c.globalAlpha = 0.5 * rainbowT;
+    drawSprite(c, images, 'effect.rainbow', x, y, { scale: k });
+    c.globalAlpha = 1;
+  }
+
+  /** Serre : vitres claires par-dessus les cultures (on les voit à travers), reflets. */
+  function drawGlass() {
+    const c = vctx;
+    for (const g of layout.greenhouses) {
+      const y0 = (g.y + 2) * TILE;
+      if (y0 > -oy + viewH || y0 + 4 * TILE < -oy) continue;
+      c.globalAlpha = 0.28;
+      for (let y = g.y + 2; y < g.y + 6; y++) for (let x = g.x + 1; x < g.x + g.w - 1; x++) drawSprite(c, images, 'glass.roof.c', x * TILE, y * TILE);
+      c.globalAlpha = 0.35;
+      c.fillStyle = '#ffffff';
+      const sweep = ((time * 18) % ((g.w + 6) * TILE)) - 3 * TILE;
+      for (let yy = 0; yy < 4 * TILE; yy += 1) {
+        const x = Math.round(g.x * TILE + TILE + sweep - yy * 0.5);
+        if (x > g.x * TILE + TILE && x < (g.x + g.w - 1) * TILE - 2) c.fillRect(x, y0 + yy, 2, 1);
+      }
+      c.globalAlpha = 1;
+    }
+  }
+
+  /** Eau des mares : quelques reflets qui scintillent. */
+  function drawWater() {
+    const c = vctx;
+    for (const p of layout.ponds) {
+      const w = p.water;
+      if ((w.y + w.h) * TILE < -oy || w.y * TILE > -oy + viewH) continue;
+      for (let k = 0; k < 7; k++) {
+        const ph = (time * 0.7 + k * 0.37) % 1;
+        if (ph > 0.5) continue;
+        const x = (w.x + 1) * TILE + Math.floor(tileHash(k, Math.floor(time * 0.7 + k * 0.37), 5) * (w.w - 2) * TILE);
+        const y = (w.y + 1) * TILE + Math.floor(tileHash(k, Math.floor(time * 0.7 + k * 0.37), 6) * (w.h - 2) * TILE);
+        c.globalAlpha = ph < 0.25 ? ph * 4 : (0.5 - ph) * 4;
+        c.fillStyle = '#e8f6ff';
+        c.fillRect(x, y, 3, 1);
+        c.fillRect(x + 1, y - 1, 1, 1);
+      }
+      c.globalAlpha = 1;
+    }
+  }
+
+  /** Bulles de ramassage au-dessus des abris (production en attente) ; nombres à l'écran ensuite. */
+  const bubbleLabels = [];
+  function drawCollectBubbles() {
+    bubbleLabels.length = 0;
+    const st = lastGame.state;
+    const bs = st.career?.buildings || {};
+    const c = vctx;
+    for (const [id, s0] of Object.entries(layout.slots)) {
+      if (!s0.animal) continue;
+      const pending = bs[id]?.pending || 0;
+      if (!(pending > 0)) continue;
+      const icon = PRODUCT_OF_ANIMAL[s0.animal] || 'product.eggs';
+      const bp = s0.bubble || { x: s0.anchor.x - 16, y: s0.anchor.y - 30 };
+      const bx = Math.round(bp.x);
+      const by = Math.round(bp.y + (Math.sin(time * 2.4 + bx) > 0.4 ? -1 : 0));
+      if (by > -oy + viewH || by + 32 < -oy) continue;
+      const full = careerInfo.full[id];
+      c.globalAlpha = full ? 0.72 + 0.28 * Math.sin(time * 5) : 1;
+      drawSprite(c, images, 'bubble.collect', bx, by);
+      if (SPRITES[icon]) drawSprite(c, images, icon, bx + BUBBLE_CONTENT.x, by + BUBBLE_CONTENT.y - 1);
+      c.globalAlpha = 1;
+      bubbleLabels.push({ x: bx + 16, y: by + BUBBLE_CONTENT.y + BUBBLE_CONTENT.h + 2, text: String(Math.round(pending)), full: !!full });
+    }
+  }
+
+  /** Nombres des bulles et prix du terrain à vendre, écrits à l'échelle de l'écran (nets). */
+  const labelPt = { x: 0, y: 0 };
+  function drawCareerLabels() {
+    const size = Math.max(Math.round(11 * dpr), Math.round(zoom * 5.5));
+    ctx.save();
+    ctx.font = `700 ${size}px "Ferme", "Trebuchet MS", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(3, Math.round(size / 5));
+    for (const b of bubbleLabels) {
+      worldToDevice(b.x, b.y, labelPt);
+      if (labelPt.y < -size || labelPt.y > devH + size) continue;
+      ctx.strokeStyle = '#3f2631';
+      ctx.strokeText(b.text, labelPt.x, labelPt.y);
+      ctx.fillStyle = b.full ? '#ffb3a0' : '#fff3b0';
+      ctx.fillText(b.text, labelPt.x, labelPt.y);
+    }
+    const sale = layout.saleBand;
+    const info = careerInfo.nextLot;
+    if (sale && info) {
+      worldToDevice(7 * TILE, (sale.y0 + sale.rows) * TILE + 4, labelPt);
+      if (labelPt.y > -size * 2 && labelPt.y < devH + size * 2) {
+        const big = Math.max(Math.round(13 * dpr), Math.round(zoom * 6.5));
+        ctx.font = `700 ${big}px "Ferme", "Trebuchet MS", monospace`;
+        const locked = !!info.lockedByRank;
+        const text = locked ? `Rang ${info.lockedByRank} requis` : `${info.price} pièces`;
+        ctx.lineWidth = Math.max(3, Math.round(big / 5));
+        ctx.strokeStyle = '#3f2631';
+        const tw = ctx.measureText(text).width;
+        const iconS = Math.max(1, Math.round(big / 9));
+        const iw = 16 * iconS * 0.8;
+        const cx = labelPt.x + iw / 2;
+        ctx.strokeText(text, cx, labelPt.y);
+        ctx.fillStyle = locked ? '#f3e9dc' : info.canBuy ? '#fff3b0' : '#ffd0c0';
+        ctx.fillText(text, cx, labelPt.y);
+        const icon = locked ? 'icon.career.lock' : 'icon.career.coins';
+        if (SPRITES[icon]) drawSprite(ctx, images, icon, Math.round(cx - tw / 2 - 16 * iconS), Math.round(labelPt.y - 8 * iconS), { scale: iconS });
+      }
+    }
+    ctx.restore();
+  }
+
   function drawEntries() {
     drawList.length = 0;
     for (let i = 0; i < entryCount; i++) drawList.push(entries[i]);
     drawList.sort(byDepth);
     const c = vctx;
+    // (Carrière) Monde très haut : on ne dessine que ce qui touche la vue.
+    const cull = windowed;
+    const vy0 = -oy - 8;
+    const vy1 = -oy + viewH + 8;
     for (const e of drawList) {
       if (e.img) {
         c.drawImage(e.img, e.x, e.y);
         continue;
       }
+      if (cull) {
+        if (e.y > vy1) continue;
+        const sp = e.name.charCodeAt(0) === 64 ? null : SPRITES[e.name];
+        const hh = sp ? (sp.h || 1) * TILE * e.scale : 40;
+        if (e.y + hh < vy0) continue;
+      }
+      if (e.name === '@bubble') {
+        extraImages();
+        c.drawImage(bubble, e.x, e.y);
+        if (e.icon && SPRITES[e.icon]) drawSprite(c, images, e.icon, e.x + 1, e.y + 1);
+        continue;
+      }
+      if (e.alpha !== 1) c.globalAlpha = Math.max(0, Math.min(1, e.alpha));
       if (e.scale !== 1) {
         drawSprite(c, e.set, e.name, e.x, e.y, { scale: e.scale, flipX: e.flipX });
       } else {
@@ -1551,6 +2192,8 @@ export function createScene(canvas, images, level, opts = {}) {
         // Outil tenu à côté du fermier (tuile de 16 px, dessinée plus haut que ses mains)
         drawSprite(c, images, e.tool, e.x + (e.toolFlip ? -9 : 9), e.y + 2, { flipX: e.toolFlip });
       }
+      if (e.overlay) drawSprite(c, images, e.overlay, e.x, e.y, e.flipX ? { flipX: true } : undefined);
+      if (e.alpha !== 1) c.globalAlpha = 1;
     }
     drawList.length = 0;
   }
@@ -1630,10 +2273,96 @@ export function createScene(canvas, images, level, opts = {}) {
     }
   }
 
+  /** (Carrière) Fumées (maison, chambre d'hôte, serre chauffée) et jets des arroseurs à l'aube. */
+  function emitCareerAmbient(dt, owned, season, weather, dayProgress) {
+    const L = layout;
+    const car = lastGame.state.career || {};
+    smokeT -= dt;
+    if (smokeT <= 0) {
+      smokeT = season === 'summer' ? rnd(1.4, 2.2) : rnd(0.6, 1.1);
+      const h = L.home.house;
+      effects.smoke((h.x + 1) * TILE + 7, h.y * TILE + 1);
+      const g = L.slots.guestHouse;
+      if (g && Math.random() < 0.6) effects.smoke((g.building.x + 1) * TILE + 7, g.building.y * TILE + 1);
+      for (const gh of L.greenhouses) if (gh.level >= 3 && (season === 'winter' || season === 'autumn')) effects.smoke((gh.x + gh.w - 2) * TILE + 8, gh.y * TILE - 2);
+    }
+    if (L.slots.mill && owned.mill > 0) {
+      const busy = working('mill');
+      millPhase = (millPhase + dt / (busy ? 0.13 : 0.42)) % (WINDMILL_FRAMES * 1000);
+    }
+    for (const id of ['dairy', 'jamWorkshop', 'cannery', 'spinningMill']) {
+      const s0 = L.slots[id];
+      if (!s0 || !(owned[id] > 0) || !working(id)) continue;
+      if (Math.random() < dt * 0.9) effects.smoke(s0.building.x * TILE + 10, s0.building.y * TILE + 3);
+    }
+    const spraying = season !== 'winter' && weather !== 'rain' && weather !== 'storm' && dayProgress < 0.22;
+    if (!spraying) return;
+    sprayT -= dt;
+    if (sprayT > 0) return;
+    sprayT = 0.05;
+    const heads = [];
+    for (const m of Object.values(car.machines || {})) {
+      if (!m || m.id !== 'sprinklers' || m.on === false) continue;
+      const sp = L.sprinklers[m.lotId];
+      if (!sp) continue;
+      const n = (m.level || 1) >= 2 ? sp.heads.length : Math.ceil(sp.heads.length / 2);
+      for (let k = 0; k < n; k++) heads.push(sp.heads[k]);
+    }
+    if (!heads.length) return;
+    const t = heads[Math.floor(Math.random() * heads.length)];
+    const wy = t.y * TILE + 4;
+    if (wy < -oy - 16 || wy > -oy + viewH + 16) return;
+    effects.spray(t.x * TILE + 8, wy);
+  }
+
+  function drawCareerBees(owned, season, weather, dayProgress) {
+    if (season === 'winter' || weather === 'rain' || weather === 'storm' || dayProgress > 0.92) return;
+    const n = Math.min(layout.hives.length, owned.beehive || 0);
+    const c = vctx;
+    for (let k = 0; k < n; k++) {
+      const t = layout.hives[k];
+      const cx = t.x * TILE + 8;
+      const cy = t.y * TILE + 5;
+      if (cy < -oy - 20 || cy > -oy + viewH + 20) continue;
+      for (let b = 0; b < 3; b++) {
+        const ph = k * 2.1 + b * 2.4;
+        const x = Math.round(cx + Math.sin(time * 1.9 + ph) * 8 + Math.sin(time * 4.3 + ph * 1.7) * 3 + 6);
+        const y = Math.round(cy + Math.cos(time * 2.6 + ph) * 4 - 4 + Math.sin(time * 6 + ph) * 1.5);
+        c.fillStyle = '#fdbe53';
+        c.fillRect(x, y, 1, 1);
+        c.fillStyle = OUTLINE;
+        c.fillRect(x + (Math.sin(time * 1.9 + ph) > 0 ? -1 : 1), y, 1, 1);
+      }
+    }
+  }
+
+  /** (Carrière) Lanternes des fêtes qui s'allument le soir. */
+  function drawFairGlow(dayProgress, weather) {
+    if (!fairTheme()) return;
+    const dark = weather === 'storm' ? 0.8 : weather === 'rain' ? 0.5 : 0;
+    const k = Math.max(dark, dayProgress > 0.68 ? Math.min(1, (dayProgress - 0.68) / 0.12) : 0);
+    if (k <= 0.02) return;
+    const c = vctx;
+    c.save();
+    c.translate(ox, oy);
+    c.globalCompositeOperation = 'lighter';
+    const y = layout.home.roadY * TILE - 8;
+    for (let i = 0; i < 4 * FAIR_LANTERNS_X.length; i++) {
+      const cx = Math.round(FAIR_LANTERNS_X[i >> 2] * TILE) + 3 + (i & 3) * 8;
+      c.globalAlpha = 0.09 * k * (0.9 + 0.1 * Math.sin(time * 7 + i));
+      c.fillStyle = '#ffcf6a';
+      c.fillRect(cx - 5, y - 3, 11, 9);
+      c.fillRect(cx - 3, y - 5, 7, 13);
+    }
+    c.restore();
+    c.globalAlpha = 1;
+  }
+
   function drawHover(owned) {
     if (!hover) return;
     let r = null;
-    if (hover.type === 'plot') r = layout.plotRect(hover.index);
+    if (careerMode && hover.type !== 'plot' && hover.type !== 'investment') r = layout.hitRect(hover) || actors.rectOf(hover);
+    else if (hover.type === 'plot') r = layout.plotRect(hover.index);
     else if (hover.type === 'investment') r = layout.investmentRect(hover.id, owned[hover.id] || 0);
     if (!r) return;
     const c = vctx;
@@ -1788,7 +2517,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     // Fermier (touchable : choix de la tenue), sans outil.
     const fr = farmerRect();
-    drawSprite(c, images, outfitSprite(cosmetics.outfit), fr.x, fr.y, farmer.facing < 0 ? { flipX: true } : undefined);
+    drawSprite(c, images, farmerSprite(), fr.x, fr.y, farmer.facing < 0 ? { flipX: true } : undefined);
     cornerMarks(c, fr, pulse);
   }
 
@@ -1869,6 +2598,25 @@ export function createScene(canvas, images, level, opts = {}) {
       if (Math.abs(flingV) < 12 || scrollDev === before) flingV = 0;
     }
 
+    if (game.state && game.state.mode === 'career') {
+      if (!careerMode || game !== lastGame) {
+        lastGame = game;
+        rebuildCareer(game, true);
+      } else if (forceRebuild || careerLayoutKey(game.state) !== careerKey) rebuildCareer(game, false);
+      if (game.level) layout.level = game.level;
+      return renderCareer(game, dt);
+    }
+    if (careerMode) {
+      // Retour au mode Niveaux : disposition des niveaux, vue pleine.
+      careerMode = false;
+      windowed = false;
+      actors.reset();
+      deferred.length = 0;
+      clearing = null;
+      rebuildLayout(game.level || layout.level);
+      computeCamera();
+      lastGame = null;
+    }
     if (game.level && game.level !== layout.level) setLevel(game.level);
     if (game !== lastGame) {
       lastGame = game;
@@ -1940,6 +2688,256 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
   }
 
+  // ── (Carrière) Disposition, reconstruction et image ──────────────────────────────────
+  function careerOpts(g) {
+    return { career: g.state.career, plots: g.state.plots, investments: g.state.investments };
+  }
+
+  /**
+   * Reconstruit la disposition de carrière. first : nouvelle partie (tout est remis à zéro, vue sur le
+   * champ de départ) ; sinon le monde a changé (terrain acheté, bâtiment…) : ce qui était à l'écran y
+   * reste, tout ce qui est en coordonnées du monde descend de la hauteur ajoutée en haut.
+   */
+  function rebuildCareer(g, first) {
+    const oldH = layout.height;
+    const keepY = !first && userScrolled ? worldCenterY() : null;
+    const anim = !first && scrollAnim ? { ...scrollAnim } : null;
+    layout = createCareerLayout(g.level || layout.level, careerOpts(g));
+    careerKey = careerLayoutKey(g.state);
+    forceRebuild = false;
+    careerMode = true;
+    windowed = true;
+    if (first) {
+      resetTracking();
+      effects.clear();
+      actors.reset();
+      deferred.length = 0;
+      clearing = null;
+      for (const k of Object.keys(prevLevels)) delete prevLevels[k];
+      careerInfo.t = -1;
+      userScrolled = false;
+      flingV = 0;
+      scrollAnim = null;
+      scrollBeforeOverlay = null;
+      computeCamera();
+      return;
+    }
+    const dy = layout.height - oldH;
+    // Suivi des parcelles : on garde ce qui existe, on complète (nouvelles parcelles à la fin).
+    const n = layout.plots.length;
+    const grow = (arr, v) => { while (arr.length < n) arr.push(v); arr.length = n; };
+    grow(plotViews, null);
+    grow(prevCrop, undefined);
+    grow(prevFruit, 0);
+    grow(prevGrowth, -1);
+    grow(prevWatered, false);
+    grow(prevUnlocked, false);
+    for (let i = 0; i < n; i++) plotViews[i] = null; // positions et parcelles retirées : tout relire
+    visualIndex = null;
+    unlockedCount = -1;
+    staticKey = -1;
+    if (dy) {
+      farmer.y += dy;
+      for (const p of farmer.path) p.y += dy;
+      effects.shift(0, dy);
+      actors.shift(dy);
+    }
+    computeCamera(keepY !== null ? keepY + dy : undefined);
+    if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom };
+  }
+
+  /** Relit quelques requêtes de carrière (au plus 4 fois par seconde). */
+  function refreshCareerInfo(g) {
+    if (careerInfo.t >= 0 && time - careerInfo.t < 0.25) return;
+    careerInfo.t = time;
+    const q = g.query?.career;
+    try { careerInfo.nextLot = q?.nextLot ? q.nextLot() : null; } catch { careerInfo.nextLot = null; }
+    careerInfo.full = {};
+    try {
+      for (const b of (q?.buildings ? q.buildings() : [])) if (b && b.full) careerInfo.full[b.id] = true;
+    } catch { /* requête indisponible */ }
+    const ev = g.state.career?.events || {};
+    careerInfo.today = ev.today || null;
+    careerInfo.active = ev.active ? ev.active.kind || ev.active.id || null : null;
+    careerInfo.contest = !!(g.state.career?.contest && !g.state.career.contest.awarded);
+  }
+
+  /** Apparition des bâtiments construits ou améliorés, des ruches et panneaux achetés. */
+  function syncCareerBuildings(st) {
+    const bs = st.career?.buildings || {};
+    const seen = new Set();
+    for (const [id, b] of Object.entries(bs)) {
+      seen.add(id);
+      const lv = b?.level || 0;
+      const before = prevLevels[id];
+      if (initialized && lv > (before || 0)) {
+        pops.set(`b.${id}`, time);
+        if (!before) pops.set(`${id}.main`, time);
+        else pops.set(`${id}.${lv - 1}`, time);
+      }
+      prevLevels[id] = lv;
+    }
+    for (const id of Object.keys(prevLevels)) if (!seen.has(id)) delete prevLevels[id];
+    for (const id of ['beehive', 'solarPanel']) {
+      const nn = st.investments?.[id] || 0;
+      const before = prevOwned[id] ?? nn;
+      if (initialized && nn > before) for (let k = before; k < nn; k++) pops.set(`${id}.${k}`, time);
+      prevOwned[id] = nn;
+    }
+  }
+
+  /** Événements de carrière différés : la disposition est maintenant à jour. */
+  function flushDeferred() {
+    while (deferred.length) {
+      const [type, payload] = deferred.shift();
+      careerEvent(type, payload);
+    }
+  }
+
+  function careerEvent(type, payload = {}) {
+    const L = layout;
+    switch (type) {
+      case 'lotBought':
+        clearing = { lotId: payload.lotId, t0: time };
+        break;
+      case 'lotDeveloped': {
+        const r = L.lotRect(payload.lotId);
+        if (!r) break;
+        // Clôture posée de gauche à droite : poussière et étincelles le long du terrain.
+        for (let k = 0; k < 10; k++) {
+          const x = r.x + TILE + (k / 9) * (r.w - 2 * TILE);
+          effects.dirt(x, r.y + r.h - TILE * 1.5, 5, 1);
+          effects.sparkle({ x: x - 6, y: r.y + 4, w: 12, h: r.h - 2 * TILE }, 3, 'gold', k * 0.1);
+        }
+        break;
+      }
+      case 'buildingBuilt':
+      case 'buildingUpgraded': {
+        const r = L.investmentRect(payload.buildingId, 99);
+        if (r) {
+          effects.sparkle(r, Math.min(40, 14 + Math.round((r.w * r.h) / 200)), 'gold', 0);
+          effects.dirt(r.x + r.w / 2, r.y + r.h - 2, 12, 1);
+        }
+        break;
+      }
+      case 'machineBought':
+      case 'machineUpgraded': {
+        const m = L.machineParking[payload.key];
+        if (m) effects.sparkle({ x: m.x, y: m.y, w: m.w, h: m.h }, 14, 'gold', 0);
+        break;
+      }
+      default:
+        break;
+    }
+    actors.onEvent(type, payload, L);
+    effects.onEvent(type, payload, L);
+  }
+
+  /** Défrichage d'un terrain acheté : la forêt s'efface, les arbres s'enfoncent, poussière et feuilles. */
+  function drawClearing(season, sheetsEnv) {
+    if (!clearing) return;
+    const age = time - clearing.t0;
+    const r = layout.lotRect(clearing.lotId);
+    if (!r || age > 1.6) {
+      clearing = null;
+      return;
+    }
+    const c = vctx;
+    if (!clearing.started) {
+      clearing.started = true;
+      const set = season === 'winter' ? sheetsEnv : images;
+      for (let k = 0; k < 9; k++) {
+        const x = r.x + TILE + Math.floor(tileHash(k, 1, 41) * (r.w - 3 * TILE));
+        const y = r.y + TILE + Math.floor(tileHash(k, 2, 41) * (r.h - 3 * TILE));
+        const name = season === 'winter' ? 'tree.pine' : season === 'autumn' ? 'tree.autumn' : 'tree.green';
+        effects.sinkTree({ x, y, w: TILE, h: TILE }, name, set, 1);
+      }
+    }
+    const k = Math.max(0, 1 - age / 1.2);
+    if (k <= 0) return;
+    const fset = season === 'autumn' ? 'forest.autumn' : 'forest.green';
+    c.globalAlpha = k;
+    for (let ty = Math.floor(r.y / TILE); ty < (r.y + r.h) / TILE; ty++) {
+      const part = ty === Math.floor((r.y + r.h) / TILE) - 1 ? 'bottom' : 'fill';
+      for (let tx = 0; tx < layout.cols; tx++) drawSprite(c, sheetsEnv, `${fset}.${part}`, tx * TILE, ty * TILE);
+    }
+    c.globalAlpha = 1;
+  }
+
+  function renderCareer(game, dt) {
+    const cal = game.query.calendar();
+    const season = cal.seasonId || 'spring';
+    const weather = game.state.weather?.today || 'sunny';
+    const dayProgress = cal.dayProgress ?? 0.5;
+    const owned = game.state.investments || {};
+    const raining = weather === 'rain' || weather === 'storm';
+    const sheetsEnv = seasonSheets[season] || seasonSheets.spring;
+
+    refreshCareerInfo(game);
+    syncCareerBuildings(game.state);
+    syncPlots(game, raining);
+    actors.sync(game, layout, time);
+    initialized = true;
+    flushDeferred();
+
+    const key = `career|${SEASON_INDEX[season] ?? 0}|${cosVersion}|${careerKey}`;
+    if (key !== staticKey) {
+      buildStaticCareer(season, game.state);
+      staticKey = key;
+    }
+
+    updateFarmer(dt);
+    actors.update(dt, { elapsed: game.state.time?.elapsed || 0, season, weather, dayProgress });
+    emitCareerAmbient(dt, owned, season, weather, dayProgress);
+    fxState.season = season;
+    fxState.weather = weather;
+    fxState.dayProgress = dayProgress;
+    fxState.view.x = -ox;
+    fxState.view.y = -oy;
+    fxState.view.w = viewW;
+    fxState.view.h = viewH;
+    effects.update(dt, fxState);
+
+    const c = vctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+    // Tranche visible de la couche fixe.
+    c.drawImage(staticLayer, 0, bufY0 - sBufY0, viewW, viewH, 0, 0, viewW, viewH);
+    c.translate(ox, oy);
+    drawWater();
+    drawPlots(sheetsEnv, raining, season);
+    drawGlass();
+    effects.drawGround(c, images);
+    drawClearing(season, sheetsEnv);
+    collectCareer(owned, season, sheetsEnv);
+    drawEntries();
+    effects.drawSmoke(c);
+    drawCareerBees(owned, season, weather, dayProgress);
+    drawFairGarlands();
+    if (contestDay(cal)) drawBunting();
+    drawWorkBubbles(owned);
+    drawCollectBubbles();
+    effects.drawWorld(c);
+    if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
+    drawHover(owned);
+    drawRainbow(dt);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    effects.drawWeather(c);
+    effects.drawLight(c, viewW, viewH);
+    drawLampGlow(dayProgress, weather);
+    drawFairGlow(dayProgress, weather);
+    effects.postProcess(c, view, scratch);
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, devW, devH);
+    ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
+    drawSignText();
+    drawCareerLabels();
+    effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
+  }
+
   function rebuildLayout(lvl) {
     layout = createLayout(lvl, { mode });
     resetTracking();
@@ -1951,6 +2949,11 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   function setLevel(lvl) {
+    if (careerMode && (!lvl || lvl.id === 'career' || lvl.career)) {
+      // La disposition de carrière se reconstruit d'elle-même (à la prochaine image).
+      forceRebuild = true;
+      return;
+    }
     rebuildLayout(lvl);
     computeCamera();
   }
@@ -1968,6 +2971,12 @@ export function createScene(canvas, images, level, opts = {}) {
       hover = hit || null;
     },
     onEvent(type, payload) {
+      if (careerMode && type !== 'treeRemoved') {
+        // Carrière : traité après la prochaine reconstruction de la disposition (positions à jour).
+        deferred.push([type, payload || {}]);
+        if (deferred.length > 300) deferred.shift();
+        return;
+      }
       if (type === 'treeRemoved' && payload) {
         // L'arbre s'enfonce dans la terre (sprite d'avant l'arrachage).
         const r = layout.plotRect(payload.plotIndex);
@@ -1976,7 +2985,7 @@ export function createScene(canvas, images, level, opts = {}) {
           const season = lastGame ? lastGame.query.calendar().seasonId : 'summer';
           const i = payload.plotIndex;
           const info = treeInfo(pv, { growth: prevGrowth[i], fruit: prevFruit[i] });
-          const name = pv ? appleTreeSprite(info, season) : 'tree.apple.young';
+          const name = pv ? appleTreeSprite(info, season, pv.cropId || 'apple') : 'tree.apple.young';
           effects.sinkTree(r, name, season === 'winter' ? seasonSheets.winter : images, layout.plotScale || 1);
         }
       }
@@ -2009,6 +3018,44 @@ export function createScene(canvas, images, level, opts = {}) {
     focusDecorSlot,
     focusDecorArea,
     focusRect,
+    // ── Carrière ──
+    focusLot(lotId, opts = {}) {
+      if (!careerMode) return scrollDev / dpr;
+      return centerRect(layout.lotRect(lotId), opts);
+    },
+    focusHouse(opts = {}) {
+      if (!careerMode) {
+        focusField();
+        return scrollDev / dpr;
+      }
+      return centerRect(layout.homeRect, opts);
+    },
+    focusBuilding(id, opts = {}) {
+      const r = careerMode ? layout.investmentRect(id, 99) : layout.investmentRect?.(id, 99);
+      return centerRect(r || null, opts);
+    },
+    lotRect(lotId) {
+      return careerMode ? layout.lotRect(lotId) : null;
+    },
+    lotScreenRect(lotId) {
+      const r = careerMode ? layout.lotRect(lotId) : null;
+      if (!r) return null;
+      const a = worldToScreen(r.x, r.y);
+      const b = worldToScreen(r.x + r.w, r.y + r.h);
+      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    },
+    setCareer(on = true) {
+      if (on) forceRebuild = true;
+    },
+    get careerMode() {
+      return careerMode;
+    },
+    get actors() {
+      return actors;
+    },
+    careerStats() {
+      return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: viewW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };
+    },
     get decorMode() {
       return decorMode;
     },
