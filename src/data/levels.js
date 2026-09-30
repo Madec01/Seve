@@ -29,9 +29,14 @@
 //     noSprinkler      true : pas d'arrosage automatique
 //     rawPriceFactor   (v3) multiplicateur du prix de vente BRUT des récoltes (pas des produits transformés)
 //     pollination      (v3) true : sans aucune ruche, une récolte de pommes a un rendement de 0,5
+//   difficulty, dailyCharge, cropPriceFactor, dryGrowth, dryHeatwaveGrowth, neighbourLoan
+//                                  nombres du mode de difficulté : ici ceux du mode « classique » ; le mode
+//                                  « détente » (défaut) les remplace, avec startMoney, rents et starThresholds :
+//                                  utiliser levelFor(id, difficulté) de src/data/difficulty.js
 //
 // Règle d'or v3 : les niveaux 1 à 8 ne changent pas (les défauts ci-dessous les laissent identiques).
 
+import { BASE_DAILY_CHARGE, GROWTH } from './balance.js';
 import { BASE_CROPS, CROPS, NEW_CROPS } from './crops.js';
 
 const ALL_INVESTMENTS = ['chickenCoop', 'beehive', 'roadsideStand', 'cow', 'sheep', 'sprinkler', 'solarPanel', 'guestHouse'];
@@ -93,6 +98,13 @@ function level(def) {
     contest: null,
     seedMerchant: true,
     tutorial: false,
+    // Nombres du mode « classique » (les autres modes les remplacent : src/data/difficulty.js, levelFor).
+    difficulty: 'classique',
+    dailyCharge: BASE_DAILY_CHARGE,
+    cropPriceFactor: 1,
+    dryGrowth: GROWTH.dry,
+    dryHeatwaveGrowth: GROWTH.dryHeatwave,
+    neighbourLoan: null,
     ...def,
     modifiers: { ...BASE_MODIFIERS, ...(def.modifiers || {}) },
   };

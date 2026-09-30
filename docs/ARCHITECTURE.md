@@ -19,7 +19,8 @@ src/
   data/                    données pures (aucune logique d'état)
     crops.js               cultures
     investments.js         investissements
-    levels.js              niveaux (contraintes, fermages, météo, seuils d'étoiles)
+    levels.js              niveaux (contraintes, fermages, météo, seuils d'étoiles) — nombres du mode classique
+    difficulty.js          modes de difficulté (détente par défaut, classique) : levelFor(id, mode)
     balance.js             constantes globales (durée d'un jour, charges de base…)
   core/                    logique pure, sans DOM, testée sous Node
     rng.js                 générateur pseudo-aléatoire à graine (mulberry32, flux météo / marché / maladie)
@@ -30,6 +31,7 @@ src/
     weather.js             tirage de la météo
     market.js              cours du « marché fou »
     stats.js               statistiques et bilans (summary)
+    neighbour.js           prêt du voisin (filet de sécurité du mode détente)
     events.js              émetteur d'événements
   render/                  dessin canvas
     assets.js              chargement des images/sons (promesses)
@@ -85,7 +87,7 @@ GitHub Pages sert chaque fichier avec `Cache-Control: max-age=600` et n'a pas d'
 ```js
 import { createGame, loadGame } from './core/game.js';
 
-const game = createGame({ levelId: 1, seed: 12345 });   // nouvelle partie
+const game = createGame({ levelId: 1, seed: 12345 });   // nouvelle partie (mode « détente » par défaut, voir plus bas)
 const game2 = loadGame(savedObject);                     // reprise (objet issu de game.serialize())
 
 game.update(dtSeconds);        // fait avancer le temps selon la vitesse ; déclenche les aubes, fermages, etc.
@@ -288,7 +290,9 @@ stats (year et season), nouveaux champs : productIncome, productsSold: { [produc
 ### createGame
 
 ```js
-createGame({ levelId, seed, perks = {} })   // perks : progression.runPerks(progress) ({} si l'interrupteur est éteint)
+createGame({ levelId, seed, perks = {}, difficulty = 'detente' })
+  // perks : progression.runPerks(progress) ({} si l'interrupteur est éteint)
+  // difficulty : progression.runDifficulty(progress) — 'detente' | 'classique' (voir « Modes de difficulté »)
 ```
 
 Effets appliqués à la création : argent de départ + `startMoney` ; pommiers de `level.startTrees` plantés adultes ; `state.processing = {}`, `state.contest` si le niveau en a un. Liste des cultures de la partie : `level.crops` (+ `NEW_CROPS` avec `seedMerchant`, dans l'ordre de `CROPS`).
@@ -441,3 +445,119 @@ scene.onEvent('productSold')             // « +46 » au-dessus du bâtiment
 | **RENDER** | `src/render/*`, `assets/sprites/*` (intégration), `tools/atlas-preview.html` | atlas, dispositions, scène | CORE : forme de `state.plots`, `query.processing()`, ids ; agent graphique : planches |
 
 Règles communes : aucun lot ne modifie les fichiers d'un autre (une demande passe par le chef de projet) ; `index.html`, `dev.html`, `dist/` restent générés (`node tools/build.js`) ; textes du jeu en français, identifiants en anglais ; `node --test tests/` vert à chaque livraison.
+
+## Modes de difficulté et prêt du voisin (rééquilibrage « détente », 2026-09-30)
+
+Retour du joueur : faillite quasi inévitable dès le niveau 1, au premier fermage, en jouant tranquillement
+à ×1. Tout l'équilibrage avait été fait avec des robots qui arrosent, récoltent et replantent chaque parcelle
+chaque jour. Le jeu a désormais deux modes ; les règles et les chiffres sont dans `docs/GAME_DESIGN.md` § 13.
+
+### Données (`src/data/difficulty.js`, pur)
+
+```js
+DIFFICULTY_IDS = ['detente', 'classique']
+DEFAULT_DIFFICULTY = 'detente'          // nouvelles parties
+LEGACY_DIFFICULTY = 'classique'         // parties sauvegardées avant les modes
+DIFFICULTIES[id] = { id, name, short, description, dailyCharge, cropPriceFactor, dryGrowth, dryHeatwaveGrowth,
+                     neighbourLoan: null | { maxShare, minCover, surcharge, repayShare, cushion },
+                     levels: { [levelId]: { startMoney, rents, starThresholds, modifiers?, description? } } }
+isDifficulty(id) / getDifficulty(id)
+levelFor(levelId, difficulty = 'detente') → niveau du mode (même objet à chaque appel ; null si inconnu)
+levelsFor(difficulty) → les 12 niveaux du mode (sélection des niveaux : fermages, départ, seuils d'étoiles)
+```
+
+- `getLevel(id)` (`src/data/levels.js`) renvoie toujours les données **classiques** ; chaque niveau y porte aussi
+  `difficulty: 'classique'`, `dailyCharge: 5`, `cropPriceFactor: 1`, `dryGrowth: 0.5`, `dryHeatwaveGrowth: 0`,
+  `neighbourLoan: null`. Le cœur lit ces champs sur le niveau de la partie (`levelFor`), jamais les constantes.
+- Un mode ne change que des nombres : cultures, investissements, grille, saisons, météo et contraintes
+  (`modifiers`) restent ceux du niveau (seule exception : la mensualité du crédit du niveau 7, avec sa description).
+
+### État et sauvegarde
+
+```js
+state.difficulty = 'detente' | 'classique'
+state.neighbourLoan = null /* classique */ | { debt, borrowed, repaid, forgiven, loans }
+  // debt : reste dû (supplément compris) ; borrowed : total prêté ; repaid : total remboursé ;
+  // forgiven : effacé en fin d'année ; loans : nombre de prêts reçus
+```
+
+- `STATE_VERSION` reste **2** (champs ajoutés). `migrateState` : sauvegarde sans `difficulty` (v1, ou v2 d'avant
+  les modes) → `'classique'` et `neighbourLoan: null` — une partie en cours garde les règles avec lesquelles elle
+  a commencé. `checkState` refuse un mode inconnu, un prêt abîmé, un prêt en classique ou son absence en détente.
+- Parité : en mode classique, tout se joue exactement comme avant (`tests/parity.test.js`, fixture inchangée ;
+  `playParity` et `playSim` passent `difficulty: 'classique'`).
+
+### Actions, requêtes, événements (ajouts)
+
+```js
+game.difficulty                      // 'detente' | 'classique'
+game.query.difficulty() → { id, name, description }
+game.query.level()                   // niveau DU MODE (fermages, départ, seuils d'étoiles, description du mode)
+game.query.finance().neighbourLoan → null /* classique */ | {
+  debt, borrowed, repaid, loans,     // voir state.neighbourLoan
+  available,                         // aucune dette en cours (le voisin peut prêter)
+  wouldLend,                         // si le fermage de la saison tombait maintenant avec l'argent actuel :
+                                     //   0 = l'argent suffit ; n = Joseph prêterait n pièces (manque + coussin) ;
+                                     //   null = il ne peut pas (dette en cours, ou manque > maxMissing) → FAILLITE
+  maxMissing,                        // manque maximal couvert pour le fermage de la saison
+  surcharge, repayShare, cushion, maxShare, minCover }
+game.actions.repayNeighbour(amount?) → { ok, amount, remaining } | { ok: false, reason }
+  // rembourse tout ce qu'on peut (ou au plus `amount`) ; refus : mode classique, rien à rembourser, pas d'argent
+game.actions.harvest(i) → { ...v3, loanRepayment? }   // présent seulement quand le voisin a pris sa part
+```
+
+| Événement | Données | Quand |
+|---|---|---|
+| `neighbourLoan` | `{ amount, debt, missing, rent, seasonId, surcharge, repayShare }` | soir du fermage, **avant** `billPaid` (`amount` = manque + coussin ; `debt` = ce qu'on doit ; `surcharge` = debt − amount) |
+| `loanRepayment` | `{ amount, remaining, source: 'harvest' \| 'product' \| 'player' \| 'yearEnd' }` | chaque remboursement (récolte vendue : juste après `harvested` ; produits : après `dawn`) |
+| `loanRepaid` | `{ total, borrowed, loans, source, forgiven? }` | dette soldée (fin d'année : toujours, avec `forgiven`) |
+| `loanForgiven` | `{ amount }` | fin d'année : ce que Joseph efface (l'argent ne suffisait pas) |
+| `harvested` | v3 + `loanRepayment` (si > 0) | |
+| `bankrupt` | v3 + `neighbourDebt` (détente seulement) ; `state.result.neighbourDebt` aussi | |
+| `dawn` | `chargesDetail` peut contenir `{ source: 'neighbour', amount }` (part des produits vendus ce matin, comptée dans `charges`) | |
+
+- `summary` (billPaid / bankrupt / victory / `query.summary()`) : en détente, `neighbourLoan: { debt, borrowed,
+  repaid, forgiven, loans }` ; `net` de l'année inclut `borrowed − repaid` (pas celui de la saison).
+- Fin d'année (détente) : après `billPaid` d'hiver → (`loanRepayment` 'yearEnd') → (`loanForgiven`) → `loanRepaid`
+  → `victory`. L'argent final n'est jamais rendu négatif par le voisin.
+
+### Progression (`src/core/progression.js`)
+
+```js
+progress.difficulty = 'detente' | 'classique'     // mode des NOUVELLES parties ; défaut 'detente' (aussi pour
+                                                  // une progression d'avant les modes)
+runDifficulty(p) → 'detente' | 'classique'        // à passer à createGame({ difficulty })
+setDifficulty(p, id) → { ok, progress } | { ok: false, reason }
+```
+
+Une seule fiche par niveau (`levels[id]`), quel que soit le mode : étoiles et record gardent le meilleur.
+
+### À faire côté interface (lot UI, non fait ici)
+
+1. **Choix du mode** : réglage « Difficulté » (Détente / Classique, avec `DIFFICULTIES[id].description`) dans les
+   options ou la sélection des niveaux ; `setDifficulty` + `saveProgress` ; `createGame({ levelId, seed, perks,
+   difficulty: progression.runDifficulty(progress) })` dans `main.js` (aujourd'hui `createGame({ levelId, seed, perks })`
+   donne déjà la détente par défaut). Afficher le mode de la partie en cours (`game.query.difficulty().name`), par
+   exemple dans le bandeau du niveau et le menu pause.
+2. **Sélection des niveaux** (`dialogs.js`) : lire départ, fermages et seuils d'étoiles dans `levelsFor(mode)` (ou
+   `levelFor(id, mode)`) au lieu de `LEVELS` / `getLevel` ; pendant une partie, toujours `game.level`.
+   L'étiquette « Récoltes −25 % » (niveau 9) lit `modifiers.rawPriceFactor`, inchangé par le mode : c'est voulu.
+3. **Prêt du voisin** (Joseph, le voisin du tutoriel) :
+   - événement `neighbourLoan` : message ou petite fenêtre « Joseph vous avance {amount} pièces pour le fermage.
+     Vous lui rendrez {debt} pièces : la moitié de vos ventes lui revient jusqu'au remboursement. » ; puis le bilan
+     de fin de saison comme d'habitude (`billPaid` suit) ;
+   - `loanRepayment` : texte flottant discret « −n pour Joseph » (sources `harvest` / `product`) ; `loanRepaid` :
+     message « Dette envers Joseph remboursée ! » (fin d'année : « Joseph efface le reste de la dette » si
+     `forgiven > 0`) ;
+   - barre du haut / fiche du fermage : si `finance().neighbourLoan.debt > 0`, afficher la dette ; couleur du fermage :
+     rouge seulement si `wouldLend === null` et l'argent ne suffit pas (faillite réelle), sinon orange « Joseph
+     aidera » quand `wouldLend > 0` ;
+   - bouton facultatif « Rembourser Joseph » (`actions.repayNeighbour()`) dans la fiche du fermage ;
+   - écran de faillite : si `neighbourDebt > 0`, expliquer « Vous deviez encore {neighbourDebt} pièces à Joseph :
+     il ne pouvait plus vous aider » ; sinon, si le mode est détente, « Il manquait trop : Joseph avance au plus
+     {maxMissing} pièces ».
+4. **Tutoriel** (`tutorial.js`, étape « Investir ») : il conseille le poulailler dès 70 pièces, soit tout de suite
+   (on en a 160 au départ) — la simulation « novice » montre que c'est la principale cause de fonds vides au
+   printemps. Suggestion : conseiller le poulailler après le premier fermage, ou seulement si l'argent restant
+   couvre le fermage (`money − 70 ≥ finance().nextBill.amount`). Le texte « Un an pour… » peut rester ;
+   l'étape « L'hiver approche » lit `game.level.rents[3]` (déjà le chiffre du mode).

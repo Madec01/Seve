@@ -12,12 +12,17 @@
 //     (v3) filets de sécurité des ateliers : dernier jour de l'année → tout ce qui est en cours est
 //          vendu en l'état (processingSoldRaw, raison 'yearEnd') ; sinon, si l'argent manque pour le
 //          fermage → vendu en l'état (raison 'rent') ;
+//     (détente) prêt du voisin : argent < fermage, aucune dette en cours et manque ≤ plafond → le voisin
+//          prête ce qui manque (+ de quoi ressemer, sauf au dernier fermage) : neighbourLoan (src/core/neighbour.js) ;
 //     fermage : argent < fermage  → faillite (status 'bankrupt', événement bankrupt), plus rien ne bouge ;
-//               sinon on paie      → billPaid ; après le fermage d'hiver → victory (status 'victory').
+//               sinon on paie      → billPaid ; après le fermage d'hiver : (détente) le voisin reprend ce
+//               qui lui est dû dans la limite de l'argent restant et efface le reste (loanRepayment,
+//               loanForgiven, loanRepaid), puis victory (status 'victory').
 //
 // Aube (dans cet ordre) :
 //   1. pousse des cultures d'après l'arrosage et la météo de la veille (ruches et « Main verte » :
-//      bonus hors hiver ; canicule : 0 si non arrosée ; pomme de terre : dryGrowth / dryHeatwaveGrowth),
+//      bonus hors hiver ; non arrosée : level.dryGrowth, canicule : level.dryHeatwaveGrowth — selon le
+//      mode de difficulté ; pomme de terre : ses propres dryGrowth / dryHeatwaveGrowth),
 //      (v3) pousse des arbres (croissance, puis fruits ; dormance en hiver),
 //      puis remise à zéro de l'arrosage de toutes les parcelles ;
 //   2. passage au jour suivant ; si une saison commence → seasonStart ;
@@ -34,12 +39,18 @@
 //      tonte des moutons à l'aube du dernier jour de printemps, d'été et d'automne) ;
 //      (v3) le lait des vaches puis des chèvres remplit les places libres de la fromagerie allumée
 //      (ces unités ne rapportent rien aujourd'hui : processingStarted) ;
-//  10. charges quotidiennes (ferme − « Ferme économe » + entretien − panneaux solaires, minimum 0) ;
+//  10. charges quotidiennes (ferme (level.dailyCharge) − « Ferme économe » + entretien − panneaux solaires,
+//      minimum 0) ;
 //  11. mensualité du prêt (aube du jour loan.first, puis tous les loan.every jours) ;
+//      (détente) part du voisin sur les produits vendus ce matin (charge 'neighbour', loanRepayment) ;
 //  12. événements : (contestProgress,) weather, dawn, moneyChanged, puis seasonWarning (2 jours avant un changement).
 //
 // L'argent peut devenir négatif uniquement par les charges de l'aube (charges, arrosage
 // automatique, prêt). Les achats et plantations exigent d'avoir la somme.
+//
+// Modes de difficulté (src/data/difficulty.js) : state.difficulty ('detente' par défaut, 'classique' =
+// nombres de la v3) ; le niveau de la partie est levelFor(levelId, difficulty) (query.level()).
+// En mode classique, tout se joue exactement comme avant les modes (test de parité).
 //
 // v3 : les bonus permanents de la partie (state.perks, copiés au lancement) sont lus par perkValue()
 // (src/core/perks.js). Avec perks = {}, les niveaux 1 à 8 se jouent exactement comme en v2 (test de
@@ -49,6 +60,7 @@ import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEA
 import { getInvestment } from '../data/investments.js';
 import { getCrop, isTreeCrop } from '../data/crops.js';
 import { getLevel, yearLength } from '../data/levels.js';
+import { DEFAULT_DIFFICULTY, LEGACY_DIFFICULTY, getDifficulty, isDifficulty, levelFor } from '../data/difficulty.js';
 import { getPerk, perkMaxRank } from '../data/perks.js';
 import { getProduct, productsFor, recipeActive, recipeFor, PRODUCTS } from '../data/products.js';
 import { createRngState, stream } from './rng.js';
@@ -129,6 +141,7 @@ import { awardContest, contestChanges, contestDueTonight, contestGoals, contestS
 import { gameCrops, hasPerks, normalizeRunPerks, perkValue } from './perks.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
 import { createEmitter } from './events.js';
+import { borrow, canBorrow, initialNeighbourLoan, loanAmount, maxMissing, repay, repaymentFrom, willLend } from './neighbour.js';
 
 export const STATE_VERSION = 2;
 
@@ -137,11 +150,13 @@ const V1_MAX_LEVEL = 8;
 
 /**
  * Nouvelle partie.
- * @param {object} opts { levelId, seed, perks } — perks : bonus permanents { [perkId]: rang }
- *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine)
+ * @param {object} opts { levelId, seed, perks, difficulty } — perks : bonus permanents { [perkId]: rang }
+ *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine) ; difficulty : 'detente' (défaut)
+ *   ou 'classique' (nombres de la v3, test de parité) — voir src/data/difficulty.js
  */
-export function createGame({ levelId = 1, seed = Date.now(), perks = {} } = {}) {
-  const level = getLevel(levelId);
+export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY } = {}) {
+  if (!isDifficulty(difficulty)) throw new Error(`Difficulté inconnue : ${difficulty}`);
+  const level = levelFor(levelId, difficulty);
   if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
   const runPerks = normalizeRunPerks(perks);
   const crops = gameCrops(level, runPerks);
@@ -167,6 +182,8 @@ export function createGame({ levelId = 1, seed = Date.now(), perks = {} } = {}) 
     perks: runPerks,
     processing: {},
     contest: initialContest(level),
+    difficulty: level.difficulty,
+    neighbourLoan: initialNeighbourLoan(level),
   };
   for (const idx of level.startTrees || []) setTree(state, state.plots[idx], 'apple', true);
   state.weather.today = drawWeather(state, level, 0);
@@ -178,6 +195,8 @@ export function createGame({ levelId = 1, seed = Date.now(), perks = {} } = {}) 
 /**
  * Migre une sauvegarde v1 (niveaux 1 à 8, sans bonus) vers la v2 : bonus vides, fruits à 0, ateliers
  * vides, pas de concours, nouveaux compteurs à 0. Renvoie un NOUVEL objet ; une v2 est copiée telle quelle.
+ * Toute sauvegarde sans mode de difficulté (v1, ou v2 d'avant les modes) passe en « classique »,
+ * sans prêt du voisin : la partie continue avec les règles avec lesquelles elle a commencé.
  */
 export function migrateState(saved) {
   const s = JSON.parse(JSON.stringify(saved));
@@ -207,6 +226,9 @@ export function migrateState(saved) {
     if (s.lastDawn && typeof s.lastDawn === 'object' && !s.lastDawn.milkToDairy) s.lastDawn.milkToDairy = [];
     s.version = 2;
   }
+  // Modes de difficulté : une partie sauvegardée avant leur existence garde ses règles (classique).
+  if (s.difficulty === undefined) s.difficulty = LEGACY_DIFFICULTY;
+  if (s.neighbourLoan === undefined) s.neighbourLoan = null;
   return s;
 }
 
@@ -214,11 +236,12 @@ export function migrateState(saved) {
 export function loadGame(saved) {
   if (!saved || typeof saved !== 'object') throw new Error('Sauvegarde invalide');
   if (saved.version !== STATE_VERSION && saved.version !== 1) throw new Error(`Version de sauvegarde incompatible : ${saved.version}`);
-  const level = getLevel(saved.levelId);
-  if (!level) throw new Error(`Niveau inconnu : ${saved.levelId}`);
+  if (!getLevel(saved.levelId)) throw new Error(`Niveau inconnu : ${saved.levelId}`);
   // Une sauvegarde v1 ne peut venir que des niveaux 1 à 8 (les niveaux 9 à 12 sont nés en v3).
-  if (saved.version === 1 && level.id > V1_MAX_LEVEL) throw new Error('Sauvegarde invalide : niveau inconnu en v1');
+  if (saved.version === 1 && getLevel(saved.levelId).id > V1_MAX_LEVEL) throw new Error('Sauvegarde invalide : niveau inconnu en v1');
   const state = migrateState(saved);
+  if (!isDifficulty(state.difficulty)) throw new Error('Sauvegarde invalide : difficulté');
+  const level = levelFor(saved.levelId, state.difficulty);
   state.levelId = level.id; // « 2 » (texte) → 2
   const problem = checkState(state, level);
   if (problem) throw new Error(`Sauvegarde invalide : ${problem}`);
@@ -293,11 +316,17 @@ function checkState(s, level) {
     if (!obj(s.contest) || typeof s.contest.awarded !== 'boolean') return 'concours';
     if (s.contest.result !== null && !(obj(s.contest.result) && Array.isArray(s.contest.result.goalsMet) && num(s.contest.result.amount))) return 'concours';
   } else if (s.contest !== null) return 'concours';
+  // Prêt du voisin (mode détente).
+  if (level.neighbourLoan) {
+    const l = s.neighbourLoan;
+    if (!obj(l) || !int(l.loans, 0, 99)) return 'prêt du voisin';
+    if (!['debt', 'borrowed', 'repaid', 'forgiven'].every((k) => num(l[k]) && l[k] >= 0)) return 'prêt du voisin';
+  } else if (s.neighbourLoan !== null) return 'prêt du voisin';
   return null;
 }
 
 function wrap(state) {
-  const level = getLevel(state.levelId);
+  const level = levelFor(state.levelId, state.difficulty);
   const crops = gameCrops(level, state.perks);
   // Complète les places d'un atelier (sauvegarde plus courte que la capacité : jamais en jeu normal).
   for (const id of Object.keys(state.processing || {})) ensureBuilding(state, id);
@@ -319,6 +348,34 @@ function wrap(state) {
     if (delta === 0) return;
     state.money += delta;
     push('moneyChanged', { money: state.money, delta });
+  }
+
+  /** Rembourse le voisin (montant déjà borné par l'appelant) : argent, événements loanRepayment / loanRepaid. */
+  function repayNeighbour(amount, source) {
+    if (!(amount > 0)) return;
+    const done = repay(state, amount);
+    changeMoney(-amount);
+    push('loanRepayment', { amount, remaining: state.neighbourLoan.debt, source });
+    if (done) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source });
+  }
+
+  /** Fin de l'année : remboursement avec ce qui reste (≥ 0), le reste est effacé (loanForgiven). */
+  function settleNeighbourAtYearEnd() {
+    const loan = state.neighbourLoan;
+    const paid = Math.min(loan.debt, Math.max(0, state.money));
+    const forgiven = loan.debt - paid;
+    if (paid > 0) {
+      loan.debt -= paid;
+      loan.repaid += paid;
+      changeMoney(-paid);
+      push('loanRepayment', { amount: paid, remaining: forgiven, source: 'yearEnd' });
+    }
+    if (forgiven > 0) {
+      loan.debt = 0;
+      loan.forgiven += forgiven;
+      push('loanForgiven', { amount: forgiven });
+    }
+    push('loanRepaid', { total: loan.repaid, borrowed: loan.borrowed, loans: loan.loans, forgiven, source: 'yearEnd' });
   }
 
   function validPlot(index) {
@@ -374,11 +431,21 @@ function wrap(state) {
     const rent = rentFor(level, state.time.seasonIndex, state);
     if (isLastSeason(state)) sellAllRaw('yearEnd');
     else if (state.money < rent) sellAllRaw('rent');
+    // Mode détente : le voisin avance ce qui manque (s'il n'attend pas déjà un remboursement).
+    if (willLend(state, level, rent)) {
+      const missing = rent - state.money;
+      const { amount, debt } = borrow(state, level, loanAmount(level, rent, state.money, isLastSeason(state)));
+      changeMoney(amount);
+      push('neighbourLoan', { amount, debt, missing, rent, seasonId: sid, surcharge: debt - amount, repayShare: level.neighbourLoan.repayShare });
+    }
     if (state.money < rent) {
+      const owed = state.neighbourLoan ? state.neighbourLoan.debt : 0;
       state.status = 'bankrupt';
       state.time.elapsed = DAY_SECONDS; // la partie s'arrête le soir du dernier jour
       state.result = { outcome: 'bankrupt', amountDue: rent, money: state.money, seasonId: sid, day: state.time.day };
-      push('bankrupt', { amountDue: rent, money: state.money, seasonId: sid, summary: buildSummary(state, sid, { amountDue: rent }) });
+      const extra = state.neighbourLoan ? { neighbourDebt: owed } : {};
+      if (state.neighbourLoan) state.result.neighbourDebt = owed;
+      push('bankrupt', { amountDue: rent, money: state.money, seasonId: sid, ...extra, summary: buildSummary(state, sid, { amountDue: rent }) });
       return;
     }
     addStat(state, 'rentsPaid', rent);
@@ -386,6 +453,9 @@ function wrap(state) {
     noteRentPaid(state);
     push('billPaid', { amount: rent, seasonId: sid, summary: buildSummary(state, sid, { amount: rent }) });
     if (isLastSeason(state)) {
+      // Fin de l'année : le voisin reprend ce qui lui est encore dû, dans la limite de l'argent qui
+      // reste ; il efface le reste (l'argent final n'est jamais négatif à cause de lui).
+      if (state.neighbourLoan && state.neighbourLoan.debt > 0) settleNeighbourAtYearEnd();
       const [t2, t3] = level.starThresholds;
       const stars = 1 + (state.money >= t2 ? 1 : 0) + (state.money >= t3 ? 1 : 0);
       state.status = 'victory';
@@ -403,7 +473,7 @@ function wrap(state) {
     const extraIncomes = []; // remboursement du gel, produits vendus (avant les revenus quotidiens)
 
     // 1. Pousse (veille), arbres compris, puis remise à zéro de l'arrosage.
-    growPlots(state, prevSeason, prevWeather);
+    growPlots(state, prevSeason, prevWeather, level);
 
     // 2. Nouveau jour, nouvelle saison, gel.
     const newSeason = advanceDay(state, level);
@@ -443,12 +513,14 @@ function wrap(state) {
     updateMarket(state, level, crops);
 
     // 7. Arrosage automatique.
-    const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level), today);
+    const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level), today, level);
     const waterCost = sprinkled.length * level.modifiers.waterCost;
 
     // 8. Ateliers : les produits prêts sont vendus.
     const contestBefore = contestSnapshot(state, level);
+    let productSales = 0;
     for (const sale of advanceProcessing(state)) {
+      productSales += sale.amount;
       addProductSold(state, sale.productId, sale.amount);
       extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: owned(state, sale.buildingId), kind: 'processed', productId: sale.productId });
       push('productSold', sale);
@@ -465,16 +537,21 @@ function wrap(state) {
     // 10-11. Charges et prêt.
     const fixed = dailyCharges(state, level);
     const loanPayment = loanDueOn(level, state.time.day) ? level.modifiers.loan.payment : 0;
+    // Prêt du voisin : sa part des produits vendus ce matin.
+    const neighbourPayment = repaymentFrom(state, level, productSales);
     const chargesDetail = [{ source: 'farm', amount: fixed }];
     if (waterCost > 0) chargesDetail.push({ source: 'water', amount: waterCost });
     if (loanPayment > 0) chargesDetail.push({ source: 'loan', amount: loanPayment });
-    const charges = fixed + waterCost + loanPayment;
+    if (neighbourPayment > 0) chargesDetail.push({ source: 'neighbour', amount: neighbourPayment });
+    const charges = fixed + waterCost + loanPayment + neighbourPayment;
 
     addStat(state, 'investmentIncome', investmentTotal);
     addStat(state, 'charges', fixed);
     addStat(state, 'waterSpent', waterCost);
     addStat(state, 'loanPaid', loanPayment);
     state.money += incomeTotal - charges;
+    let neighbourDone = false;
+    if (neighbourPayment > 0) neighbourDone = repay(state, neighbourPayment);
 
     // 12. Événements.
     pushContestChanges(contestBefore);
@@ -492,6 +569,10 @@ function wrap(state) {
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
     push('weather', { today, tomorrow: state.weather.tomorrow });
     push('dawn', dawnInfo);
+    if (neighbourPayment > 0) {
+      push('loanRepayment', { amount: neighbourPayment, remaining: state.neighbourLoan.debt, source: 'product' });
+      if (neighbourDone) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: 'product' });
+    }
     if (state.money !== moneyBefore) push('moneyChanged', { money: state.money, delta: state.money - moneyBefore });
 
     if (!isLastSeason(state) && daysLeftInSeason(state, level) + 1 === WARNING_DAYS) {
@@ -568,7 +649,7 @@ function wrap(state) {
       const crop = getCrop(p.cropId);
       if (isTreeCrop(crop)) return fail('Le pommier n\'a pas besoin d\'eau.');
       if (isMature(p)) return fail('Cette culture est mûre : récoltez-la !');
-      if (!needsWaterToday(crop, state.weather.today)) return fail('Pas besoin : elle pousse sans arrosage.');
+      if (!needsWaterToday(crop, state.weather.today, level)) return fail('Pas besoin : elle pousse sans arrosage.');
       if (p.watered) return fail('Déjà arrosée aujourd\'hui.');
       const cost = level.modifiers.waterCost;
       if (cost > 0 && state.money < cost) return fail(notEnoughMoney(cost - state.money));
@@ -607,10 +688,13 @@ function wrap(state) {
       addHarvest(state, cropId);
       noteSeasonHarvest(state);
       changeMoney(amount);
-      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed });
+      // Prêt du voisin : sa part de la vente (champ loanRepayment seulement quand il y en a une).
+      const neighbourPart = repaymentFrom(state, level, amount);
+      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
       if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
+      repayNeighbour(neighbourPart, 'harvest');
       pushContestChanges(contestBefore);
-      return { ok: true, amount, cropId, tree, processed };
+      return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed };
     }),
 
     removeTree: act((plotIndex) => {
@@ -673,6 +757,20 @@ function wrap(state) {
       changeMoney(amount);
       push('processingSoldRaw', { buildingId, amount, count, reason: 'player' });
       return { ok: true, amount, count };
+    }),
+
+    /** Mode détente : rembourse le voisin maintenant (tout ce qu'on peut, ou `amount` pièces au plus). */
+    repayNeighbour: act((amount) => {
+      if (!playing()) return fail(ENDED);
+      const loan = state.neighbourLoan;
+      if (!loan) return fail('Pas de prêt du voisin dans ce mode.');
+      if (loan.debt <= 0) return fail('Vous ne devez rien au voisin.');
+      const wanted = amount === undefined ? loan.debt : Math.floor(Number(amount));
+      if (!(wanted > 0)) return fail('Montant invalide.');
+      const paid = Math.min(wanted, loan.debt, Math.max(0, Math.floor(state.money)));
+      if (paid <= 0) return fail(notEnoughMoney(1));
+      repayNeighbour(paid, 'player');
+      return { ok: true, amount: paid, remaining: loan.debt };
     }),
 
     setSpeed: act((speed) => {
@@ -775,7 +873,7 @@ function wrap(state) {
       const mature = !!crop && isMature(p);
       const daysLeft = crop ? plotDaysLeft(p) : 0;
       const unlockCost = p.unlocked ? null : plotUnlockCost(state, level);
-      const needsWater = !!crop && !mature && needsWaterToday(crop, state.weather.today);
+      const needsWater = !!crop && !mature && needsWaterToday(crop, state.weather.today, level);
       let action = null;
       if (playing()) {
         if (!p.unlocked) action = unlockCost === null ? null : 'unlock';
@@ -871,7 +969,7 @@ function wrap(state) {
                 }
               : null,
             tree: treeData,
-            noWater: !tree && !needsWaterToday(c, 'sunny'),
+            noWater: !tree && !needsWaterToday(c, 'sunny', level),
             sowAll: !tree,
           };
         });
@@ -998,7 +1096,14 @@ function wrap(state) {
         processingValue: totals.value,
         processingRawValue: totals.rawValue,
         rentAutoSell: rentAutoSellTonight(totals),
+        neighbourLoan: neighbourInfo(),
       };
+    },
+
+    /** Mode de difficulté de la partie : { id, name, description }. */
+    difficulty() {
+      const d = getDifficulty(state.difficulty);
+      return { id: d.id, name: d.name, description: d.description };
     },
 
     calendar() {
@@ -1032,6 +1137,35 @@ function wrap(state) {
     },
   };
 
+  /**
+   * Prêt du voisin pour l'interface (null en mode classique) :
+   * { debt, borrowed, repaid, loans, available, wouldLend, surcharge, repayShare, cushion }.
+   * wouldLend : ce que Joseph prêterait si le fermage de la saison tombait avec l'argent actuel
+   * (0 : l'argent suffit ; null : il ne peut pas, une dette est en cours → ce serait la faillite).
+   */
+  function neighbourInfo() {
+    const loan = state.neighbourLoan;
+    if (!loan || !level.neighbourLoan) return null;
+    const rent = rentFor(level, state.time.seasonIndex, state);
+    const available = canBorrow(state, level);
+    let wouldLend = 0;
+    if (state.money < rent) wouldLend = willLend(state, level, rent) ? loanAmount(level, rent, state.money, isLastSeason(state)) : null;
+    return {
+      debt: loan.debt,
+      borrowed: loan.borrowed,
+      repaid: loan.repaid,
+      loans: loan.loans,
+      available,
+      wouldLend,
+      maxMissing: maxMissing(level, rent),
+      surcharge: level.neighbourLoan.surcharge,
+      repayShare: level.neighbourLoan.repayShare,
+      cushion: level.neighbourLoan.cushion,
+      maxShare: level.neighbourLoan.maxShare,
+      minCover: level.neighbourLoan.minCover,
+    };
+  }
+
   /** Météo d'après-demain (« Almanach ») : lue sur une COPIE du flux météo, sans rien consommer. */
   function afterTomorrow() {
     if (!perkValue(state, 'forecastDays')) return null;
@@ -1054,6 +1188,7 @@ function wrap(state) {
       return state;
     },
     level,
+    difficulty: state.difficulty,
     update,
     on: emitter.on,
     serialize: () => JSON.parse(JSON.stringify(state)),

@@ -12,11 +12,13 @@
 //                                               le joueur arrose tout à la main, quitte à mettre en pause)
 //   node tools/simulate.js --trace --level 2 --strategy optimal --seed 7   déroulé jour par jour d'une partie
 //   node tools/simulate.js --json               sortie JSON (pour comparer deux réglages)
+//   node tools/simulate.js --difficulty classique   mode de difficulté (detente par défaut ; classique = v3)
+//   node tools/simulate.js --compare-modes      tableau des victoires côte à côte : détente / classique
 //
 // Les robots passent uniquement par l'API publique du jeu (actions / query), comme l'interface.
 // Chaque jour, juste après l'aube, ils récoltent, achètent, plantent et arrosent, puis la journée s'écoule.
 //
-// Stratégies :
+// Stratégies (robots « parfaits » : chaque parcelle arrosée, récoltée, replantée chaque jour) :
 //   careless  : graines les moins chères, pas d'investissement ni de parcelle, aucune prévoyance
 //               (plante même ce qui gèlera, ne garde rien de côté) ; jamais d'atelier ni d'arbre.
 //   balanced  : meilleure culture du moment, investissements progressifs dans un ordre fixe tant
@@ -30,6 +32,11 @@
 //               gère la rotation (niveau bio) et vend au bon moment sur le marché fou ;
 //               (v3) valeur d'un atelier = gain par produit × produits réellement possibles d'ici la fin
 //               de l'année ; pommiers seulement si ≥ 3 paniers sont attendus ; concours du niveau 12.
+// Joueurs humains simulés (voir « Joueurs humains simulés » plus bas) :
+//   casual    : joueur tranquille à ×1 sur téléphone (arrose 50 à 70 % des parcelles, récolte parfois
+//               un jour en retard, choisit ses graines un peu au hasard, suit le tutoriel).
+//   novice    : débutant (arrose 20 à 40 %, carottes et navets, achète sans regarder le fermage).
+//   idle      : sème une fois le 1er jour puis ne fait plus rien (doit faire faillite).
 //
 // Parité : sans bonus, sur les niveaux 1 à 8, les robots prennent exactement les mêmes décisions qu'en v2
 // (tests/parity.test.js) : tout ce qui est propre à la v3 ne s'active qu'avec un arbre, un atelier, une
@@ -43,6 +50,7 @@ import { DAY_SECONDS, EPSILON, MARKET, SEASONS } from '../src/data/balance.js';
 import { getCrop } from '../src/data/crops.js';
 import { getInvestment } from '../src/data/investments.js';
 import { LEVELS, yearLength } from '../src/data/levels.js';
+import { levelFor } from '../src/data/difficulty.js';
 import { PERKS } from '../src/data/perks.js';
 import { getProduct, productsFor } from '../src/data/products.js';
 
@@ -65,6 +73,8 @@ const TRACE = !!arg('trace', false);
 const TRACE_SEED = Number(arg('seed', 1));
 const PERKS_ARG = String(arg('perks', 'none'));
 const COMPARE = !!arg('compare-perks', false);
+const COMPARE_MODES = !!arg('compare-modes', false);
+const DIFFICULTY = String(arg('difficulty', 'detente'));
 // Réglages de la stratégie « optimal » (fonds de roulement gardé, rentabilité minimale d'un achat).
 const OPT_CAPITAL = Number(arg('opt-capital', 0.6));
 const OPT_RATIO = Number(arg('opt-ratio', 0.15));
@@ -104,7 +114,7 @@ function ctx(game) {
     crops: gameCrops(level, state.perks).filter((cr) => cr.kind !== 'tree'),
     seed: (cr) => (seedFactor === 1 ? cr.seedCost : Math.max(1, Math.round(cr.seedCost * seedFactor))),
     gt: perkValue(state, 'growthBonus'),
-    rawFactor: level.modifiers.rawPriceFactor,
+    rawFactor: level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1),
   };
 }
 
@@ -580,6 +590,240 @@ function candidates(c) {
   return ['plot', ...ids].filter((id) => purchaseCost(c, id) != null && requirementMet(c, id));
 }
 
+
+// ── Joueurs humains simulés (casual, novice, idle) ─────────────────────────────────────
+//
+// Les robots ci-dessus jouent parfaitement : chaque parcelle arrosée, récoltée et replantée chaque
+// jour. Un vrai joueur, sur téléphone, à ×1 (20 s par jour), n'y arrive pas. Ces modèles imitent
+// un joueur tranquille, avec leur propre tirage (déterministe : graine × niveau × stratégie), sans
+// jamais toucher aux tirages du jeu :
+//   - un budget de gestes par jour (glisser pour arroser / récolter coûte peu, « semer partout » 3 gestes) ;
+//   - certains jours, on ne fait rien (distrait, menus, on regarde la ferme) ;
+//   - arrosage partiel (une part tirée chaque jour des parcelles qui en ont besoin) ;
+//   - récolte en retard d'un jour (ou deux pour le novice), replantation parfois en retard ;
+//   - cultures choisies un peu au hasard parmi celles qu'on peut payer, surtout les pas chères et
+//     rapides (le novice : carottes et navets, sinon la moins chère) ; « semer partout » ;
+//   - niveau 1 : le tutoriel (une seule carotte le 1er jour, puis le poulailler conseillé dès qu'on
+//     a 70 pièces, parfois trop tôt) ; ailleurs, une liste d'envies d'achats (poulailler d'abord,
+//     puis ce que suggère la description du niveau), sans calcul de rentabilité ;
+//   - aucune prévision météo ; le casual regarde souvent la couleur du fermage (n'achète rien qui la
+//     ferait passer au rouge, garde de quoi payer les 3 derniers jours), le novice jamais (il peut
+//     acheter juste avant le fermage).
+//   idle : sème une fois le 1er jour, puis ne fait plus rien (la faillite doit rester possible).
+
+export const HUMAN_PROFILES = {
+  casual: {
+    skipDay: 0.1, // jour sans rien faire
+    taps: [7, 11], // gestes par jour
+    harvestProb: 0.7, // récolte le jour même (sinon le lendemain, sûr)
+    maxDelay: 1,
+    plantProb: 0.75, // replante les parcelles vides ce jour-là
+    water: [0.5, 0.7], // part des parcelles arrosées
+    avoidFreeze: 0.8, // tient compte du gel annoncé
+    rentAware: 0.7, // regarde le fermage : n'achète pas s'il le met en danger ; garde de quoi le payer les 3 derniers jours
+    buyProb: 0.5, // regarde la boutique ce jour-là
+    buyBuffer: [0, 40], // argent gardé après un achat
+    tutorialCoop: 0.8, // achète le poulailler conseillé par le tutoriel dès 70 pièces
+    plotProb: 0.08, // achète une parcelle (s'il reste de quoi)
+    cropBias: 'cheapFast',
+  },
+  novice: {
+    skipDay: 0.15,
+    taps: [4, 8],
+    harvestProb: 0.5,
+    maxDelay: 2,
+    plantProb: 0.6,
+    water: [0.2, 0.4],
+    avoidFreeze: 0.3,
+    rentAware: 0,
+    buyProb: 0.6,
+    buyBuffer: [0, 0],
+    tutorialCoop: 1,
+    plotProb: 0,
+    cropBias: 'starter',
+    wishes: 'novice',
+  },
+};
+
+/**
+ * Envies d'achats par niveau : ce que suggère la description du niveau (le novice : surtout des
+ * poulaillers, et l'investissement que le niveau met en avant).
+ */
+const NOVICE_WISHES = {
+  default: ['chickenCoop', 'chickenCoop', 'beehive', 'chickenCoop'],
+  4: ['chickenCoop', 'cow', 'chickenCoop'],
+  9: ['chickenCoop', 'jamWorkshop', 'chickenCoop'],
+  10: ['beehive', 'jamWorkshop', 'chickenCoop'],
+  11: ['goat', 'chickenCoop', 'dairy'],
+  12: ['chickenCoop', 'goat', 'dairy'],
+};
+
+const HUMAN_WISHES = {
+  default: ['chickenCoop', 'sprinkler', 'beehive', 'sheep', 'chickenCoop', 'cow', 'roadsideStand', 'solarPanel', 'chickenCoop', 'guestHouse'],
+  4: ['chickenCoop', 'cow', 'sheep', 'chickenCoop', 'beehive', 'chickenCoop', 'cow'],
+  9: ['chickenCoop', 'jamWorkshop', 'beehive', 'sprinkler', 'chickenCoop', 'jamWorkshop', 'sheep'],
+  10: ['beehive', 'jamWorkshop', 'chickenCoop', 'goat', 'sprinkler', 'beehive', 'jamWorkshop'],
+  11: ['goat', 'chickenCoop', 'dairy', 'goat', 'sprinkler', 'beehive', 'sheep'],
+  12: ['chickenCoop', 'goat', 'dairy', 'mill', 'jamWorkshop', 'sprinkler', 'beehive', 'cow'],
+};
+
+/** Tirage pseudo-aléatoire propre au joueur simulé (mulberry32). */
+function humanRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function humanSeed(levelId, seed, strategy) {
+  let h = 2166136261;
+  for (const ch of `${levelId}/${seed}/${strategy}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
+/** Mémoire du joueur simulé (une par partie). */
+export function createHuman(strategy, levelId, seed) {
+  return { rnd: humanRng(humanSeed(levelId, seed, strategy)), matureSince: {}, tutorial: levelId === 1 ? 'plant' : null, wishIndex: 0 };
+}
+
+const between = (me, [a, b]) => a + (b - a) * me.rnd();
+
+function humanPickCrop(game, me, profile, plotIndex, budgetMoney) {
+  const c = ctx(game);
+  const cal = c.cal;
+  const avoid = me.rnd() < profile.avoidFreeze;
+  let options = c.q.plantableCrops(plotIndex).filter((o) => o.kind !== 'tree' && o.seedCost <= budgetMoney);
+  if (avoid) options = options.filter((o) => !o.willFreeze);
+  // Personne ne sème le dernier jour de l'année.
+  options = options.filter((o) => cal.day < cal.totalDays);
+  if (options.length === 0) return null;
+  if (profile.cropBias === 'starter') {
+    const starters = options.filter((o) => o.id === 'carrot' || o.id === 'turnip');
+    if (starters.length) return starters[Math.floor(me.rnd() * starters.length)];
+    return options.reduce((a, b) => (b.seedCost < a.seedCost ? b : a));
+  }
+  // Au hasard, surtout les cultures bon marché et rapides ; un peu plus celles que l'atelier transforme.
+  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? 2 : 1);
+  const total = options.reduce((sum, o) => sum + weight(o), 0);
+  let r = me.rnd() * total;
+  for (const o of options) {
+    r -= weight(o);
+    if (r <= 0) return o;
+  }
+  return options[options.length - 1];
+}
+
+/**
+ * Argent que le joueur garde de côté pour le fermage (il regarde la couleur du fermage) : pour un
+ * achat, toute la saison (il n'achète pas s'il voit le fermage passer au rouge) ; pour semer, seulement
+ * les 3 derniers jours.
+ */
+function humanKeep(game, me, profile, forPurchase = false) {
+  const fin = game.query.finance();
+  if ((forPurchase || fin.nextBill.daysLeft <= 2) && me.rnd() < profile.rentAware) return fin.nextBill.amount;
+  return 0;
+}
+
+function humanDay(game, me, profile) {
+  const q = game.query;
+  const cal = q.calendar();
+  let taps = Math.round(between(me, profile.taps));
+  const spend = (n) => {
+    if (taps < n) return false;
+    taps -= n;
+    return true;
+  };
+  // Niveau 1 : tutoriel. Jour 1 : une seule carotte, arrosée.
+  if (me.tutorial === 'plant') {
+    const i = game.state.plots.findIndex((p) => p.unlocked && !p.cropId);
+    game.actions.plant(i, 'carrot');
+    if (q.plot(i).action === 'water') game.actions.water(i);
+    me.tutorial = 'harvest';
+    return;
+  }
+  if (me.rnd() < profile.skipDay && cal.daysLeftInSeason > 0) return;
+
+  // Récolte (glisser) : le jour même avec harvestProb, au plus tard après maxDelay jours.
+  const toHarvest = [];
+  for (let i = 0; i < game.state.plots.length; i++) {
+    const p = q.plot(i);
+    if (!p.mature) {
+      delete me.matureSince[i];
+      continue;
+    }
+    if (me.matureSince[i] === undefined) me.matureSince[i] = cal.day;
+    const late = cal.day - me.matureSince[i] >= profile.maxDelay;
+    const billNight = profile.rentAware > 0 && cal.daysLeftInSeason === 0;
+    if (late || billNight || me.rnd() < profile.harvestProb) toHarvest.push(i);
+  }
+  if (toHarvest.length && spend(1)) {
+    for (const i of toHarvest) {
+      if (!spend(0.25)) break;
+      if (game.actions.harvest(i).ok) {
+        delete me.matureSince[i];
+        if (me.tutorial === 'harvest') me.tutorial = 'coop';
+      }
+    }
+  }
+
+  // Achats : le poulailler du tutoriel, puis la liste d'envies.
+  if (me.tutorial === 'coop') {
+    if (game.state.money >= 70) {
+      if (me.rnd() < profile.tutorialCoop && spend(3)) game.actions.buyInvestment('chickenCoop');
+      me.tutorial = null;
+    }
+  } else if (me.tutorial === null && me.rnd() < profile.buyProb && spend(3)) {
+    const table = profile.wishes === 'novice' ? NOVICE_WISHES : HUMAN_WISHES;
+    const wishes = table[game.level.id] || table.default;
+    const invs = q.investments();
+    const buffer = between(me, profile.buyBuffer) + humanKeep(game, me, profile, true);
+    for (let k = 0; k < wishes.length; k++) {
+      const id = wishes[k];
+      const inv = invs.find((x) => x.id === id);
+      if (!inv) continue;
+      const wanted = wishes.slice(0, k + 1).filter((w) => w === id).length;
+      if (inv.owned >= wanted) continue;
+      if (inv.canBuy && game.state.money - inv.nextCost >= buffer) game.actions.buyInvestment(id);
+      break; // on attend d'avoir de quoi acheter l'envie suivante
+    }
+    if (profile.plotProb > 0 && me.rnd() < profile.plotProb) {
+      const idx = game.state.plots.findIndex((p) => !p.unlocked);
+      const cost = idx >= 0 ? q.plot(idx).unlockCost : null;
+      if (cost !== null && game.state.money - cost >= 100 + buffer) game.actions.unlockPlot(idx);
+    }
+  }
+
+  // Plantation (« semer partout ») certains jours.
+  const empty = () => game.state.plots.map((p, i) => (p.unlocked && !p.cropId ? i : -1)).filter((i) => i >= 0);
+  if (empty().length && me.rnd() < profile.plantProb && spend(3)) {
+    const keep = humanKeep(game, me, profile);
+    const first = empty()[0];
+    const pick = humanPickCrop(game, me, profile, first, game.state.money - keep);
+    if (pick) {
+      for (const i of empty()) {
+        if (game.state.money - pick.seedCost < keep) break;
+        if (!game.actions.plant(i, pick.id).ok) break;
+      }
+    }
+  }
+
+  // Arrosage partiel (glisser).
+  const thirsty = [];
+  for (let i = 0; i < game.state.plots.length; i++) if (q.plot(i).action === 'water') thirsty.push(i);
+  if (thirsty.length && spend(1)) {
+    const share = between(me, profile.water);
+    for (const i of thirsty) {
+      if (me.rnd() >= share) continue;
+      if (!spend(0.25)) break;
+      game.actions.water(i);
+    }
+  }
+}
+
 // ── Stratégies ─────────────────────────────────────────────────────────────────────────
 
 // v3 : les ateliers juste après le premier poulailler, la chèvre à côté de la vache (absents des
@@ -641,6 +885,23 @@ const STRATEGIES = {
     waterAll(game, budget);
   },
 
+  casual(game, me) {
+    humanDay(game, me, HUMAN_PROFILES.casual);
+  },
+
+  novice(game, me) {
+    humanDay(game, me, HUMAN_PROFILES.novice);
+  },
+
+  idle(game, me) {
+    if (me.done) return;
+    me.done = true;
+    const i = game.state.plots.findIndex((p) => p.unlocked && !p.cropId);
+    const cheap = game.query.plantableCrops(i).filter((o) => o.kind !== 'tree').reduce((a, b) => (b.seedCost < a.seedCost ? b : a));
+    for (const p of game.query.plots()) if (p.action === 'plant' && !game.actions.plant(p.index, cheap.id).ok) break;
+    for (const p of game.query.plots()) if (p.action === 'water') game.actions.water(p.index);
+  },
+
   optimal(game) {
     const budget = makeBudget();
     harvestAll(game, budget, OPT_MARKET);
@@ -672,8 +933,9 @@ const STRATEGIES = {
  * income : revenus par origine { crops, apples, products, investments, contest, raw, refund, total } (disjoints),
  *   et, pour les parts, trees = pommes vendues brutes + jus, milk = lait vendu + fromages.
  */
-export function playOne(levelId, seed, strategy, perks = {}) {
-  const game = createGame({ levelId, seed, perks });
+export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFICULTY) {
+  const game = createGame({ levelId, seed, perks, difficulty });
+  const me = createHuman(strategy, levelId, seed);
   const total = game.query.calendar().totalDays;
   let result = null;
   // Sources disjointes (crops, apples, products, investments, contest, raw, refund) ; trees et milk
@@ -708,7 +970,7 @@ export function playOne(levelId, seed, strategy, perks = {}) {
   game.on('bankrupt', (e) => (result = { win: false, money: e.money, stars: 0, seasonId: e.seasonId, summary: e.summary }));
   for (let day = 0; day <= total && game.state.status === 'playing'; day++) {
     const before = game.state.money;
-    STRATEGIES[strategy](game);
+    STRATEGIES[strategy](game, me);
     if (TRACE) traceDay(game, before);
     game.update(DAY_SECONDS);
   }
@@ -763,9 +1025,9 @@ function selectedLevels() {
 }
 
 /** Statistiques d'un niveau pour une stratégie. */
-function simulateRow(level, strategy, perks) {
+function simulateRow(level, strategy, perks, difficulty = DIFFICULTY) {
   const results = [];
-  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks));
+  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks, difficulty));
   const wins = results.filter((r) => r.win);
   const stars = [0, 1, 2, 3].map((s) => results.filter((r) => r.stars === s).length);
   const lossSeasons = {};
@@ -777,6 +1039,8 @@ function simulateRow(level, strategy, perks) {
   return {
     strategy,
     winRate: wins.length / results.length,
+    // Mode détente : parties où le voisin a prêté au moins une fois.
+    loanRate: results.filter((r) => r.summary.neighbourLoan?.loans > 0).length / results.length,
     medianMoney: median(results.map((r) => r.money)),
     medianWinMoney: wins.length ? median(wins.map((r) => r.money)) : null,
     stars,
@@ -802,20 +1066,24 @@ function simulateRow(level, strategy, perks) {
   };
 }
 
-export function simulate(levels, strategies, perks) {
-  return levels.map((level) => ({
-    level: level.id,
-    name: level.name,
-    thresholds: level.starThresholds,
-    rows: strategies.map((s) => simulateRow(level, s, perks)),
-  }));
+export function simulate(levels, strategies, perks, difficulty = DIFFICULTY) {
+  return levels.map((base) => {
+    const level = levelFor(base.id, difficulty);
+    return {
+      level: level.id,
+      name: level.name,
+      difficulty,
+      thresholds: level.starThresholds,
+      rows: strategies.map((s) => simulateRow(level, s, perks, difficulty)),
+    };
+  });
 }
 
 function printTable(out, title) {
   console.log(`${title}\n`);
   for (const lv of out) {
     console.log(`Niveau ${lv.level} — ${lv.name}   (★★ ≥ ${lv.thresholds[0]}, ★★★ ≥ ${lv.thresholds[1]})`);
-    console.log('  stratégie  victoires  argent médian  (si victoire)   faillite / ★ / ★★ / ★★★   produits arbres lait   faillites par saison');
+    console.log('  stratégie  victoires  argent médian  (si victoire)   faillite / ★ / ★★ / ★★★   produits arbres lait  prêt voisin   faillites par saison');
     for (const r of lv.rows) {
       const st = r.stars.map((n) => pct(n, SEEDS).padStart(4)).join(' ');
       const losses = Object.entries(r.lossSeasons)
@@ -824,7 +1092,7 @@ function printTable(out, title) {
       const share = ['products', 'trees', 'milk'].map((k) => pct(r.share[k] * 100, 100).padStart(5)).join(' ');
       const contest = r.contest ? `  concours ${r.contest.avgPrize} (≥ 2 épreuves : ${pct(r.contest.twoGoals * 100, 100)})` : '';
       console.log(
-        `  ${r.strategy.padEnd(10)} ${pct(r.winRate * SEEDS, SEEDS).padStart(8)}  ${String(r.medianMoney).padStart(12)}  ${String(r.medianWinMoney ?? '—').padStart(12)}   ${st}   ${share}   ${losses}${contest}`,
+        `  ${r.strategy.padEnd(10)} ${pct(r.winRate * SEEDS, SEEDS).padStart(8)}  ${String(r.medianMoney).padStart(12)}  ${String(r.medianWinMoney ?? '—').padStart(12)}   ${st}   ${share}   ${pct(r.loanRate * 100, 100).padStart(9)}   ${losses}${contest}`,
       );
       if (VERBOSE) console.log(`             achats moyens : ${JSON.stringify(r.avgInvestments)}  parcelles (pièces) : ${r.avgPlotsSpent}`);
     }
@@ -846,9 +1114,26 @@ function printCompare(none, all) {
   });
 }
 
+function printCompareModes(detente, classique) {
+  console.log(`Victoires par mode (détente / classique) : ${SEEDS} graines par niveau et par stratégie, sans bonus\n`);
+  const strategies = detente[0].rows.map((r) => r.strategy);
+  console.log(`niveau  ${strategies.map((s) => s.padStart(15)).join('')}`);
+  detente.forEach((lv, k) => {
+    const cells = lv.rows.map((r, j) => `${pct(r.winRate * 100, 100)} / ${pct(classique[k].rows[j].winRate * 100, 100)}`.padStart(15));
+    console.log(`${String(lv.level).padStart(4)}    ${cells.join('')}`);
+  });
+}
+
 function run() {
   const levels = selectedLevels();
   const strategies = Object.keys(STRATEGIES).filter((s) => !STRATEGY_FILTER || s === STRATEGY_FILTER);
+  if (COMPARE_MODES) {
+    const detente = simulate(levels, strategies, {}, 'detente');
+    const classique = simulate(levels, strategies, {}, 'classique');
+    if (JSON_OUT) console.log(JSON.stringify({ detente, classique }, null, 2));
+    else printCompareModes(detente, classique);
+    return;
+  }
   if (COMPARE) {
     const none = simulate(levels, strategies, {});
     const all = simulate(levels, strategies, resolvePerks('all'));
@@ -863,7 +1148,7 @@ function run() {
     return;
   }
   const perkText = Object.keys(perks).length ? `, bonus : ${PERKS_ARG}` : '';
-  printTable(out, `Simulation : ${SEEDS} graines par niveau et par stratégie${Number.isFinite(CLICKS) ? `, ${CLICKS} actions/jour` : ''}${perkText}`);
+  printTable(out, `Simulation (mode ${DIFFICULTY}) : ${SEEDS} graines par niveau et par stratégie${Number.isFinite(CLICKS) ? `, ${CLICKS} actions/jour` : ''}${perkText}`);
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];

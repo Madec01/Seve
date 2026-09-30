@@ -23,7 +23,7 @@ test('maladie : seulement les aubes pluvieuses, au taux prévu', () => {
   let exposures = 0;
   let rotten = 0;
   for (let seed = 1; seed <= 60; seed++) {
-    const g = createGame({ levelId: 3, seed });
+    const g = createGame({ levelId: 3, seed , difficulty: 'classique' });
     rich(g);
     let rottenHere = 0;
     g.on('rot', (r) => {
@@ -49,7 +49,7 @@ test('maladie : seulement les aubes pluvieuses, au taux prévu', () => {
 });
 
 test('maladie : aucune pourriture dans les niveaux sans maladie', () => {
-  const g = createGame({ levelId: 1, seed: 3 });
+  const g = createGame({ levelId: 1, seed: 3 , difficulty: 'classique' });
   rich(g);
   const rec = record(g);
   for (let day = 0; day < 20; day++) {
@@ -61,7 +61,7 @@ test('maladie : aucune pourriture dans les niveaux sans maladie', () => {
 
 test('maladie : même graine, mêmes pertes', () => {
   const run = () => {
-    const g = createGame({ levelId: 3, seed: 9 });
+    const g = createGame({ levelId: 3, seed: 9 , difficulty: 'classique' });
     rich(g);
     const lost = [];
     g.on('rot', (r) => lost.push([g.state.time.day, r.plotIndex]));

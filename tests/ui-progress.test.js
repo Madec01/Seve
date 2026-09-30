@@ -50,7 +50,7 @@ function fakeApp() {
 
 /** Joue le niveau 1 jusqu'au bout avec un robot simple (carottes, arrosage, récolte). */
 function playLevel1(seed = 3) {
-  const g = createGame({ levelId: 1, seed });
+  const g = createGame({ levelId: 1, seed , difficulty: 'classique' });
   let end = null;
   g.on('victory', (e) => (end = e));
   g.on('bankrupt', (e) => (end = e));
@@ -99,7 +99,7 @@ test('succès vérifiés pendant la partie : le contexte de la partie en cours c
   const storage = memoryStorage(start);
   const app = fakeApp();
   const prog = createProgress(app, storage);
-  const g = createGame({ levelId: 1, seed: 5 });
+  const g = createGame({ levelId: 1, seed: 5 , difficulty: 'classique' });
   const i = g.state.plots.findIndex((p) => p.unlocked);
   g.actions.plant(i, 'carrot');
   for (let d = 0; d < 8 && g.query.plot(i).action !== 'harvest'; d++) {

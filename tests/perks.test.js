@@ -35,12 +35,12 @@ test('createGame : bonus copiés et nettoyés (ids inconnus, rangs invalides ign
     { id: 'startPurse', name: 'Bas de laine', rank: 2, description: getPerk('startPurse').description },
   ]);
   const perks = { almanac: 1 };
-  const h = createGame({ levelId: 1, seed: 1, perks });
+  const h = createGame({ levelId: 1, seed: 1, perks , difficulty: 'classique' });
   perks.frugal = 1; // acheter un bonus pendant la partie ne change pas la partie en cours
   assert.deepEqual(h.state.perks, { almanac: 1 });
   assert.deepEqual(normalizeRunPerks(null), {});
   assert.deepEqual(normalizeRunPerks([1, 2]), {});
-  assert.deepEqual(createGame({ levelId: 1, seed: 1 }).state.perks, {});
+  assert.deepEqual(createGame({ levelId: 1, seed: 1 , difficulty: 'classique' }).state.perks, {});
   // Sauvegarde : un bonus inconnu ou un rang faux est refusé.
   const saved = g.serialize();
   assert.throws(() => loadGame({ ...saved, perks: { dragon: 1 } }), /Sauvegarde invalide/);
@@ -63,8 +63,8 @@ test('perkValue : valeurs neutres sans bonus', () => {
 test('Almanach : météo d’après-demain exacte, lue sans consommer l’aléatoire', () => {
   for (const levelId of [1, 2, 5, 11]) {
     for (let seed = 1; seed <= 6; seed++) {
-      const g = createGame({ levelId, seed, perks: { almanac: 1 } });
-      const plain = createGame({ levelId, seed });
+      const g = createGame({ levelId, seed, perks: { almanac: 1 }, difficulty: 'classique' });
+      const plain = createGame({ levelId, seed , difficulty: 'classique' });
       assert.equal(plain.query.forecast().afterTomorrow, null);
       const total = g.query.calendar().totalDays;
       const predictions = {};
@@ -96,8 +96,8 @@ test('Almanach : météo d’après-demain exacte, lue sans consommer l’aléat
 test('Bas de laine : argent de départ + rang 1, + rang 2', () => {
   const base = getLevel(3).startMoney;
   assert.ok(V('startPurse', 1) > 0 && V('startPurse', 2) > V('startPurse', 1));
-  assert.equal(createGame({ levelId: 3, seed: 1, perks: { startPurse: 1 } }).state.money, base + V('startPurse', 1));
-  const g = createGame({ levelId: 3, seed: 1, perks: { startPurse: 2 } });
+  assert.equal(createGame({ levelId: 3, seed: 1, perks: { startPurse: 1 }, difficulty: 'classique' }).state.money, base + V('startPurse', 1));
+  const g = createGame({ levelId: 3, seed: 1, perks: { startPurse: 2 }, difficulty: 'classique' });
   assert.equal(g.state.money, base + V('startPurse', 2));
   assert.equal(g.state.startMoney, base + V('startPurse', 2));
   assert.equal(g.query.summary().startMoney, base + V('startPurse', 2));
@@ -287,7 +287,7 @@ test('Semencier : les 5 nouveautés dans les niveaux 1 à 8', () => {
 test('tous les bonus à la fois : la partie se joue et se recharge', () => {
   const all = Object.fromEntries(PERKS.map((p) => [p.id, p.costs.length]));
   for (const levelId of [1, 6, 10, 12]) {
-    const g = createGame({ levelId, seed: 3, perks: all });
+    const g = createGame({ levelId, seed: 3, perks: all , difficulty: 'classique' });
     for (let d = 0; d < 40 && g.state.status === 'playing'; d++) {
       g.state.money += 150;
       for (const p of g.query.plots()) {

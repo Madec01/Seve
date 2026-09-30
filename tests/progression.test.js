@@ -300,7 +300,7 @@ test('écus d’une partie', () => {
 });
 
 test('recordRunEnd : niveaux, cumuls, écus, succès (victoire, faillite, abandon)', () => {
-  const g = createGame({ levelId: 1, seed: 1 });
+  const g = createGame({ levelId: 1, seed: 1 , difficulty: 'classique' });
   const summary = { ...g.query.summary(), cropsHarvested: { carrot: 120, pumpkin: 3 }, productsSold: { flour: 2, caviar: 3 }, rentsPaid: 590, money: 950 };
   let p = P.defaultProgress();
   const r = P.recordRunEnd(p, { levelId: 1, outcome: 'victory', stars: 3, money: 950, summary, perksActive: false }, NOW);
@@ -348,7 +348,7 @@ test('recordRunEnd : niveaux, cumuls, écus, succès (victoire, faillite, abando
 });
 
 test('recordRunEnd depuis une vraie partie (résumé de victory)', () => {
-  const g = createGame({ levelId: 1, seed: 2 });
+  const g = createGame({ levelId: 1, seed: 2 , difficulty: 'classique' });
   let victory = null;
   g.on('victory', (e) => (victory = e));
   for (let d = 0; d < 40 && g.state.status === 'playing'; d++) {
@@ -417,7 +417,7 @@ test('cosmétiques : acheter, poser, retirer, allées, clôture, tenue, nom, con
 });
 
 test('achievementContext d’une partie : forme', () => {
-  const g = createGame({ levelId: 10, seed: 1 });
+  const g = createGame({ levelId: 10, seed: 1 , difficulty: 'classique' });
   const c = g.query.achievementContext();
   assert.deepEqual(Object.keys(c).sort(), ['adultTrees', 'availableInvestments', 'dailyCharges', 'day', 'investments', 'levelId', 'money', 'perksActive', 'seasonId', 'stars', 'stats', 'status'].sort());
   assert.equal(c.adultTrees, 4);

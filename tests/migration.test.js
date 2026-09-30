@@ -16,7 +16,7 @@ const hash = (t) => createHash('sha256').update(t).digest('hex').slice(0, 16);
 
 test('STATE_VERSION vaut 2', () => {
   assert.equal(STATE_VERSION, 2);
-  assert.equal(createGame({ levelId: 1, seed: 1 }).state.version, 2);
+  assert.equal(createGame({ levelId: 1, seed: 1 , difficulty: 'classique' }).state.version, 2);
 });
 
 test('migrateState : v1 → v2 (champs vides), sans toucher à l’objet reçu', () => {
@@ -41,7 +41,7 @@ test('migrateState : v1 → v2 (champs vides), sans toucher à l’objet reçu',
   }
   assert.equal(m.stats.year.bestSeasonHarvestIncome, save.stats.season.harvestIncome);
   // Une v2 est copiée telle quelle.
-  const v2 = createGame({ levelId: 3, seed: 1 }).serialize();
+  const v2 = createGame({ levelId: 3, seed: 1 , difficulty: 'classique' }).serialize();
   assert.deepEqual(migrateState(v2), v2);
 });
 
@@ -52,7 +52,7 @@ test('sauvegardes v1 réelles : chargées, puis la partie finit exactement comme
     assert.equal(g.state.version, 2, key);
     // Rejoue le début avec le code v3 (sans bonus) : même état qu'à la sauvegarde v1, et le tirage
     // du robot retrouve sa position.
-    const fresh = createGame({ levelId: c.levelId, seed: c.seed });
+    const fresh = createGame({ levelId: c.levelId, seed: c.seed , difficulty: 'classique' });
     const rnd = lcg(c.seed + c.levelId * 1000);
     while (fresh.state.status === 'playing' && fresh.state.time.day < c.stopDay) {
       BOTS[c.bot](fresh, rnd);
@@ -94,7 +94,7 @@ test('versions inconnues refusées ; v1 abîmée refusée', () => {
 });
 
 test('v2 : champs abîmés refusés (fruits, bonus, statistiques v3)', () => {
-  const g = createGame({ levelId: 10, seed: 4 });
+  const g = createGame({ levelId: 10, seed: 4 , difficulty: 'classique' });
   g.update(45);
   const good = g.serialize();
   const broken = (patch) => {
@@ -120,7 +120,7 @@ test('aller-retour serialize → loadGame, niveaux 1 à 12, avec et sans bonus, 
   let checked = 0;
   for (const level of LEVELS) {
     for (const perks of [{}, all]) {
-      const g = createGame({ levelId: level.id, seed: level.id * 13, perks });
+      const g = createGame({ levelId: level.id, seed: level.id * 13, perks , difficulty: 'classique' });
       let r = level.id * 7919;
       const rnd = () => (r = (r * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
       for (let step = 0; step < 120 && g.state.status === 'playing'; step++) {
@@ -162,7 +162,7 @@ test('une partie rechargée continue à l’identique (niveaux 9 à 12, événem
       for (const inv of g.query.investments()) if (inv.canBuy && g.state.money > inv.nextCost + 150) g.actions.buyInvestment(inv.id);
       g.state.money += 60;
     };
-    const a = createGame({ levelId, seed: 77 });
+    const a = createGame({ levelId, seed: 77 , difficulty: 'classique' });
     for (let d = 0; d < 12; d++) {
       play(a);
       a.update(20);
