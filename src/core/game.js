@@ -55,6 +55,11 @@
 // v3 : les bonus permanents de la partie (state.perks, copiés au lancement) sont lus par perkValue()
 // (src/core/perks.js). Avec perks = {}, les niveaux 1 à 8 se jouent exactement comme en v2 (test de
 // parité) : aucune nouvelle règle, aucun tirage aléatoire supplémentaire.
+//
+// Mode Carrière (state.mode === 'career', créé par createCareer de src/core/career/career.js) : le niveau
+// est careerLevel(state) (recalculé après chaque achat), et la journée, les actions de la parcelle, les
+// achats et les requêtes propres à la carrière passent par src/core/career/runtime.js (déroulé en tête de
+// ce fichier-là). Une partie de niveau ne passe par AUCUNE de ces branches.
 
 import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEATHER_TYPES } from '../data/balance.js';
 import { getInvestment } from '../data/investments.js';
@@ -100,8 +105,10 @@ import {
   growPlots,
   harvestValue,
   isMature,
+  inGreenhouse,
   needsWaterToday,
   plotUnlockCost,
+  plotWateredRate,
   rainWater,
   rawUnitPrice,
   sprinklerWater,
@@ -139,6 +146,9 @@ import {
 } from './processing.js';
 import { awardContest, contestChanges, contestDueTonight, contestGoals, contestSnapshot, initialContest, prizeFor } from './contest.js';
 import { gameCrops, hasPerks, normalizeRunPerks, perkValue } from './perks.js';
+import { careerLevel } from './career/level.js';
+import { createCareerRuntime } from './career/runtime.js';
+import './career/extensions.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
 import { createEmitter } from './events.js';
 import { borrow, canBorrow, initialNeighbourLoan, loanAmount, maxMissing, repay, repaymentFrom, willLend } from './neighbour.js';
@@ -325,9 +335,25 @@ function checkState(s, level) {
   return null;
 }
 
+/**
+ * Enveloppe un état (nouvelle partie ou sauvegarde vérifiée) : update, actions, requêtes, événements.
+ * Exportée pour src/core/career/career.js (createCareer / loadCareer) ; ne pas appeler ailleurs.
+ */
+export function wrapState(state) {
+  return wrap(state);
+}
+
 function wrap(state) {
-  const level = levelFor(state.levelId, state.difficulty);
-  const crops = gameCrops(level, state.perks);
+  const career = state.mode === 'career';
+  // Carrière : le « niveau » change avec la ferme (rang, achats) — refreshLevel().
+  let level = career ? careerLevel(state) : levelFor(state.levelId, state.difficulty);
+  let crops = gameCrops(level, state.perks);
+  let rt = null; // moteur de carrière (src/core/career/runtime.js), créé plus bas
+  function refreshLevel() {
+    if (!career) return;
+    level = careerLevel(state);
+    crops = gameCrops(level, state.perks);
+  }
   // Complète les places d'un atelier (sauvegarde plus courte que la capacité : jamais en jeu normal).
   for (const id of Object.keys(state.processing || {})) ensureBuilding(state, id);
   const emitter = createEmitter();
@@ -382,6 +408,11 @@ function wrap(state) {
     return Number.isInteger(index) && index >= 0 && index < state.plots.length;
   }
 
+  // Parcelle de serre (carrière) : pousse propre, ni météo ni gel. Ailleurs : règles des niveaux.
+  const rateFor = (p) => (career ? plotWateredRate(state, p, state.time.seasonIndex) : wateredRate(state, state.time.seasonIndex));
+  const weatherFor = (p) => (career && inGreenhouse(p) ? 'sunny' : state.weather.today);
+  const frostFree = (p) => career && inGreenhouse(p);
+
   /** Prix d'une graine dans cette partie (« Graines sélectionnées », « Arboriste »). */
   function seedCostOf(crop) {
     if (isTreeCrop(crop)) return treeSeedCost(state, crop);
@@ -418,6 +449,7 @@ function wrap(state) {
 
   // ── Fin de journée : concours, filets de sécurité, fermage ──────────────────────────
   function endOfDay() {
+    if (rt) return rt.endOfDay();
     if (contestDueTonight(state, level)) {
       const award = awardContest(state, level);
       if (award.amount > 0) {
@@ -467,6 +499,7 @@ function wrap(state) {
 
   // ── Aube ─────────────────────────────────────────────────────────────────────────────
   function dawn() {
+    if (rt) return rt.dawn();
     const moneyBefore = state.money;
     const prevSeason = state.time.seasonIndex;
     const prevWeather = state.weather.today;
@@ -583,6 +616,7 @@ function wrap(state) {
 
   // ── Temps ────────────────────────────────────────────────────────────────────────────
   function update(dt) {
+    if (rt) return rt.update(dt);
     if (!playing() || !(dt > 0) || !Number.isFinite(dt) || state.speed === 0) return;
     state.time.elapsed += dt * state.speed;
     while (playing() && state.time.elapsed >= DAY_SECONDS) {
@@ -611,6 +645,7 @@ function wrap(state) {
 
   const actions = {
     plant: act((plotIndex, cropId) => {
+      if (rt) return rt.plant(plotIndex, cropId, { by: 'player' });
       if (!playing()) return fail(ENDED);
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
@@ -641,6 +676,7 @@ function wrap(state) {
     }),
 
     water: act((plotIndex) => {
+      if (rt) return rt.water(plotIndex, { by: 'player' });
       if (!playing()) return fail(ENDED);
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
@@ -661,6 +697,7 @@ function wrap(state) {
     }),
 
     harvest: act((plotIndex) => {
+      if (rt) return rt.harvest(plotIndex, { by: 'player' });
       if (!playing()) return fail(ENDED);
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
@@ -709,6 +746,7 @@ function wrap(state) {
     }),
 
     unlockPlot: act((plotIndex) => {
+      if (rt) return rt.unlockPlot(plotIndex);
       if (!playing()) return fail(ENDED);
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
@@ -725,6 +763,7 @@ function wrap(state) {
     }),
 
     buyInvestment: act((investmentId) => {
+      if (rt) return rt.buyInvestment(investmentId);
       if (!playing()) return fail(ENDED);
       const check = checkBuy(state, level, investmentId);
       if (!check.ok) return check;
@@ -785,7 +824,7 @@ function wrap(state) {
     const crop = getCrop(p.cropId);
     if (!crop || isMature(p)) return 0;
     if (isTreeCrop(crop)) return forecastOf(p).fruitDaysLeft;
-    return Math.max(1, Math.ceil((crop.growDays - p.growth) / wateredRate(state, state.time.seasonIndex) - EPSILON));
+    return Math.max(1, Math.ceil((crop.growDays - p.growth) / rateFor(p) - EPSILON));
   }
 
   function forecastOf(p) {
@@ -872,10 +911,10 @@ function wrap(state) {
       const isTree = !!crop && isTreeCrop(crop);
       const mature = !!crop && isMature(p);
       const daysLeft = crop ? plotDaysLeft(p) : 0;
-      const unlockCost = p.unlocked ? null : plotUnlockCost(state, level);
-      const needsWater = !!crop && !mature && needsWaterToday(crop, state.weather.today, level);
+      const unlockCost = p.unlocked || (career && p.lot !== 'start') ? null : plotUnlockCost(state, level);
+      const needsWater = !!crop && !mature && needsWaterToday(crop, weatherFor(p), level);
       let action = null;
-      if (playing()) {
+      if (playing() && !(career && p.env === null)) {
         if (!p.unlocked) action = unlockCost === null ? null : 'unlock';
         else if (!crop) action = 'plant';
         else if (mature) action = 'harvest';
@@ -891,7 +930,7 @@ function wrap(state) {
         stage = stageOf(p.growth, crop.growDays);
         progress = Math.min(1, p.growth / crop.growDays);
       }
-      return {
+      const out = {
         index: plotIndex,
         col: plotIndex % level.gridCols,
         row: Math.floor(plotIndex / level.gridCols),
@@ -905,7 +944,7 @@ function wrap(state) {
         watered: p.watered,
         mature,
         fatigue: p.fatigued,
-        willFreeze: !!crop && !isTree && !mature && freezes(crop, daysLeft),
+        willFreeze: !!crop && !isTree && !mature && !frostFree(p) && freezes(crop, daysLeft),
         harvestValue: mature ? harvestValue(state, level, p) : null,
         action,
         kind: crop ? (isTree ? 'tree' : 'crop') : null,
@@ -913,6 +952,7 @@ function wrap(state) {
         needsWater,
         processTarget: crop ? processTargetOf(crop.id, yieldFactor(state, level, p)) : null,
       };
+      return rt ? Object.assign(out, rt.plotExtras(plotIndex)) : out;
     },
 
     plots() {
@@ -923,9 +963,18 @@ function wrap(state) {
     plantableCrops(plotIndex) {
       const sid = seasonId(state);
       const plot = validPlot(plotIndex) ? state.plots[plotIndex] : null;
-      const rate = wateredRate(state, state.time.seasonIndex);
+      const rate = plot ? rateFor(plot) : wateredRate(state, state.time.seasonIndex);
+      // Carrière : le verger n'accueille que des arbres, les champs et la serre que des cultures ; la serre
+      // accepte toutes les cultures en toute saison.
+      const allowed = (c) => {
+        if (!career) return c.seasons.includes(sid);
+        const tree = isTreeCrop(c);
+        if (plot && plot.env === 'orchard') return tree && c.seasons.includes(sid);
+        if (plot && inGreenhouse(plot)) return !tree;
+        return c.seasons.includes(sid) && (!plot || !tree);
+      };
       return crops
-        .filter((c) => c.seasons.includes(sid))
+        .filter(allowed)
         .map((c) => {
           const tree = isTreeCrop(c);
           const seedCost = seedCostOf(c);
@@ -955,7 +1004,7 @@ function wrap(state) {
             daysToMature,
             frostHardy: c.frostHardy,
             fatigue,
-            willFreeze: !tree && freezes(c, daysToMature),
+            willFreeze: !tree && !(plot && frostFree(plot)) && freezes(c, daysToMature),
             canAfford: state.money >= seedCost,
             kind: tree ? 'tree' : 'crop',
             product: recipe
@@ -976,6 +1025,7 @@ function wrap(state) {
     },
 
     investments() {
+      if (rt) return rt.investmentsList();
       const sid = seasonId(state);
       return levelInvestments(level).map((inv) => {
         const check = playing() ? checkBuy(state, level, inv.id) : fail(ENDED);
@@ -1069,9 +1119,9 @@ function wrap(state) {
 
     finance() {
       const si = state.time.seasonIndex;
-      const incomes = dawnIncomes(state, level, si, null, false);
+      const incomes = rt ? rt.incomesEstimate() : dawnIncomes(state, level, si, null, false);
       const dailyIncome = incomes.reduce((s, i) => s + i.amount, 0);
-      const charges = dailyCharges(state, level);
+      const charges = rt ? rt.chargesInfo().dailyTotal : dailyCharges(state, level);
       const total = yearLength(level);
       const loan = level.modifiers.loan;
       const nextLoan = nextLoanDay(level, state.time.day, total);
@@ -1082,7 +1132,7 @@ function wrap(state) {
         dailyCharges: charges,
         net: dailyIncome - charges,
         nextBill: { amount: rentFor(level, si, state), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si] },
-        loan: loan
+        loan: loan && !career
           ? {
               payment: loan.payment,
               every: loan.every,
@@ -1120,6 +1170,23 @@ function wrap(state) {
 
     /** Contexte des succès (src/core/progression.js : checkAchievements). */
     achievementContext() {
+      if (rt) {
+        return {
+          levelId: 'career',
+          status: state.status,
+          day: state.time.day,
+          seasonId: seasonId(state),
+          money: state.money,
+          stars: 0,
+          perksActive: false,
+          stats: { year: JSON.parse(JSON.stringify(state.stats.year)), season: JSON.parse(JSON.stringify(state.stats.season)) },
+          investments: { ...state.investments },
+          availableInvestments: [],
+          adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
+          dailyCharges: rt.chargesInfo().dailyTotal,
+          career: rt.achievementContext(),
+        };
+      }
       return {
         levelId: level.id,
         status: state.status,
@@ -1149,7 +1216,7 @@ function wrap(state) {
     const rent = rentFor(level, state.time.seasonIndex, state);
     const available = canBorrow(state, level);
     let wouldLend = 0;
-    if (state.money < rent) wouldLend = willLend(state, level, rent) ? loanAmount(level, rent, state.money, isLastSeason(state)) : null;
+    if (state.money < rent) wouldLend = willLend(state, level, rent) ? loanAmount(level, rent, state.money, isLastSeason(state) && !career) : null;
     return {
       debt: loan.debt,
       borrowed: loan.borrowed,
@@ -1183,11 +1250,36 @@ function wrap(state) {
     return stream(copy, 'weather').weighted(level.weather[SEASONS[si]]);
   }
 
+  if (career) {
+    rt = createCareerRuntime({
+      state,
+      getLevel: () => level,
+      getCrops: () => crops,
+      refreshLevel,
+      push,
+      flush,
+      changeMoney,
+      fail,
+      playing,
+      ENDED,
+      sellAllRaw,
+      seedCostOf,
+      neighbourInfo,
+    });
+    actions.career = Object.fromEntries(Object.entries(rt.careerActions).map(([name, fn]) => [name, act(fn)]));
+    query.career = rt.careerQueries;
+  }
+
   return {
     get state() {
       return state;
     },
-    level,
+    get level() {
+      return level;
+    },
+    mode: career ? 'career' : 'levels',
+    /** Carrière : recalcule le niveau après une modification directe de l'état (outils de débogage, tests). */
+    ...(career ? { refreshLevel } : {}),
     difficulty: state.difficulty,
     update,
     on: emitter.on,

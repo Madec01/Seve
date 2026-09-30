@@ -2,6 +2,8 @@
 
 Document de référence du gameplay. Les chiffres marqués *(équilibré)* ont été réglés avec la simulation (`tools/simulate.js`) ; la version qui fait foi vit dans `src/data/`, et ce document est mis à jour en conséquence.
 
+> **Mode Carrière (conception 2026-09-30)** : une ferme à soi qui dure et grandit d'année en année — voir **§ 14** et `docs/CARRIERE.md`. Le mode Niveaux décrit ici ne change pas.
+>
 > **Deux modes de difficulté (2026-09-30)** : les chiffres des § 3 à § 12 sont ceux du mode **classique**. Les nouvelles parties se jouent par défaut en mode **détente** (charges, fermages, départ, prix des récoltes, pousse sans arrosage et prêt du voisin) : voir **§ 13**.
 
 ## 1. Intention
@@ -719,3 +721,20 @@ Le robot « careless » (graines les moins chères, aucun investissement) gagne 
 Les robots appliqués finissent l'année avec beaucoup plus d'argent qu'en classique (1 100 à 2 900 pièces) : c'est voulu, la détente pardonne tout ; seuls les seuils d'étoiles de ce mode en tiennent compte.
 
 Commandes : `node tools/simulate.js` (détente, toutes les stratégies), `--difficulty classique`, `--compare-modes` (tableau des victoires côte à côte), `--strategy casual --trace --level 1 --seed 3` (une partie jour par jour).
+
+---
+
+# 14. Mode Carrière (conception, 2026-09-30)
+
+Le jeu a désormais **deux modes** au menu principal : **« Les niveaux »** (tout ce qui précède, 12 années à contraintes, **inchangé** : chiffres, difficultés, parité) et **« Ma ferme »**, le **mode Carrière** : sa propre ferme, qui dure d'année en année et grandit.
+
+La conception complète, chiffrée et découpée en lots, est dans **`docs/CARRIERE.md`** ; les contrats de code dans `docs/ARCHITECTURE.md`, section « Mode Carrière — contrats ». En bref :
+
+- **Années continues** (saisons de 7 jours, bilan de l'année chaque hiver) ; le fermage est remplacé par des **charges de saison** qui suivent la taille de la ferme (Détente : 20 + 15 par terrain acheté).
+- **6 rangs** (Petite ferme → Ferme familiale → Belle ferme → Grande ferme → Exploitation modèle → **Domaine**) : patrimoine + 2 objectifs ; chaque rang débloque cultures, bâtiments, machines et terrains.
+- **Terrains** : le monde est une colonne verticale ; on achète un à un les 12 terrains de la forêt au-dessus de la ferme et on les aménage (champ, pré, verger, cour des ateliers, mare, serre).
+- **Bâtiments à niveaux** (maison et capacité d'employés, grenier → silo pour vendre au bon cours, serre pour l'hiver, étal → marché fermier, abris d'animaux, ateliers jusqu'au niveau 5), **8 espèces** d'animaux (poule, lapin, canard, chèvre, vache, mouton, cochon et ses truffes, cheval), **machines** (arroseurs, semoir, moissonneuse, cueilleuse, collecteur, tracteur, château d'eau, convoyeur), **employés** (jardinier, soigneur, artisan, vendeur ; salaire, niveaux, humeur simple, congés).
+- **Événements vivants** : 4 fêtes au calendrier et le comice agricole, événements au hasard (visiteurs, touristes, corbeaux, arc-en-ciel…), **quêtes et amitié de Joseph**.
+- **Détente par défaut, sans fin de partie** (stock et ateliers vendus, prêt de Joseph, coup dur, vente de secours limitée) ; Classique : faillite possible.
+- Écus, décor et succès **partagés** avec le mode Niveaux ; les bonus permanents (étoiles) n'ont **aucun effet** en carrière.
+

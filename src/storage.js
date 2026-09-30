@@ -1,8 +1,9 @@
-// Sauvegarde locale (localStorage) : partie en cours, progression, options, tutoriel.
+// Sauvegarde locale (localStorage) : partie en cours, carrière, progression, options, tutoriel.
 // Chaque accès est protégé (navigation privée, stockage plein ou désactivé) : en cas d'échec,
 // le jeu continue sans sauvegarde et les lectures renvoient des valeurs par défaut.
 
-import { PROGRESS_SCHEMA, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
+import { PROGRESS_SCHEMA, archiveCareer, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
+import { CAREER_SCHEMA, checkCareerState, migrateCareer } from './core/career/save.js';
 
 const PREFIX = 'une-annee-a-la-ferme.';
 const KEYS = {
@@ -10,6 +11,8 @@ const KEYS = {
   progress: `${PREFIX}progress`,
   settings: `${PREFIX}settings`,
   tutorial: `${PREFIX}tutorial`,
+  career: `${PREFIX}career`,
+  careerBak: `${PREFIX}career.bak`,
 };
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -67,6 +70,70 @@ export function clearRun() {
   remove(KEYS.run);
 }
 
+// ── Carrière (une seule à la fois) ───────────────────────────────────────────────────
+// Clé « une-annee-a-la-ferme.career » : { schema: 1, savedAt, meta, state } (state = game.serialize() d'une
+// carrière ; meta = { farmName, year, seasonId, day, rank, difficulty, patrimony, … } pour le menu).
+// Copie de secours « …career.bak » : avant d'écrire une nouvelle sauvegarde, la précédente est recopiée
+// dans la copie de secours si elle se relit correctement (migrateCareer + checkCareerState) et si elle
+// date d'un autre jour de jeu que la copie actuelle (au plus une fois par jour de jeu).
+
+/** true si une enveloppe de carrière lue se relit comme une carrière valide. */
+function readableCareer(entry) {
+  if (!entry || typeof entry !== 'object' || !entry.state) return false;
+  try {
+    return checkCareerState(migrateCareer(entry.state)) === null;
+  } catch {
+    return false;
+  }
+}
+
+function gameDayOf(entry) {
+  const t = entry?.state?.time;
+  return t ? `${t.year}/${t.day}` : null;
+}
+
+/** Enregistre la carrière (objet issu de game.serialize()), avec ses métadonnées pour le menu. */
+export function saveCareer(serialized, meta = {}) {
+  if (!serialized) return false;
+  const prev = read(KEYS.career);
+  if (readableCareer(prev)) {
+    const bak = read(KEYS.careerBak);
+    if (!bak || gameDayOf(bak) !== gameDayOf(prev)) write(KEYS.careerBak, prev);
+  }
+  return write(KEYS.career, { schema: CAREER_SCHEMA, savedAt: Date.now(), meta, state: serialized });
+}
+
+function readCareerKey(key) {
+  const data = read(key);
+  if (!data || typeof data !== 'object' || !data.state || typeof data.state !== 'object') return null;
+  return { state: data.state, meta: data.meta && typeof data.meta === 'object' ? data.meta : null, savedAt: data.savedAt ?? null, schema: data.schema ?? null };
+}
+
+/** { state, meta, savedAt, schema } ou null (lecture seule : la validation est faite par loadCareer du cœur). */
+export function loadCareer() {
+  return readCareerKey(KEYS.career);
+}
+
+/** Copie de secours (« Reprendre la sauvegarde de secours (hier) ») : même forme, ou null. */
+export function loadCareerBackup() {
+  return readCareerKey(KEYS.careerBak);
+}
+
+/** Métadonnées de la carrière pour le menu (sans charger la partie), ou null. */
+export function careerMeta() {
+  return loadCareer()?.meta ?? null;
+}
+
+/**
+ * Efface la carrière (et sa copie de secours). Avec `archive` ({ farmName, years, rank, patrimony, endedBy }),
+ * l'ajoute d'abord à progress.career.archive (progression enregistrée).
+ */
+export function clearCareer({ archive = null } = {}) {
+  if (archive) saveProgress(archiveCareer(loadProgress(), archive));
+  remove(KEYS.career);
+  remove(KEYS.careerBak);
+}
+
 // ── Progression ──────────────────────────────────────────────────────────────────────
 // Schéma 2 (v3) : voir src/core/progression.js (pur). Une progression v1 ({ levels }) est lue,
 // complétée, et les succès déjà mérités par les anciennes parties sont débloqués d'un coup au
@@ -105,10 +172,13 @@ export function isLevelUnlocked(levelId, progress = loadProgress()) {
   return isUnlocked(progress, levelId);
 }
 
+/** « Effacer la progression » : progression, tutoriel, partie en cours ET carrière (avec sa copie de secours). */
 export function resetProgress() {
   remove(KEYS.progress);
   remove(KEYS.tutorial);
   remove(KEYS.run);
+  remove(KEYS.career);
+  remove(KEYS.careerBak);
 }
 
 // ── Options ──────────────────────────────────────────────────────────────────────────

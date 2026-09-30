@@ -1,0 +1,329 @@
+// Mode Carrière — petits outils d'interface partagés (icônes, boutons d'achat, barres, sections
+// repliables, textes). Aucun accès au cœur ici : seulement de la mise en forme.
+
+import { el, fmt, plural } from '../dom.js';
+import { icon, spriteAny, investmentIcon, cropIcon } from '../icons.js';
+import { josephPortrait, playerSprite, staffPortrait } from '../../render/atlas.js';
+
+// ── Icônes ────────────────────────────────────────────────────────────────────────
+/** Icône d'interface de la carrière (planche career : icon.career.<name>), sinon une icône de secours. */
+export function cIcon(name, cls = 'sprite--sm', fallback = 'info') {
+  return spriteAny([`icon.career.${name}`], cls, fallback);
+}
+
+/** Blason d'un rang (1 à 6). */
+export function rankIcon(rank, cls = 'sprite--md') {
+  return spriteAny([`icon.career.rank.${rank}`], cls, 'star');
+}
+
+const LOT_SPRITES = {
+  field: ['crop.wheat.icon', 'crop.carrot.icon'],
+  meadow: ['animal.sheep', 'animal.cow'],
+  orchard: ['tree.apple.icon', 'crop.apple.icon'],
+  workshops: ['building.jamworkshop', 'building.shed'],
+  pond: ['animal.duck', 'icon.career.fishing'],
+  greenhouse: ['icon.career.greenhouse', 'building.greenhouse.1'],
+  wild: ['icon.career.land', 'land.stump'],
+  home: ['icon.career.house', 'building.house.1'],
+  yard: ['animal.chicken'],
+  forSale: ['land.sale.sign', 'icon.career.land'],
+};
+/** Icône d'un type de terrain (friche, champ, pré…). */
+export function lotIcon(type, cls = 'sprite--md') {
+  return spriteAny(LOT_SPRITES[type] || ['icon.career.land'], cls, 'seed');
+}
+
+/** Icône d'un bâtiment à niveaux (sprite du niveau, sinon niveau 1, sinon icône voisine). */
+export function buildingIcon(id, level = 1, cls = 'sprite--md') {
+  const lv = Math.max(1, level || 1);
+  const names = [`building.${id}.${lv}`, `building.${id}.1`];
+  if (id === 'roadsideStand') names.unshift(lv >= 2 ? `building.roadsideStand.${lv}` : 'stall.cart', 'stall.cart');
+  if (id === 'guestHouse') names.push('building.cottage.red');
+  if (id === 'storage') names.push('icon.career.storage');
+  if (id === 'house') names.push('icon.career.house', 'building.house');
+  if (['jamWorkshop', 'dairy', 'mill', 'cannery', 'spinningMill'].includes(id)) return investmentIcon(id, cls);
+  return spriteAny(names, cls, 'coin');
+}
+
+const ANIMAL_SPRITES = {
+  hen: ['animal.chicken'],
+  rabbit: ['animal.rabbit.white', 'animal.rabbit'],
+  duck: ['animal.duck'],
+  goat: ['animal.goat'],
+  cow: ['animal.cow'],
+  sheep: ['animal.sheep'],
+  pig: ['animal.pig'],
+  horse: ['animal.horse'],
+};
+export function animalIcon(id, cls = 'sprite--md') {
+  return spriteAny(ANIMAL_SPRITES[id] || [`animal.${id}`], cls, 'harvest');
+}
+
+const PRODUCT_OF_ANIMAL = { hen: 'product.eggs', duck: 'product.duckEgg', rabbit: 'product.angora', pig: 'product.truffle', cow: 'product.milk', goat: 'product.milk.goat', sheep: 'product.yarn', horse: 'product.ride' };
+/** Produit d'un animal (bulle de ramassage). */
+export function animalProductIcon(animalId, cls = 'sprite--sm') {
+  return spriteAny([PRODUCT_OF_ANIMAL[animalId], 'product.eggs'].filter(Boolean), cls, 'harvest');
+}
+
+export function machineIcon(id, cls = 'sprite--md') {
+  return spriteAny([`icon.career.machine.${id}`, `machine.${id}`, id === 'tractor' ? 'machine.tractor.r' : null].filter(Boolean), cls, 'coin');
+}
+
+/** Portrait d'un employé (32 × 32). */
+export function portrait(look, cls = 'sprite--md') {
+  let name = null;
+  try {
+    name = staffPortrait(look || {});
+  } catch {
+    name = null;
+  }
+  return spriteAny([name, 'farmer'].filter(Boolean), cls, 'info');
+}
+
+/** Portrait de Joseph : 'content' | 'happy' | 'proud' | 'surprised'. */
+export function joseph(expr = 'content', cls = 'sprite--md') {
+  let name = null;
+  try {
+    name = josephPortrait(expr);
+  } catch {
+    name = null;
+  }
+  return spriteAny([name, 'portrait.joseph', 'npc.joseph', 'farmer'].filter(Boolean), cls, 'info');
+}
+
+/** Aperçu du personnage du joueur (fermier ou fermière, tenue). */
+export function farmerPreview(outfit, female, cls = 'sprite--card') {
+  let name = null;
+  try {
+    name = playerSprite(outfit || 'outfit.classic', { female: !!female });
+  } catch {
+    name = null;
+  }
+  return spriteAny([name, 'farmer'].filter(Boolean), cls, 'info');
+}
+
+export { cropIcon, icon };
+
+// ── Textes ────────────────────────────────────────────────────────────────────────
+export const SEASON_ORDER = ['spring', 'summer', 'autumn', 'winter'];
+
+export const JOB_NAMES = {
+  gardener: ['Jardinier', 'Jardinière'],
+  keeper: ['Soigneur', 'Soigneuse'],
+  artisan: ['Artisan', 'Artisane'],
+  seller: ['Vendeur', 'Vendeuse'],
+};
+export const JOB_TEXT = {
+  gardener: 'Récolte, arrose et sème sur son terrain.',
+  keeper: 'Ramasse les produits des abris, 3 fois par jour.',
+  artisan: 'Ajoute des places aux ateliers de sa cour.',
+  seller: 'Vend le stock du grenier au bon cours.',
+};
+/** Nom du métier accordé (look.gender === 'f' → féminin). */
+export function jobName(job, female = false) {
+  const n = JOB_NAMES[job];
+  if (!n) return 'Sans affectation';
+  return female ? n[1] : n[0];
+}
+
+export const MOOD_NAMES = { joyful: 'Joyeux', content: 'Content', tired: 'Las' };
+export const MOOD_NAMES_F = { joyful: 'Joyeuse', content: 'Contente', tired: 'Lasse' };
+
+/** Sources du bilan de l'année (clés de yearStats). */
+export const INCOME_LABELS = {
+  crops: 'Récoltes',
+  products: 'Produits transformés',
+  animals: 'Animaux',
+  passersby: 'Passants de l\'étal',
+  guests: 'Chambre d\'hôte',
+  stock: 'Stock vendu',
+  honey: 'Miel',
+  visitors: 'Visiteurs et fêtes',
+  quests: 'Quêtes de Joseph',
+  contest: 'Comice',
+  rescue: 'Vente de secours',
+  tourists: 'Touristes',
+  rides: 'Balades à cheval',
+  truffle: 'Truffes',
+  other: 'Autres',
+};
+export const SPENT_LABELS = {
+  seeds: 'Graines',
+  charges: 'Charges quotidiennes',
+  wages: 'Salaires',
+  fuel: 'Carburant',
+  heating: 'Chauffage de la serre',
+  seasonCharges: 'Charges de saison',
+  lots: 'Terrains',
+  develop: 'Aménagements et parcelles',
+  buildings: 'Bâtiments',
+  machines: 'Machines',
+  animals: 'Animaux',
+  items: 'Ruches et panneaux',
+  water: 'Arrosage',
+  other: 'Autres',
+};
+export const CHARGE_LABELS = {
+  farm: 'Charges de la ferme',
+  upkeep: 'Entretien (animaux, bâtiments)',
+  wages: 'Salaires',
+  fuel: 'Carburant',
+  heating: 'Chauffage de la serre',
+  solar: 'Panneaux solaires',
+  neighbour: 'Part de Joseph',
+  other: 'Autres',
+};
+
+/** « le Haut-Champ » : nom d'un terrain en minuscule initiale (dans une phrase). */
+export function lotPhrase(name) {
+  if (!name) return 'ce terrain';
+  return /^(Le|La|Les|L')\b/.test(name) ? name.charAt(0).toLowerCase() + name.slice(1) : name;
+}
+
+// ── Éléments ──────────────────────────────────────────────────────────────────────
+/** Pastilles de niveau (● ● ○). */
+export function pips(level, max, cls = '') {
+  return el(`span.c-pips${cls ? `.${cls}` : ''}`, { 'aria-label': `Niveau ${level} sur ${max}` }, Array.from({ length: max }, (_, i) => el(`span.pip${i < level ? '.is-on' : ''}`)));
+}
+
+/** Barre de progression (value / max). */
+export function bar(value, max, cls = '') {
+  const k = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+  return el(`span.c-bar${cls ? `.${cls}` : ''}`, el('span.c-bar-fill', { style: { width: `${Math.round(k * 100)}%` } }));
+}
+
+/** Ligne « libellé · valeur » (même style que le bilan). */
+export function line(label, value, cls = '') {
+  if (value === '0') cls = 'mid';
+  return el('div.stats-line', el('span.stats-label', label), el(`b.stats-value${cls ? `.${cls}` : ''}`, value));
+}
+
+/**
+ * Bouton d'achat : libellé + prix. Grisé s'il est impossible, mais toujours touchable : il explique
+ * alors pourquoi (message), sans rien faire d'autre.
+ */
+export function buyButton(app, { id, label, cost = null, can = true, reason = null, onClick, cls = '' }) {
+  const b = el(
+    `button.btn.btn--buy${can ? '.btn--red' : '.is-disabled'}${cls ? `.${cls}` : ''}`,
+    {
+      type: 'button',
+      id,
+      'aria-disabled': can ? 'false' : 'true',
+      onclick: () => {
+        if (!can) {
+          app.audio.play('error');
+          if (reason) app.toasts.show({ kind: 'error', text: reason });
+          return;
+        }
+        onClick?.(b);
+      },
+    },
+    el('span.buy-label', label),
+    cost !== null && cost !== undefined ? el('span.buy-cost', icon('coin', 'sm'), fmt(cost)) : null,
+  );
+  return b;
+}
+
+/** Bouton simple de la carrière (secondaire par défaut). */
+export function cBtn(app, label, onClick, { id, cls = '', sound = 'click' } = {}) {
+  return el(
+    `button.btn${cls ? `.${cls}` : ''}`,
+    {
+      type: 'button',
+      id,
+      onclick: (e) => {
+        if (sound) app.audio.play(sound, { volume: 0.7 });
+        onClick?.(e);
+      },
+    },
+    label,
+  );
+}
+
+/** Interrupteur (rôle switch, ≥ 48 px). */
+export function toggle(app, { id, label, sub = null, on, onChange }) {
+  return el(
+    `button.opt-toggle.c-toggle${on ? '.is-on' : ''}`,
+    {
+      type: 'button',
+      role: 'switch',
+      id,
+      'aria-checked': on ? 'true' : 'false',
+      onclick: () => {
+        app.audio.play('toggle');
+        onChange?.(!on);
+      },
+    },
+    el('span.checkbox'),
+    el('span.opt-label', sub ? [el('b', label), el('small', sub)] : label),
+  );
+}
+
+// Sections repliables (état gardé pour toute la session d'interface).
+const openSections = new Map();
+
+/**
+ * Section repliable (en-tête ≥ 48 px) : `key` mémorise l'état ; `open` = état par défaut.
+ * @param opts { key, title, icon, badge (texte court), open, content: () => nœuds }
+ */
+export function foldSection(app, { key, title, iconNode = null, badge = null, open = false, content, id }) {
+  const isOpen = openSections.has(key) ? openSections.get(key) : open;
+  const body = el('div.fold-body');
+  if (isOpen) body.append(...[content()].flat(Infinity).filter(Boolean));
+  const sec = el(`section.fold${isOpen ? '.is-open' : ''}`, { id: id || `fold-${key}` });
+  const head = el(
+    'button.fold-head',
+    {
+      type: 'button',
+      'aria-expanded': isOpen ? 'true' : 'false',
+      onclick: () => {
+        const now = !sec.classList.contains('is-open');
+        openSections.set(key, now);
+        app.audio.play('page', { volume: 0.6 });
+        sec.classList.toggle('is-open', now);
+        head.setAttribute('aria-expanded', now ? 'true' : 'false');
+        body.replaceChildren(...(now ? [content()].flat(Infinity).filter(Boolean) : []));
+      },
+    },
+    iconNode ? el('span.fold-icon', iconNode) : null,
+    el('span.fold-title', title),
+    badge ? el('span.fold-badge', badge) : null,
+    el('span.fold-chevron', { 'aria-hidden': 'true' }),
+  );
+  sec.append(head, body);
+  return sec;
+}
+export function setSectionOpen(key, on) {
+  openSections.set(key, !!on);
+}
+
+/** Bulle de Joseph (portrait + texte). */
+export function josephSays(text, expr = 'content', name = 'Joseph, votre voisin') {
+  return el('div.loan-head.c-joseph', el('span.loan-avatar.c-joseph-face', joseph(expr, 'sprite--card')), el('div.loan-speech', el('div.tuto-name', name), el('p.loan-quote', text)));
+}
+
+/** « dans 3 jours » / « demain » / « aujourd'hui ». */
+export function inDays(n) {
+  if (n === null || n === undefined) return '';
+  if (n <= 0) return 'aujourd\'hui';
+  if (n === 1) return 'demain';
+  return `dans ${plural(n, 'jour')}`;
+}
+
+/** Cours du marché : « ▲ ×1,2 » (classe pos/neg/mid). */
+export function marketChip(mult, { offSeason = false, fair = 1 } = {}) {
+  const m = Number(mult) || 1;
+  const up = m >= 1.05;
+  const down = m <= 0.95;
+  return el(
+    `span.c-market${up ? '.is-up' : down ? '.is-down' : ''}`,
+    up ? spriteAny(['icon.career.market.up'], 'sprite--xs', 'star') : down ? spriteAny(['icon.career.market.down'], 'sprite--xs', 'info') : null,
+    `×${m.toFixed(2).replace('.', ',').replace(/0$/, '')}`,
+    offSeason ? el('small.c-offseason', 'hors saison') : null,
+    fair > 1.001 ? el('small.c-fair', 'fête') : null,
+  );
+}
+
+export function capitalize(t) {
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}

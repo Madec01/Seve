@@ -9,7 +9,7 @@
 // tutoriel ne soit affiché ; au menu, seulement sur le menu principal. Une bulle à la fois (file).
 
 import { el, placeNear, setText } from './dom.js';
-import { sprite } from './icons.js';
+import { sprite, spriteAny } from './icons.js';
 
 export const HINTS = {
   processing: { title: 'Les ateliers', text: 'Nouveau : les ateliers transforment vos récoltes en produits plus chers, vendus tout seuls à l\'aube.', where: 'game' },
@@ -20,6 +20,18 @@ export const HINTS = {
   contest: { title: 'Le concours', text: 'Concours le soir du 21ᵉ jour : 6 citrouilles, 12 produits, 3 fromages. Chaque épreuve rapporte 120.', where: 'game' },
   grange: { title: 'Vos étoiles', text: 'Vos étoiles achètent des bonus dans la grange aux souvenirs.', where: 'menu' },
   decor: { title: 'Vos écus', text: 'Vos écus décorent la ferme : Grange → Ma ferme.', where: 'menu' },
+  // Mode Carrière (docs/CARRIERE.md § 10.8)
+  'career.start': { title: 'Votre ferme', text: 'Semez, arrosez, récoltez comme d\'habitude. Le Carnet montre les objectifs du prochain rang.', where: 'game', who: 'joseph' },
+  'career.collect': { title: 'Les œufs', text: 'Les abris gardent leurs produits 3 jours : touchez le poulailler pour les ramasser.', where: 'game', who: 'joseph' },
+  'career.lotForSale': { title: 'La forêt à vendre', text: 'Le terrain au-dessus de la ferme est à vendre. Chaque terrain ajoute un peu de charges de saison.', where: 'game', who: 'joseph' },
+  'career.plan': { title: 'Le plan de culture', text: 'Chaque champ a un plan par saison : c\'est ce que sèment le semoir et les jardiniers.', where: 'game', who: 'joseph' },
+  'career.hire': { title: 'L\'embauche', text: 'La maison peut loger des employés : ouvrez l\'onglet « Équipe » pour embaucher.', where: 'game', who: 'joseph' },
+  'career.leave': { title: 'L\'hiver', text: 'En hiver, les champs sont vides : mettez l\'équipe en congé pour ne pas payer de salaires.', where: 'game', who: 'joseph' },
+  'career.machine': { title: 'Votre machine', text: 'Elle travaille seule chaque jour. Son interrupteur est dans la fiche du terrain.', where: 'game', who: 'joseph' },
+  'career.storage': { title: 'Le grenier', text: 'Quand le cours est bas, la récolte attend au grenier. Vendez-la quand le cours remonte.', where: 'game', who: 'joseph' },
+  'career.quest': { title: 'Les quêtes de Joseph', text: 'Rendez-moi service : je paie bien, et notre amitié grandit (♥).', where: 'game', who: 'joseph' },
+  'career.crows': { title: 'Les corbeaux', text: 'Touchez une parcelle marquée d\'un corbeau pour le chasser, sinon la récolte vaudra moitié moins.', where: 'game', who: 'joseph' },
+  'career.yearEnd': { title: 'Fin de l\'année', text: 'Au soir du dernier jour d\'hiver : le bilan de l\'année, puis l\'année suivante avec la même ferme.', where: 'game', who: 'joseph' },
 };
 
 export function createHints(app) {
@@ -68,11 +80,12 @@ export function createHints(app) {
   function show(q) {
     const def = HINTS[q.id];
     shown = { ...q, def };
+    const face = def.who === 'joseph' ? spriteAny(['portrait.joseph', 'npc.joseph', 'farmer'], 'sprite--avatar', 'info') : sprite('farmer', 'sprite--avatar');
     bubble.replaceChildren(
-      el('div.tuto-avatar', sprite('farmer', 'sprite--avatar')),
+      el('div.tuto-avatar', face),
       el(
         'div.tuto-content',
-        el('div.tuto-name', 'Conseil'),
+        el('div.tuto-name', def.who === 'joseph' ? 'Joseph' : 'Conseil'),
         el('div.tuto-title', def.title),
         (textNode = el('p.tuto-text', def.text)),
         el('div.tuto-actions', el('button.btn.btn--small.btn--red', { type: 'button', id: 'hint-ok', onclick: () => done() }, 'Compris')),

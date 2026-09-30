@@ -240,7 +240,7 @@ export function createField(app) {
     if (p.action === 'water') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-water', onclick: () => { app.water(index); } }, icon('water', 'sm'), f.waterCost ? `Arroser (${fmt(f.waterCost)})` : 'Arroser'));
     } else if (p.action === 'harvest') {
-      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), toWorkshop ? 'Récolter → atelier' : `Récolter (+${fmt(p.harvestValue)})`));
+      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), toWorkshop ? 'Récolter → atelier' : p.storeTarget ? 'Récolter → grenier' : `Récolter (+${fmt(p.handValue ?? p.harvestValue)})`));
     } else if (p.action === 'plant') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-plant', onclick: () => openSeedPicker(index) }, icon('seed', 'sm'), 'Semer'));
     }
@@ -368,7 +368,8 @@ export function createField(app) {
       if (verb) rows.push(el('div.tip-sub', t.fruitReady ? `${verb} pour cueillir les pommes.` : `${verb} pour voir sa fiche.`));
     } else if (p.mature) {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
-      rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.harvestValue, 'pièce')}`));
+      rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
+      careerRows(rows, p);
       processRow(rows, p, sheet);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
@@ -384,10 +385,22 @@ export function createField(app) {
       );
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
       if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
+      if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (!p.watered && verb && p.needsWater !== false) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));
     }
     return el('div.tip-rows', rows);
+  }
+
+  /** Carrière : cueillie à la main (+10 %), grenier, cours du jour, corbeau (docs/CARRIERE.md § 3). */
+  function careerRows(rows, p) {
+    if (p.lot === undefined) return;
+    if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
+    else if (p.crowPenalty) rows.push(el('div.tip-note.warn', 'Le corbeau a abîmé la récolte : −50 %.'));
+    if (p.storeTarget) rows.push(el('div.tip-sub', 'Cours bas : la récolte attendra au grenier.'));
+    else if (p.handBonus && p.handBonus > 1) rows.push(el('div.tip-ok', `Cueillie à la main : +${Math.round((p.handBonus - 1) * 100)} %`));
+    if (p.marketMultiplier && Math.abs(p.marketMultiplier - 1) > 0.01) rows.push(el('div.tip-sub', `Cours du jour ×${dec(p.marketMultiplier, 2)}${p.offSeason ? ' · hors saison ×1,25' : ''}`));
+    else if (p.offSeason) rows.push(el('div.tip-sub', 'Hors saison : ×1,25'));
   }
 
   /** « À la récolte : part à l'atelier (1 place libre) → confiture de fraises 46 » / « Atelier plein : vendue 26 ». */

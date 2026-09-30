@@ -77,7 +77,8 @@ export function cropCount(id, n) {
   if (n <= 1) return `${n} ${name}`;
   if (name.endsWith('s') || name.endsWith('x')) return `${n} ${name}`;
   if (name === 'maïs') return `${n} maïs`;
-  if (name === 'blé') return `${n} bottes de blé`;
+  if (name === 'chou') return `${n} choux`;
+  if (name === 'pomme de terre') return `${n} pommes de terre`;
   return `${n} ${name}s`;
 }
 

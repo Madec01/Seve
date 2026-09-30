@@ -1,11 +1,23 @@
 // Économie : investissements, revenus automatiques, charges, prêt, fermage.
+// Mode Carrière (state.mode === 'career') : branches vers src/core/career/effects.js (investissements de
+// carrière, étal à niveaux, charges de saison à la place du fermage). Une partie de niveau n'y passe jamais.
 
 import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
 import { INVESTMENTS, getInvestment } from '../data/investments.js';
 import { perkValue } from './perks.js';
+import { careerEffectTotal, careerSeasonCharge } from './career/effects.js';
+
+/**
+ * Données d'un investissement pour ce niveau : celles de la carrière (level.investmentsById) si le
+ * niveau en a, sinon celles des niveaux (src/data/investments.js).
+ */
+export function investmentOf(level, id) {
+  return level?.investmentsById?.[id] ?? getInvestment(id);
+}
 
 /** Liste des investissements proposés dans ce niveau (dans l'ordre des données). */
 export function levelInvestments(level) {
+  if (level.investmentsById) return level.availableInvestments.map((id) => level.investmentsById[id]).filter(Boolean);
   return INVESTMENTS.filter(
     (inv) => level.availableInvestments.includes(inv.id) && !(inv.id === 'sprinkler' && level.modifiers.noSprinkler),
   );
@@ -29,6 +41,7 @@ export function nextCost(state, inv) {
 
 /** Somme d'un effet numérique sur toutes les unités possédées. */
 export function effectTotal(state, effectKey) {
+  if (state.mode === 'career') return careerEffectTotal(state, effectKey);
   let total = 0;
   for (const inv of INVESTMENTS) {
     const n = owned(state, inv.id);
@@ -127,8 +140,12 @@ export function nextLoanDay(level, day, totalDays) {
   return null;
 }
 
-/** Fermage de la saison (« Bon voisinage » : printemps réduit si `state` est donné). */
+/**
+ * Fermage de la saison (« Bon voisinage » : printemps réduit si `state` est donné).
+ * Carrière : charges de saison (« Impôts et assurance », src/core/career/effects.js).
+ */
 export function rentFor(level, seasonIndex, state = null) {
+  if (state && state.mode === 'career') return careerSeasonCharge(state);
   const rent = level.rents[seasonIndex];
   if (!state || seasonIndex !== 0) return rent;
   const factor = perkValue(state, 'springRentFactor');

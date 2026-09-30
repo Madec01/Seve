@@ -8,11 +8,13 @@
 
 import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
-import { icon, setIcon } from './icons.js';
+import { icon, setIcon, spriteAny } from './icons.js';
 import { season, weatherHint, weatherName } from './text.js';
 
 export function createHud(root, app) {
   let game = null;
+  let career = false; // mode Carrière : année, rang, charges de saison
+  let shownRank = null;
   let shownMoney = 0;
   let targetMoney = 0;
   let shownInt = null;
@@ -28,7 +30,8 @@ export function createHud(root, app) {
   const seasonIcon = icon('spring', 'sm');
   const dateSeason = el('span.date-season', '');
   const dateDay = el('span.date-day', '');
-  const dateMain = el('span.date-main', dateSeason, el('span.date-word', 'Jour'), dateDay);
+  const dateYear = el('span.date-year', '');
+  const dateMain = el('span.date-main', dateYear, dateSeason, el('span.date-word', 'Jour'), dateDay);
   const money = el(
     'button.hud-cell.hud-money.has-tip',
     { type: 'button', id: 'hud-money', 'data-tip-side': 'bottom', 'aria-label': 'Argent et saison', onclick: () => openInfo('money') },
@@ -103,7 +106,17 @@ export function createHud(root, app) {
   const daySun = el('span.dayline-sun');
   const dayline = el('div.hud-dayline', { 'aria-hidden': 'true' }, dayFill, daySun);
 
-  root.append(el('div.hud-row', money, weather, bill, speedBtn), dayline);
+  // Carrière : blason du rang et progression vers le rang suivant (toucher → le Carnet).
+  const rankIconBox = el('span.rank-ico');
+  const rankFill = el('span.rank-fill');
+  const rankCell = el(
+    'button.hud-cell.hud-rank',
+    { type: 'button', id: 'hud-rank', hidden: true, 'aria-label': 'Rang de la ferme', onclick: () => app.careerUI?.open.journal('farm') },
+    rankIconBox,
+    el('span.rank-bar', rankFill),
+  );
+
+  root.append(el('div.hud-row', money, weather, bill, rankCell, speedBtn), dayline);
 
   // Fiches de la barre du haut (au toucher : c'est la seule façon de voir ces détails). Seule la
   // partie chiffrée est reconstruite quand l'argent change ; le bouton reste le même élément.
@@ -119,10 +132,10 @@ export function createHud(root, app) {
     app.audio.play('page', { volume: 0.7 });
     infoKind = kind;
     infoDyn = el('div.info-dyn', infoRows(kind));
-    const titles = { money: ['coin', 'Argent et saison'], weather: [game.state.weather.today, 'Météo'], bill: ['bill', 'Prochain fermage'] };
+    const titles = { money: ['coin', 'Argent et saison'], weather: [game.state.weather.today, 'Météo'], bill: ['bill', career ? 'Charges de saison' : 'Prochain fermage'] };
     const debt = game.query.finance().neighbourLoan?.debt || 0;
     let actions = null;
-    if (kind === 'bill') actions = el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-bilan', onclick: () => app.openTab('stats') }, icon('bill', 'sm'), 'Voir le bilan complet'));
+    if (kind === 'bill') actions = el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-bilan', onclick: () => (career ? app.careerUI?.open.journal('report') : app.openTab('stats')) }, icon('bill', 'sm'), career ? 'Voir le carnet (bilan)' : 'Voir le bilan complet'));
     else if (kind === 'money' && debt > 0) actions = el('div.sheet-actions', el('button.btn.btn--wide', { type: 'button', id: 'info-repay', onclick: () => app.openNeighbour() }, icon('coin', 'sm'), 'Rembourser Joseph'));
     app.sheets.open({ id: `info-${kind}`, kind: 'popup', icon: icon(titles[kind][0], 'md'), title: titles[kind][1], content: el('div.info-sheet', infoDyn, actions) });
   }
@@ -130,6 +143,7 @@ export function createHud(root, app) {
   // ── Infobulles ────────────────────────────────────────────────────────────────
   function moneyTip() {
     if (!game) return null;
+    if (career) return careerMoneyTip();
     const f = game.query.finance();
     const c = game.query.calendar();
     const rows = [el('div.tip-title', `Argent : ${plural(f.money, 'pièce')}`), el('div.tip-sub', `Chaque matin ${season(c.seasonId, 'in')} :`)];
@@ -162,10 +176,35 @@ export function createHud(root, app) {
     const c = game.query.calendar();
     return el(
       'div.tip-rows',
-      el('div.tip-title', `${c.seasonName} — jour ${c.dayOfSeason} sur ${c.seasonLength}`),
+      el('div.tip-title', `${career ? `Année ${game.state.time.year} · ` : ''}${c.seasonName} — jour ${c.dayOfSeason} sur ${c.seasonLength}`),
       el('div', `Jour ${c.day} de l'année (sur ${c.totalDays}).`),
-      el('div', c.daysLeftInSeason === 0 ? `Dernier jour ${season(c.seasonId, 'of')} : le fermage se paie ce soir.` : `Encore ${plural(c.daysLeftInSeason, 'jour')} avant la fin ${season(c.seasonId, 'of')}.`),
+      el('div', c.daysLeftInSeason === 0 ? `Dernier jour ${season(c.seasonId, 'of')} : ${career ? 'les charges de saison se paient' : 'le fermage se paie'} ce soir.` : `Encore ${plural(c.daysLeftInSeason, 'jour')} avant la fin ${season(c.seasonId, 'of')}.`),
     );
+  }
+
+  /** Carrière : charges quotidiennes détaillées (ferme, entretien, salaires, carburant, solaire) et patrimoine. */
+  function careerMoneyTip() {
+    const f = game.query.finance();
+    const cq = game.query.career;
+    let ch = null;
+    let sum = null;
+    try {
+      ch = cq.charges();
+      sum = cq.summary();
+    } catch {
+      /* lot pas encore livré */
+    }
+    const labels = { farm: 'Charges de la ferme', upkeep: 'Entretien', wages: 'Salaires', fuel: 'Carburant', heating: 'Chauffage de la serre', solar: 'Panneaux solaires', neighbour: 'Part de Joseph' };
+    const rows = [el('div.tip-title', `Argent : ${plural(f.money, 'pièce')}`)];
+    if (f.dailyIncome) rows.push(row('Revenus automatiques (chaque matin)', `+${fmt(f.dailyIncome)}`, 'pos'));
+    for (const d of ch?.daily || []) rows.push(row(labels[d.source] || d.source, d.source === 'solar' ? `+${fmt(d.amount)}` : `−${fmt(d.amount)}`, d.source === 'solar' ? 'pos' : 'neg'));
+    rows.push(el('div.tip-row.tip-total', el('span', 'Solde de chaque matin'), el(`b.${f.net < 0 ? 'neg' : 'pos'}`, `${signed(f.net)} / jour`)));
+    rows.push(el('div.tip-sub', 'Récoltes, ramassage des abris et ventes du grenier rapportent au moment où vous les faites.'));
+    if (sum) rows.push(row('Patrimoine de la ferme', fmt(sum.patrimony)));
+    const nl = f.neighbourLoan;
+    if (nl && nl.debt > 0) rows.push(el('div.tip-row.tip-debt', el('span', 'Dette envers Joseph'), el('b.warn', `${fmt(nl.debt)} pièces`)));
+    if (sum?.hardship) rows.push(el('div.tip-note.neg', 'Passe difficile : employés et machines à l\'arrêt jusqu\'à ce que l\'argent repasse au-dessus de 50.'));
+    return el('div.tip-rows', rows);
   }
 
   function weatherTip() {
@@ -183,9 +222,10 @@ export function createHud(root, app) {
   function billTip() {
     if (!game) return null;
     const p = projection();
+    const what = career ? 'Charges' : 'Fermage';
     const nodes = [
-      el('div.tip-title', `Fermage ${season(p.seasonId, 'of')} : ${fmt(p.amount)} pièces`),
-      el('div', p.daysLeft === 0 ? 'Il sera prélevé ce soir.' : `Il sera prélevé le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
+      el('div.tip-title', `${what} ${season(p.seasonId, 'of')} : ${fmt(p.amount)} pièces`),
+      el('div', p.daysLeft === 0 ? `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} ce soir.` : `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
       row('Argent actuel', fmt(p.money)),
     ];
     if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
@@ -196,6 +236,7 @@ export function createHud(root, app) {
     nodes.push(el('div.tip-row.tip-total', el('span', 'Prévision ce soir-là'), el(`b.${p.projected >= p.amount ? 'pos' : p.state === 'loan' ? 'warn' : 'neg'}`, fmt(p.projected))));
     nodes.push(el(`div.tip-note.${p.state === 'danger' ? 'neg' : p.state === 'ok' ? 'pos' : 'warn'}`, stateText(p)));
     if (p.state === 'danger' && p.loanBlocked) nodes.push(el('div.tip-sub', p.loanBlocked));
+    if (career) nodes.push(el('div.tip-sub', 'Impôts et assurance : ils grandissent avec la ferme (par terrain acheté). S\'il manque de l\'argent, les produits des ateliers puis le stock du grenier sont vendus d\'abord.'));
     if (p.rentAutoSell && p.daysLeft === 0) {
       nodes.push(el('div.tip-note.warn', `Il manque ${fmt(Math.max(0, p.amount - p.money))} pièces : vos produits seront vendus en l'état ce soir.`));
     }
@@ -219,7 +260,12 @@ export function createHud(root, app) {
   function stateText(p) {
     if (p.state === 'ok') return 'Vous avez déjà de quoi payer.';
     if (p.state === 'warn') return `Il manque encore ${fmt(p.amount - p.money)} pièces : récoltez avant ce soir-là.`;
-    if (p.state === 'loan') return `Pas d'inquiétude : s'il manque un peu, Joseph pourra vous avancer environ ${fmt(p.lend)} pièces (à lui rendre avec 10 % de plus). Récoltez pour ne pas en avoir besoin !`;
+    if (p.state === 'loan') return `Pas d'inquiétude : s'il manque un peu, Joseph pourra vous avancer environ ${fmt(p.lend)} pièces${p.surchargePct ? ` (à lui rendre avec ${p.surchargePct} % de plus)` : ''}. Récoltez pour ne pas en avoir besoin !`;
+    if (career) {
+      return game?.state.career?.difficulty === 'classique'
+        ? 'Attention : sans assez d\'argent ce soir-là, la ferme sera vendue ! Récoltez, vendez du stock.'
+        : 'Au rythme actuel, la caisse sera vide : une passe difficile s\'annonce (employés et machines à l\'arrêt un moment). Récoltez, vendez du stock !';
+    }
     return 'Attention : au rythme actuel, vous ne pourrez pas payer. Faillite en vue !';
   }
 
@@ -239,11 +285,13 @@ export function createHud(root, app) {
       loanTotal = f.loan.payment * (1 + Math.floor((daysLeft - f.loan.nextInDays) / f.loan.every));
     }
     let crops = 0;
+    let plantable = null; // calculé une seule fois (et seulement s'il sert) : grande ferme = 100+ parcelles
     for (const p of game.query.plots()) {
       if (!p.cropId) continue;
       if (p.mature) crops += p.harvestValue || 0;
       else if (p.daysLeft <= daysLeft && !p.willFreeze) {
-        const c = game.query.plantableCrops().find((x) => x.id === p.cropId);
+        if (!plantable) plantable = new Map(game.query.plantableCrops().map((x) => [x.id, x]));
+        const c = plantable.get(p.cropId);
         crops += c ? c.sellPrice : 0;
       }
     }
@@ -276,12 +324,12 @@ export function createHud(root, app) {
         state = 'loan';
         lend = missing + (last ? 0 : nl.cushion);
       } else if (!nl.available) {
-        loanBlocked = `Vous devez encore ${fmt(nl.debt)} pièces à Joseph : il ne pourra pas vous aider cette fois. Récoltez, ou remboursez-le dans le Bilan.`;
+        loanBlocked = `Vous devez encore ${fmt(nl.debt)} pièces à Joseph : il ne pourra pas vous aider cette fois. Récoltez, ou remboursez-le dans le ${career ? 'Carnet' : 'Bilan'}.`;
       } else {
         loanBlocked = `Joseph peut avancer au plus ${fmt(nl.maxMissing)} pièces ; il en manquerait ${fmt(missing)}.`;
       }
     }
-    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell };
+    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell, surchargePct: nl ? Math.round((nl.surcharge || 0) * 100) : 0 };
   }
 
   // ── Mises à jour ──────────────────────────────────────────────────────────────
@@ -292,8 +340,10 @@ export function createHud(root, app) {
     targetMoney = game.state.money;
 
     setIcon(seasonIcon, c.seasonId);
+    setText(dateYear, career ? `An ${game.state.time.year} ·` : '');
     setText(dateSeason, c.seasonName);
     setText(dateDay, ` ${c.dayOfSeason}/${c.seasonLength}`);
+    if (career) refreshRank();
     money.dataset.season = c.seasonId;
 
     setIcon(wToday, w.today);
@@ -307,9 +357,9 @@ export function createHud(root, app) {
     const status = game.state.status;
     setText(billAmount, fmt(p.amount));
     if (status === 'victory') setText(billDays, 'payé : année finie !');
-    else if (status === 'bankrupt') setText(billDays, 'impayé');
+    else if (status === 'bankrupt') setText(billDays, career ? 'impayées' : 'impayé');
     else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} j`);
-    bill.setAttribute('aria-label', `Fermage : ${fmt(p.amount)} pièces, ${billDays.textContent}`);
+    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces, ${billDays.textContent}`);
     const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn' || state === 'loan');
@@ -326,6 +376,31 @@ export function createHud(root, app) {
     root.classList.toggle('is-paused', sp === 0);
     app.tooltip?.refresh(money);
     app.tooltip?.refresh(bill);
+  }
+
+  /** Carrière : blason du rang et barre de patrimoine vers le rang suivant. */
+  function refreshRank() {
+    let sum = null;
+    try {
+      sum = game.query.career.summary();
+    } catch {
+      sum = null;
+    }
+    if (!sum) return;
+    if (shownRank !== sum.rank) {
+      shownRank = sum.rank;
+      rankIconBox.replaceChildren(spriteAny([`icon.career.rank.${sum.rank}`], 'sprite--sm', 'star'));
+    }
+    const n = sum.nextRank;
+    let k = 1;
+    if (n) {
+      const parts = [Math.min(1, Math.max(0, sum.patrimony / Math.max(1, n.patrimony)))];
+      for (const o of n.objectives || []) parts.push(o.done ? 1 : Math.min(1, (o.progress || 0) / Math.max(1, o.target || 1)));
+      k = parts.reduce((a, b) => a + b, 0) / parts.length;
+    }
+    rankFill.style.transform = `scaleX(${k.toFixed(3)})`;
+    rankCell.classList.toggle('is-ready', !!n && k >= 0.999);
+    rankCell.setAttribute('aria-label', n ? `${sum.rankName} : ${Math.round(k * 100)} % du chemin vers « ${n.name} »` : `${sum.rankName} : rang maximal`);
   }
 
   function refreshMute() {
@@ -375,6 +450,11 @@ export function createHud(root, app) {
 
   function bind(g) {
     game = g;
+    career = g.mode === 'career';
+    shownRank = null;
+    root.classList.toggle('is-career', career);
+    rankCell.hidden = !career;
+    bill.querySelector('.hud-line--big .ico')?.setAttribute('data-kind', career ? 'charges' : 'rent');
     shownMoney = g.state.money;
     targetMoney = g.state.money;
     shownInt = null;
@@ -389,10 +469,30 @@ export function createHud(root, app) {
     if (ev.type === 'moneyChanged') {
       targetMoney = ev.money;
       if (ev.delta) popDelta(ev.delta);
-      money.classList.remove('is-bump');
-      void money.offsetWidth;
-      money.classList.add('is-bump');
+      if (career) bumpSoft();
+      else {
+        money.classList.remove('is-bump');
+        void money.offsetWidth;
+        money.classList.add('is-bump');
+      }
     }
+  }
+
+  // Carrière : l'équipe et les machines font bouger l'argent plusieurs fois par seconde. Relancer l'animation
+  // en lisant offsetWidth forçait une mise en page à chaque fois : ici au plus 3 fois par seconde, et la classe
+  // est remise à l'image suivante (aucune lecture de mise en page).
+  let bumpAt = 0;
+  let bumpQueued = false;
+  function bumpSoft() {
+    const now = performance.now();
+    if (bumpQueued || now - bumpAt < 330) return;
+    bumpAt = now;
+    bumpQueued = true;
+    money.classList.remove('is-bump');
+    requestAnimationFrame(() => {
+      bumpQueued = false;
+      money.classList.add('is-bump');
+    });
   }
 
   let infoQueued = false;

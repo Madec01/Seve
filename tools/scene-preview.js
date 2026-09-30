@@ -12,6 +12,8 @@
 //   Bandeaux simulés : top=64&bottom=72 (px CSS couverts par la barre du haut et les onglets ;
 //   par défaut 64 / 72 en vue téléphone, 0 sinon) ; mode=portrait|landscape|auto ; scroll=px
 //   Au doigt ou à la souris : glisser = défiler, toucher bref = action sur la parcelle.
+//   Mode Carrière : career=1 stage=start|1|3|8|12|manor event=… staff=N sim=s pets=1 pending=1|full
+//   focus=<lotId>|house|field (voir tools/scene-preview-career.js)
 // window.preview expose { game, scene, set(opts), buyAll(), fill(), … } pour les scripts.
 //
 // Cet outil modifie directement game.state (saison, météo, achats) : c'est volontaire, pour
@@ -92,7 +94,22 @@ function mockGame(levelId, grid) {
 // grid=8x5 : maquette avec une grille imposée (taille maximale du champ)
 const forcedGrid = params.get('grid') ? params.get('grid').split('x').map(Number) : null;
 
+// (Carrière) career=1 : vraie carrière construite au stade voulu (tools/scene-preview-career.js).
+const careerOn = params.get('career') === '1';
+const CP = careerOn ? await import('./scene-preview-career.js') : null;
+
 function newGame(levelId, seed) {
+  if (CP) {
+    return CP.buildCareerGame({
+      seed,
+      stage: params.get('stage') || 'start',
+      season: params.get('season') ?? 0,
+      staff: params.get('staff'),
+      crops: params.get('crops') !== '0',
+      female: params.get('female') === '1',
+      farmName: params.get('name') || undefined,
+    });
+  }
   if (forcedGrid) return mockGame(levelId, forcedGrid);
   if (createGame) {
     try { return createGame({ levelId, seed }); } catch (e) { console.warn(e); }
@@ -196,6 +213,7 @@ const api = {
     }
   },
   buyAll() {
+    if (CP) return;
     for (const id of availableIds()) game.state.investments[id] = maxOf(id);
   },
   buyOne() {
@@ -219,6 +237,7 @@ const api = {
     for (const p of game.state.plots) p.unlocked = true;
   },
   fill() {
+    if (CP) { CP.fillCrops(game); return; }
     const season = SEASONS[game.state.time.seasonIndex];
     const ids = CROPS ? CROPS.filter((c) => c.seasons.includes(season)).map((c) => c.id) : CROP_IDS;
     const pool = ids.length ? ids : CROP_IDS;
@@ -408,7 +427,31 @@ api.set({
 });
 if (params.get('unlock') === '1') api.unlock();
 if (params.get('inv') === 'all') api.buyAll();
-if (params.get('crops') === '1') api.fill();
+if (params.get('crops') === '1' && !CP) api.fill();
+if (CP) {
+  api.career = {
+    stage(n) { game = CP.buildCareerGame({ seed, stage: String(n), season: game.state.time.seasonIndex }); wire(); return game; },
+    event(id) { CP.applyEvent(game, id); },
+    pending(full) { CP.fillPending(game, full); },
+    sim(sec, from) { CP.simulate(game, Number(sec) || 1, from ?? null); },
+    pets() { game.state.career.pets = { cat: true, dog: true }; },
+    lots() { return scene.layout.lots; },
+    focus(id, animate = false) {
+      if (id === 'house') return scene.focusHouse({ animate });
+      if (id === 'field') { scene.focusField(); return scene.getScroll(); }
+      return scene.focusLot(id, { animate });
+    },
+    log: CP.careerLog,
+  };
+  for (const ev of (params.get('event') || '').split(',').filter(Boolean)) CP.applyEvent(game, ev);
+  if (params.get('pets') === '1') api.career.pets();
+  if (params.get('pending')) CP.fillPending(game, params.get('pending') === 'full');
+  if (params.get('sim')) CP.simulate(game, Number(params.get('sim')), params.get('from') !== null ? Number(params.get('from')) : null);
+  // Rendu une fois pour construire la disposition, puis cadrage demandé.
+  scene.render(game, performance.now());
+  const f = params.get('focus');
+  if (f) api.career.focus(f);
+}
 if (params.get('trees') === '1') api.trees();
 if (params.get('proc') === '1') api.proc();
 if (params.get('decor') === 'all') api.decorAll();
