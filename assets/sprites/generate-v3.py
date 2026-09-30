@@ -387,7 +387,7 @@ def sack(emb):
     paint(t, emb, 6, 8)
     return t
 
-def crate(icon_img, dy=-3):
+def crate(icon_img, dy=-2):
     """Cagette Kenney remplie : le produit dépasse au-dessus, le rebord avant reste devant."""
     base = tile(4, 6).copy()
     out = base.copy()
@@ -941,16 +941,16 @@ def stone_letter(x, y):
                 if lx < w:
                     ly = y - y0
                     if lx == w - 1 or ly == h - 1:
-                        return 'M'  # joint
+                        return 'S'  # joint
                     corner = (lx in (0, w - 2)) and (ly in (0, h - 2))
                     if corner:
-                        return 'M'
-                    if ly == 0 or lx == 0:
-                        return 'W'
-                    if ly == h - 2 or lx == w - 2:
                         return 'S'
+                    if ly == 0 and lx < w - 2:
+                        return 'W'
+                    if ly == h - 2:
+                        return 'S' if lx % 2 else 's'
                     return 's'
-    return 'M'
+    return 'S'
 
 
 def stone_path(mask):
@@ -963,7 +963,7 @@ def stone_path(mask):
                 # bords du chemin : joint sombre qui borde l'herbe
                 edge = any(not mask(x + dx, y + dy) for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))
                            if 0 <= x + dx < 16 and 0 <= y + dy < 16)
-                px[x, y] = PAL['M' if edge and ch != 'M' and ch != 'S' else ch] + (255,)
+                px[x, y] = PAL['M' if edge else ch] + (255,)
     return t
 
 
@@ -1192,32 +1192,58 @@ MAILBOX = [
 
 
 def hedge(n, e, s, w):
-    """Haie vue de dessus/face, raccordable : n/e/s/w = continue vers ce côté."""
+    """Haie de buissons ronds raccordable : n/e/s/w = continue vers ce côté.
+
+    Les touffes sont des disques espacés de 8 px (le motif se raccorde d'une tuile à l'autre),
+    ombrés comme le buisson de Tiny Town (clair en haut à gauche, sombre en bas à droite).
+    """
+    R = 5.6
+    if e or w:
+        cs = [(x, 7.5) for x in (-4, 4, 12, 20)]
+        cs = [(x, y) for (x, y) in cs if (w or x >= 4) and (e or x <= 12)]
+        if not w:
+            cs = [(7 if x == 4 else x, y) for (x, y) in cs]
+        if not e:
+            cs = [(9 if x == 12 else x, y) for (x, y) in cs]
+        band = (min(x for x, _ in cs), max(x for x, _ in cs), 7, 13)
+    elif n or s:
+        cs = [(7.5, y) for y in (-4, 4, 12, 20)]
+        cs = [(x, y) for (x, y) in cs if (n or y >= 4) and (s or y <= 12)]
+        if not n:
+            cs = [(x, 7 if y == 4 else y) for (x, y) in cs]
+        if not s:
+            cs = [(x, 8 if y == 12 else y) for (x, y) in cs]
+        band = (3, 12, max(0, min(y for _, y in cs)), min(15, max(y for _, y in cs)))
+    else:
+        cs = [(7.5, 7.5)]
+        band = None
     g = Grid(16, 16)
-    if e or w or not (n or s):
-        x0 = 0 if w else 2
-        x1 = 15 if e else 13
-        g.rect(x0, 3, x1, 13, 'G')
-    if n or s:
-        y0 = 0 if n else 2
-        y1 = 15 if s else 13
-        g.rect(2, y0, 13, y1, 'G')
-    # feuillage : touffes claires en haut à gauche, ombre en bas (motif de période 16 → raccords)
-    tufts = [(1, 4), (5, 3), (9, 5), (13, 4), (3, 8), (7, 7), (11, 9), (2, 11), (6, 11), (10, 12), (14, 8)]
     for y in range(16):
         for x in range(16):
-            if g.get(x, y) != 'G':
+            px_, py_ = x + 0.5, y + 0.5
+            best = None
+            for (cx, cy) in cs:
+                d = math.hypot(px_ - cx - 0.5, py_ - cy - 0.5)
+                if d <= R and (best is None or d < best[0]):
+                    best = (d, cx, cy)
+            if best is None:
+                if band and band[0] <= x <= band[1] and band[2] <= y <= band[3]:
+                    g.set(x, y, 'D' if (e or w or x >= 9) else 'G')
                 continue
-            below = g.get(x, y + 1)
-            if below == '.' or y == 15 and not s:
-                g.set(x, y, 'd')
-    for (x, y) in tufts:
-        for (dx, dy, ch) in ((0, 0, 'g'), (1, 0, 'g'), (0, 1, 'G'), (1, 1, 'd'), (2, 1, 'd'), (-1, 1, 'G')):
-            if g.get(x + dx, y + dy) in 'Gd' and g.get(x + dx, y + dy + 1) != '.':
-                g.set(x + dx, y + dy, ch)
-    rows = g.rows()
-    # bas de la haie : bande sombre (J) de 2 px quand elle ne continue pas vers le bas
-    return art(rows)
+            d, cx, cy = best
+            dx, dy = px_ - cx - 0.5, py_ - cy - 0.5
+            if dy > 1.5 or dx + dy > 4.5:
+                ch = 'D'
+            elif dx + dy < -5 and d > 3:
+                ch = 'g'
+            else:
+                ch = 'G'
+            g.set(x, y, ch)
+    # quelques feuilles sombres dans le vert (comme les taches du buisson Kenney)
+    for (x, y) in ((5, 6), (6, 6), (13, 5), (2, 9), (10, 9)):
+        if g.get(x, y) == 'G':
+            g.set(x, y, 'D')
+    return art(g.rows())
 
 
 def wall_piece(n, e, s, w, gate=False):
@@ -1348,4 +1374,273 @@ def deco_section():
     add('deco.wall.stone.gate', wall_piece(False, True, False, True, gate=True))
 
 
-SECTIONS = [crop_section, tree_section, goat_section, product_section, icon_section, farmer_section, deco_section]
+
+
+# ===========================================================================
+# 5 bis. Bâtiments : confiturerie, fromagerie (tuiles Tiny Town + pièces dessinées), moulin, fournil
+
+# Murs chaulés : murs de pierre Tiny Town éclaircis (les portes et vitres restent d'origine)
+WHITEWASH = {PAL['S']: PAL['W'], PAL['s']: PAL['w'], PAL['M']: PAL['s']}
+# Bas des toits d'ardoise / pignon : la bordure de bois devient blanche, comme le mur dessous
+WOOD_TO_WHITE = {PAL['b']: PAL['w'], PAL['n']: PAL['s'], PAL['N']: PAL['S']}
+
+SIGN_BOARD = [  # enseigne suspendue à une potence (posée sur une tuile de mur), 16 × 16
+    '................',
+    '..ZZZZZZZZZZZZ..',
+    '....Z......Z....',
+    '...bbbbbbbbbbn..',
+    '...bkkkkkkkkBn..',
+    '...bk......kBn..',
+    '...bk......kBn..',
+    '...bk......kBn..',
+    '...bk......kBn..',
+    '...bk......kBn..',
+    '...bkkkkkkkkBn..',
+    '...nnnnnnnnnnn..',
+]
+SIGN_EMBLEMS = {
+    'jam': ['.RwRw.', 'RwRwRw', '.yyyy.', 'qRRRRq', 'qRkkRq', '.qqqq.'],
+    'cheese': ['....i.', '..iiiy', 'iiiiiy', 'yyYyyY', 'yyyyYY', 'YYYYYo'],
+    'bread': ['......', '.BBBB.', 'BkBBkB', 'BBBBBn', 'bbbbbn', '.nnnn.'],
+}
+
+
+def sign(emblem):
+    g = Grid(16, 16)
+    g.stamp(SIGN_BOARD, 0, 0)
+    g.stamp(['kkkkkk'] * 6, 5, 4)
+    g.stamp(SIGN_EMBLEMS[emblem], 5, 4)
+    return art(g.rows(), outline=1)
+
+
+AWNING = [
+    'RRwwRRwwRRwwRRww',
+    'RRwwRRwwRRwwRRww',
+    'RRwwRRwwRRwwRRww',
+    'RqWsRqWsRqWsRqWs',
+    '.q.s.q.s.q.s.q.s',
+]
+
+
+def awning():
+    t = art(['................', '................'] + AWNING, outline=1)
+    return t
+
+
+def windmill_body():
+    g = Grid(48, 64)
+    # tour de pierre chaulée, légèrement évasée
+    for y in range(18, 62):
+        k = (y - 18) / (61 - 18)
+        x0 = round(15 - 5 * k)
+        x1 = round(32 + 5 * k)
+        for x in range(x0, x1 + 1):
+            ch = 'W' if x < x0 + 3 else ('S' if x > x1 - 4 else 's')
+            g.set(x, y, ch)
+        # assises de pierre
+        if y % 7 == 3:
+            for x in range(x0 + 1, x1):
+                if (x + y) % 5 != 0:
+                    g.set(x, y, 'S' if g.get(x, y) != 'S' else 'M')
+    for (x, y) in ((19, 28), (20, 28), (28, 43), (29, 43), (17, 50), (30, 33)):
+        g.set(x, y, 'M')
+    # porte en bois (arrondie), fenêtre
+    g.stamp(['..nnnn..', '.nNNNNn.', 'nNnNnNNn', 'nNnNnNNn', 'nNnNnNNn', 'nNnNnNNn',
+             'nNnNnNNn', 'nNnNnkNn', 'nNnNnNNn', 'nNnNnNNn', 'nNnNnNNn', 'nnnnnnnn'], 20, 50)
+    g.stamp(['.MM.', 'McCM', 'MzzM', '.MM.'], 22, 36)
+    # chapeau (toit conique en tuiles rouges)
+    for y in range(4, 22):
+        k = (y - 4) / (21 - 4)
+        half = 2 + k * 11
+        x0, x1 = round(23.5 - half), round(24.5 + half)
+        for x in range(x0, x1 + 1):
+            ch = 'r' if x < x0 + 3 else ('q' if x > x1 - 3 else 'R')
+            if y % 4 == 3 and ch == 'R' and x % 2 == 0:
+                ch = 'q'
+            g.set(x, y, ch)
+    for x in range(10, 38):
+        g.set(x, 21, 'q' if x > 30 else 'R')
+        g.set(x, 22, 'n')
+    return art(g.rows(), w=48, h=64)
+
+
+WINDMILL_HUB = (24, 20)   # centre des ailes, en pixels du sprite 48 × 64
+
+
+def windmill_sails(angle_deg):
+    hx, hy = WINDMILL_HUB
+    g = Grid(48, 64)
+    for b in range(4):
+        a = math.radians(angle_deg + 90 * b)
+        ux, uy = math.cos(a), -math.sin(a)
+        vx, vy = -uy, ux
+        for y in range(64):
+            for x in range(48):
+                rx, ry = x + 0.5 - hx, y + 0.5 - hy
+                u = rx * ux + ry * uy
+                v = rx * vx + ry * vy
+                if 2 < u <= 20.5 and abs(v) <= 1.0:
+                    g.set(x, y, 'n')
+                elif 6.5 < u <= 20.5 and 1.0 < v <= 6.2:
+                    edge = u > 19.5 or v > 5.2 or u < 7.5
+                    lattice = (u - 6.5) % 4.5 < 1.0 or abs(v - 3.6) < 0.5
+                    g.set(x, y, 'B' if edge else ('b' if lattice else 'W'))
+    g.stamp(['.NN.', 'NnnN', 'NnnN', '.NN.'], hx - 2, hy - 2)
+    return art(g.rows(), outline=1, w=48, h=64)
+
+
+def bakery():
+    g = Grid(32, 32)
+    # mur de pierre
+    for y in range(15, 31):
+        for x in range(3, 29):
+            ch = 'W' if x < 5 else ('S' if x > 26 else 's')
+            g.set(x, y, ch)
+    for (x, y) in ((8, 17), (9, 17), (20, 18), (26, 24), (5, 27), (6, 27), (13, 25)):
+        g.set(x, y, 'M')
+    # porte
+    g.stamp(['nnnnnn', 'nNNNNn', 'nNnNNn', 'nNnNNn', 'nNnNkn', 'nNnNNn', 'nNnNNn', 'nNnNNn', 'nnnnnn'], 5, 22)
+    # four : voûte de briques, bouche rougeoyante
+    g.stamp(['...rrRRRr...', '..rRRRRRRq..', '.rRqoooooRq.', '.rRoYYYYoRq.', 'rRoYyiiyYoRq',
+             'rRoYiiiiYoRq', 'rRoYyyyyYoRq', 'rRooooooooRq', 'qqqqqqqqqqqq'], 15, 21)
+    # toit de tuiles rouges (débord), cheminée
+    g.stamp(['..sSS', '.MMMM', '.sssS', '.sssS', '.sssS', '.sssS'], 21, 0)
+    for y in range(4, 15):
+        k = (y - 4) / 10
+        x0, x1 = round(8 - 7 * k), round(23 + 7 * k)
+        for x in range(x0, x1 + 1):
+            ch = 'r' if x < x0 + 2 else ('q' if x > x1 - 2 else 'R')
+            if y % 3 == 1 and ch == 'R' and x % 3 == 0:
+                ch = 'q'
+            g.set(x, y, ch)
+    for x in range(1, 31):
+        g.set(x, 14, 'q')
+    return art(g.rows(), w=32, h=32)
+
+
+def building_section():
+    add('part.sign.jam', sign('jam'))
+    add('part.sign.cheese', sign('cheese'))
+    add('part.sign.bread', sign('bread'))
+    add('part.awning', awning())
+    add('part.wall.white.l', recolor(tile(4, 6, TOWN), WHITEWASH))
+    add('part.wall.white.c', recolor(tile(5, 6, TOWN), WHITEWASH))
+    add('part.wall.white.r', recolor(tile(7, 6, TOWN), WHITEWASH))
+    add('part.wall.white.window', recolor(tile(4, 7, TOWN), WHITEWASH))
+    add('part.wall.white.door', recolor(tile(5, 7, TOWN), WHITEWASH))
+    add('part.roof.slate.white.l', recolor_region(tile(0, 5, TOWN), WOOD_TO_WHITE, (0, 14, 16, 16)))
+    add('part.roof.slate.white.c', recolor_region(tile(1, 5, TOWN), WOOD_TO_WHITE, (0, 14, 16, 16)))
+    add('part.roof.slate.white.r', recolor_region(tile(2, 5, TOWN), WOOD_TO_WHITE, (0, 14, 16, 16)))
+    add('part.roof.slate.white.gable', recolor_region(tile(3, 5, TOWN), WOOD_TO_WHITE, (0, 8, 16, 16)))
+
+    # Confiturerie 3 × 3 : toit de tuiles rouges, murs de pierre, auvent rayé, enseigne « pot de confiture »
+    composite('building.jamworkshop', 3, 3, [
+        ('town', 4, 4, 0, 0), ('town', 5, 4, 1, 0), ('town', 6, 4, 2, 0),
+        ('town', 4, 5, 0, 1), ('town', 7, 5, 1, 1), ('town', 6, 5, 2, 1),
+        ('town', 4, 7, 0, 2), ('town', 5, 7, 1, 2), ('town', 7, 6, 2, 2),
+        ('v3', 'part.awning', 0, 2), ('v3', 'part.sign.jam', 2, 2),
+    ])
+    # Fromagerie 3 × 3 : toit d'ardoise, murs chaulés, enseigne « fromage »
+    composite('building.dairy', 3, 3, [
+        ('town', 0, 4, 0, 0), ('town', 1, 4, 1, 0), ('town', 2, 4, 2, 0),
+        ('v3', 'part.roof.slate.white.l', 0, 1), ('v3', 'part.roof.slate.white.gable', 1, 1),
+        ('v3', 'part.roof.slate.white.r', 2, 1),
+        ('v3', 'part.wall.white.window', 0, 2), ('v3', 'part.wall.white.door', 1, 2),
+        ('v3', 'part.wall.white.r', 2, 2), ('v3', 'part.sign.cheese', 2, 2),
+    ])
+    body = windmill_body()
+    add('building.windmill.body', body)
+    frames = [windmill_sails(a) for a in (0, 22.5, 45, 67.5)]
+    for i, f in enumerate(frames):
+        add(f'building.windmill.sails.{i}', f)
+    composite('building.windmill', 3, 4, [
+        ('v3', 'building.windmill.body', 0, 0), ('v3', 'building.windmill.sails.0', 0, 0),
+    ])
+    add('building.bakery', bakery())
+
+
+SECTIONS = [crop_section, tree_section, goat_section, product_section, icon_section, farmer_section,
+            deco_section, building_section]
+
+
+def render_composite(name):
+    for (n, w, h, layers) in COMPOSITES:
+        if n != name:
+            continue
+        out = img(w * T, h * T)
+        named = dict(ENTRIES)
+        for layer in layers:
+            if layer[0] == 'v3':
+                _, a, dx, dy = layer
+                src = named[a]
+            else:
+                sheet, a, b, dx, dy = layer
+                src = tile(a, b, TOWN if sheet == 'town' else FARM)
+            out.alpha_composite(src, (dx * T, dy * T))
+        return out
+    raise KeyError(name)
+
+
+# ===========================================================================
+# Placement dans la planche, écriture du PNG et du bloc de src/render/atlas.js
+
+def pack():
+    """Premier emplacement libre (lecture ligne par ligne) pour chaque sprite, 16 tuiles de large."""
+    used = set()
+    pos = {}
+    for name, im in ENTRIES:
+        w, h = im.width // T, im.height // T
+        r = 0
+        while name not in pos:
+            for c in range(SHEET_COLS - w + 1):
+                cells = {(c + i, r + j) for i in range(w) for j in range(h)}
+                if not cells & used:
+                    used |= cells
+                    pos[name] = (c, r, w, h)
+                    break
+            r += 1
+    rows = max(r + h for (c, r, w, h) in pos.values())
+    return pos, rows
+
+
+def js_entry(c, r, w, h):
+    return f"{{ sheet: 'v3', col: {c}, row: {r}" + (f', w: {w}, h: {h}' if (w, h) != (1, 1) else '') + ' }'
+
+
+def main():
+    for fn in SECTIONS:
+        fn()
+    pos, rows = pack()
+    sheet = img(SHEET_COLS * T, rows * T)
+    for name, im in ENTRIES:
+        c, r, w, h = pos[name]
+        sheet.alpha_composite(im, (c * T, r * T))
+    sheet.save(HERE / 'v3.png')
+    lines = ['  // Généré par assets/sprites/generate-v3.py — ne pas modifier à la main.']
+    for name, _ in ENTRIES:
+        lines.append(f"  '{name}': {js_entry(*pos[name])},")
+    for (name, w, h, layers) in COMPOSITES:
+        ls = []
+        for layer in layers:
+            if layer[0] == 'v3':
+                _, a, dx, dy = layer
+                c, r, lw, lh = pos[a]
+                ls.append(f"{{ sheet: 'v3', col: {c}, row: {r}, dx: {dx}, dy: {dy}"
+                          + (f', w: {lw}, h: {lh}' if (lw, lh) != (1, 1) else '') + ' }')
+            else:
+                sh, a, b, dx, dy = layer
+                ls.append(f"{{ sheet: '{sh}', col: {a}, row: {b}, dx: {dx}, dy: {dy} }}")
+        lines.append(f"  '{name}': {{ w: {w}, h: {h}, layers: [\n    " + ',\n    '.join(ls) + ',\n  ] },')
+    block = '\n'.join(lines)
+    atlas = ROOT / 'src' / 'render' / 'atlas.js'
+    src = atlas.read_text()
+    new = re.sub(r'(// <v3:auto>\n).*?( *// </v3:auto>)', lambda m: m.group(1) + block + '\n' + m.group(2), src, flags=re.S)
+    if new == src and '// <v3:auto>' not in src:
+        raise SystemExit('marqueurs // <v3:auto> absents de src/render/atlas.js')
+    atlas.write_text(new)
+    print(f'écrit {HERE / "v3.png"} ({SHEET_COLS} × {rows} tuiles, {len(ENTRIES)} sprites, '
+          f'{len(COMPOSITES)} composés)')
+
+
+if __name__ == '__main__':
+    main()

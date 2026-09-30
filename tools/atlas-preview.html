@@ -32,10 +32,13 @@
   <label>Échelle <select id="scale"><option>2</option><option selected>3</option><option>4</option><option>6</option></select></label>
   <label>Fond <select id="bgsel"><option value="#8a6aa0">violet (contraste)</option><option value="#84c669">herbe</option><option value="#eaa56c">terre</option><option value="#222">sombre</option></select></label>
   <label><input type="checkbox" id="flip"> retourner (flipX)</label>
+  <label><input type="checkbox" id="onlyv3"> contenu v3 seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
 <div id="out"></div>
+<h2>Moulin animé (corps + ailes 0..3) et pommier au fil des saisons</h2>
+<div class="demo" style="align-items:flex-start"><canvas id="mill"></canvas><canvas id="trees"></canvas></div>
 <h2>Interface (UI pack, border-image)</h2>
 <div class="demo">
   <div class="panel">Panneau parchemin<br>(border-image 8 fill)</div>
@@ -45,7 +48,13 @@
 <div id="ui" class="grid ui" style="margin-top:12px"></div>
 
 <script type="module">
-import { SPRITES, SHEETS, TILE, UI, drawSprite, spriteSize } from '../src/render/atlas.js';
+import { SPRITES, SHEETS, TILE, UI, drawSprite, spriteSize, treeSprite, CROP_IDS_V3, WINDMILL_FRAMES } from '../src/render/atlas.js';
+
+const isV3 = (name) => {
+  const s = SPRITES[name];
+  if (s.sheet === 'v3' || (s.layers && s.layers.some((l) => l.sheet === 'v3'))) return true;
+  return name.startsWith('crop.apple.') || CROP_IDS_V3.some((id) => name === `crop.${id}.0`);
+};
 
 const out = document.getElementById('out');
 const uiOut = document.getElementById('ui');
@@ -77,11 +86,13 @@ function render() {
   const bg = document.getElementById('bgsel').value;
   const flipX = document.getElementById('flip').checked;
   const filter = document.getElementById('filter').value.trim();
+  const onlyV3 = document.getElementById('onlyv3').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
   for (const name of Object.keys(SPRITES)) {
     if (filter && !name.includes(filter)) continue;
+    if (onlyV3 && !isV3(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -128,7 +139,30 @@ for (const [key, u] of Object.entries(UI)) {
   uiOut.append(fig);
 }
 
-for (const id of ['scale', 'bgsel', 'flip', 'filter']) document.getElementById(id).addEventListener('input', render);
+// Démo : ailes du moulin qui tournent, pommier dans les quatre saisons (échelle 3)
+const mill = document.getElementById('mill');
+mill.width = 48 * 3; mill.height = 64 * 3;
+const mctx = mill.getContext('2d');
+mctx.imageSmoothingEnabled = false;
+const trees = document.getElementById('trees');
+const treeList = [[0, 'spring'], [2, 'spring'], [4, 'spring'], [3, 'summer'], [4, 'summer'], [3, 'autumn'], [4, 'autumn'], [4, 'winter']];
+trees.width = treeList.length * 16 * 3; trees.height = 16 * 3;
+const tctx = trees.getContext('2d');
+tctx.imageSmoothingEnabled = false;
+tctx.fillStyle = '#84c669'; tctx.fillRect(0, 0, trees.width, trees.height);
+treeList.forEach(([st, se], i) => {
+  drawSprite(tctx, images, 'soil.dry', i * 48, 0, { scale: 3 });
+  drawSprite(tctx, images, treeSprite(st, se, st >= 4), i * 48, -3, { scale: 3 });
+});
+let frame = 0;
+setInterval(() => {
+  mctx.fillStyle = '#84c669'; mctx.fillRect(0, 0, mill.width, mill.height);
+  drawSprite(mctx, images, 'building.windmill.body', 0, 0, { scale: 3 });
+  drawSprite(mctx, images, `building.windmill.sails.${frame}`, 0, 0, { scale: 3 });
+  frame = (frame + 1) % WINDMILL_FRAMES;
+}, 180);
+
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>

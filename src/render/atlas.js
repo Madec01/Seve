@@ -5,6 +5,9 @@
 //   town  : Kenney « Tiny Town »  (CC0) — assets/sprites/tiny-town.png, 12 × 11 tuiles
 //   extra : tuiles dérivées des packs Kenney (plants pas mûrs, tournesol, panneau solaire, arroseur)
 //           — assets/sprites/extra.png, générée par assets/sprites/generate-extra.py
+//   v3    : contenu « v3 » dessiné dans le style Kenney (nouvelles cultures, pommier, chèvre, produits,
+//           bâtiments, décorations, tenues, icônes) — assets/sprites/v3.png, générée (avec le bloc
+//           « v3:auto » plus bas) par assets/sprites/generate-v3.py
 //
 // Une entrée simple : { sheet, col, row, w?, h? } (w/h en tuiles, 1 par défaut).
 // Une entrée composée (bâtiments) : { w, h, layers: [{ sheet, col, row, dx, dy }] }
@@ -23,6 +26,7 @@ export const SHEETS = {
   farm: 'assets/sprites/tiny-farm.png',
   town: 'assets/sprites/tiny-town.png',
   extra: 'assets/sprites/extra.png',
+  v3: 'assets/sprites/v3.png',
 };
 
 // Cultures disponibles (toutes présentes dans Tiny Farm ; le tournesol n'y a qu'une image mûre,
@@ -284,6 +288,236 @@ const things = {
   'sprinkler': x(4, 1),
 };
 
+// ---------------------------------------------------------------------------
+// Contenu v3 (planche « v3 »). Toutes les tuiles font 16 × 16 sauf indication (w/h en tuiles).
+//
+// Cultures v3 (citrouille, pomme de terre, fraise, courgette) : mêmes noms que les cultures Kenney
+//   crop.<id>.1..4, .icon, .dead, seedbag.<id>, sack.<id>, crate.<id> ; l'étape 0 = graines semées
+//   (tuile commune extra, ajoutée ci-dessous). cropSprite(id, stage) fonctionne tel quel.
+// Pommier : une parcelle, 16 × 16, dessiné exactement comme une culture (même position, même échelle
+//   ×2 en portrait) : tree.apple.sapling / .young / .spring / .summer / .summer.ripe / .autumn /
+//   .autumn.ripe / .winter / .dead, et tree.apple.icon (pomme). Pour la scène : treeSprite(stage, season,
+//   ripe) ; alias crop.apple.0..4 / .icon / .dead pour passer par cropSprite('apple', stage, season).
+// Moulin : building.windmill.body (3 × 4) + building.windmill.sails.0..3 (3 × 4, même origine, à dessiner
+//   par-dessus à la même position ; 4 images espacées de 22,5° : la rotation boucle 0→1→2→3→0).
+//   Centre des ailes : pixel (24, 20) du sprite. building.windmill = corps + ailes 0 (image fixe).
+// Panneau de la ferme deco.sign.farm (2 × 1) : planche vierge, zone de texte FARM_SIGN_TEXT_RECT (px sprite).
+// Animaux : animal.goat regarde vers la droite, comme les autres.
+const v3 = {
+  // <v3:auto>
+  // Généré par assets/sprites/generate-v3.py — ne pas modifier à la main.
+  'crop.pumpkin.1': { sheet: 'v3', col: 0, row: 0 },
+  'crop.pumpkin.2': { sheet: 'v3', col: 1, row: 0 },
+  'crop.pumpkin.3': { sheet: 'v3', col: 2, row: 0 },
+  'crop.pumpkin.4': { sheet: 'v3', col: 3, row: 0 },
+  'crop.pumpkin.icon': { sheet: 'v3', col: 4, row: 0 },
+  'crop.pumpkin.dead': { sheet: 'v3', col: 5, row: 0 },
+  'seedbag.pumpkin': { sheet: 'v3', col: 6, row: 0 },
+  'sack.pumpkin': { sheet: 'v3', col: 7, row: 0 },
+  'crate.pumpkin': { sheet: 'v3', col: 8, row: 0 },
+  'crop.potato.1': { sheet: 'v3', col: 9, row: 0 },
+  'crop.potato.2': { sheet: 'v3', col: 10, row: 0 },
+  'crop.potato.3': { sheet: 'v3', col: 11, row: 0 },
+  'crop.potato.4': { sheet: 'v3', col: 12, row: 0 },
+  'crop.potato.icon': { sheet: 'v3', col: 13, row: 0 },
+  'crop.potato.dead': { sheet: 'v3', col: 14, row: 0 },
+  'seedbag.potato': { sheet: 'v3', col: 15, row: 0 },
+  'sack.potato': { sheet: 'v3', col: 0, row: 1 },
+  'crate.potato': { sheet: 'v3', col: 1, row: 1 },
+  'crop.strawberry.1': { sheet: 'v3', col: 2, row: 1 },
+  'crop.strawberry.2': { sheet: 'v3', col: 3, row: 1 },
+  'crop.strawberry.3': { sheet: 'v3', col: 4, row: 1 },
+  'crop.strawberry.4': { sheet: 'v3', col: 5, row: 1 },
+  'crop.strawberry.icon': { sheet: 'v3', col: 6, row: 1 },
+  'crop.strawberry.dead': { sheet: 'v3', col: 7, row: 1 },
+  'seedbag.strawberry': { sheet: 'v3', col: 8, row: 1 },
+  'sack.strawberry': { sheet: 'v3', col: 9, row: 1 },
+  'crate.strawberry': { sheet: 'v3', col: 10, row: 1 },
+  'crop.zucchini.1': { sheet: 'v3', col: 11, row: 1 },
+  'crop.zucchini.2': { sheet: 'v3', col: 12, row: 1 },
+  'crop.zucchini.3': { sheet: 'v3', col: 13, row: 1 },
+  'crop.zucchini.4': { sheet: 'v3', col: 14, row: 1 },
+  'crop.zucchini.icon': { sheet: 'v3', col: 15, row: 1 },
+  'crop.zucchini.dead': { sheet: 'v3', col: 0, row: 2 },
+  'seedbag.zucchini': { sheet: 'v3', col: 1, row: 2 },
+  'sack.zucchini': { sheet: 'v3', col: 2, row: 2 },
+  'crate.zucchini': { sheet: 'v3', col: 3, row: 2 },
+  'tree.apple.sapling': { sheet: 'v3', col: 4, row: 2 },
+  'tree.apple.young': { sheet: 'v3', col: 5, row: 2 },
+  'tree.apple.spring': { sheet: 'v3', col: 6, row: 2 },
+  'tree.apple.summer': { sheet: 'v3', col: 7, row: 2 },
+  'tree.apple.summer.ripe': { sheet: 'v3', col: 8, row: 2 },
+  'tree.apple.autumn': { sheet: 'v3', col: 9, row: 2 },
+  'tree.apple.autumn.ripe': { sheet: 'v3', col: 10, row: 2 },
+  'tree.apple.winter': { sheet: 'v3', col: 11, row: 2 },
+  'tree.apple.dead': { sheet: 'v3', col: 12, row: 2 },
+  'tree.apple.icon': { sheet: 'v3', col: 13, row: 2 },
+  'animal.goat': { sheet: 'v3', col: 14, row: 2 },
+  'product.jam': { sheet: 'v3', col: 15, row: 2 },
+  'product.cheese': { sheet: 'v3', col: 0, row: 3 },
+  'product.flour': { sheet: 'v3', col: 1, row: 3 },
+  'product.bread': { sheet: 'v3', col: 2, row: 3 },
+  'product.juice': { sheet: 'v3', col: 3, row: 3 },
+  'product.milk.goat': { sheet: 'v3', col: 4, row: 3 },
+  'icon.star': { sheet: 'v3', col: 5, row: 3 },
+  'icon.trophy.bronze': { sheet: 'v3', col: 6, row: 3 },
+  'icon.trophy.silver': { sheet: 'v3', col: 7, row: 3 },
+  'icon.trophy.gold': { sheet: 'v3', col: 8, row: 3 },
+  'icon.medal': { sheet: 'v3', col: 9, row: 3 },
+  'icon.ecu': { sheet: 'v3', col: 10, row: 3 },
+  'perk.seeds': { sheet: 'v3', col: 11, row: 3 },
+  'perk.wateringcan': { sheet: 'v3', col: 12, row: 3 },
+  'perk.coin': { sheet: 'v3', col: 13, row: 3 },
+  'perk.basket': { sheet: 'v3', col: 14, row: 3 },
+  'perk.compost': { sheet: 'v3', col: 15, row: 3 },
+  'perk.bee': { sheet: 'v3', col: 0, row: 4 },
+  'perk.barn': { sheet: 'v3', col: 1, row: 4 },
+  'perk.book': { sheet: 'v3', col: 2, row: 4 },
+  'perk.clover': { sheet: 'v3', col: 3, row: 4 },
+  'farmer.outfit.0': { sheet: 'v3', col: 4, row: 4 },
+  'farmer.outfit.0.nohat': { sheet: 'v3', col: 5, row: 4 },
+  'farmer.outfit.1': { sheet: 'v3', col: 6, row: 4 },
+  'farmer.outfit.1.nohat': { sheet: 'v3', col: 7, row: 4 },
+  'farmer.outfit.2': { sheet: 'v3', col: 8, row: 4 },
+  'farmer.outfit.2.nohat': { sheet: 'v3', col: 9, row: 4 },
+  'farmer.outfit.3': { sheet: 'v3', col: 10, row: 4 },
+  'farmer.outfit.3.nohat': { sheet: 'v3', col: 11, row: 4 },
+  'deco.path.stone': { sheet: 'v3', col: 12, row: 4 },
+  'deco.path.stone.h': { sheet: 'v3', col: 13, row: 4 },
+  'deco.path.stone.v': { sheet: 'v3', col: 14, row: 4 },
+  'deco.path.stone.ne': { sheet: 'v3', col: 15, row: 4 },
+  'deco.path.stone.nw': { sheet: 'v3', col: 0, row: 5 },
+  'deco.path.stone.se': { sheet: 'v3', col: 1, row: 5 },
+  'deco.path.stone.sw': { sheet: 'v3', col: 2, row: 5 },
+  'deco.path.stone.single': { sheet: 'v3', col: 3, row: 5 },
+  'deco.flowerbed.red': { sheet: 'v3', col: 4, row: 5 },
+  'deco.flowerbed.yellow': { sheet: 'v3', col: 5, row: 5 },
+  'deco.flowerbed.blue': { sheet: 'v3', col: 6, row: 5 },
+  'deco.flowerbed.pink': { sheet: 'v3', col: 7, row: 5 },
+  'deco.flowerbed.white': { sheet: 'v3', col: 8, row: 5 },
+  'deco.bench': { sheet: 'v3', col: 9, row: 5 },
+  'deco.lamppost': { sheet: 'v3', col: 10, row: 5, w: 1, h: 2 },
+  'deco.scarecrow': { sheet: 'v3', col: 11, row: 5, w: 1, h: 2 },
+  'deco.wheelbarrow': { sheet: 'v3', col: 12, row: 5 },
+  'deco.pond': { sheet: 'v3', col: 13, row: 5, w: 2, h: 2 },
+  'deco.birdhouse': { sheet: 'v3', col: 15, row: 5, w: 1, h: 2 },
+  'deco.gnome': { sheet: 'v3', col: 0, row: 6 },
+  'deco.mailbox': { sheet: 'v3', col: 1, row: 6 },
+  'deco.sign.farm': { sheet: 'v3', col: 2, row: 6, w: 2, h: 1 },
+  'deco.slot': { sheet: 'v3', col: 4, row: 6 },
+  'deco.hedge': { sheet: 'v3', col: 5, row: 6 },
+  'deco.hedge.h.left': { sheet: 'v3', col: 6, row: 6 },
+  'deco.hedge.h.mid': { sheet: 'v3', col: 7, row: 6 },
+  'deco.hedge.h.right': { sheet: 'v3', col: 8, row: 6 },
+  'deco.hedge.v.top': { sheet: 'v3', col: 9, row: 6 },
+  'deco.hedge.v.mid': { sheet: 'v3', col: 12, row: 6 },
+  'deco.hedge.v.bottom': { sheet: 'v3', col: 0, row: 7 },
+  'deco.fence.picket.tl': { sheet: 'v3', col: 1, row: 7 },
+  'deco.fence.picket.t': { sheet: 'v3', col: 2, row: 7 },
+  'deco.fence.picket.tr': { sheet: 'v3', col: 3, row: 7 },
+  'deco.fence.picket.l': { sheet: 'v3', col: 4, row: 7 },
+  'deco.fence.picket.r': { sheet: 'v3', col: 5, row: 7 },
+  'deco.fence.picket.bl': { sheet: 'v3', col: 6, row: 7 },
+  'deco.fence.picket.gate': { sheet: 'v3', col: 7, row: 7 },
+  'deco.fence.picket.br': { sheet: 'v3', col: 8, row: 7 },
+  'deco.fence.picket.v.top': { sheet: 'v3', col: 9, row: 7 },
+  'deco.fence.picket.v.mid': { sheet: 'v3', col: 10, row: 7 },
+  'deco.fence.picket.v.bottom': { sheet: 'v3', col: 11, row: 7 },
+  'deco.fence.picket.h.left': { sheet: 'v3', col: 12, row: 7 },
+  'deco.fence.picket.h.mid': { sheet: 'v3', col: 13, row: 7 },
+  'deco.fence.picket.h.right': { sheet: 'v3', col: 14, row: 7 },
+  'deco.wall.stone.tl': { sheet: 'v3', col: 15, row: 7 },
+  'deco.wall.stone.t': { sheet: 'v3', col: 0, row: 8 },
+  'deco.wall.stone.tr': { sheet: 'v3', col: 1, row: 8 },
+  'deco.wall.stone.l': { sheet: 'v3', col: 2, row: 8 },
+  'deco.wall.stone.r': { sheet: 'v3', col: 3, row: 8 },
+  'deco.wall.stone.bl': { sheet: 'v3', col: 4, row: 8 },
+  'deco.wall.stone.b': { sheet: 'v3', col: 5, row: 8 },
+  'deco.wall.stone.br': { sheet: 'v3', col: 6, row: 8 },
+  'deco.wall.stone.v.top': { sheet: 'v3', col: 7, row: 8 },
+  'deco.wall.stone.v.mid': { sheet: 'v3', col: 8, row: 8 },
+  'deco.wall.stone.v.bottom': { sheet: 'v3', col: 9, row: 8 },
+  'deco.wall.stone.h.left': { sheet: 'v3', col: 10, row: 8 },
+  'deco.wall.stone.h.mid': { sheet: 'v3', col: 11, row: 8 },
+  'deco.wall.stone.h.right': { sheet: 'v3', col: 12, row: 8 },
+  'deco.wall.stone.single': { sheet: 'v3', col: 13, row: 8 },
+  'deco.wall.stone.gate': { sheet: 'v3', col: 14, row: 8 },
+  'part.sign.jam': { sheet: 'v3', col: 15, row: 8 },
+  'part.sign.cheese': { sheet: 'v3', col: 0, row: 9 },
+  'part.sign.bread': { sheet: 'v3', col: 1, row: 9 },
+  'part.awning': { sheet: 'v3', col: 2, row: 9 },
+  'part.wall.white.l': { sheet: 'v3', col: 3, row: 9 },
+  'part.wall.white.c': { sheet: 'v3', col: 4, row: 9 },
+  'part.wall.white.r': { sheet: 'v3', col: 5, row: 9 },
+  'part.wall.white.window': { sheet: 'v3', col: 6, row: 9 },
+  'part.wall.white.door': { sheet: 'v3', col: 7, row: 9 },
+  'part.roof.slate.white.l': { sheet: 'v3', col: 8, row: 9 },
+  'part.roof.slate.white.c': { sheet: 'v3', col: 9, row: 9 },
+  'part.roof.slate.white.r': { sheet: 'v3', col: 10, row: 9 },
+  'part.roof.slate.white.gable': { sheet: 'v3', col: 11, row: 9 },
+  'building.windmill.body': { sheet: 'v3', col: 12, row: 9, w: 3, h: 4 },
+  'building.windmill.sails.0': { sheet: 'v3', col: 0, row: 10, w: 3, h: 4 },
+  'building.windmill.sails.1': { sheet: 'v3', col: 3, row: 10, w: 3, h: 4 },
+  'building.windmill.sails.2': { sheet: 'v3', col: 6, row: 10, w: 3, h: 4 },
+  'building.windmill.sails.3': { sheet: 'v3', col: 9, row: 10, w: 3, h: 4 },
+  'building.bakery': { sheet: 'v3', col: 12, row: 13, w: 2, h: 2 },
+  'building.jamworkshop': { w: 3, h: 3, layers: [
+    { sheet: 'town', col: 4, row: 4, dx: 0, dy: 0 },
+    { sheet: 'town', col: 5, row: 4, dx: 1, dy: 0 },
+    { sheet: 'town', col: 6, row: 4, dx: 2, dy: 0 },
+    { sheet: 'town', col: 4, row: 5, dx: 0, dy: 1 },
+    { sheet: 'town', col: 7, row: 5, dx: 1, dy: 1 },
+    { sheet: 'town', col: 6, row: 5, dx: 2, dy: 1 },
+    { sheet: 'town', col: 4, row: 7, dx: 0, dy: 2 },
+    { sheet: 'town', col: 5, row: 7, dx: 1, dy: 2 },
+    { sheet: 'town', col: 7, row: 6, dx: 2, dy: 2 },
+    { sheet: 'v3', col: 2, row: 9, dx: 0, dy: 2 },
+    { sheet: 'v3', col: 15, row: 8, dx: 2, dy: 2 },
+  ] },
+  'building.dairy': { w: 3, h: 3, layers: [
+    { sheet: 'town', col: 0, row: 4, dx: 0, dy: 0 },
+    { sheet: 'town', col: 1, row: 4, dx: 1, dy: 0 },
+    { sheet: 'town', col: 2, row: 4, dx: 2, dy: 0 },
+    { sheet: 'v3', col: 8, row: 9, dx: 0, dy: 1 },
+    { sheet: 'v3', col: 11, row: 9, dx: 1, dy: 1 },
+    { sheet: 'v3', col: 10, row: 9, dx: 2, dy: 1 },
+    { sheet: 'v3', col: 6, row: 9, dx: 0, dy: 2 },
+    { sheet: 'v3', col: 7, row: 9, dx: 1, dy: 2 },
+    { sheet: 'v3', col: 5, row: 9, dx: 2, dy: 2 },
+    { sheet: 'v3', col: 0, row: 9, dx: 2, dy: 2 },
+  ] },
+  'building.windmill': { w: 3, h: 4, layers: [
+    { sheet: 'v3', col: 12, row: 9, dx: 0, dy: 0, w: 3, h: 4 },
+    { sheet: 'v3', col: 0, row: 10, dx: 0, dy: 0, w: 3, h: 4 },
+  ] },
+  // </v3:auto>
+};
+
+export const CROP_IDS_V3 = ['pumpkin', 'potato', 'strawberry', 'zucchini'];
+for (const id of CROP_IDS_V3) v3[`crop.${id}.0`] = SEED;
+
+/** Zone (pixels du sprite 32 × 16) où écrire le nom de la ferme sur 'deco.sign.farm'. */
+export const FARM_SIGN_TEXT_RECT = Object.freeze({ x: 3, y: 3, w: 26, h: 6 });
+/** Centre des ailes du moulin (pixels du sprite 48 × 64). */
+export const WINDMILL_HUB = Object.freeze({ x: 24, y: 20 });
+export const WINDMILL_FRAMES = 4;
+
+/**
+ * Sprite du pommier.
+ * @param stage   0..4 (0–1 jeune plant, 2 jeune arbre, 3–4 arbre adulte)
+ * @param season  'spring' | 'summer' | 'autumn' | 'winter'
+ * @param ripe    pommes prêtes à cueillir (été / automne seulement)
+ */
+export function treeSprite(stage, season = 'summer', ripe = false) {
+  if (stage === 'dead') return 'tree.apple.dead';
+  if (stage <= 1) return 'tree.apple.sapling';
+  if (stage === 2) return 'tree.apple.young';
+  if (season === 'spring') return 'tree.apple.spring';
+  if (season === 'winter') return 'tree.apple.winter';
+  if (season === 'autumn') return ripe ? 'tree.apple.autumn.ripe' : 'tree.apple.autumn';
+  return ripe || stage >= 4 ? 'tree.apple.summer.ripe' : 'tree.apple.summer';
+}
+
 export const SPRITES = {
   ...crops,
   ...ground,
@@ -292,10 +526,26 @@ export const SPRITES = {
   ...things,
   ...buildings,
   ...buildingParts,
+  ...v3,
 };
 
-/** Nom du sprite d'une culture à une étape (0..4), ou 'dead'. */
-export function cropSprite(cropId, stage) {
+// Alias du pommier en « culture » (crop.apple.*) : étapes sans saison (été).
+Object.assign(SPRITES, {
+  'crop.apple.0': SPRITES['tree.apple.sapling'],
+  'crop.apple.1': SPRITES['tree.apple.sapling'],
+  'crop.apple.2': SPRITES['tree.apple.young'],
+  'crop.apple.3': SPRITES['tree.apple.summer'],
+  'crop.apple.4': SPRITES['tree.apple.summer.ripe'],
+  'crop.apple.icon': SPRITES['tree.apple.icon'],
+  'crop.apple.dead': SPRITES['tree.apple.dead'],
+});
+
+/**
+ * Nom du sprite d'une culture à une étape (0..4), ou 'dead'.
+ * Pour le pommier ('apple'), la saison (facultative) choisit le feuillage : treeSprite().
+ */
+export function cropSprite(cropId, stage, season) {
+  if (cropId === 'apple' && season && stage !== 'dead') return treeSprite(stage, season, stage >= 4);
   return `crop.${cropId}.${stage}`;
 }
 
