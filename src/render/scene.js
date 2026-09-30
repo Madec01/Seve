@@ -42,6 +42,9 @@
 //                                       renvoie alors { type:'decorSlot', id } | { type:'sign' } |
 //                                       { type:'farmer' } | null (seulement ces trois types)
 //   scene.decorSlotRect(id)             (v3) rectangle (px du monde) d'un emplacement, ou null
+//   scene.focusDecorSlot(id, opts?)     (v3) défile pour voir l'emplacement (ou 'sign', 'farmer') au-dessus
+//                                       de la feuille ouverte ; opts { margin, animate }
+//   scene.focusDecorArea(animate?)      (v3) défile sur la cour (fait aussi à l'entrée en mode décoration)
 //   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
 //
@@ -453,6 +456,68 @@ export function createScene(canvas, images, level, opts = {}) {
     else {
       scrollAnim = null;
       setScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
+  }
+
+  /** Rectangle (px du monde) englobant les emplacements de la cour (portail, maison, route, panneau). */
+  function decorAreaRect() {
+    let r = null;
+    for (const d of layout.decorSlots || []) {
+      if (d.id === 'field.corner' || d.id === 'pond') continue;
+      const q = { x: d.x, y: d.kind === 'small' ? d.y - TILE : d.y, w: d.w, h: d.kind === 'small' ? d.h + TILE : d.h };
+      r = r ? { x: Math.min(r.x, q.x), y: Math.min(r.y, q.y), w: Math.max(r.x + r.w, q.x + q.w) - Math.min(r.x, q.x), h: Math.max(r.y + r.h, q.y + q.h) - Math.min(r.y, q.y) } : q;
+    }
+    return r;
+  }
+
+  /**
+   * (v3) Mode décoration : fait défiler pour montrer la cour (la plupart des emplacements). Si elle
+   * ne tient pas, son bas (maison, route, panneau) est prioritaire.
+   * @returns défilement visé (px CSS)
+   */
+  function focusDecorArea(animate = true) {
+    const r = decorAreaRect();
+    if (!r) return scrollDev / dpr;
+    flingV = 0;
+    userScrolled = true;
+    const m = 12 * dpr;
+    const visH = band.h - overlayDev;
+    let target;
+    if (r.h * zoom + 2 * m <= visH) target = baseY + (r.y + r.h / 2) * zoom - (band.y + visH / 2);
+    else target = baseY + (r.y + r.h) * zoom + m - (band.y + visH);
+    if (animate) animateScrollDev(target);
+    else {
+      scrollAnim = null;
+      setScrollDev(target);
+    }
+    return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
+  }
+
+  /**
+   * (v3) Fait défiler le moins possible pour voir l'emplacement `id` (au-dessus de la feuille ouverte).
+   * opts : { margin (px CSS, 24), animate (true) }. Renvoie le défilement visé (px CSS).
+   */
+  function focusDecorSlot(id, opts = {}) {
+    const d = id === 'farmer' ? { ...farmerRect(), kind: 'small' } : (layout.decorSlots || []).find((s0) => s0.id === id);
+    if (!d) return scrollDev / dpr;
+    flingV = 0;
+    userScrolled = true;
+    const top0 = d.kind === 'small' ? d.y - TILE : d.y; // les grands objets dépassent vers le haut
+    const m = (opts.margin ?? 24) * dpr;
+    const cur = scrollAnim ? scrollAnim.to : scrollDev;
+    const top = baseY - cur + top0 * zoom;
+    const bottom = baseY - cur + (d.y + d.h) * zoom;
+    const visTop = band.y + m;
+    const visBottom = band.y + band.h - overlayDev - m;
+    let target = cur;
+    if (bottom > visBottom) target = cur + (bottom - visBottom);
+    if (top - (target - cur) < visTop) target = cur - (visTop - top);
+    if (target !== cur) {
+      if (opts.animate === false) {
+        scrollAnim = null;
+        setScrollDev(target);
+      } else animateScrollDev(target);
     }
     return (scrollAnim ? scrollAnim.to : scrollDev) / dpr;
   }
@@ -1918,9 +1983,19 @@ export function createScene(canvas, images, level, opts = {}) {
       return { ...cosmetics, decor: { ...cosmetics.decor } };
     },
     setDecorMode(on) {
+      const was = decorMode;
       decorMode = !!on;
       if (decorMode) hover = null;
+      // Entrée en mode décoration : la vue se pose sur la cour (portail → panneau), où se trouvent
+      // la plupart des emplacements. À la sortie, retour au champ.
+      if (decorMode && !was) focusDecorArea(true);
+      else if (!decorMode && was) {
+        userScrolled = false;
+        animateScrollDev(centerOnDev(layout.fieldRect));
+      }
     },
+    focusDecorSlot,
+    focusDecorArea,
     get decorMode() {
       return decorMode;
     },

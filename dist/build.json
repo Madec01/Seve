@@ -1,7 +1,7 @@
 {
-  "id": "8f20158938f9",
+  "id": "18bad90c6877",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.64426e22bf.js",
+  "js": "dist/game.780039755f.js",
   "css": "dist/game.ac322645b8.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -171,12 +171,12 @@
     "src/main.js": "10b7ec865f0fbaaa",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
-    "src/render/atlas.js": "139bb8b2a14077af",
+    "src/render/atlas.js": "ed6f2163488bf9b7",
     "src/render/effects.js": "0e25f69dcd6caf4a",
     "src/render/layout-common.js": "fbcb56de0f9abdb8",
     "src/render/layout-portrait.js": "5185ed16cf6502de",
     "src/render/layout.js": "391ef10dd8ea0e06",
-    "src/render/scene.js": "6b63f94816d791cd",
+    "src/render/scene.js": "81116d5b2571c383",
     "src/storage.js": "b7764387128f125c",
     "src/ui/buildings.js": "4c4e4ad2d0e9a7a5",
     "src/ui/decor.js": "df26021cb579dd1c",
@@ -201,6 +201,14 @@
     "tools/build.js": "96604599f3e50f75"
   },
   "history": [
+    {
+      "id": "18bad90c6877",
+      "files": [
+        "dist/game.780039755f.js",
+        "dist/game.780039755f.js.map",
+        "dist/game.ac322645b8.css"
+      ]
+    },
     {
       "id": "8f20158938f9",
       "files": [

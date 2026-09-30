@@ -614,6 +614,22 @@ Object.assign(SPRITES, {
   'crop.apple.dead': SPRITES['tree.apple.dead'],
 });
 
+// Alias de la personnalisation (id de src/data/cosmetics.js) : « decor.<id> », « farmer.outfit.<id> »,
+// « farmer.<outfitId> », allées et clôtures (aperçus de l'interface).
+for (const [id, name] of Object.entries(DECOR_SPRITES)) SPRITES[`decor.${id}`] = SPRITES[name];
+for (const [id, i] of Object.entries(OUTFIT_INDEX)) {
+  SPRITES[`farmer.${id}`] = SPRITES[`farmer.outfit.${i}`];
+  SPRITES[`farmer.outfit.${id.replace(/^outfit\./, '')}`] = SPRITES[`farmer.outfit.${i}`];
+}
+Object.assign(SPRITES, {
+  'decor.path.dirt': SPRITES['path.c'],
+  'decor.path.stone': SPRITES['deco.path.stone'],
+  'decor.fence.wood': SPRITES['fence.h.mid'],
+  'decor.fence.picket': SPRITES['deco.fence.picket.h.mid'],
+  'decor.fence.stone': SPRITES['deco.wall.stone.h.mid'],
+  'decor.fence.hedge': SPRITES['deco.hedge.h.mid'],
+});
+
 /**
  * Nom du sprite d'une culture à une étape (0..4), ou 'dead'.
  * Pour le pommier ('apple'), la saison (facultative) choisit le feuillage : treeSprite().
