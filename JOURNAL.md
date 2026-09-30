@@ -67,6 +67,8 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 
 ### 2026-09-29 — Mise en ligne
 
+- **Important :** GitHub Pages publie depuis la branche `main`. Les modifications de la branche de travail ne sont en ligne qu'une fois fusionnées dans `main` (pull requests n° 1, n° 3, puis n° 4 pour la correction du chargement).
+
 - Ajout de `.nojekyll` : le jeu peut être servi tel quel par GitHub Pages, directement depuis la branche de travail (pas besoin d'action de déploiement).
 
 ### 2026-09-29 — Application installable (PWA) et jeu hors ligne
