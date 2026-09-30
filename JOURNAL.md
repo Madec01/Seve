@@ -18,6 +18,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-09-29 | `backup/avant-chargement-robuste-2026-09-29` | État avant la refonte du chargement (jeu bloqué sur l'écran de chargement sur le téléphone de l'utilisateur), commit `76068cf` |
 | 2026-09-30 | `backup/avant-contenu-v3-2026-09-30` | Avant l'ajout du contenu v3 (transformation, progression permanente, nouvelles cultures, nouveaux niveaux, personnalisation), commit `cbc23c0` |
 | 2026-09-30 | `backup/v3-contenu-2026-09-30` | Contenu v3 terminé et vérifié (transformation, bonus, succès, nouvelles cultures, niveaux 9 à 12, décoration), commit `98607e8` |
+| 2026-09-30 | `backup/avant-equilibrage-detente-2026-09-30` | Avant le rééquilibrage « détente » (retour utilisateur : faillite quasi inévitable dès le niveau 1, au premier fermage, en jouant tranquillement à ×1), commit `b3e71ab` |
 
 ---
 
