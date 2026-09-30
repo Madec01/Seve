@@ -1,7 +1,7 @@
 {
-  "id": "3906c9243d99",
+  "id": "6c318fa17d68",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.bed37be153.js",
+  "js": "dist/game.57b08c089a.js",
   "css": "dist/game.cf5821b84d.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -150,7 +150,7 @@
     "src/core/career/career.js": "9b39a9de13f583af",
     "src/core/career/effects.js": "ccaa1afad583af9a",
     "src/core/career/extensions.js": "1380bc32138aed5c",
-    "src/core/career/land.js": "cb0bd69971232822",
+    "src/core/career/land.js": "b7086fa149f19bca",
     "src/core/career/level.js": "369b1b4a616754a3",
     "src/core/career/market.js": "1ddd0ac42e554fb4",
     "src/core/career/ranks.js": "33687348b3bf7c89",
@@ -177,7 +177,7 @@
     "src/data/career/buildings.js": "5fb6613b2c72514e",
     "src/data/career/career.js": "b0a78a771491e2e1",
     "src/data/career/lots.js": "305cc6161edf2e9a",
-    "src/data/career/ranks.js": "620874e70cb0abb5",
+    "src/data/career/ranks.js": "5f768c535326e03c",
     "src/data/cosmetics.js": "f7d4eb5ebb95979a",
     "src/data/crops.js": "b95f14be6d5a8267",
     "src/data/difficulty.js": "781c96df9342bb46",
@@ -221,6 +221,14 @@
   },
   "history": [
     {
+      "id": "6c318fa17d68",
+      "files": [
+        "dist/game.57b08c089a.js",
+        "dist/game.57b08c089a.js.map",
+        "dist/game.cf5821b84d.css"
+      ]
+    },
+    {
       "id": "3906c9243d99",
       "files": [
         "dist/game.bed37be153.js",
@@ -249,14 +257,6 @@
       "files": [
         "dist/game.ec6b652543.js",
         "dist/game.ec6b652543.js.map",
-        "dist/game.ac322645b8.css"
-      ]
-    },
-    {
-      "id": "77aeb8050373",
-      "files": [
-        "dist/game.dba3132c49.js",
-        "dist/game.dba3132c49.js.map",
         "dist/game.ac322645b8.css"
       ]
     }

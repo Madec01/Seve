@@ -32,7 +32,8 @@ export const RANKS = [
     patrimony: 1200,
     objectives: [
       { id: 'firstLot', label: 'Acheter un premier terrain', type: 'lots', target: 1 },
-      { id: 'harvests100', label: 'Faire 100 récoltes', type: 'harvests', target: 100 },
+      // 100 au § 1.5 ; 80 après simulation (le joueur tranquille en fait ≈ 85 la première année).
+      { id: 'harvests', label: 'Faire 80 récoltes', type: 'harvests', target: 80 },
     ],
     features: [
       { kind: 'feature', id: 'hire', name: 'Embauche' },
@@ -47,7 +48,8 @@ export const RANKS = [
     patrimony: 4000,
     objectives: [
       { id: 'firstHire', label: 'Embaucher un employé', type: 'staff', target: 1 },
-      { id: 'products30', label: 'Vendre 30 produits transformés', type: 'productsSold', target: 30 },
+      // 30 au § 1.5 ; 20 après simulation (au rang 2, seul l'atelier de confitures transforme : fraises, pommes).
+      { id: 'products', label: 'Vendre 20 produits transformés', type: 'productsSold', target: 20 },
     ],
     features: [
       { kind: 'machine', id: 'seeder', name: 'Semoir' },

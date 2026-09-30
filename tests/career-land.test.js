@@ -62,7 +62,7 @@ test('aménager en champ : 16 parcelles ouvertes ajoutées à la fin, index jama
   assert.equal(g.state.plots.length, 32);
   assert.ok(r.plots.every((i) => g.state.plots[i].unlocked && g.state.plots[i].lot === 'lot3' && g.state.plots[i].env === 'field'));
   assert.deepEqual(r.plots.map((i) => g.state.plots[i].cell), Array.from({ length: 16 }, (_, k) => k));
-  assert.equal(ev.of('lotDeveloped')[0].type, 'field');
+  assert.equal(ev.of('lotDeveloped')[0].lotType, 'field');
   assert.deepEqual(g.state.career.lots[3].plan, { spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
   const q = g.query.plot(20);
   assert.equal(q.lot, 'lot3');

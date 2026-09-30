@@ -158,7 +158,7 @@ export function developLot(api, lotId, type) {
     const count = def.building === 'greenhouse' ? BUILDINGS_BY_ID.greenhouse.levels[0].plots : def.plots.count;
     plots = ensureLotPlots(state, lot, def.plots.env, count);
   }
-  api.push('lotDeveloped', { lotId: lot.id, type, cost: def.cost, plots });
+  api.push('lotDeveloped', { lotId: lot.id, lotType: type, cost: def.cost, plots }); // « lotType » : « type » écraserait le type de l'événement (on('*'))
   return { ok: true, cost: def.cost, plots };
 }
 
