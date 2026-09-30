@@ -1601,6 +1601,13 @@ sur une case `(lot.col, lot.row)` et donne `query.career.grid()` ; le rendu en f
   `machineCatalog()` / `machines()`. `buildingCard(ui, b, { lines: true })` : lignes du niveau suivant au-dessus du
   bouton. `src/ui/buildings.js` (fiche d'atelier) et `field.openInvestmentInfo` ajoutent la section en carrière ;
   `field.openBuilding(id)` d'un atelier de carrière (absent d'`investments()`) ouvre `careerUI.open.building(id)`.
+- **Ateliers de carrière** (2026-09-30) : `query.career.building(id).processing` = `workshopInfo(state, id, level)`
+  (`src/core/career/buildings.js`) → `{ level, places, basePlaces, extraPlaces (artisan), nextPlaces, on, used, upkeep,
+  source: 'harvest'|'animal', recipes: [{ input, inputName, productId, productName, days, value, active, minLevel, maxLevel }] }`.
+  `query.processing()[].name` = nom de carrière ; `setProcessing` / `sellProcessing` identiques aux niveaux ; en carrière, une
+  vente en l'état (joueur, charges) s'ajoute aussi à `yearStats.incomeBy.other`. La fiche de carrière d'un atelier
+  (`src/ui/career/buildings.js`) réutilise `workshopControls(proc, source, id, actions, { sellHint })`, `recipesSection`,
+  `confirmSellRaw(app, id, proc)` de `src/ui/buildings.js` (ids `#bld-switch`, `#bld-sellraw`).
 - **Quêtes** (`src/ui/career/events.js`) : `questTimeFacts(quest)` (proposition : `deadline` + `daysLeft` « si vous
   acceptez », `offerDaysLeft` ; acceptée : `deadlineText`, « plus que N jours », « demain soir », « ce soir »),
   `askJosephBlock(ui)` (`#c-ask-joseph`, `joseph().ask`, `actions.career.askQuest()`).

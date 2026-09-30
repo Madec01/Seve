@@ -10,7 +10,7 @@
 import { el, fmt, plural, dec } from './dom.js';
 import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './icons.js';
 import { incomeProfile, season, seasonList, waterEffect } from './text.js';
-import { buildingContent, buildingSignature, isProcessing, processingOf } from './buildings.js';
+import { buildingContent, buildingSignature, confirmSellRaw, isProcessing, processingOf } from './buildings.js';
 import { aboutSection } from './career/util.js';
 
 const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
@@ -324,15 +324,7 @@ export function createField(app) {
   // ── Fiche d'un atelier (src/ui/buildings.js) ──────────────────────────────────
   const buildingActions = {
     toggle: (id, on) => app.setProcessing(id, on),
-    sellRaw: async (id, proc) => {
-      const n = (proc.places || []).filter(Boolean).length;
-      const ok = await app.dialogs.confirm({
-        title: 'Vendre en l\'état ?',
-        text: `${plural(n, 'produit')} en cours ${n > 1 ? 'seront vendus' : 'sera vendu'} tout de suite au prix de la matière première : +${fmt(proc.rawValue)} pièces (au lieu de ${fmt(proc.value)} à l'aube).`,
-        ok: 'Vendre',
-      });
-      if (ok) app.sellProcessing(id);
-    },
+    sellRaw: (id, proc) => confirmSellRaw(app, id, proc),
     buy: (id) => app.buyInvestment(id),
     shop: (id) => app.panel.focusInvestment(id),
   };

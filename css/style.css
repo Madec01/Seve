@@ -2515,7 +2515,7 @@ body.is-career.has-dialog #toasts:has(.toast.is-action) { z-index: 35; }
 .c-about { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; background: #fbf3df; box-shadow: 0 0 0 var(--u) var(--parch-3); }
 .c-about .stats-title { display: flex; align-items: center; gap: 6px; margin: 0; }
 .c-about-role { margin: 0; font-size: 1rem; line-height: 1.35; font-weight: 600; }
-.c-about-label { display: block; font-size: 0.8125rem; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.02em; }
+.c-about-label { display: block; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.02em; }
 .c-about-lines { margin: 2px 0 0; padding: 0 0 0 18px; font-size: 0.9375rem; line-height: 1.35; }
 .c-about-lines li { margin: 1px 0; }
 .c-about-lines li::marker { color: var(--green-dark); }

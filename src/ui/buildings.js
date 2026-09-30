@@ -7,7 +7,9 @@
 // description, ses recettes, sa condition et le bouton d'achat.
 //
 // Exports : isProcessing(inv), recipesOf(game, inv), recipeLine(r, opts), buildingContent(app, id),
-//           buildingSignature(game, id), processingOf(game, id), nextLevelLabel(inv)
+//           buildingSignature(game, id), processingOf(game, id), nextLevelLabel(inv),
+//           workshopControls(proc, source, id, actions, opts), recipesSection(source, recipes),
+//           confirmSellRaw(app, id, proc) (aussi utilisés par la fiche d'atelier de la carrière)
 
 import { getCrop } from '../data/crops.js';
 import { getInvestment } from '../data/investments.js';
@@ -149,59 +151,13 @@ export function buildingContent(app, id, actions) {
   }
 
   if (inv.owned && proc) {
-    const on = !!proc.on;
-    nodes.push(
-      el(
-        `button.proc-switch${on ? '.is-on' : ''}`,
-        {
-          type: 'button',
-          role: 'switch',
-          id: 'bld-switch',
-          'aria-checked': on ? 'true' : 'false',
-          onclick: () => actions.toggle(id, !on),
-        },
-        el('span.proc-switch-track', el('span.proc-switch-knob')),
-        el(
-          'span.proc-switch-text',
-          el('span.proc-switch-label', source === 'animal' ? 'Transformer le lait' : 'Transformer mes récoltes'),
-          el('span.proc-switch-state', on ? (source === 'animal' ? 'Allumé : le lait part à l\'atelier s\'il reste une place' : 'Allumé : les récoltes compatibles y partent s\'il reste une place') : 'Éteint : rien n\'entre, tout se vend comme d\'habitude'),
-        ),
-      ),
-    );
-    const places = proc.places || [];
-    const used = places.filter(Boolean).length;
-    nodes.push(el('div.places', { role: 'list', 'aria-label': 'Places de l\'atelier' }, places.map(placeTile)));
-    nodes.push(
-      el(
-        'p.proc-summary',
-        used
-          ? [`En cours : ${plural(used, 'produit')}, valeur à la vente `, el('b.pos', fmt(proc.value)), used < places.length ? ` · ${plural(places.length - used, 'place libre', 'places libres')}` : ' · atelier plein']
-          : `Aucun produit en cours · ${plural(places.length, 'place libre', 'places libres')}.`,
-      ),
-    );
-    if (used) {
-      nodes.push(
-        el(
-          'button.btn.btn--wide.btn--sellraw',
-          { type: 'button', id: 'bld-sellraw', onclick: () => actions.sellRaw(id, proc) },
-          icon('coin', 'sm'),
-          `Vendre en l'état (+${fmt(proc.rawValue)})`,
-        ),
-      );
-      nodes.push(el('p.sheet-hint', 'Vendus en l\'état, les produits rapportent le prix de la matière première. Utile avant un fermage.'));
-    }
+    nodes.push(...workshopControls(proc, source, id, actions));
   } else if (!about) {
     nodes.push(el('p.bld-desc', inv.description));
   }
 
   // Recettes
-  nodes.push(
-    el(
-      'section.bld-recipes',
-      el('h3.bld-title', source === 'animal' ? 'Recettes (lait du matin)' : 'Recettes (à la récolte)'),
-      recipes.map((r) => recipeLine(r)),
-    ),
-  );
+  nodes.push(recipesSection(source, recipes));
 
   // Faits : places, entretien, niveau
   const facts = [];
@@ -228,6 +184,78 @@ export function buildingContent(app, id, actions) {
     ),
   );
   return el('div.info-sheet.bld-sheet', nodes);
+}
+
+/**
+ * Commandes d'un atelier possédé (niveaux et carrière) : interrupteur « Transformer » (#bld-switch), places
+ * (produit, jours restants, barre), résumé, « Vendre en l'état » (#bld-sellraw) et son explication.
+ * proc : ligne de query.processing() ; actions : { toggle(id, on), sellRaw(id, proc) }.
+ */
+export function workshopControls(proc, source, id, actions, { sellHint = 'Vendus en l\'état, les produits rapportent le prix de la matière première. Utile avant un fermage.' } = {}) {
+  const nodes = [];
+  const on = !!proc.on;
+  nodes.push(
+    el(
+      `button.proc-switch${on ? '.is-on' : ''}`,
+      {
+        type: 'button',
+        role: 'switch',
+        id: 'bld-switch',
+        'aria-checked': on ? 'true' : 'false',
+        onclick: () => actions.toggle(id, !on),
+      },
+      el('span.proc-switch-track', el('span.proc-switch-knob')),
+      el(
+        'span.proc-switch-text',
+        el('span.proc-switch-label', source === 'animal' ? 'Transformer le lait' : 'Transformer mes récoltes'),
+        el('span.proc-switch-state', on ? (source === 'animal' ? 'Allumé : le lait part à l\'atelier s\'il reste une place' : 'Allumé : les récoltes compatibles y partent s\'il reste une place') : 'Éteint : rien n\'entre, tout se vend comme d\'habitude'),
+      ),
+    ),
+  );
+  const places = proc.places || [];
+  const used = places.filter(Boolean).length;
+  nodes.push(el('div.places', { role: 'list', 'aria-label': 'Places de l\'atelier' }, places.map(placeTile)));
+  nodes.push(
+    el(
+      'p.proc-summary',
+      used
+        ? [`En cours : ${plural(used, 'produit')}, valeur à la vente `, el('b.pos', fmt(proc.value)), used < places.length ? ` · ${plural(places.length - used, 'place libre', 'places libres')}` : ' · atelier plein']
+        : `Aucun produit en cours · ${plural(places.length, 'place libre', 'places libres')}.`,
+    ),
+  );
+  if (used) {
+    nodes.push(
+      el(
+        'button.btn.btn--wide.btn--sellraw',
+        { type: 'button', id: 'bld-sellraw', onclick: () => actions.sellRaw(id, proc) },
+        icon('coin', 'sm'),
+        `Vendre en l'état (+${fmt(proc.rawValue)})`,
+      ),
+    );
+    nodes.push(el('p.sheet-hint', sellHint));
+  }
+  return nodes;
+}
+
+/** Section « Recettes » d'un atelier. */
+export function recipesSection(source, recipes) {
+  return el(
+    'section.bld-recipes',
+    el('h3.bld-title', source === 'animal' ? 'Recettes (lait du matin)' : 'Recettes (à la récolte)'),
+    recipes.map((r) => recipeLine(r)),
+  );
+}
+
+/** « Vendre en l'état ? » (confirmation), puis app.sellProcessing(id). */
+export async function confirmSellRaw(app, id, proc) {
+  const n = (proc.places || []).filter(Boolean).length;
+  const ok = await app.dialogs.confirm({
+    title: 'Vendre en l\'état ?',
+    text: `${plural(n, 'produit')} en cours ${n > 1 ? 'seront vendus' : 'sera vendu'} tout de suite au prix de la matière première : +${fmt(proc.rawValue)} pièces (au lieu de ${fmt(proc.value)} à l'aube).`,
+    ok: 'Vendre',
+  });
+  if (ok) app.sellProcessing(id);
+  return ok;
 }
 
 /** Résumé de ce qu'affiche la fiche (reconstruite seulement s'il change). */
