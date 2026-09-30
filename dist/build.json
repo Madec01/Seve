@@ -1,7 +1,7 @@
 {
-  "id": "881be820da91",
+  "id": "8676543a0781",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.a27084cdd2.js",
+  "js": "dist/game.90aa2e0ce2.js",
   "css": "dist/game.646c8be6fd.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -137,6 +137,7 @@
     "assets/sprites/ui/round-wood.png": "5e218733d935467f",
     "assets/sprites/ui/slot-parchment.png": "57ce96c6f85e42d1",
     "assets/sprites/ui/slot-wood.png": "77631b56d79873e0",
+    "assets/sprites/v3.png": "897aacf1899d5794",
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/style.css": "ae5cf5ab82880de4",
     "manifest.webmanifest": "c406b9280302ded5",
@@ -161,7 +162,7 @@
     "src/main.js": "a92e5d7f320da7cf",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
-    "src/render/atlas.js": "f5fa36a437ff3ef1",
+    "src/render/atlas.js": "2a04f3a18b26c29e",
     "src/render/effects.js": "e97cc5de1031a21e",
     "src/render/layout-common.js": "26d7d02798dcb1a7",
     "src/render/layout-portrait.js": "3ef02f6b7b1ff1f7",
@@ -173,7 +174,7 @@
     "src/ui/field.js": "2dd12f3b67d206f1",
     "src/ui/gestures.js": "ae98ca4707dfecd5",
     "src/ui/hud.js": "420ecbc77fcbcaeb",
-    "src/ui/icons.js": "0171f8b27c837bda",
+    "src/ui/icons.js": "5e9535a122e38947",
     "src/ui/panel.js": "4f3ce52754586e1e",
     "src/ui/sheets.js": "69f0e66f53f93bcf",
     "src/ui/tabbar.js": "df6fca62dd05cf4e",
@@ -181,10 +182,19 @@
     "src/ui/toasts.js": "8d18c790b8818d48",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
     "src/ui/tutorial.js": "d7ef47041f84272f",
+    "src/ui/v3.js": "45edf2a4853e4468",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "96604599f3e50f75"
   },
   "history": [
+    {
+      "id": "8676543a0781",
+      "files": [
+        "dist/game.90aa2e0ce2.js",
+        "dist/game.90aa2e0ce2.js.map",
+        "dist/game.646c8be6fd.css"
+      ]
+    },
     {
       "id": "881be820da91",
       "files": [

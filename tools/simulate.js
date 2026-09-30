@@ -23,6 +23,7 @@
 //               rentabilité attendue jusqu'à la fin de l'année, garde une réserve pour le fermage,
 //               gère la rotation (niveau bio) et vend au bon moment sur le marché fou.
 
+import { fileURLToPath } from 'node:url';
 import { loanDueOn } from '../src/core/economy.js';
 import { createGame } from '../src/core/game.js';
 import { DAY_SECONDS, EPSILON, MARKET, SEASONS } from '../src/data/balance.js';
@@ -412,7 +413,7 @@ const STRATEGIES = {
 
 // ── Boucle de simulation ────────────────────────────────────────────────────────────────
 
-function playOne(levelId, seed, strategy) {
+export function playOne(levelId, seed, strategy) {
   const game = createGame({ levelId, seed });
   const total = game.query.calendar().totalDays;
   let result = null;
@@ -514,5 +515,8 @@ function run() {
   }
 }
 
-if (TRACE) runTrace();
-else run();
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  if (TRACE) runTrace();
+  else run();
+}
