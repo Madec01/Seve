@@ -33,6 +33,7 @@
   <label>Fond <select id="bgsel"><option value="#8a6aa0">violet (contraste)</option><option value="#84c669">herbe</option><option value="#eaa56c">terre</option><option value="#222">sombre</option></select></label>
   <label><input type="checkbox" id="flip"> retourner (flipX)</label>
   <label><input type="checkbox" id="onlyv3"> contenu v3 seulement</label>
+  <label><input type="checkbox" id="onlycareer"> carrière seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
@@ -54,6 +55,11 @@ const isV3 = (name) => {
   const s = SPRITES[name];
   if (s.sheet === 'v3' || (s.layers && s.layers.some((l) => l.sheet === 'v3'))) return true;
   return name.startsWith('crop.apple.') || CROP_IDS_V3.some((id) => name === `crop.${id}.0`);
+};
+
+const isCareer = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'career' || !!(s.layers && s.layers.some((l) => l.sheet === 'career'));
 };
 
 const out = document.getElementById('out');
@@ -87,12 +93,14 @@ function render() {
   const flipX = document.getElementById('flip').checked;
   const filter = document.getElementById('filter').value.trim();
   const onlyV3 = document.getElementById('onlyv3').checked;
+  const onlyCareer = document.getElementById('onlycareer').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
   for (const name of Object.keys(SPRITES)) {
     if (filter && !name.includes(filter)) continue;
     if (onlyV3 && !isV3(name)) continue;
+    if (onlyCareer && !isCareer(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -162,7 +170,13 @@ setInterval(() => {
   frame = (frame + 1) % WINDMILL_FRAMES;
 }, 180);
 
-for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3']) document.getElementById(id).addEventListener('input', render);
+// Préréglage par l'adresse : ?career=1 (carrière seulement), ?filter=staff.f
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('career')) document.getElementById('onlycareer').checked = true;
+  if (q.get('filter')) document.getElementById('filter').value = q.get('filter');
+}
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>
