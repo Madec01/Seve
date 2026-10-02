@@ -34,13 +34,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '681d305a587d';
+const VERSION = '99eae64e9e2f';
 // 146 fichiers, 26.3 Mo ; installés d'emblée (core) : 64 fichiers, 1.18 Mo
 const PRECACHE = [
-  ["index.html", 'f36e1a4c202bd434', 26044, 'core'],
+  ["index.html", '6ab495be5eb3d90f', 26044, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.c9b8b4f2a9.js", 'c57d6004ade7db59', 877689, 'core'],
-  ["dist/game.c002c9721a.css", 'c002c9721a8909e8', 118264, 'core'],
+  ["dist/game.270299cbfe.js", 'f24942eed6ea3ed0', 878362, 'core'],
+  ["dist/game.7b0c0c8d45.css", '7b0c0c8d453983ba', 118936, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],

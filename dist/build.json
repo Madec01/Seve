@@ -1,8 +1,8 @@
 {
-  "id": "681d305a587d",
+  "id": "99eae64e9e2f",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.c9b8b4f2a9.js",
-  "css": "dist/game.c002c9721a.css",
+  "js": "dist/game.270299cbfe.js",
+  "css": "dist/game.7b0c0c8d45.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -149,7 +149,7 @@
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/guidance.css": "f94433c31a91ab2e",
-    "css/style.css": "d2b5d85a999b821e",
+    "css/style.css": "a7b8f3b4b1cc6891",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
     "src/audio/audio.js": "ad3f4125ebc5f0e7",
@@ -228,7 +228,7 @@
     "src/ui/buildings.js": "3935e0120d094ec7",
     "src/ui/career/buildings.js": "0a54ec028e45533a",
     "src/ui/career/events.js": "ae744376ff300e5e",
-    "src/ui/career/index.js": "d702c90c1d711706",
+    "src/ui/career/index.js": "2ae47323b9fdfca1",
     "src/ui/career/journal.js": "fd8d6063f716254d",
     "src/ui/career/lots.js": "baa04a60ce4c0538",
     "src/ui/career/menu.js": "6f058db96634d80a",
@@ -257,50 +257,50 @@
     "src/ui/toasts.js": "c7a6d799774064a3",
     "src/ui/todo.js": "8429f4fa967e2504",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
-    "src/ui/tutorial.js": "6e3861b4b4beb15e",
+    "src/ui/tutorial.js": "948e641f4601395b",
     "src/ui/v3.js": "45edf2a4853e4468",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "6d16b2c4acf08fba"
   },
   "history": [
     {
-      "id": "681d305a587d",
+      "id": "99eae64e9e2f",
       "files": [
-        "dist/game.c9b8b4f2a9.js",
-        "dist/game.c9b8b4f2a9.js.map",
-        "dist/game.c002c9721a.css"
+        "dist/game.270299cbfe.js",
+        "dist/game.270299cbfe.js.map",
+        "dist/game.7b0c0c8d45.css"
       ]
     },
     {
-      "id": "7475250aaf6c",
+      "id": "966cfaec0d50",
       "files": [
-        "dist/game.afa2b90a31.js",
-        "dist/game.afa2b90a31.js.map",
-        "dist/game.a690427c8a.css"
+        "dist/game.5a7dd36400.js",
+        "dist/game.5a7dd36400.js.map",
+        "dist/game.7b0c0c8d45.css"
       ]
     },
     {
-      "id": "538866c4c968",
+      "id": "005520745dd6",
       "files": [
-        "dist/game.e22185ea2b.js",
-        "dist/game.e22185ea2b.js.map",
-        "dist/game.a690427c8a.css"
+        "dist/game.5a7dd36400.js",
+        "dist/game.5a7dd36400.js.map",
+        "dist/game.b2b8cd840e.css"
       ]
     },
     {
-      "id": "c5476309df58",
+      "id": "9cb9e0b45728",
       "files": [
-        "dist/game.1350439452.js",
-        "dist/game.1350439452.js.map",
-        "dist/game.2cc1866480.css"
+        "dist/game.f0ab288ea3.js",
+        "dist/game.f0ab288ea3.js.map",
+        "dist/game.73b1b9111a.css"
       ]
     },
     {
-      "id": "8f1b8e18e135",
+      "id": "d8521a1f972c",
       "files": [
-        "dist/game.4f12548717.js",
-        "dist/game.4f12548717.js.map",
-        "dist/game.2cc1866480.css"
+        "dist/game.f0ab288ea3.js",
+        "dist/game.f0ab288ea3.js.map",
+        "dist/game.ba2079b66b.css"
       ]
     }
   ]

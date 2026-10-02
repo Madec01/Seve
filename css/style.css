@@ -2123,6 +2123,12 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
   #hud.is-career .hud-bill .hud-line--big { font-size: 1rem; }
   #hud.is-career .w-name { font-size: 0.875rem; }
   .hud-rank { width: 48px; }
+  /* Cinq cases sur 360 px : la météo ne garde que l'icône du jour (nom et demain dans sa fiche),
+     et reste une cible d'au moins 48 px (elle tombait à 33–42 px). */
+  #hud.is-career .hud-weather { min-width: 48px; flex-shrink: 0; align-items: center; }
+  #hud.is-career .hud-weather .w-arrow,
+  #hud.is-career .hud-weather .w-tomorrow,
+  #hud.is-career .hud-weather .w-name { display: none; } /* « En… » coupé : l'icône seule (nom dans la fiche) */
 }
 
 /* ─── Menu principal ─────────────────────────────────────────────────────────── */
@@ -2837,3 +2843,16 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 #tabbar.has-dock .tabbar-label { font-size: min(0.875rem, 15px); }
 #tabbar.has-dock.is-five .tabbar-label { font-size: 14px; }
 #tabbar.has-dock .tabbar-btn { padding-left: 0; padding-right: 0; }
+
+/* Grand texte (130–150 %) sur téléphone : le titre des fenêtres reste dans son ruban, à côté du ✕
+   (« Où en étais-je ? » débordait à 150 % en 360 px de large). */
+@media (max-width: 439px) {
+  html[data-text-scale='130'] .dialog-title,
+  html[data-text-scale='150'] .dialog-title { font-size: min(1.25rem, 21px); }
+  html[data-text-scale='130'] .dialog.is-closable .dialog-ribbon,
+  html[data-text-scale='150'] .dialog.is-closable .dialog-ribbon { max-width: calc(100% - 112px); }
+}
+@media (max-width: 379px) {
+  html[data-text-scale='130'] .dialog.is-closable .dialog-title,
+  html[data-text-scale='150'] .dialog.is-closable .dialog-title { font-size: min(1.125rem, 17px); }
+}

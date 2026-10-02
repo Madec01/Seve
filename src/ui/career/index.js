@@ -742,7 +742,7 @@ export function createCareerUI(app) {
         t.show({ kind: 'info', sprite: cIcon('contest'), title: 'Le comice agricole est annoncé', text: 'Trois épreuves, jugées le dernier soir de l\'automne. Touchez pour les voir.', duration: 6000, onClick: () => open.journal('agenda') });
         break;
       case 'shelterFull':
-        t.show({ kind: 'warn', icon: 'harvest', key: `full-${ev.buildingId}`, title: `${q('building', null, ev.buildingId)?.name || 'Abri'} : plein`, text: 'Ramassez vite : la production du jour se perd.', duration: 4200 });
+        t.show({ kind: 'warn', sprite: safeProductIcon(ev.buildingId), icon: 'harvest', key: `full-${ev.buildingId}`, title: `${q('building', null, ev.buildingId)?.name || 'Abri'} : plein`, text: 'Ramassez vite : la production du jour se perd.', duration: 4200 });
         break;
       case 'touristsPassed':
         if (ev.pass === 1) t.show({ kind: 'money', sprite: cIcon('visitor'), title: 'Des touristes !', text: `+${fmt(ev.amount)} pièces à chaque passage aujourd'hui.`, duration: 3600 });
@@ -787,6 +787,16 @@ export function createCareerUI(app) {
 
   function shelterAnimal(buildingId) {
     return { coop: 'hen', hutch: 'rabbit', duckPond: 'duck', goatShed: 'goat', cowshed: 'cow', sheepfold: 'sheep', pigsty: 'pig', stable: 'horse' }[buildingId] || 'hen';
+  }
+
+  /** Icône du produit d'un abri (œuf, laine…) ; null : l'icône générique du message. */
+  function safeProductIcon(buildingId) {
+    try {
+      const animal = shelterAnimal(buildingId);
+      return animal ? animalProductIcon(animal, 'sprite--sm') : null;
+    } catch {
+      return null;
+    }
   }
 
   function maybeCollectHint() {

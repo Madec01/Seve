@@ -1666,8 +1666,7 @@ Feuille de route : `docs/analyse/0-SYNTHESE.md` (A2, A6, A7, F2 et bugs de l'ann
   `agree(groupe, n, mot)` (« 5 pommes de terre, payées »). `cropMass(cropId)` (`career/events.js`) : « de blé »,
   « de choux ». Corrigés : visiteur (« payées »), cadeau de Joseph (« 8 parcelles de choux »), « Au plus 3 cours des
   ateliers », « Loge jusqu'à 2 chevaux ». L'événement `crow` porte un `text` accordé (« Un corbeau dans les champs :
-  touchez-le pour le chasser. ») : **l'interface doit l'utiliser** au lieu de son « N parcelle : touchez-les »
-  (`src/ui/career/index.js`, cas `crow`).
+  touchez-le pour le chasser. ») : l'interface l'affiche (`src/ui/career/index.js`, cas `crow`).
 
 ### Rendu : mouvements réduits (A6)
 
@@ -1676,8 +1675,8 @@ Feuille de route : `docs/analyse/0-SYNTHESE.md` (A2, A6, A7, F2 et bugs de l'ann
   s'estompe lentement, jamais de double éclair) ; pas de brume de chaleur ; pas de tremblement (arbre arraché) ni
   d'apparition « ressort » (bâtiments, animaux, employés) ; cultures immobiles ; moitié moins de particules (pluie,
   neige, feuilles, pièces, gouttes…) ; textes flottants qui montent de 3 px au lieu de 14 ; défilements sans
-  animation. **À câbler par l'interface** : `applyDisplaySettings` → `scene.setReducedMotion(reduced)` (option
-  « Réduire les animations » ou `prefers-reduced-motion`, avec un écouteur `change`) à chaque création de scène.
+  animation. **Câblé** (`src/ui/a11y.js` `applySceneA11y`) : option « Réduire les animations » ou
+  `prefers-reduced-motion` (écouteur `change`), à chaque création de scène (`resizeScene`) et à chaque partie.
 
 ### Rendu : parcelles lisibles (A7, sans la couleur)
 
@@ -1700,8 +1699,8 @@ Feuille de route : `docs/analyse/0-SYNTHESE.md` (A2, A6, A7, F2 et bugs de l'ann
   et fleur au chapeau (`assets/sprites/generate-career.py`, `HAT_FP` / `NOHAT_FP`) ; elle ne ressemble plus au
   fermier à la création.
 - **Joseph** : `josephPortrait(expr)` (`src/render/atlas.js`, 'content' | 'surprised' | 'proud' | 'happy') →
-  `portrait.joseph[.expr]` (32 × 32). **À câbler** : le tutoriel des niveaux (`src/ui/tutorial.js`, `sprite('farmer')`
-  l. 300 et 335) doit utiliser `spriteAny([josephPortrait(), 'npc.joseph', 'farmer'], …)` comme la carrière.
+  `portrait.joseph[.expr]` (32 × 32). **Câblé** : le tutoriel des niveaux utilise `joseph()` (`src/ui/career/util.js`)
+  comme la carrière.
 
 ## Lot 1 — confort (interface : guidage, 2026-10-02)
 
@@ -1774,3 +1773,64 @@ src/ui/guide-prefs.js readPrefs() / writePrefs(patch) : localStorage `une-annee-
   `updateSettings`, `app.sheets.releasePause()` quand le joueur relance le temps (clavier), hauteur zoomée
   (`viewportHeight`), préchargement des cadres foncés, portrait de Joseph dans le tutoriel des niveaux.
 - **Débogage** : `__debug.todo()` (liste de la ligne « À faire »), `__debug.messages()`.
+
+## Lot 1 — confort (interface : accessibilité et réglages, 2026-10-02)
+
+Feuille de route : `docs/analyse/0-SYNTHESE.md` A1, A3, A4, A5, A8, A11 (+ A2, A6, A7 côté interface) ;
+`docs/analyse/4-accessibilite.md` § 5. Tests : `tests/a11y-settings.test.js`.
+
+```
+src/ui/a11y.js   applyA11y(app)            tous les réglages (classes de <html>, viewport, scène, partie) ;
+                                           = app.applyA11y(), appelé par app.updateSettings et au démarrage
+                 applySceneA11y(app)       scene.setReducedMotion(app.reducedMotion()), scene.setPlotHints(plotHints) ;
+                                           = app.applySceneA11y(), appelé à chaque nouvelle scène et par hud.bind
+                 applyGameA11y(app)        game.actions.setOption('autoPauseDawn', settings.autoPauseDawn) (hud.bind)
+                 initA11y(app)             une fois (createHud, microtâche) : écouteur prefers-reduced-motion,
+                                           hauteur d'écran pendant le zoom, MutationObserver (grand écran → vitesse en haut)
+                 speedCycle(settings)      [0.5, 1, 2, 4] avec slowSpeed, sinon [1, 2, 4] (la pause vient après)
+                 nextSpeed(sp, settings)   vitesse suivante au toucher du bouton ; speedText(0.5) = « ×½ »
+                 pauseOnSheetActive(app)   'on' / 'off', ou 'auto' = tout sauf le mode Classique
+src/ui/sheets.js pause de lecture : raison de pause 'sheet' (pushPause / popPause) tant qu'une feuille est ouverte
+                 (sauf panneau rangé à droite en grand écran, ou opts.pauses === false) ; releasePause() (le joueur
+                 relance le temps : levée jusqu'à la fermeture), syncPause(), isPausing()
+src/ui/tabbar.js setDock(node | null, side 'start' | 'end'), dockNode() : le bouton de vitesse (#hud-speed, même nœud)
+                 rangé au bout de la barre d'onglets (option « Vitesse et pause en bas », à gauche pour gaucher)
+src/ui/hud.js    prévision du fermage : glyphe (.bill-glyph[data-glyph=ok|warn|danger], dessiné en CSS) + mot
+                 (.bill-word : couvert / juste / danger / payé / impayé) + aria-label « Prévision : … » ;
+                 syncDock() ; bouton de vitesse : « ×½ », icône pause sur fond bleu (le rouge = danger)
+src/ui/dialogs.js section « Accessibilité » des options (textSizePicker, a11yToggles) ; a11yWelcome() : fenêtre
+                 « Bienvenue ! » au premier lancement (taille du texte + 5 interrupteurs), une seule fois
+                 (settings.a11yOffered) ; jamais sous navigator.webdriver sauf ?welcome
+```
+
+**Réglages** (`src/storage.js`, `DEFAULT_SETTINGS`, clé `une-annee-a-la-ferme.settings`, vérifiés par `loadSettings`) :
+
+| Clé | Défaut | Effet |
+|---|---|---|
+| `textScale` | `1` | 1 · 1,15 · 1,3 · 1,5 : `--text-scale`, `html[data-text-scale]` (toute l'interface en rem ; plafonds en px dans la barre du haut et les titres de fenêtres à 130–150 %) |
+| `readableFont` | `false` | `html.font-readable` : police « Lisible » (Atkinson Hyperlegible, OFL, `assets/fonts/`) |
+| `highContrast` | `false` | `html.high-contrast` : contours, fonds plus foncés, palette d'états bleu / orange / vermillon |
+| `pauseOnSheet` | `'auto'` | `'auto'` (oui en Détente) · `'on'` · `'off'` |
+| `slowSpeed` | `false` | ×½ dans le cycle du bouton ; une **nouvelle partie** commence alors à ×½ (`main.js`, `speedCycle(settings)[0]`) |
+| `autoPauseDawn` | `false` | `game.setOption('autoPauseDawn')` à chaque partie et à chaque changement ; jamais pour la ferme de fond du menu |
+| `reducedMotion` | `false` | `html.reduced-motion` + `scene.setReducedMotion` (ou préférence du système) |
+| `plotHints` | `true` | `scene.setPlotHints` (goutte « à arroser », coche « mûre ») |
+| `controlsBottom` | `false` | `html.controls-bottom`, vitesse dans la barre d'onglets |
+| `leftHanded` | `false` | `html.left-handed` : vitesse à gauche (en haut comme en bas), ligne « À faire » en miroir |
+| `pinchZoom` | `true` | viewport sans `user-scalable=no` (la scène garde `touch-action: none`) |
+| `vibration` | `true` | `app.vibrate` ; motifs : toucher 8–12 ms, erreur `[30,40,30]`, alerte de saison `[15,80,15,80,15]` |
+| `a11yOffered` | `false` | la fenêtre du premier lancement a été montrée (ou fermée par le joueur) |
+| `speed` | `1` | vitesse préférée (0,5 accepté) |
+
+- **Application** : au démarrage (`createHud` → `initA11y`, avant « Commencer »), à chaque `app.updateSettings`,
+  à chaque partie (`hud.bind` → `applyGameA11y` + `applySceneA11y`) et à chaque nouvelle scène (`resizeScene`).
+- **Contrastes** (A4) : sprites foncés `assets/sprites/ui/*-deep.png` et `button-blue.png` (variables `--img-btn-*`,
+  `--img-slot-wood`, `--img-ribbon`, `--img-banner`), texte crème ≥ 5:1 ; textes de l'interface ≥ 14 px (exceptions :
+  étiquettes de la carte de carrière, raccourcis clavier).
+- **Tutoriel au grand texte** (`src/ui/tutorial.js`, `positionPortrait`) : si la bulle ne tient ni au-dessus ni
+  au-dessous de la parcelle visée, la scène défile (`scene.focusPlot(i, { bottom: hauteur de la bulle })`), puis, si
+  cela ne suffit pas, la bulle se réduit en rappel compact (l'anneau reste sur la parcelle) ; le rappel (`placePill`)
+  passe en bas, au-dessus des onglets, s'il couvrirait la cible. Le texte « bouton de
+  vitesse en haut à droite » suit l'option (en bas / à gauche).
+- **Feuilles** (`sheets.js`) : `is-visible` n'est posé que si la feuille est toujours ouverte à l'image suivante
+  (cause du bug [42], en plus du garde-fou de `main.js`).

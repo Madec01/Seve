@@ -102,3 +102,30 @@ Effort : S (petit), M (moyen), L (gros).
 
 - Lots 1, 2, 3 et 4 à développer dans l'ordre ; en carrière, salariés et machines « aident sans remplacer ».
 - Pas de copie de la restauration du village de Stardew : le grand projet de carrière sera **« La Vallée vivante »** (la Vallée qui revient + la Grainothèque vivante, voir `5-idees-projet-long.md`), développé **après les 4 lots**.
+
+---
+
+## 4. État du lot 1 « Confort & accessibilité » (2026-10-02)
+
+Audit du code après le lot 1 (détails : `JOURNAL.md`, entrées « Lot 1 » du 2026-10-02 ; API : `docs/ARCHITECTURE.md`, sections « Lot 1 — confort »).
+
+| Point | Lot 1 | Où dans le code |
+|---|---|---|
+| A1 Pause pendant la lecture | ✓ Fait (réglage auto / oui / non, auto = Détente) | `src/ui/sheets.js`, `src/ui/a11y.js` |
+| A2 Vitesse ×½ et pause chaque matin | ✓ Fait | `src/data/balance.js`, `src/core/options.js`, `src/ui/a11y.js`, `src/ui/hud.js` |
+| A3 Fermage lisible sans couleur | ✓ Fait (✓ / ! / ✗ + mot + libellé lu) | `src/ui/hud.js`, `css/style.css`, police Ferme |
+| A4 Contrastes | ✓ Fait (boutons 5–7,6:1, Pause bleu, vraies coches, mode contrastes renforcés) | `assets/sprites/ui/*-deep.png`, `css/style.css` |
+| A5 Taille du texte, zoom, police lisible | ✓ Fait (100–150 %, Atkinson Hyperlegible) | `src/ui/a11y.js`, `src/ui/dialogs.js`, `css/style.css` |
+| A6 Mouvements réduits partout | ✓ Fait (canevas compris) | `src/render/scene.js`, `src/render/effects.js` |
+| A7 Sol assoiffé visible, pousse dès la semence | ✓ Fait (goutte, coche, pousse, terre humide) | `src/render/scene.js` |
+| A8 Commandes du temps en bas, main gauche | ✓ Fait (option) | `src/ui/tabbar.js`, `src/ui/hud.js` |
+| A9 Historique des messages, offres gardées | ✓ Fait | `src/ui/messages.js`, `src/ui/toasts.js`, `src/ui/career/journal.js` |
+| A10 Textes FALC, glossaire | ◐ Partiel (glossaire « mots de la ferme », guide en phrases ≤ 25 mots ; tutoriel et fiches à réécrire) | `src/ui/guide.js` |
+| A11 Section Accessibilité au premier lancement | ✓ Fait | `src/ui/dialogs.js` |
+| E2 Ligne « À faire maintenant » | ✓ Fait | `src/ui/todo.js`, `css/guidance.css` |
+| E5 Guide de la ferme + résumé du matin | ✓ Fait | `src/ui/guide.js`, `src/ui/todo.js` |
+| E6 « Où en étais-je ? » | ✓ Fait | `src/ui/todo.js` |
+| F2 Tout ramasser (bouton et glissé) | ✓ Fait | `src/core/game.js`, `src/ui/todo.js`, `src/ui/gestures.js` |
+| Bugs de l'analyse (annexe B 1 à 7, frictions 6 à 12, 15, 17, 19) | ✓ Corrigés | voir le tableau des bugs de `JOURNAL.md` |
+| Annexe B n° 8 (glissé qui fait défiler la carte) | ? Non reproduit, à vérifier au doigt | `src/ui/gestures.js` |
+| Frictions 14 (icônes des graines sans libellé), 21 (succès empilés) | ✗ Hors lot 1 | lots suivants |

@@ -31,6 +31,8 @@ export function createTutorial(layer, app) {
   let lastRect = '';
   let hidden = false; // 'dialog' (tout caché), 'popup' (bulle cachée, rappel visible) ou false
   let minimized = false;
+  let crowdedTried = -1; // étape pour laquelle la scène a déjà défilé faute de place pour la bulle
+  let crowdedAt = 0;
   let userExpanded = false; // la bulle a été rouverte à la main : plus de réduction automatique // la bulle a été réduite par le joueur : seul le rappel reste affiché
 
   const ring = el('div.tuto-ring', { 'aria-hidden': 'true' });
@@ -279,6 +281,11 @@ export function createTutorial(layer, app) {
   }
 
   /** Réduit la bulle : il ne reste que le rappel compact de l'étape (cliquable pour la rouvrir). */
+  /** La scène finit de défiler (focusPlot animé) : on attend avant de juger la place. */
+  function scrollSettling() {
+    return performance.now() - crowdedAt < 700;
+  }
+
   function minimize(auto = false) {
     if (minimized) return;
     if (!auto) app.audio.play('close', { volume: 0.6 });
@@ -309,15 +316,31 @@ export function createTutorial(layer, app) {
       pillTitle.textContent = s.title;
       setText(pillText, s.hint());
       pill.classList.add('is-visible');
-      // Sous la barre du haut, à gauche (la feuille ouverte est en bas : elle n'est pas couverte).
-      const top = app.safeTop();
-      const left = app.safeLeft() + 8;
-      pill.style.left = `${Math.round(left)}px`;
-      pill.style.top = `${Math.round(top + 8)}px`;
+      placePill();
       pill.classList.toggle('is-static', hidden === 'popup' && !minimized);
       app.toasts?.hideBanner?.(); // le rappel se place là où s'affiche le bandeau
     }
     pill.classList.toggle('is-visible', show);
+  }
+
+  /**
+   * Rappel compact : sous la barre du haut, à gauche (la feuille ouverte est en bas : elle n'est pas couverte).
+   * S'il couvrirait la parcelle ou le bouton visé (grand texte, parcelle tout en haut), il passe en bas, au-dessus
+   * des onglets.
+   */
+  function placePill() {
+    const left = app.safeLeft() + 8;
+    let top = app.safeTop() + 8;
+    pill.style.left = `${Math.round(left)}px`;
+    pill.style.top = `${Math.round(top)}px`;
+    const h = hidden === 'popup' ? null : getHighlight();
+    const r = h ? targetRect(h) : null;
+    if (r) {
+      const p = pill.getBoundingClientRect();
+      const covers = p.left < r.right && p.right > r.left && top < r.bottom && top + p.height > r.top;
+      if (covers) top = Math.max(top, app.safeBottom() - p.height - 8);
+      pill.style.top = `${Math.round(top)}px`;
+    }
   }
 
   /** Montre la parcelle visée (la scène défile si elle dépasse l'écran). */
@@ -421,6 +444,7 @@ export function createTutorial(layer, app) {
     }
     if (app.isWide()) positionWide(h, rect, s);
     else positionPortrait(rect, s);
+    if (minimized && pill.classList.contains('is-visible')) placePill();
   }
 
   /**
@@ -458,6 +482,22 @@ export function createTutorial(layer, app) {
         // Pas de place sans recouvrir : du côté le plus grand, collée au bord.
         y = roomTop > roomBottom ? top : bottom - h;
         side = 'none';
+        // Grand texte (130–150 %) sur un petit écran : la bulle ne tient ni au-dessus ni au-dessous de la
+        // parcelle visée. D'abord la scène défile pour montrer la parcelle au-dessus de la bulle ; si cela ne
+        // suffit pas, la bulle se réduit en rappel compact (l'anneau montre la parcelle, un toucher la rouvre).
+        const hl = getHighlight();
+        if (hl?.type === 'plot' && !userExpanded && s?.hint) {
+          if (crowdedTried !== index && typeof app.scene?.focusPlot === 'function') {
+            crowdedTried = index;
+            crowdedAt = performance.now();
+            y = bottom - h;
+            app.scene.focusPlot(hl.index, { animate: true, bottom: h + 16 });
+            lastRect = ''; // rejugé après le défilement (même si la scène ne peut pas défiler)
+          } else if (crowdedTried === index) {
+            if (scrollSettling()) lastRect = ''; // rejugé à l'image suivante
+            else minimize(true);
+          }
+        }
       }
     }
     bubble.style.left = `${x}px`;
