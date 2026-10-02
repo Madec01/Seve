@@ -416,6 +416,45 @@ test('débogage : triggerVariety(\'medal\') amène un défi proposé au palier v
   assert.equal(c.actions.triggerVariety('medal', { challengeId: id }).ok, false);
 });
 
+test('défis : paliers strictement croissants et atteignables ; un défi dont les paliers s\'écraseraient n\'est pas proposé', () => {
+  const SE = ['spring', 'summer', 'autumn', 'winter'];
+  const seen = {};
+  for (const lv of [1, 2, 4, 5, 10]) {
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = detente(lv, seed);
+      rich(g, 5000);
+      let guard = 0;
+      while (g.state.status === 'playing' && guard++ < 120) {
+        const ch = g.state.variety.challenges;
+        if (g.state.time.dayOfSeason === 1 && ch.season !== null) {
+          const season = SE[g.state.time.seasonIndex];
+          const level = g.query.level();
+          for (const id of ch.options) {
+            const t = ch.targets[id];
+            assert.ok(t[0] >= 1 && t[0] < t[1] && t[1] < t[2], `niveau ${lv}, ${season}, ${id} : ${t}`);
+            const key = `${lv}.${season}.${id}`;
+            seen[key] = t.join('/');
+            if (id === 'variety' || id === 'sowing') {
+              assert.ok(t[0] >= 2, `${key} : au moins 2 cultures pour le bronze`);
+              const crops = g.query.plantableCrops().filter((c) => !c.rare).length;
+              assert.ok(t[2] <= Math.max(crops, 2) + 1, `${key} : or atteignable (${t} pour ${crops} cultures)`);
+            }
+            if (id === 'crates') assert.ok(t[2] <= g.state.variety.cart.crates.length, `${key} : au plus le nombre de caisses`);
+          }
+          // Niveau 2 au printemps : 3 cultures seulement → ni « Potager varié » ni « Semeur curieux » (3 / 3 / 3).
+          if (lv === 2 && season === 'spring') assert.ok(!ch.options.includes('variety') && !ch.options.includes('sowing'), `printemps du niveau 2 : ${ch.options}`);
+          // Niveau 4 : charrette de 2 caisses → pas de « Charrette pleine » (1 / 2 / 2).
+          if (lv === 4) assert.ok(!ch.options.includes('crates'));
+        }
+        nextDay(g);
+      }
+    }
+  }
+  // Paliers reconstruits sous le plafond (4 cultures faisables : 2 / 3 / 4) et intacts au-dessus (niveau 10, été).
+  assert.ok(Object.entries(seen).some(([k, t]) => /\.(variety|sowing)$/.test(k) && t === '2/3/4'), JSON.stringify(seen));
+  assert.ok(Object.entries(seen).some(([k, t]) => k.endsWith('.variety') && t === '3/4/6'), JSON.stringify(seen));
+});
+
 test('défis : textes accordés au nombre (« 1 caisse », « 2 caisses »)', () => {
   const g = detente(2, 9);
   const ch = g.state.variety.challenges;

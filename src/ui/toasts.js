@@ -1,20 +1,72 @@
 // Messages temporaires (toasts) et grand bandeau (changement de saison, avertissements).
 //
-// createToasts(stack, bannerNode) → { show(opts), banner(opts), hideBanner(), clearAll(), trim(), setLogger(fn) }
+// createToasts(stack, bannerNode) → { show(opts), banner(opts), hideBanner(), clearAll(), trim(), setLogger(fn),
+//                                     setMoreHandler(fn) }
 // Historique (lot 1 « confort », A9) : chaque message montré (et chaque bandeau) est aussi passé au
 // journal des messages (`setLogger(fn)`, src/ui/messages.js), sauf `log: false` (refus d'une action :
 // « Il manque 12 pièces »…). Les messages importants (alerte, gel, action à toucher, succès) restent au
 // moins 5 secondes à l'écran.
+// Téléphone (QA du lot 3) : au plus DEUX messages à la fois (MAX_VISIBLE). Quand d'autres arrivent en même temps
+// (début de saison en carrière : comice, Joseph, charrette, abri plein…), les plus anciens — d'abord ceux qui ne
+// proposent rien — s'effacent ; ils restent dans l'historique, et une pastille « +2 » (≥ 48 px) au-dessus des
+// messages ouvre la feuille « Messages » (`setMoreHandler(fn)`). Les messages ne captent JAMAIS les touchers :
+// seul le bouton d'un message qui propose une action (« Voir », `actionLabel`) et la pastille « +N » se touchent.
 
 import { el, clear, typo } from './dom.js';
 import { icon } from './icons.js';
 
 const KIND_ICON = { info: 'info', error: 'lock', success: 'star', warn: 'bill', money: 'coin', frost: 'winter', rot: 'rain' };
+/** Messages visibles en même temps (les autres passent dans l'historique, pastille « +N »). */
+export const MAX_VISIBLE = 2;
+/** Durée de la pastille « +N » après le dernier message effacé faute de place. */
+const MORE_MS = 7000;
 
 export function createToasts(stack, bannerNode) {
   const recent = new Map(); // texte → { node, timer }
   let bannerTimer = null;
   let logger = null;
+  let moreHandler = null;
+  let hidden = 0; // messages effacés faute de place depuis que la pastille est apparue
+  let moreTimer = null;
+  const moreCount = el('b.toast-more-n', '');
+  const more = el(
+    'button.btn.btn--small.toast-more',
+    {
+      type: 'button',
+      id: 'toast-more',
+      hidden: true,
+      onclick: () => {
+        hideMore();
+        try {
+          moreHandler?.();
+        } catch (err) {
+          console.warn('Messages :', err);
+        }
+      },
+    },
+    moreCount,
+    el('span.toast-more-text', 'messages'),
+  );
+
+  function hideMore() {
+    hidden = 0;
+    clearTimeout(moreTimer);
+    more.hidden = true;
+    more.remove();
+  }
+
+  function showMore(n) {
+    hidden += n;
+    moreCount.textContent = `+${hidden}`;
+    more.setAttribute('aria-label', `${hidden} autre${hidden > 1 ? 's' : ''} message${hidden > 1 ? 's' : ''} : voir l'historique`);
+    more.hidden = false;
+    stack.append(more); // en haut de la pile (column-reverse : le dernier enfant est le plus haut)
+    clearTimeout(moreTimer);
+    moreTimer = setTimeout(hideMore, MORE_MS);
+  }
+
+  const isImportant = (n) => n.dataset.important === '1';
+  const liveToasts = () => [...stack.children].filter((n) => n.classList.contains('toast') && !n.classList.contains('is-leaving'));
 
   /** Durée d'affichage : au moins 5 s pour ce qui compte (alerte, action à toucher, succès). */
   function durationOf(o, kind) {
@@ -35,18 +87,27 @@ export function createToasts(stack, bannerNode) {
   function dismiss(node) {
     if (!node.isConnected || node.classList.contains('is-leaving')) return;
     node.classList.add('is-leaving');
-    setTimeout(() => node.remove(), 260);
+    setTimeout(() => {
+      node.remove();
+      // Plus aucun message : la pastille n'a plus de sens au-dessus du vide… sauf si elle vient d'apparaître.
+      if (!liveToasts().length && !more.hidden && hidden > 0) {
+        clearTimeout(moreTimer);
+        moreTimer = setTimeout(hideMore, 2500);
+      }
+    }, 260);
   }
 
   /** Efface les plus anciens messages qui passeraient sous la barre du haut (le plus récent reste). */
   function trim() {
     const limit = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inset-top')) || 0;
-    const live = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
+    if (!more.hidden && more.getBoundingClientRect().top < limit + 2) hideMore();
+    const live = liveToasts();
     for (const n of live.slice(1)) if (n.getBoundingClientRect().top < limit + 2) dismiss(n);
   }
 
   /**
-   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick?, key? }
+   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick?, actionLabel = 'Voir', key? }
+   *   onClick : le message porte un bouton (actionLabel) ; seul ce bouton se touche (le reste laisse passer le doigt).
    *   key : un message déjà affiché avec la même clé est mis à jour (titre, texte) au lieu d'en
    *         empiler un nouveau (ex. remboursements successifs du voisin).
    */
@@ -76,21 +137,46 @@ export function createToasts(stack, bannerNode) {
       return prev.node;
     }
     log(o, kind);
+    const go = o.onClick
+      ? el(
+          'button.btn.btn--small.btn--red.toast-go',
+          {
+            type: 'button',
+            'aria-label': `${o.actionLabel || 'Voir'} : ${o.title || o.text}`,
+            onclick: (e) => {
+              e.stopPropagation();
+              dismiss(node);
+              try {
+                o.onClick();
+              } catch (err) {
+                console.warn('Message :', err);
+              }
+            },
+          },
+          o.actionLabel || 'Voir',
+        )
+      : null;
     const node = el(
       `div.toast.toast--${kind}`,
       { role: kind === 'error' ? 'alert' : 'status' },
       o.sprite || icon(o.icon || KIND_ICON[kind] || 'info', 'md'),
       el('div.toast-body', o.title ? el('strong.toast-title', o.title) : null, el('span.toast-text', o.text)),
+      go,
     );
-    node.addEventListener('click', () => {
-      dismiss(node);
-      o.onClick?.();
-    });
     if (o.onClick) node.classList.add('is-action');
+    if (duration >= 5000) node.dataset.important = '1';
     stack.prepend(node);
-    // Pas plus de 4 messages à la fois.
-    const items = [...stack.children].filter((n) => !n.classList.contains('is-leaving'));
-    for (const extra of items.slice(4)) dismiss(extra);
+    // Au plus MAX_VISIBLE messages : on efface d'abord les plus anciens qui ne proposent rien d'important
+    // (ils restent dans l'historique ; la pastille « +N » y mène).
+    const items = liveToasts();
+    let extra = items.length - MAX_VISIBLE;
+    if (extra > 0) {
+      const older = items.slice(1).reverse(); // du plus ancien au plus récent (le nouveau reste toujours)
+      const victims = [...older.filter((n) => !isImportant(n)), ...older.filter(isImportant)].slice(0, extra);
+      for (const v of victims) dismiss(v);
+      extra = victims.length;
+      showMore(extra);
+    }
     // Place limitée (feuille haute ouverte) : les plus anciens qui passeraient sous la barre du
     // haut s'effacent (le plus récent reste toujours).
     // (vérifié deux fois : tout de suite, puis une fois l'animation d'entrée finie)
@@ -143,6 +229,7 @@ export function createToasts(stack, bannerNode) {
    *  « Hiver · Fermage de l'hiver » d'une partie de niveau restait dans le DOM au lancement d'une carrière). */
   function clearAll() {
     for (const n of [...stack.children]) n.remove();
+    hideMore();
     recent.clear();
     clearTimeout(bannerTimer);
     bannerNode.classList.remove('is-visible');
@@ -159,5 +246,11 @@ export function createToasts(stack, bannerNode) {
     setLogger(fn) {
       logger = typeof fn === 'function' ? fn : null;
     },
+    /** fn() : la pastille « +N » est touchée (ouvre l'historique des messages). */
+    setMoreHandler(fn) {
+      moreHandler = typeof fn === 'function' ? fn : null;
+    },
+    /** Nombre de messages visibles, et de messages passés dans l'historique faute de place (mesures, tests). */
+    stats: () => ({ visible: liveToasts().length, hidden: more.hidden ? 0 : hidden }),
   };
 }

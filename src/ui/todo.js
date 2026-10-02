@@ -148,7 +148,11 @@ export function createTodo(app) {
         const id = o.offerId ?? o.id;
         const who = o.data?.name || o.title || 'un visiteur';
         const Who = who.charAt(0).toUpperCase() + who.slice(1);
-        if (!o.accepted) {
+        if (!o.accepted && o.kind === 'themeVisitor') {
+          // Visiteur du thème : il attend près du panneau du village, souvent hors de la vue (ou sous la mini-carte) ;
+          // toucher la ligne amène la vue sur lui (on le touche ensuite dans la scène), sinon ouvre sa fiche.
+          add({ id: `offer-${id}`, prio: 30, icon: () => cIco('visitor', 'star'), text: `Un visiteur vous attend : ${who}`, short: `un visiteur (${who})`, go: () => focusVisitor(id) });
+        } else if (!o.accepted) {
           const last = o.daysLeft !== undefined && o.daysLeft <= 0;
           add({ id: `offer-${id}`, prio: 30, icon: () => cIco(o.kind === 'visitor' || o.kind === 'order' ? 'visitor' : 'event', 'star'), text: `${Who} vous fait une proposition${last ? ' (aujourd\'hui seulement)' : ''}`, short: `une proposition (${who})`, go: () => app.careerUI?.open.offer(id) });
         } else if (o.n) {
@@ -325,6 +329,27 @@ export function createTodo(app) {
   }
   let ringTimer = null;
 
+  /** Amène la vue sur le visiteur du thème (hors de la mini-carte et de la ligne « À faire ») et l'entoure. */
+  function focusVisitor(offerId) {
+    const s = app.scene;
+    const v = safe(() => s?.varietySpots?.()?.visitor, null);
+    if (!s?.focusWorld || !v) {
+      app.careerUI?.open.offer(offerId);
+      return;
+    }
+    const r = { x: v.x - 2, y: v.y - 17, w: 20, h: 21 };
+    safe(() => s.focusWorld(r.x + r.w / 2, r.y + r.h / 2, { animate: !app.reducedMotion?.() }), null);
+    let n = 0;
+    const paint = () => {
+      const pr = app.worldPageRect?.(r);
+      ring(pr ? [pr] : []);
+      if (++n < 40) requestAnimationFrame(paint);
+    };
+    requestAnimationFrame(paint);
+    clearTimeout(ringTimer);
+    ringTimer = setTimeout(() => ring([]), 2400);
+  }
+
   function ring(rects) {
     rings.replaceChildren(
       ...rects.map((r) => {
@@ -446,7 +471,7 @@ export function createTodo(app) {
       const plotsHit = ev.plots || [];
       if (plotsHit.length && !app.sheets.isOpen() && !app.dialogs.isOpen()) requestAnimationFrame(() => focusPlots(plotsHit));
       lastTick = 0;
-    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought'].includes(ev.type)) {
+    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderKept', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought'].includes(ev.type)) {
       lastTick = 0;
     }
   }

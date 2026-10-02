@@ -321,6 +321,7 @@ export function createVariety(app) {
       o.text ? el('p.v-say', `« ${o.text} »`) : null,
       el('div.v-lines', lines),
       o.note ? el('p.v-note', icon('info', 'sm'), o.note) : null,
+      o.autoKept ? el('p.v-note.v-autokept', el('span.v-pin', { 'aria-hidden': 'true' }), 'Gardée d\'office : vous avez semé pour elle.') : null,
       el('div.v-order-actions', keepBtn(o), ...actions, declineBtn(o)),
     );
   }
@@ -790,13 +791,17 @@ export function createVariety(app) {
         const n = ev.added ?? (ev.slots || []).filter(Boolean).length;
         if (ev.reason === 'dawn' && n > 0) morning(`${n > 1 ? `${n} nouvelles commandes` : 'Une nouvelle commande'} au tableau du village.`);
         if (ev.reason === 'start' && n > 0) {
-          app.toasts.show({ kind: 'info', sprite: sectionIco('board', 'info'), title: 'Le tableau du village', text: 'Des villageois ont épinglé des commandes : touchez le panneau.', onClick: () => openBoard(), duration: 5200 });
+          app.toasts.show({ kind: 'info', sprite: sectionIco('board', 'info'), title: 'Le tableau du village', text: 'Des villageois ont épinglé des commandes près du portail.', onClick: () => openBoard(), duration: 5200 });
           hint('variety.board', null);
         }
         break;
       }
       case 'orderProgress':
         app.audio.play('page', { volume: 0.45, throttle: 160 });
+        break;
+      case 'orderKept':
+        // Gardée d'office (semis de sa culture) : discret — étiquette sur la parcelle, punaise rouge sur le panneau.
+        app.audio.play('toggle', { volume: 0.35, throttle: 400 });
         break;
       case 'orderDone': {
         const slot = slotOf.get(ev.orderId);
@@ -812,7 +817,7 @@ export function createVariety(app) {
         break;
       case 'cartArrived':
         // Même mise à jour que la fin de saison (niveaux : la fenêtre du bilan arrive) : seulement le résumé du matin.
-        if (!(evening && evening.day && !career && seasonFlip(g))) app.toasts.show({ kind: 'info', sprite: sectionIco('cart', 'harvest'), title: 'La charrette du marché', text: ev.text || 'Elle attend vos récoltes jusqu\'au dernier soir de la saison.', onClick: () => openCart(), duration: 5200 });
+        if (!(evening && evening.day && !career && seasonFlip(g))) app.toasts.show({ kind: 'info', sprite: sectionIco('cart', 'harvest'), title: 'La charrette du marché', text: 'Jusqu\'au dernier soir : vos récoltes à la main remplissent ses caisses.', onClick: () => openCart(), duration: 5200 });
         morning('La charrette du marché est arrivée.');
         app.audio.play('page', { volume: 0.5, delay: 0.6 });
         hint('variety.cart', null);
@@ -879,7 +884,7 @@ export function createVariety(app) {
         break;
       case 'merchantArrived':
         app.audio.tone?.('magic', { volume: 0.7, delay: 0.5 });
-        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : touchez pour voir son étal.`, onClick: () => openMerchant(), duration: 6000 });
+        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : son étal vous attend.`, onClick: () => openMerchant(), duration: 6000 });
         morning('Basile le colporteur est là (jusqu\'à demain soir).');
         hint('variety.merchant', null);
         break;

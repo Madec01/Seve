@@ -2,7 +2,7 @@
 // récoltes comptées (src/core/requests.js). Règles : docs/GAME_DESIGN.md § 16.1, § 16.2, § 16.4.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGame } from '../src/core/game.js';
+import { createGame, loadGame } from '../src/core/game.js';
 import { getCrop, isRareCrop, RARE_CROP_IDS } from '../src/data/crops.js';
 import { BOARD, CART, CLIENTS_BY_ID, ORDER_RATES } from '../src/data/variety.js';
 import { baseUnitValue, feasibleCrops, boardHorizon } from '../src/core/requests.js';
@@ -263,6 +263,58 @@ test('tableau : « Pas pour moi » sans pénalité ; commencée → prime des un
   void c;
   assert.equal(g.actions.keepOrder('o999').reason, 'Commande inconnue.');
   assert.equal(g.actions.deliverOrder(kept.id).reason, 'Les commandes se remplissent quand vous récoltez.');
+});
+
+test('tableau : semer la culture d\'une commande non gardée la garde d\'office (orderKept auto) ; on peut toujours la retirer', () => {
+  const g = detente(2, 12);
+  const sowable = g.query.plantableCrops().filter((c) => !c.rare && !c.willFreeze).map((c) => c.id);
+  assert.ok(sowable.length >= 3);
+  const [want, other, third] = sowable;
+  const slots = g.state.variety.board.slots;
+  slots[0].lines = [{ cropId: want, n: 3, got: 0 }];
+  slots[1].lines = [{ cropId: other, n: 3, got: 0 }];
+  slots[2].lines = [{ cropId: other, n: 2, got: 0 }];
+  for (const o of slots) o.kept = false;
+  const ids = slots.map((o) => o.id);
+  const rec = record(g);
+  const free = () => g.state.plots.findIndex((p) => p.unlocked && !p.cropId && p.env !== null);
+  // Une culture qu'aucune commande ne demande : rien.
+  assert.ok(g.actions.plant(free(), third).ok);
+  assert.equal(rec.of('orderKept').length, 0);
+  // La culture de la 1re commande : gardée d'office, une seule fois, les autres non.
+  const i = free();
+  assert.ok(g.actions.plant(i, want).ok);
+  assert.deepEqual(rec.of('orderKept'), [{ orderId: ids[0], clientId: slots[0].clientId, clientName: CLIENTS_BY_ID[slots[0].clientId].name, cropId: want, auto: true, plotIndex: i, type: 'orderKept' }]);
+  assert.equal(slots[0].kept, true);
+  assert.equal(slots[1].kept, false);
+  const info = g.query.orders().slots[0];
+  assert.equal(info.kept, true);
+  assert.equal(info.autoKept, true);
+  assert.ok(g.actions.plant(free(), want).ok);
+  assert.equal(rec.of('orderKept').length, 1, 'déjà gardée');
+  // Deux commandes de la même culture : les deux sont gardées.
+  assert.ok(g.actions.plant(free(), other).ok);
+  assert.deepEqual(rec.of('orderKept').slice(1).map((e) => e.orderId), [ids[1], ids[2]]);
+  // Sauvegarde : le drapeau survit à l'aller-retour.
+  const saved = g.serialize();
+  assert.deepEqual(loadGame(JSON.parse(JSON.stringify(saved))).serialize(), saved);
+  // L'aube ne la remplace pas.
+  nextDay(g);
+  assert.ok(g.state.variety.board.slots.some((o) => o && o.id === ids[0]));
+  // Le joueur ôte la punaise : ce n'est plus « d'office » ; il peut aussi la refuser sans pénalité.
+  assert.ok(g.actions.keepOrder(ids[0], false).ok);
+  const o0 = g.state.variety.board.slots.find((o) => o && o.id === ids[0]);
+  assert.equal(o0.kept, false);
+  assert.equal(o0.autoKept, undefined);
+  assert.equal(g.query.orders().slots.find((o) => o.id === ids[0]).autoKept, false);
+  const money = g.state.money;
+  assert.deepEqual(g.actions.declineOrder(ids[1]), { ok: true, premium: 0 });
+  assert.equal(g.state.money, money);
+  // Classique : pas de tableau, rien.
+  const c = createGame({ levelId: 2, seed: 12, difficulty: 'classique' });
+  const crec = record(c);
+  c.actions.plant(c.state.plots.findIndex((p) => p.unlocked && !p.cropId), want);
+  assert.equal(crec.of('orderKept').length, 0);
 });
 
 test('tableau : une commande gardée devenue impossible au changement de saison est retirée (prime des unités données)', () => {

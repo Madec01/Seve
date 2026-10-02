@@ -128,6 +128,7 @@ app.newFarm = () => openNewFarm(app, {});
 // Guidage (lot 1 « confort ») : historique des messages, ligne « À faire », guide de la ferme.
 app.messages = createMessages(app);
 app.toasts.setLogger((e) => app.messages.add(e));
+app.toasts.setMoreHandler(() => app.messages.open());
 app.todo = createTodo(app);
 app.openGuide = (opts = {}) => openGuide(app, opts);
 // Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
@@ -188,7 +189,8 @@ pwa.onUpdateAvailable(() => {
     kind: 'info',
     icon: 'star',
     title: 'Nouvelle version disponible',
-    text: 'Touchez ici pour recharger (la partie est sauvegardée).',
+    text: 'La partie est sauvegardée.',
+    actionLabel: 'Recharger',
     duration: 60000,
     onClick: () => {
       save();
@@ -640,6 +642,16 @@ app.plotPageRect = (index) => {
   const scene = app.scene;
   const r = scene?.layout.plotRect(index);
   if (!r) return null;
+  const s = canvas.getBoundingClientRect();
+  const a = scene.worldToScreen(r.x, r.y);
+  const b = scene.worldToScreen(r.x + r.w, r.y + r.h);
+  return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
+};
+
+/** Rectangle du monde (px) en pixels de la page. */
+app.worldPageRect = (r) => {
+  const scene = app.scene;
+  if (!scene || !r) return null;
   const s = canvas.getBoundingClientRect();
   const a = scene.worldToScreen(r.x, r.y);
   const b = scene.worldToScreen(r.x + r.w, r.y + r.h);

@@ -684,7 +684,7 @@ export function createCareerUI(app) {
       case 'offer': {
         const id = ev.offerId ?? ev.id;
         app.audio.play('warning', { volume: 0.45 });
-        t.show({ kind: 'info', sprite: cIcon(ev.kind === 'visitor' ? 'visitor' : 'event'), title: offerTitle(ev), text: (ev.data?.text || ev.text || 'Une proposition vous attend.') + ' Touchez pour répondre.', duration: 6500, onClick: () => open.offer(id) });
+        t.show({ kind: 'info', sprite: cIcon(ev.kind === 'visitor' ? 'visitor' : 'event'), title: offerTitle(ev), text: (ev.data?.text || ev.text || 'Une proposition vous attend.') , duration: 6500, actionLabel: 'Répondre', onClick: () => open.offer(id) });
         badges.journal = true;
         break;
       }
@@ -696,14 +696,14 @@ export function createCareerUI(app) {
         // Demandée depuis le Carnet : la feuille s'ouvre déjà (pas de message en double).
         if (ev.asked) break;
         app.audio.play('warning', { volume: 0.45 });
-        t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), title: 'Joseph a une demande', text: `${ev.quest?.text || 'Une quête vous attend.'} Touchez pour voir.`, duration: 6000, onClick: () => open.quest() });
+        t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), title: 'Joseph a une demande', text: `${ev.quest?.text || 'Une quête vous attend.'}`, duration: 6000, onClick: () => open.quest() });
         badges.journal = true;
         app.hints.maybe('career.quest', { selector: '#tab-journal' });
         break;
       case 'questReminder':
         // Rappels à 3 jours et à 1 jour de l'échéance d'une quête acceptée (une fois chacun).
         app.audio.play('warning', { volume: 0.35 });
-        t.show({ kind: ev.daysLeft <= 1 ? 'warn' : 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-reminder', title: ev.daysLeft <= 1 ? 'Quête de Joseph : dernier jour demain' : `Quête de Joseph : plus que ${plural(ev.daysLeft, 'jour')}`, text: `« ${ev.line || 'Petit rappel, rien de grave !'} » Touchez pour voir.`, duration: 5600, onClick: () => open.quest() });
+        t.show({ kind: ev.daysLeft <= 1 ? 'warn' : 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-reminder', title: ev.daysLeft <= 1 ? 'Quête de Joseph : dernier jour demain' : `Quête de Joseph : plus que ${plural(ev.daysLeft, 'jour')}`, text: `« ${ev.line || 'Petit rappel, rien de grave !'} »`, duration: 5600, onClick: () => open.quest() });
         break;
       case 'questWithdrawn':
         // Proposition jamais acceptée : Joseph la retire, sans reproche (message discret).
@@ -711,7 +711,7 @@ export function createCareerUI(app) {
         break;
       case 'offerReminder':
         app.audio.play('warning', { volume: 0.35 });
-        t.show({ kind: 'warn', sprite: cIcon('visitor'), key: `c-offer-reminder-${ev.offerId}`, title: 'Commande : dernier jour demain', text: `${ev.text || 'Une commande attend encore.'} Touchez pour voir.`, duration: 5600, onClick: () => open.offer(ev.offerId) });
+        t.show({ kind: 'warn', sprite: cIcon('visitor'), key: `c-offer-reminder-${ev.offerId}`, title: 'Commande : dernier jour demain', text: `${ev.text || 'Une commande attend encore.'}`, duration: 5600, onClick: () => open.offer(ev.offerId) });
         break;
       case 'questProgress':
         break;
@@ -739,7 +739,7 @@ export function createCareerUI(app) {
         app.toasts.banner({ kind: 'season', icon: game.query.calendar().seasonId, title: ev.name, text: ev.text || 'Jour de fête à la ferme !', duration: 5200 });
         break;
       case 'contestAnnounced':
-        t.show({ kind: 'info', sprite: cIcon('contest'), title: 'Le comice agricole est annoncé', text: 'Trois épreuves, jugées le dernier soir de l\'automne. Touchez pour les voir.', duration: 6000, onClick: () => open.journal('agenda') });
+        t.show({ kind: 'info', sprite: cIcon('contest'), title: 'Le comice agricole est annoncé', text: 'Trois épreuves, jugées le dernier soir de l\'automne.', duration: 6000, onClick: () => open.journal('agenda') });
         break;
       case 'shelterFull':
         t.show({ kind: 'warn', sprite: safeProductIcon(ev.buildingId), icon: 'harvest', key: `full-${ev.buildingId}`, title: `${q('building', null, ev.buildingId)?.name || 'Abri'} : plein`, text: 'Ramassez vite : la production du jour se perd.', duration: 4200 });

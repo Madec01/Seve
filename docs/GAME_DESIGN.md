@@ -918,8 +918,8 @@ et si au moins une de ces conditions est vraie :
 | `tree` | arbre fruitier adulte possédé, en saison de fruits, et une récolte de fruits tient dans l'horizon (ou est déjà mûre) |
 
 Horizon : **tableau** = jours restants dans la saison, aujourd'hui compris, au moins 3 ; **charrette** = durée de la
-saison − 1 (tirée le 1er jour) ; **défis** : nombre de cultures distinctes faisables (sert à plafonner « Potager varié »
-et « Semeur curieux »).
+saison − 1 (tirée le 1er jour) ; **défis** : durée de la saison — le nombre de cultures distinctes faisables plafonne
+« Potager varié » (cultures qu'on peut récolter) et « Semeur curieux » (cultures qui se sèment), § 16.5.
 
 **Exclusions** (si au moins une autre culture reste possible) : la culture de la quête de Joseph en cours (carrière : pas
 de concurrence pour les récoltes) ; une culture qu'un atelier **allumé** du joueur transforme (l'atelier passe avant,
@@ -982,6 +982,11 @@ ouvrir sa feuille. C'est le remplaçant des « visiteurs acheteurs » de la carr
 - **Garder** (punaise, bouton « Garder ») : une commande gardée ne part plus, **sans limite de temps**, jusqu'à ce qu'elle
   soit livrée ou qu'on la retire. Une commande **commencée** (au moins une unité donnée) est gardée d'office. On peut
   garder les 3. Utile quand on sème exprès pour elle.
+- **Gardée d'office au semis** *(QA, 2026-10-02)* : semer **à la main** la culture d'une commande non gardée la garde
+  aussitôt (on sème pour elle : elle ne doit pas disparaître à l'aube avant la récolte). Indice discret : étiquette
+  « Gardée : Lili » au-dessus de la parcelle, punaise rouge sur le panneau, mention « Gardée d'office : vous avez semé
+  pour elle. » dans la feuille. Le joueur peut ôter la punaise ou la refuser (✕), sans pénalité. Les semis des salariés,
+  des machines et de Joseph ne gardent rien.
 - **Autres demandes** (bouton ↻ en bas de la feuille) : **une fois par jour, gratuit** : remplace tout de suite toutes les
   commandes non gardées et pas commencées.
 - **Pas pour moi** (✕ sur chaque commande) : la commande part, **sans aucune pénalité** ; si elle était commencée, le
@@ -1137,16 +1142,28 @@ or**. Rien ne se reporte d'une saison à l'autre (aucune série).
 Cibles : `k` = (parcelles de champ ouvertes au début de la saison / 12) × (durée de la saison / 7), entre 0,5 et 4 ;
 toute cible arrondie, au moins 1.
 
+**Paliers toujours strictement croissants et atteignables** *(QA, 2026-10-02)* : avec peu de cultures faisables (niveau 2
+au printemps : 3), « Semeur curieux » et « Potager varié » avaient des paliers 3 / 3 / 3 et les trois médailles tombaient
+d'un coup au 2ᵉ jour. Règle, appliquée à tous les défis :
+1. un palier égal ou inférieur au précédent est relevé d'une unité (arrondis des petits champs) ;
+2. sous un **plafond** (cultures faisables récoltables pour « Potager varié », semables pour « Semeur curieux », nombre
+   de caisses pour « La charrette pleine »), l'or descend au plafond, puis chaque palier au plus le suivant − 1 ;
+3. si le bronze tombe alors sous son minimum (**2** pour les deux défis de cultures différentes — le 1er semis ne doit
+   pas suffire —, 1 sinon), **le défi n'est pas proposé** (un autre est tiré à sa place).
+
+Exemples : 4 cultures faisables → 2 / 3 / 4 ; 5 → 3 / 4 / 5 (semer) ; 3 ou moins → pas proposé ; charrette de 2 caisses
+(niveau 4, hiver) → « La charrette pleine » pas proposée (1 / 2 / 2 auparavant).
+
 | id | Défi | Mesure (depuis le 1er jour de la saison) | Bronze / argent / or | Condition | Poids |
 |---|---|---|---|---|---|
 | `harvests` | Belle cueillette | récoltes (toutes) | 12 / 20 / 30 × k | — | 3 |
 | `sales` | Bon marché | pièces de ventes de récoltes (prime de qualité comprise) | 150 / 260 / 380 × k × prix des récoltes du mode | — | 3 |
-| `variety` | Potager varié | cultures différentes récoltées | 2 / 3 / 4 (or plafonné au nombre de cultures faisables) | ≥ 2 cultures faisables | 2 |
-| `sowing` | Semeur curieux | cultures différentes semées | 2 / 3 / 4 (idem) | ≥ 2 cultures semables | 2 |
+| `variety` | Potager varié | cultures différentes récoltées | 3 / 4 / 6 (sous le plafond : règle ci-dessus) | ≥ 4 cultures faisables récoltables | 2 |
+| `sowing` | Semeur curieux | cultures différentes semées | 4 / 5 / 6 (idem) | ≥ 4 cultures semables | 2 |
 | `care` | Aux petits soins | récoltes « arrosée chaque jour où il le fallait » (soin du lot 2) | 3 / 6 / 10 × k | surprises actives | 2 |
 | `quality` | La main verte | récoltes belles ou dorées | 1 / 2 / 4 × max(1, k) | surprises actives | 1 |
 | `orders` | Ami du village | commandes du tableau livrées | 1 / 2 / 3 | tableau actif | 2 |
-| `crates` | La charrette pleine | caisses de la charrette remplies | 1 / 2 / 3 (au plus le nombre de caisses) | charrette cette saison | 2 |
+| `crates` | La charrette pleine | caisses de la charrette remplies | 1 / 2 / 3 | charrette d'au moins 3 caisses cette saison | 2 |
 | `products` | Fait maison | produits transformés vendus | 2 / 4 / 6 (carrière : + rang) | un atelier possédé | 2 |
 | `apples` | Paniers du verger | paniers de fruits récoltés | 1 / 2 / 4 × max(1, arbres adultes / 2) | arbre adulte, saison de fruits | 1 |
 | `animals` | Basse-cour heureuse | pièces de revenus des animaux (niveaux) | 25 / 45 / 70 × durée / 7 | un animal qui rapporte | 1 |

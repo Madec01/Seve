@@ -97,6 +97,9 @@
 .v-keep.is-on { border-image-source: var(--img-btn-red); }
 .v-keep.is-on .v-pin { background: #ffd2c8; }
 .v-x { flex: none; width: 48px; padding: 0; }
+/* Gardée d'office (semis de sa culture) : petite mention discrète, punaise rouge. */
+.v-autokept { color: var(--text-soft); }
+.v-autokept .v-pin { flex: none; width: 10px; height: 10px; background: #e04a3a; box-shadow: 0 0 0 var(--u) var(--outline); }
 .v-reroll { gap: 8px; }
 .v-reroll-ico { font-size: 1.375rem; line-height: 1; }
 

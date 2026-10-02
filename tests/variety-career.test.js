@@ -95,6 +95,27 @@ test('carrière : récolte à la main d\'une culture demandée → vendue tout d
   h.off();
 });
 
+test('carrière : semer à la main la culture d\'une commande la garde d\'office ; salariés, machines : jamais', () => {
+  const h = withExtension();
+  const g = career();
+  const api = h.api();
+  const o = g.state.variety.board.slots[0];
+  o.lines = [{ cropId: 'carrot', n: 3, got: 0 }];
+  o.kept = false;
+  for (const x of g.state.variety.board.slots.slice(1)) if (x) x.lines = [{ cropId: 'potato', n: 3, got: 0 }];
+  const rec = record(g);
+  const [a, b] = fieldPlots(g).filter((i) => !g.state.plots[i].cropId);
+  g.state.money = 1000;
+  assert.ok(api.plant(a, 'carrot', { by: 'staff' }).ok);
+  assert.equal(o.kept, false, 'semis d\'un salarié : rien');
+  assert.ok(g.actions.plant(b, 'carrot').ok);
+  assert.equal(o.kept, true);
+  assert.equal(rec.of('orderKept').length, 1);
+  assert.equal(rec.of('orderKept')[0].orderId, o.id);
+  assert.equal(g.query.orders().slots[0].autoKept, true);
+  h.off();
+});
+
 test('carrière : livrer depuis le grenier, charger la charrette depuis le grenier (au prix du grenier)', () => {
   const g = career();
   setRank(g, 2);

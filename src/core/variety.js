@@ -147,6 +147,7 @@ export function checkVariety(state) {
     if (!obj(o) || typeof o.id !== 'string' || !CLIENTS_BY_ID[o.clientId] || !int(o.day)) return 'commande';
     if (!Array.isArray(o.lines) || o.lines.length < 1 || o.lines.length > 2 || !o.lines.every(lineOk)) return 'commande';
     if (typeof o.rate !== 'number' || o.rate < 1 || o.rate > 1.6 || typeof o.kept !== 'boolean' || typeof o.base !== 'number' || o.base < 0 || !int(o.fromStock)) return 'commande';
+    if (o.autoKept !== undefined && o.autoKept !== true) return 'commande';
   }
   if (!int(b.startDay) || !int(b.rerollDay) || !Array.isArray(b.yesterday) || !b.yesterday.every((id) => !!getCrop(id))) return 'tableau du village';
   if (!Array.isArray(b.done)) return 'tableau du village';
@@ -292,8 +293,13 @@ function cartExpected(host, si) {
   return true;
 }
 
-/** Le défi est-il possible pour la saison d'index si ? */
+/** Le défi est-il possible pour la saison d'index si ? (condition, puis paliers strictement croissants, § 16.5) */
 function challengePossible(host, def, si, current) {
+  return challengeCondition(host, def, si, current) && challengeTargets(host, def, si, current) !== null;
+}
+
+/** Condition propre au défi (sans regarder ses paliers). */
+function challengeCondition(host, def, si, current) {
   const { state } = host;
   const v = state.variety;
   const career = state.mode === 'career';
@@ -301,9 +307,8 @@ function challengePossible(host, def, si, current) {
   if (def.mode === 'career' && !career) return false;
   switch (def.id) {
     case 'variety':
-      return Object.keys(seasonFeasible(host, si, current)).length >= 2;
     case 'sowing':
-      return Object.values(seasonFeasible(host, si, current)).filter((e) => e.reasons.includes('sowable')).length >= 2;
+      return challengeCap(host, def, si, current) >= 2;
     case 'care':
     case 'quality':
       return !!state.surprises;
@@ -324,7 +329,32 @@ function challengePossible(host, def, si, current) {
   }
 }
 
-/** Cibles d'un défi pour la saison d'index si : [bronze, argent, or]. */
+/**
+ * Plafond d'un défi (ce qu'il est possible d'atteindre dans la saison), ou Infinity :
+ *   « Potager varié » : cultures faisables qu'on peut RÉCOLTER (pas seulement au grenier) ;
+ *   « Semeur curieux » : cultures qui se SÈMENT et mûrissent dans la saison ;
+ *   « La charrette pleine » : nombre de caisses.
+ */
+function challengeCap(host, def, si, current) {
+  const { state, level } = host;
+  if (def.capFeasible) {
+    const list = Object.values(seasonFeasible(host, si, current));
+    if (def.id === 'sowing') return list.filter((e) => e.reasons.includes('sowable')).length;
+    return list.filter((e) => e.reasons.some((r) => r !== 'stock')).length;
+  }
+  if (def.capCrates) return current && state.variety.cart ? state.variety.cart.crates.length : cartCrateCount(state, level);
+  return Infinity;
+}
+
+/**
+ * Paliers [bronze, argent, or] d'un défi pour la saison d'index si, ou null si le défi n'a pas trois paliers
+ * STRICTEMENT croissants et atteignables (il n'est alors pas proposé, § 16.5) :
+ *   1. cibles de base × échelle, arrondies, au moins 1 (carrière : + rang si perRank) ;
+ *   2. strictement croissantes : un palier égal ou inférieur au précédent est relevé d'une unité ;
+ *   3. plafond (cultures faisables, caisses) : l'or descend au plafond, puis chaque palier au plus le suivant − 1 ;
+ *   4. le bronze doit rester au moins à `minTarget` (1 par défaut ; 2 pour les défis de cultures différentes,
+ *      sinon le premier semis donnerait la médaille), sinon null.
+ */
 function challengeTargets(host, def, si, current) {
   const { state, level } = host;
   const len = seasonLen(state, level, si);
@@ -349,19 +379,15 @@ function challengeTargets(host, def, si, current) {
     default:
       mult = 1;
   }
-  let t = def.targets.map((x) => Math.max(1, Math.round(x * mult)));
-  if (def.perRank && state.mode === 'career') t = t.map((x) => x + (state.career.rank || 1));
-  if (def.capFeasible) {
-    const n = Object.keys(seasonFeasible(host, si, current)).length;
-    t = t.map((x) => Math.max(1, Math.min(x, n)));
+  const t = def.targets.map((x) => Math.max(1, Math.round(x * mult)));
+  if (def.perRank && state.mode === 'career') for (let i = 0; i < 3; i++) t[i] += state.career.rank || 1;
+  for (let i = 1; i < 3; i++) if (t[i] <= t[i - 1]) t[i] = t[i - 1] + 1;
+  const cap = challengeCap(host, def, si, current);
+  if (Number.isFinite(cap)) {
+    t[2] = Math.min(t[2], cap);
+    for (let i = 1; i >= 0; i--) t[i] = Math.min(t[i], t[i + 1] - 1);
   }
-  if (def.capCrates) {
-    const n = current && state.variety.cart ? state.variety.cart.crates.length : cartCrateCount(state, level);
-    t = t.map((x) => Math.max(1, Math.min(x, n)));
-  }
-  // Paliers croissants (au moins égaux).
-  for (let i = 1; i < 3; i++) if (t[i] < t[i - 1]) t[i] = t[i - 1];
-  return t;
+  return t[0] >= (def.minTarget ?? 1) ? t : null;
 }
 
 /** Tire 3 défis différents (flux « variety »), jamais les mêmes trois que la saison précédente. */
@@ -440,7 +466,7 @@ export function checkMedals(host) {
 function challengeInfo(host, id, set, { current }) {
   const { state } = host;
   const def = CHALLENGES_BY_ID[id];
-  const targets = set.targets[id] || challengeTargets(host, def, state.time.seasonIndex, true);
+  const targets = set.targets[id] || challengeTargets(host, def, state.time.seasonIndex, true) || def.targets;
   const medal = current ? state.variety.challenges.medals[id] || 0 : 0;
   const kept = (set.kept || []).includes(id);
   return {
@@ -1087,7 +1113,29 @@ export function keepOrder(host, orderId, keep = true) {
   if (!f) return host.fail('Commande inconnue.');
   if (!keep && orderStarted(f.order)) return host.fail('Une commande commencée reste gardée.');
   f.order.kept = !!keep;
+  delete f.order.autoKept; // choix du joueur : ce n'est plus « gardée d'office »
   return { ok: true, order: orderInfo(host, f.order) };
+}
+
+/**
+ * (§ 16.2.3) Le joueur sème À LA MAIN la culture d'une commande du tableau qui n'est pas gardée : elle est gardée
+ * d'office (punaise), pour ne pas être remplacée à l'aube avant la récolte. Il peut toujours la retirer (✕) ou ôter
+ * la punaise. Les semis des salariés, des machines et de Joseph ne gardent rien. → événements orderKept poussés
+ */
+export function autoKeepOrders(host, cropId, plotIndex = null) {
+  const v = host.state.variety;
+  if (!v || !v.parts.board || !cropId) return [];
+  const out = [];
+  for (const o of v.board.slots) {
+    if (!o || o.kept || orderStarted(o)) continue;
+    if (!o.lines.some((l) => l.cropId === cropId && l.got < l.n)) continue;
+    o.kept = true;
+    o.autoKept = true;
+    const ev = { orderId: o.id, clientId: o.clientId, clientName: CLIENTS_BY_ID[o.clientId].name, cropId, auto: true, ...(plotIndex !== null ? { plotIndex } : {}) };
+    host.push('orderKept', ev);
+    out.push(ev);
+  }
+  return out;
 }
 
 export function declineOrder(host, orderId) {

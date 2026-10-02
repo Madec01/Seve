@@ -582,6 +582,7 @@ export function orderInfo(host, order) {
     premium: fullPremium(host, order),
     premiumSoFar: partialPremium(state, order),
     kept: !!order.kept || started,
+    autoKept: !!order.autoKept && !!order.kept && !started,
     started,
     canDeliver: deliverCount > 0,
     deliverCount,
