@@ -169,7 +169,8 @@ import {
 } from './variety.js';
 import { cartInfo, claimPreview, claimUnits, renewBoard, drawCart } from './requests.js';
 import { cardActive, hasVarietyAlmanac, seedFairFactor, vAbsDay } from './variety-effects.js';
-import { careerVarietyHost, triggerCareerVariety, careerDeliverOrder, careerLoadCart } from './career/variety.js';
+import { careerVarietyHost, careerDeliverOrder, careerLoadCart } from './career/variety-host.js';
+import { triggerCareerVariety } from './career/variety.js';
 import { CARD_VALUES } from '../data/variety.js';
 import { getInvestment as investmentData } from '../data/investments.js';
 import { hasRoom } from './processing.js';
@@ -1436,7 +1437,8 @@ function wrap(state, { fresh = false } = {}) {
         .filter(allowed)
         .map((c) => {
           const tree = isTreeCrop(c);
-          const seedCost = seedCostOf(c);
+          // Carrière : le prix payé au semis (remises de saison des fournisseurs : foire aux semis, cartes, thèmes).
+          const seedCost = rt ? rt.api.seedCost(c.id) : seedCostOf(c);
           const fatigue = plot && !tree ? wouldFatigue(level, plot, c.id) : false;
           const factor = fatigue ? 1 - level.modifiers.soilFatigue : 1;
           const yf = factor * (tree ? pollinationFactor(state, level, c.id) : 1);
@@ -1859,6 +1861,10 @@ function wrap(state, { fresh = false } = {}) {
     /** (lot 2) Surprises actives (Détente et carrière par défaut ; Classique : non). */
     get surprises() {
       return !!state.surprises;
+    },
+    /** (lot 3) Variété active (Détente et carrière par défaut ; Classique : non). */
+    get variety() {
+      return !!state.variety;
     },
     update,
     on: emitter.on,

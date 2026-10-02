@@ -9,6 +9,7 @@
 //   plan (champs et serre) : { spring, summer, autumn, winter } → 'same' | cropId | null (semoir, jardiniers)
 // Parcelles d'un terrain : state.plots[i].lot === lot.id (index du cœur, ajoutées à la fin, jamais renumérotées).
 
+import { CARD_VALUES } from '../../data/variety.js';
 import { SEASONS } from '../../data/balance.js';
 import { countNoun } from '../../data/french.js';
 import { getCrop } from '../../data/crops.js';
@@ -239,9 +240,9 @@ export function checkDevelop(state, lotId, type) {
   return { ok: true, cost, def };
 }
 
-/** Prix d'un aménagement ; (lot 3) carte « Coup de main au défrichage » : le prochain à moitié prix. */
+/** Prix d'un aménagement ; (lot 3) carte « Coup de main au défrichage » : le prochain moins cher (CARD_VALUES.clearing). */
 export function developCost(state, def) {
-  if (def.cost > 0 && state.variety?.cards?.pending?.clearingHalf) return Math.round(def.cost * 0.5);
+  if (def.cost > 0 && state.variety?.cards?.pending?.clearingHalf) return Math.round(def.cost * CARD_VALUES.clearing.careerFactor);
   return def.cost;
 }
 

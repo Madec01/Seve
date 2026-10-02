@@ -13,6 +13,10 @@ import './machines.js';
 import './staff.js';
 import './work.js';
 import './surprises.js';
-import './variety.js';
+import { varietyExtension } from './variety.js';
+import { registerCareerExtension } from './registry.js';
+
+// (lot 3) La variété après tous les autres (récoltes comptées : quête de Joseph, puis tableau et charrette).
+registerCareerExtension(varietyExtension);
 
 export {};

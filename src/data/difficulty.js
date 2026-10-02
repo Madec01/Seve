@@ -23,6 +23,11 @@
 //     cushion     pièces prêtées EN PLUS de ce qui manque, pour pouvoir ressemer (pas au dernier fermage)
 //   levels { [id]: { startMoney, rents, starThresholds, modifiers?, description? } }   nombres propres à
 //                              chaque niveau (description : quand le texte du niveau cite un nombre changé)
+//
+// Seuils d'étoiles Détente (règle du § 13.3 : ★★ ≈ argent final médian du joueur tranquille, ★★★ ≈ ses 12 % meilleures
+// parties ; niveau 2 : ★★★ rare pour le débutant, ≈ 15 %) — recalculés au lot 3 (2026-10-02) avec la variété active
+// (tableau, cadeaux, charrette, défis, colporteur : tools/simulate.js --stars, 200 graines). Anciens (lot 2) :
+// 410/650, 180/470, 230/450, 420/590, 240/510, 180/470, 140/380, 260/530, 170/340, 570/780, 260/440, 290/560.
 
 import { BASE_DAILY_CHARGE, GROWTH } from './balance.js';
 import { LEVELS, getLevel } from './levels.js';
@@ -47,24 +52,24 @@ export const DIFFICULTIES = {
     dryHeatwaveGrowth: 0.25,
     neighbourLoan: { maxShare: 0.5, minCover: 60, surcharge: 0.1, repayShare: 0.5, cushion: 30 },
     levels: {
-      1: { startMoney: 160, rents: [20, 60, 90, 130], starThresholds: [410, 650] },
-      2: { startMoney: 180, rents: [20, 60, 80, 120], starThresholds: [180, 470] },
-      3: { startMoney: 160, rents: [20, 50, 100, 170], starThresholds: [230, 450] },
-      4: { startMoney: 260, rents: [20, 60, 90, 120], starThresholds: [420, 590] },
-      5: { startMoney: 160, rents: [20, 80, 140, 500], starThresholds: [240, 510] },
-      6: { startMoney: 160, rents: [20, 70, 130, 300], starThresholds: [180, 470] },
+      1: { startMoney: 160, rents: [20, 60, 90, 130], starThresholds: [570, 870] },
+      2: { startMoney: 180, rents: [20, 60, 80, 120], starThresholds: [290, 540] },
+      3: { startMoney: 160, rents: [20, 50, 100, 170], starThresholds: [310, 620] },
+      4: { startMoney: 260, rents: [20, 60, 90, 120], starThresholds: [550, 780] },
+      5: { startMoney: 160, rents: [20, 80, 140, 500], starThresholds: [450, 840] },
+      6: { startMoney: 160, rents: [20, 70, 130, 300], starThresholds: [290, 670] },
       7: {
         startMoney: 660,
         rents: [50, 150, 230, 360],
-        starThresholds: [140, 380],
+        starThresholds: [250, 580],
         description: 'La banque vous prête 600 pièces pour bien démarrer, mais il faut rembourser 120 pièces tous les 7 jours (au milieu de chaque saison), en plus du fermage.',
         modifiers: { loan: { payment: 120, every: 7, first: 4 } },
       },
-      8: { startMoney: 160, rents: [20, 80, 130, 240], starThresholds: [260, 530] },
-      9: { startMoney: 360, rents: [20, 60, 120, 260], starThresholds: [170, 340] },
-      10: { startMoney: 240, rents: [20, 90, 200, 420], starThresholds: [570, 780] },
-      11: { startMoney: 340, rents: [20, 80, 160, 440], starThresholds: [260, 440] },
-      12: { startMoney: 310, rents: [20, 100, 190, 480], starThresholds: [290, 560] },
+      8: { startMoney: 160, rents: [20, 80, 130, 240], starThresholds: [410, 660] },
+      9: { startMoney: 360, rents: [20, 60, 120, 260], starThresholds: [290, 490] },
+      10: { startMoney: 240, rents: [20, 90, 200, 420], starThresholds: [680, 950] },
+      11: { startMoney: 340, rents: [20, 80, 160, 440], starThresholds: [440, 640] },
+      12: { startMoney: 310, rents: [20, 100, 190, 480], starThresholds: [420, 660] },
     },
   },
   classique: {

@@ -773,9 +773,11 @@ export function varietyDay(game, me, style, spend, keep = 0) {
   const q = game.query;
   if (!game.state.variety) return;
   // Tableau : un regard (1 geste), garder les commandes qu'on peut semer.
-  if (style.boardLook > 0 && me.rnd() < style.boardLook && spend(1)) {
+  if (style.boardLook > 0 && q.orders() && me.rnd() < style.boardLook && spend(1)) {
     const board = q.orders();
     const sowable = new Set(q.plantableCrops().map((o) => o.id));
+    // Il retient les cultures demandées (son « semer partout » des deux jours suivants les préfère).
+    me.wanted = { day: q.calendar().day, crops: new Set((board?.slots || []).filter((o) => !o.empty).flatMap((o) => o.lines.filter((l) => l.left > 0).map((l) => l.cropId))) };
     for (const o of board?.slots || []) {
       if (o.empty || o.kept) continue;
       const can = o.lines.every((l) => sowable.has(l.cropId) || l.inStock >= l.left);
@@ -793,10 +795,12 @@ export function varietyDay(game, me, style, spend, keep = 0) {
     me.merchantSeen = m.arriveDay;
     if (style.rareBuy > 0 && me.rnd() < style.rareBuy) {
       const bag = m.stall.find((it) => it.itemId.startsWith('seeds.') && it.canBuy);
-      if (bag && game.state.money - bag.price >= keep + 20 && spend(1)) game.actions.buyFromMerchant(bag.itemId);
+      if (bag && game.state.money - bag.price >= keep && spend(1)) game.actions.buyFromMerchant(bag.itemId);
     }
     if (style.merchantAny > 0 && me.rnd() < style.merchantAny) {
-      const it = m.stall.find((x) => x.canBuy);
+      // Le débutant achète un objet au hasard parmi ceux qu'il peut payer (sans regarder le fermage).
+      const can = m.stall.filter((x) => x.canBuy);
+      const it = can.length ? can[Math.floor(me.rnd() * can.length)] : null;
       if (it && spend(1)) game.actions.buyFromMerchant(it.itemId);
     }
   }
@@ -903,7 +907,8 @@ function humanPickCrop(game, me, profile, plotIndex, budgetMoney) {
   }
   // Au hasard, surtout les cultures bon marché et rapides ; un peu plus celles que l'atelier transforme ;
   // (lot 3) × 2 les cultures demandées au tableau ou à la charrette (le casual a regardé le tableau).
-  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? 2 : 1) * (o.requested && profile.requestBias ? profile.requestBias : 1);
+  const wanted = me.wanted && me.wanted.day >= cal.day - 1 ? me.wanted.crops : null;
+  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? 2 : 1) * (wanted && wanted.has(o.id) && profile.requestBias ? profile.requestBias : 1);
   const total = options.reduce((sum, o) => sum + weight(o), 0);
   let r = me.rnd() * total;
   for (const o of options) {
@@ -996,7 +1001,8 @@ function humanDay(game, me, profile) {
   }
 
   // (lot 3) Tableau du village (un jour sur deux) et colporteur.
-  if (game.state.variety) varietyDay(game, me, profile, spend, game.query.finance().nextBill.amount * profile.rentAware);
+  // « S'il a la marge » : le sachet ne doit pas entamer le fermage de la saison (+ 40 pièces pour ressemer).
+  if (game.state.variety) varietyDay(game, me, profile, spend, game.query.finance().nextBill.amount + 40);
 
   // Plantation (« semer partout ») certains jours.
   const empty = () => game.state.plots.map((p, i) => (p.unlocked && !p.cropId ? i : -1)).filter((i) => i >= 0);
@@ -1159,6 +1165,7 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
   const lot2 = { fine: 0, gold: 0, giants: 0, surprises: 0, specials: 0, wishes: 0 };
   // (lot 3) Variété : primes du tableau et de la charrette, cartes, médailles (pièces) ; dépenses au colporteur ; écus.
   const lot3 = { orders: 0, cart: 0, cards: 0, medals: 0, merchant: 0, ecus: 0, ordersDone: 0, cratesFull: 0, medalsN: 0, rareSown: 0 };
+  const medalsBy = {};
   game.on('orderDone', (e) => {
     lot3.orders += e.premium;
     lot3.ordersDone++;
@@ -1174,6 +1181,7 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
     lot3.medals += e.coins || 0;
     lot3.ecus += e.ecus || 0;
     lot3.medalsN++;
+    medalsBy[`${e.challengeId}.${e.medal}`] = (medalsBy[`${e.challengeId}.${e.medal}`] || 0) + 1;
   });
   game.on('merchantBought', (e) => (lot3.merchant += e.price || 0));
   game.on('planted', (e) => {
@@ -1237,7 +1245,7 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
   if (!result) throw new Error(`Partie non terminée (niveau ${levelId}, graine ${seed})`);
   income.variety = lot3.orders + lot3.cart + lot3.cards + lot3.medals;
   income.total = income.crops + income.apples + income.products + income.investments + income.contest + income.raw + income.refund + income.surprises + income.variety;
-  return { ...result, income, contest, lot2, lot3 };
+  return { ...result, income, contest, lot2, lot3, medalsBy };
 }
 
 function traceDay(game, before) {

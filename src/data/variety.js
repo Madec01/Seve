@@ -22,10 +22,9 @@ export const BOARD = { slots: 3, level1Start: 5, minHorizon: 3 };
 
 /** Taux de prime d'une commande (poids) ; commande à deux lignes +0,1 (au plus ×1,5) ; carte « crieur » +0,1 (×1,6). */
 export const ORDER_RATES = [
-  { rate: 1.05, weight: 2 },
-  { rate: 1.1, weight: 4 },
-  { rate: 1.15, weight: 3 },
-  { rate: 1.2, weight: 1 },
+  { rate: 1.05, weight: 6 },
+  { rate: 1.1, weight: 3 },
+  { rate: 1.15, weight: 1 },
 ];
 export const ORDER_RATE_RULES = { twoLines: 0.1, twoLinesMax: 1.5, crier: 0.1, crierMax: 1.6 };
 
@@ -38,7 +37,7 @@ export const ORDER_SIZES = {
   cheap: { maxPrice: 20, levels: [3, 5], perRank: 2 },
   medium: { maxPrice: 40, levels: [2, 4], perRank: 2 },
   dear: { maxPrice: Infinity, levels: [2, 3], perRank: 3 },
-  plotsPerUnit: 3,
+  plotsPerUnit: 2,
   minCap: 2,
   perTree: 2,
   secondaryMin: 2,
@@ -94,8 +93,8 @@ export const CART = {
   careerBase: 4,
   careerPerRank: 2,
   careerMin: 2,
-  share: 0.1,
-  fullShare: 0.1,
+  share: 0.05,
+  fullShare: 0.05,
   fullEcus: 2,
   horseFactor: 2,
   level1From: 1, // niveau 1 : à partir de l'été (index de saison)
@@ -111,39 +110,39 @@ export const CART = {
 export const CARDS = [
   { id: 'purse', name: 'La bourse du village', kind: 'now', weight: 3, text: '+{amount} pièces tout de suite.' },
   { id: 'seedFair', name: 'Foire aux graines', kind: 'season', weight: 3, text: 'Graines à moitié prix les 3 premiers jours de la saison.' },
-  { id: 'fertilizer', name: 'Sac d\'engrais', kind: 'season', weight: 3, text: 'Tout pousse 10 % plus vite toute la saison.' },
-  { id: 'hen', name: 'Une poule voyageuse', kind: 'season', careerKind: 'now', weight: 2, text: '+4 pièces chaque matin de la saison.', careerText: 'Deux poules offertes au poulailler.' },
+  { id: 'fertilizer', name: 'Sac d\'engrais', kind: 'season', weight: 3, text: 'Tout pousse 8 % plus vite toute la saison.' },
+  { id: 'hen', name: 'Une poule voyageuse', kind: 'season', careerKind: 'now', weight: 2, text: '+3 pièces chaque matin de la saison.', careerText: 'Deux poules offertes au poulailler.' },
   { id: 'watering', name: 'L\'arrosoir magique', kind: 'season', weight: 2, text: 'Chaque matin, {n} parcelles qui ont soif sont arrosées.' },
   { id: 'clover', name: 'Trèfle à quatre feuilles', kind: 'season', weight: 2, text: 'Belles et dorées deux fois plus fréquentes toute la saison.' },
-  { id: 'poster', name: 'Une affiche au marché', kind: 'season', weight: 2, text: 'Récoltes vendues 5 % plus cher toute la saison.' },
+  { id: 'poster', name: 'Une affiche au marché', kind: 'season', weight: 2, text: 'Récoltes vendues 4 % plus cher toute la saison.' },
   { id: 'landlord', name: 'Le geste du propriétaire', kind: 'next', weight: 2, text: 'Prochain fermage −20 %.', careerName: 'La ristourne de la coopérative', careerText: 'Prochaines charges de saison −20 %.' },
   { id: 'bees', name: 'Un essaim d\'abeilles', kind: 'now', weight: 1, text: 'Une ruche offerte, tout de suite.' },
   { id: 'crier', name: 'Le crieur du village', kind: 'season', weight: 2, text: 'Primes du tableau +10 points toute la saison.' },
   { id: 'cartHorse', name: 'Un cheval de renfort', kind: 'next', weight: 2, text: 'Prime de la prochaine charrette × 2.' },
-  { id: 'clearing', name: 'Coup de main au défrichage', kind: 'next', weight: 1, text: 'Prochaine parcelle achetée gratuite.', careerText: 'Prochain aménagement de terrain à moitié prix.' },
+  { id: 'clearing', name: 'Coup de main au défrichage', kind: 'next', weight: 1, text: 'Prochaine parcelle achetée gratuite.', careerText: 'Prochain aménagement de terrain −25 %.' },
   { id: 'seedBag', name: 'Un sachet de graines rares', kind: 'now', weight: 1, text: '{n} graines rares de {crop}, tout de suite.' },
-  { id: 'recipe', name: 'La recette de saison', kind: 'season', weight: 1, text: 'Produits transformés 15 % plus chers toute la saison.' },
-  { id: 'hay', name: 'Du foin parfumé', kind: 'season', weight: 1, text: 'Les animaux rapportent 15 % de plus toute la saison.' },
+  { id: 'recipe', name: 'La recette de saison', kind: 'season', weight: 1, text: 'Produits transformés 10 % plus chers toute la saison.' },
+  { id: 'hay', name: 'Du foin parfumé', kind: 'season', weight: 1, text: 'Les animaux rapportent 10 % de plus toute la saison.' },
   { id: 'almanac', name: 'L\'almanach du berger', kind: 'now', weight: 1, text: 'Météo d\'après-demain affichée jusqu\'à la fin de la partie.', careerText: 'Météo d\'après-demain affichée jusqu\'à la fin de l\'année.' },
 ];
 export const CARDS_BY_ID = Object.fromEntries(CARDS.map((c) => [c.id, c]));
 
 /** Chiffres des cartes. */
 export const CARD_VALUES = {
-  purse: { base: 20, perSeason: 5, careerBase: 30, careerPerRank: 20 },
+  purse: { base: 12, perSeason: 4, careerBase: 20, careerPerRank: 10 },
   seedFair: { factor: 0.5, days: 3 },
-  fertilizer: { growth: 0.1 },
-  hen: { coins: 4, careerHens: 2 },
-  watering: { plots: 4, careerPlots: 6 },
+  fertilizer: { growth: 0.08 },
+  hen: { coins: 3, careerHens: 2 },
+  watering: { plots: 3, careerPlots: 4 },
   clover: { factor: 2, maxFactor: 4 },
-  poster: { factor: 1.05 },
+  poster: { factor: 1.04 },
   landlord: { factor: 0.8 },
   crier: { bonus: 0.1 },
   cartHorse: { factor: 2 },
-  clearing: { careerFactor: 0.5 },
-  seedBag: { seeds: 4, careerSeeds: 8 },
-  recipe: { factor: 1.15 },
-  hay: { factor: 1.15 },
+  clearing: { careerFactor: 0.75 },
+  seedBag: { seeds: 3, careerSeeds: 6 },
+  recipe: { factor: 1.1 },
+  hay: { factor: 1.1 },
 };
 
 // ── C4 — Les défis de la saison ────────────────────────────────────────────────────────────────
@@ -159,26 +158,26 @@ export const CARD_VALUES = {
 export const CHALLENGE_RULES = { kMin: 0.5, kMax: 4, keepMax: 2, offered: 3 };
 
 export const CHALLENGES = [
-  { id: 'harvests', name: 'Belle cueillette', text: 'Récolter {n} fois.', targets: [18, 32, 48], scale: 'k', weight: 3 },
-  { id: 'sales', name: 'Bon marché', text: 'Vendre pour {n} pièces de récoltes.', targets: [240, 400, 580], scale: 'price', weight: 3 },
-  { id: 'variety', name: 'Potager varié', text: 'Récolter {n} cultures différentes.', targets: [3, 4, 5], scale: null, capFeasible: true, weight: 2 },
-  { id: 'sowing', name: 'Semeur curieux', text: 'Semer {n} cultures différentes.', targets: [3, 4, 5], scale: null, capFeasible: true, weight: 2 },
-  { id: 'care', name: 'Aux petits soins', text: 'Récolter {n} cultures arrosées chaque jour.', targets: [5, 10, 16], scale: 'k', weight: 2 },
+  { id: 'harvests', name: 'Belle cueillette', text: 'Récolter {n} fois.', targets: [20, 36, 54], scale: 'k', weight: 3 },
+  { id: 'sales', name: 'Bon marché', text: 'Vendre pour {n} pièces de récoltes.', targets: [300, 520, 760], scale: 'price', weight: 3 },
+  { id: 'variety', name: 'Potager varié', text: 'Récolter {n} cultures différentes.', targets: [3, 4, 6], scale: null, capFeasible: true, weight: 2 },
+  { id: 'sowing', name: 'Semeur curieux', text: 'Semer {n} cultures différentes.', targets: [4, 5, 6], scale: null, capFeasible: true, weight: 2 },
+  { id: 'care', name: 'Aux petits soins', text: 'Récolter {n} cultures arrosées chaque jour.', targets: [6, 12, 20], scale: 'k', weight: 2 },
   { id: 'quality', name: 'La main verte', text: 'Récolter {n} belles ou dorées.', targets: [1, 3, 5], scale: 'kMin1', weight: 1 },
-  { id: 'orders', name: 'Ami du village', text: 'Livrer {n} commandes du tableau.', targets: [1, 2, 4], scale: null, weight: 2 },
+  { id: 'orders', name: 'Ami du village', text: 'Livrer {n} commandes du tableau.', targets: [2, 3, 5], scale: null, weight: 2 },
   { id: 'crates', name: 'La charrette pleine', text: 'Remplir {n} caisses de la charrette.', targets: [1, 2, 3], scale: null, capCrates: true, weight: 2 },
   { id: 'products', name: 'Fait maison', text: 'Vendre {n} produits transformés.', targets: [3, 6, 9], scale: null, perRank: true, weight: 2 },
   { id: 'apples', name: 'Paniers du verger', text: 'Récolter {n} paniers de fruits.', targets: [2, 4, 6], scale: 'trees', weight: 1 },
-  { id: 'animals', name: 'Basse-cour heureuse', text: 'Gagner {n} pièces avec les animaux.', targets: [30, 55, 85], scale: 'days', mode: 'levels', weight: 1 },
+  { id: 'animals', name: 'Basse-cour heureuse', text: 'Gagner {n} pièces avec les animaux.', targets: [45, 80, 120], scale: 'days', mode: 'levels', weight: 1 },
   { id: 'collect', name: 'La tournée des abris', text: 'Ramasser {n} fois les abris.', targets: [6, 11, 17], scale: 'days', mode: 'career', weight: 2 },
 ];
 export const CHALLENGES_BY_ID = Object.fromEntries(CHALLENGES.map((c) => [c.id, c]));
 
-/** Récompenses des médailles (paliers cumulés) : écus (versés par l'interface) et pièces (carrière : × rang). */
+/** Récompenses des médailles (paliers cumulés) : écus (versés par l'interface) et pièces (carrière : careerCoins × rang). */
 export const MEDALS = [
-  { id: 'bronze', name: 'Médaille de bronze', ecus: 1, coins: 0 },
-  { id: 'silver', name: 'Médaille d\'argent', ecus: 2, coins: 10 },
-  { id: 'gold', name: 'Médaille d\'or', ecus: 4, coins: 20 },
+  { id: 'bronze', name: 'Médaille de bronze', ecus: 1, coins: 0, careerCoins: 0 },
+  { id: 'silver', name: 'Médaille d\'argent', ecus: 2, coins: 10, careerCoins: 5 },
+  { id: 'gold', name: 'Médaille d\'or', ecus: 4, coins: 20, careerCoins: 10 },
 ];
 
 // ── C7 — Le jour du colporteur ─────────────────────────────────────────────────────────────────
@@ -212,9 +211,9 @@ export const RARE_OF_SEASON = { spring: 'pea', summer: 'melon', autumn: 'leek', 
 
 /** Sachets de graines rares : prix et semis (niveaux ; carrière : careerPrice, careerSeeds). */
 export const RARE_SEEDS = {
-  pea: { price: 30, seeds: 6, careerPrice: 60, careerSeeds: 12 },
-  melon: { price: 90, seeds: 6, careerPrice: 180, careerSeeds: 12 },
-  leek: { price: 50, seeds: 6, careerPrice: 100, careerSeeds: 12 },
+  pea: { price: 30, seeds: 6, careerPrice: 60, careerSeeds: 8 },
+  melon: { price: 90, seeds: 6, careerPrice: 180, careerSeeds: 8 },
+  leek: { price: 50, seeds: 6, careerPrice: 100, careerSeeds: 8 },
 };
 
 /**

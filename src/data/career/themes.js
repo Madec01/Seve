@@ -63,7 +63,7 @@ export const THEMES = [
     effects: ['Choux vendus +25 %.', 'Les jours nuageux, parfois une petite averse à l\'aube.', 'Corbeaux deux fois plus rares.', 'L\'heure dorée est plus rare.'],
     festival: { name: 'Bal des grenouilles', seasonId: 'spring', day: 7, text: 'Tout est arrosé, récoltes +10 % aujourd\'hui.' },
     visitor: { id: 'firmin', name: 'Firmin le vieux pêcheur', seasonId: 'autumn', day: 3, text: 'Firmin vous offre sa canne : poissons +50 % toute l\'année.', gift: 'rod' },
-    values: { showerChance: 0.3, crowWeight: 0.5, goldenHour: 0.5, festivalCrops: 1.1, fishFactor: 1.5, giftCoins: 40 },
+    values: { showerChance: 0.15, crowWeight: 0.5, goldenHour: 0.5, festivalCrops: 1.1, fishFactor: 1.5, giftCoins: 40 },
   },
   {
     id: 'orchard',

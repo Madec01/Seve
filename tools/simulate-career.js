@@ -13,6 +13,10 @@
 //   node tools/simulate-career.js --json
 //   node tools/simulate-career.js --surprises off        (lot 2) sans qualité, géants, surprises, météos spéciales, trouvailles
 //   node tools/simulate-career.js --compare-surprises    (lot 2) sans / avec : revenu par année, rang médian, Domaine
+//   node tools/simulate-career.js --variety off          (lot 3) sans tableau, cadeaux, charrette, défis, colporteur ni thèmes
+//                                                        (--variety board,themes : seulement ces parties) ; défaut : avec
+//   node tools/simulate-career.js --compare-variety      (lot 3) sans → avec : revenu par année, rang médian, Domaine,
+//                                                        sollicitations par semaine, faillites, gains de la variété
 //
 // Robots (profils humains : budget de gestes par jour, comme tools/simulate.js ; « glisser » sur un terrain :
 // 1 geste + 0,25 par parcelle, « semer partout » : 3 gestes par terrain, ramasser un abri : 1, chasser un
@@ -49,7 +53,7 @@ import { createCareer } from '../src/core/career/career.js';
 import { DAY_SECONDS } from '../src/data/balance.js';
 import { getCrop, isTreeCrop } from '../src/data/crops.js';
 import { RANKS } from '../src/data/career/ranks.js';
-import { HUMAN_PROFILES } from './simulate.js';
+import { HUMAN_PROFILES, parseVariety, sowRare, varietyChoices, varietyDay } from './simulate.js';
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
@@ -71,17 +75,21 @@ export const CAREER_PROFILES = {
     avoidFreeze: C.avoidFreeze, rentAware: C.rentAware, buyProb: C.buyProb, buyBuffer: C.buyBuffer, reserveSeasons: 2,
     collectProb: 0.5, acceptVisitor: 0.7, acceptQuest: 0.7, chaseCrow: 0.6, fish: 0.5, winterLeave: 0.5, merchant: 0.3, pet: 0.5,
     contestAware: 0.5, plan: 'simple', hirePick: 'first', smart: false,
+    // (lot 3) Variété : comme le joueur tranquille des niveaux (§ 16.10).
+    boardLook: C.boardLook, keepOrder: C.keepOrder, requestBias: C.requestBias, cardPick: C.cardPick, challengePick: C.challengePick, rareBuy: C.rareBuy, merchantAny: 0,
   },
   novice: {
     taps: N.taps, skipDay: N.skipDay, harvestProb: N.harvestProb, maxDelay: N.maxDelay, plantProb: N.plantProb, water: N.water,
     avoidFreeze: N.avoidFreeze, rentAware: 0, buyProb: N.buyProb, buyBuffer: N.buyBuffer, reserveSeasons: 0,
     collectProb: 0.5, acceptVisitor: 0.5, acceptQuest: 0.5, chaseCrow: 0.4, fish: 0.3, winterLeave: 0, merchant: 0.5, pet: 0.8,
     contestAware: 0, plan: 'same', hirePick: 'first', smart: false, starter: true,
+    boardLook: 0, keepOrder: 0, requestBias: 1, cardPick: 'first', challengePick: 'none', rareBuy: 0, merchantAny: N.merchantAny,
   },
   optimal: {
     taps: [40, 40], skipDay: 0, harvestProb: 1, maxDelay: 0, plantProb: 1, water: [1, 1], avoidFreeze: 1, rentAware: 1,
     buyProb: 1, buyBuffer: [20, 20], reserveSeasons: 2, collectProb: 1, acceptVisitor: 1, acceptQuest: 1, chaseCrow: 1, fish: 1,
     winterLeave: 'smart', merchant: 'smart', pet: 1, contestAware: 1, plan: 'best', hirePick: 'best', smart: true, askQuest: 0.2,
+    boardLook: 1, keepOrder: 1, requestBias: 2, cardPick: 'best', challengePick: 'best', rareBuy: 1, merchantAny: 0,
   },
 };
 CAREER_PROFILES.idle = { ...CAREER_PROFILES.casual, idleFrom: 2 };
@@ -562,6 +570,10 @@ function priorityCrops(game, me) {
   const q = game.state.career.quest;
   if (q && q.accepted && q.type === 'crop') out.push(q.need.id);
   for (const o of game.state.career.events.offers) if (o.kind === 'visitor' && o.accepted) out.push(o.data.cropId);
+  // (lot 3) L'appliqué sème les cultures des commandes qu'il a gardées.
+  if (me.profile.smart && game.state.variety) {
+    for (const o of game.query.orders()?.slots || []) if (!o.empty && o.kept) for (const l of o.lines) if (l.left > 0) out.push(l.cropId);
+  }
   if (me.contestFocus) {
     const k = game.query.career.contest();
     if (k && !k.judged) {
@@ -660,9 +672,9 @@ function collectShelters(game, me, spend) {
 }
 
 // ── Gestes aux champs ──────────────────────────────────────────────────────────────────────
-function pickCrop(game, i, { rnd, P, keep, priority }) {
+function pickCrop(game, i, { rnd, P, keep, priority, me }) {
   const cal = game.query.calendar();
-  let options = game.query.plantableCrops(i).filter((o) => o.kind !== 'tree' && o.seedCost <= game.state.money - keep && cal.day < cal.totalDays);
+  let options = game.query.plantableCrops(i).filter((o) => o.kind !== 'tree' && !o.rare && o.seedCost <= game.state.money - keep && cal.day < cal.totalDays);
   if (!options.length) return null;
   const safe = options.filter((o) => !o.willFreeze);
   for (const id of priority) {
@@ -682,7 +694,9 @@ function pickCrop(game, i, { rnd, P, keep, priority }) {
     return cheap[0] || options.reduce((a, b) => (b.seedCost < a.seedCost ? b : a));
   }
   const wantsProducts = (game.query.career.summary().nextRank?.objectives || []).some((ob) => ob.id === 'products' && !ob.done);
-  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? (wantsProducts ? 6 : 2) : 1);
+  // (lot 3) × 2 les cultures demandées au tableau (si le joueur l'a regardé hier ou aujourd'hui).
+  const wanted = me.wanted && me.wanted.day >= cal.day - 1 && P.requestBias > 1 ? me.wanted.crops : null;
+  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? (wantsProducts ? 6 : 2) : 1) * (wanted && wanted.has(o.id) ? P.requestBias : 1);
   const total = options.reduce((s, o) => s + weight(o), 0);
   let r = rnd() * total;
   for (const o of options) {
@@ -754,9 +768,12 @@ function sowAndWater(game, me, spend, { lots, priority, cal }) {
       if (L.list.some((i) => !game.state.plots[i].cropId) && spend(3)) orchardTrees(game, L.list, seasonCharge(game));
       continue;
     }
-    const empty = L.list.filter((i) => !game.state.plots[i].cropId);
+    let empty = L.list.filter((i) => !game.state.plots[i].cropId);
     if (!empty.length || me.rnd() >= P.plantProb || !spend(3)) continue;
-    const pick = pickCrop(game, empty[0], { rnd: me.rnd, P, keep, priority });
+    // (lot 3) Les graines rares d'abord (« semer partout » les utilise jusqu'au bout du sachet).
+    if (game.state.variety && sowRare(game, empty) > 0) empty = empty.filter((i) => !game.state.plots[i].cropId);
+    if (!empty.length) continue;
+    const pick = pickCrop(game, empty[0], { rnd: me.rnd, P, keep, priority, me });
     if (!pick) continue;
     for (const i of empty) {
       if (game.state.money - pick.seedCost < keep) break;
@@ -831,6 +848,16 @@ function sellStock(game, me) {
   if ((cal.seasonId === 'winter' && cal.dayOfSeason === 4) || stock.used >= stock.capacity) game.actions.career.sellStock();
 }
 
+/** (lot 3) Visiteur unique de l'année à thème : son cadeau est accepté (grossiste : quand il y a un grenier plein). */
+function themeVisitor(game, me) {
+  const offers = game.query.career.events().offers.filter((o) => o.kind === 'themeVisitor');
+  for (const o of offers) {
+    if (o.data.gift === 'wholesale' && game.query.career.stock().used < 5 && o.daysLeft > 0) continue;
+    game.actions.career.acceptOffer(o.id);
+  }
+  void me;
+}
+
 // ── Une journée ───────────────────────────────────────────────────────────────────────────
 function playDay(game, me) {
   const P = me.profile;
@@ -846,6 +873,11 @@ function playDay(game, me) {
   const noGestures = P.noGesturesFrom && year >= P.noGesturesFrom;
   contestFocus(game, me);
   seasonalDecisions(game, me);
+  // (lot 3) Fenêtre de fin de saison (cadeau, défis) et visiteur du thème : des décisions, sans geste compté.
+  if (game.state.variety) {
+    varietyChoices(game, me, P);
+    themeVisitor(game, me);
+  }
   t.left = noGestures ? 0 : Math.round(between(me.rnd, P.taps));
   const cal = game.query.calendar();
   if (!noGestures && me.rnd() < P.skipDay && cal.daysLeftInSeason > 0) {
@@ -853,6 +885,8 @@ function playDay(game, me) {
     return t;
   }
   if (!noGestures) handleEvents(game, me, spend);
+  // (lot 3) Tableau du village (et grenier → commandes, charrette), colporteur.
+  if (!noGestures && game.state.variety) varietyDay(game, me, P, spend, (P.reserveSeasons || 0) * seasonCharge(game));
   const ctx = noGestures ? null : fieldWork(game, me, spend);
   if (!noGestures) collectShelters(game, me, spend);
   // Achats (le joueur ouvre la boutique certains jours ; l'automate décide chaque jour sans geste).
@@ -878,8 +912,8 @@ export async function loadStaffHelper() {
   return staffHelperModule;
 }
 
-export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true } = {}) {
-  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises });
+export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true } = {}) {
+  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises, variety });
   const profile = CAREER_PROFILES[strategy];
   if (!profile) throw new Error(`Stratégie inconnue : ${strategy}`);
   const me = {
@@ -891,6 +925,25 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   };
   game.actions.career.setStorageMode('low');
   const out = { seed, strategy, years: [], bankrupt: false, loans: 0, hardships: 0, rescues: 0, quests: 0, contests: 0, domaineYear: null, overdraftStreakMax: 0 };
+  // (lot 3) gains de la variété (pièces, toute la carrière) et écus.
+  out.variety = { orders: 0, cart: 0, cards: 0, medals: 0, merchant: 0, ecus: 0, ordersDone: 0, medalsN: 0, themes: 0 };
+  game.on('orderDone', (e) => {
+    out.variety.orders += e.premium;
+    out.variety.ordersDone++;
+  });
+  game.on('orderRemoved', (e) => (out.variety.orders += e.premium || 0));
+  game.on('cartDeparted', (e) => {
+    out.variety.cart += e.premium;
+    out.variety.ecus += e.ecus || 0;
+  });
+  game.on('cardPicked', (e) => (out.variety.cards += e.amount || 0));
+  game.on('challengeMedal', (e) => {
+    out.variety.medals += e.coins || 0;
+    out.variety.ecus += e.ecus || 0;
+    out.variety.medalsN++;
+  });
+  game.on('merchantBought', (e) => (out.variety.merchant += e.price || 0));
+  game.on('themeStarted', () => out.variety.themes++);
   let y = newYearAcc(game);
   let current = null;
   let overdraftSeasons = 0;
@@ -917,6 +970,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     me.pace.events++;
     // Sollicitations : ce qui demande une réponse ou un geste (commande, marchand, animal perdu, corbeaux).
     if (['visitor', 'merchant', 'lostPet', 'crows'].includes(e.kind)) me.pace.asks++;
+    if (['visitor', 'merchant'].includes(e.kind)) me.pace.visitorMerchant = (me.pace.visitorMerchant || 0) + 1;
     if (e.kind === 'visitor') me.pace.visitors++;
   });
   game.on('festival', () => me.pace.festivals++);
@@ -1056,11 +1110,11 @@ function median(xs) {
 
 const pct = (n, d) => (d ? Math.round((100 * n) / d) : 0);
 
-export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true } = {}) {
+export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true, variety = true } = {}) {
   const table = {};
   for (const strategy of strategies) {
     const careers = [];
-    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises }));
+    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises, variety }));
     const rows = [];
     for (let yv = 1; yv <= years; yv++) {
       const at = careers.map((c) => c.years.find((x) => x.year === yv)).filter(Boolean);
@@ -1110,6 +1164,8 @@ export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10,
       quests: median(careers.map((c) => c.quests)),
       hearts: median(careers.map((c) => c.hearts)),
       pace: paceSummary(careers),
+      // (lot 3) gains moyens de la variété par carrière (pièces) et écus.
+      variety: Object.fromEntries(Object.keys(careers[0]?.variety || {}).map((k) => [k, Math.round(careers.reduce((s2, c) => s2 + c.variety[k], 0) / careers.length)])),
     };
   }
   return table;
@@ -1193,6 +1249,27 @@ function printCompareSurprises(off, on, years) {
   }
 }
 
+/** (lot 3) Sans → avec la variété : revenu par année, rang médian, Domaine, sollicitations, gains. */
+function printCompareVariety(off, on, years) {
+  console.log('\nVariété du lot 3 — carrière : sans → avec (revenu moyen de l\'année, rang médian, Domaine, faillites, sollicitations/semaine)');
+  for (const strategy of Object.keys(off)) {
+    const a = off[strategy];
+    const b = on[strategy];
+    let ia = 0;
+    let ib = 0;
+    const cells = [];
+    for (let k = 0; k < Math.min(a.rows.length, b.rows.length, years); k++) {
+      ia += a.rows[k].income;
+      ib += b.rows[k].income;
+      cells.push(`${a.rows[k].rankMedian}→${b.rows[k].rankMedian}`);
+    }
+    const d = ia ? (100 * (ib - ia)) / ia : 0;
+    const v = b.variety || {};
+    console.log(`  ${strategy.padEnd(9)} revenu ${d >= 0 ? '+' : ''}${d.toFixed(1)} % · Domaine ${a.domaineYear}→${b.domaineYear} · faillites ${a.bankrupt}→${b.bankrupt} % · sollic./sem. ${a.pace.asksPerWeek}→${b.pace.asksPerWeek} (évén. au hasard ${a.pace.eventsPerWeek}→${b.pace.eventsPerWeek}) · rangs ${cells.join(' ')}`);
+    console.log(`            gains par carrière : tableau ${v.orders} · cartes ${v.cards} · charrette ${v.cart} · médailles ${v.medals} · colporteur −${v.merchant} · écus ${v.ecus} · commandes ${v.ordersDone} · médailles ${v.medalsN} · thèmes ${v.themes}`);
+  }
+}
+
 async function run() {
   const strategies = arg('strategy', null) ? String(arg('strategy')).split(',') : STRATEGIES;
   const helper = await loadStaffHelper();
@@ -1206,7 +1283,15 @@ async function run() {
     seasonLength: Number(arg('season', 7)),
     assumeObjectives: !!arg('assume-objectives', false),
     helper: helper || null,
+    variety: arg('variety', null) === null ? true : parseVariety(arg('variety')),
   };
+  if (arg('compare-variety', false)) {
+    const off = simulateCareer({ ...opts, variety: false });
+    const on = simulateCareer({ ...opts, variety: opts.variety === false ? true : opts.variety });
+    if (arg('json', false)) console.log(JSON.stringify({ off, on }, null, 2));
+    else printCompareVariety(off, on, opts.years);
+    return;
+  }
   if (arg('compare-surprises', false)) {
     const off = simulateCareer({ ...opts, surprises: false });
     const on = simulateCareer({ ...opts, surprises: true });

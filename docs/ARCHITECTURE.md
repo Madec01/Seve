@@ -2453,6 +2453,63 @@ par le chef de projet : `node --test tests/` (parité comprise), `node tools/sim
 cibles ≥ 48 px, textes ≥ 14 px, aucun débordement ; une année de niveau Détente et une année de carrière avec tableau,
 charrette, cadeau, défis, colporteur et thème), `JOURNAL.md`, sauvegarde `backup/…` avant et après le lot.
 
+### Écarts et précisions (livraison CORE, 2026-10-02)
+
+Tout le contrat est livré ; ce qui suit précise ou s'écarte de ce qui est écrit plus haut (aucun nom ni forme du contrat
+n'est retiré, seulement des champs **ajoutés**).
+
+- **Fichiers en plus** : `src/core/variety-effects.js` (lecture pure des effets en cours : cartes, objets du colporteur,
+  thème ; aucune dépendance vers le cœur, pour que `farm.js`, `economy.js`, `trees.js`, `surprises.js`, `processing.js`
+  et les modules de carrière le lisent sans cycle d'imports) ; `src/core/career/variety-host.js` (hôte de carrière,
+  livraisons depuis le grenier, compteurs de l'année, **sans** enregistrement : `runtime.js` et `game.js` l'importent
+  sans changer l'ordre des extensions). L'extension `variety` est enregistrée explicitement par `extensions.js`, en
+  **dernier** (ordre : surprises, staff, events, quests, animals, machines, work, variety) : la quête de Joseph passe
+  avant le tableau pour les récoltes. Modifiés en plus de la liste : `src/core/processing.js` (carte « recette » des
+  niveaux), `src/core/career/storage.js` (ventes du grenier comptées pour le défi « Bon marché »),
+  `src/data/career/events.js` (`RANDOM_EVENT_RULES.chanceWithVariety = 0.1`).
+- **Atelier d'abord** (§ 16.2.4 du game design) : une récolte qu'un atelier **allumé avec une place libre** transforme
+  part à l'atelier, même si une commande ou une caisse l'attend (le contrat disait « comptée avant `tryProcessHarvest` »).
+  `query.plot(i).claim` vaut alors `null` et `orderInfo.note` = « L'atelier passe d'abord ». Sinon, ordre du contrat.
+- **Point d'accroche `harvest`** : le résultat `{ divert, sell, label }` porte aussi `claimed` (copié dans `harvested`) et
+  `after()`, appelé par `runtime.js` **après** l'événement `harvested` (ordre : `harvested`, puis `orderProgress` /
+  `cartProgress`, `orderDone`, `crateFull`). Les géants (niveaux et carrière) comptent 4 unités, à la main seulement.
+- **Requêtes (champs ajoutés)** : place vide de `query.orders()` : `{ empty, text, delivered?, clientId?, clientName? }`
+  (coche du jour) ; `orderInfo.day` ; `cartInfo.base` ; `query.cards()` : `pending` (cartes « prochaine fois ») et, pour
+  chaque carte en cours, `season` et `current` (effet actif maintenant) ; `query.challenges().next.kept` ;
+  `merchantInfo.daysUntil` et, pour un sachet, `cropId` et `seeds` ; `query.variety()` : `freeSows`, `theme`.
+  `query.career.charges().season` et `finance().nextBill` : `reduced` (ristourne).
+- **État (champs ajoutés)** : `variety.board.done` (livraisons du jour, vidé à l'aube), `variety.fertilizer` (engrais du
+  colporteur des niveaux : `{ left, growth }`), `variety.yearBase` (carrière : compteurs au dernier bilan),
+  `variety.challenges.next.kept`, `variety.season.medals` ; carte « almanach » : `{ id: 'almanac', season: null, until }`.
+  `state.career.theme` : `dairyPlace` et `rod` (cadeaux de l'année) quand ils existent.
+- **Événements (ajouts)** : `themeShower { plots, text }` (averse de l'année des grenouilles) ; `purchased` avec
+  `gift: true` (ruche, poules offertes) ou `used: true` (poulailler, ruche d'occasion) ; `orderRemoved.clientId` et
+  `text` (retrait de saison) ; `billPaid.reduced` ; `cartDeparted.horse` ; `merchantLeft.text`. Carrière : l'ordre du soir
+  est `cartDeparted`, `challengesJudged`, `cardsOffered`, `challengesOffered`, puis `billPaid` (tout se passe dans
+  `evening`, avant les charges de saison) ; niveaux : ordre du contrat.
+- **Le choix d'une carte se fait après l'aube** de la nouvelle saison (la fenêtre de fin de saison s'ouvre quand le jour
+  suivant a commencé) : une carte « saison » vaut donc pour la saison en cours ; « Un cheval de renfort » double la
+  charrette **déjà arrivée** (sinon la prochaine) ; la bourse vaut 12 + 4 × saisons jouées (niveaux).
+- **Carrière** : la carte `hen` donne deux poules tout de suite (`kind: 'now'`, pas de revenu `cardHen`) ;
+  `dawn.varietyWatered` est rempli par `runtime.js` (après le point d'accroche `water`) ; aucun événement au hasard le jour
+  de la fête du thème ; « Plus tard » sur le visiteur du thème = `declineOffer` (il repart sans cadeau) — l'interface peut
+  aussi simplement fermer la fiche (l'offre attend jusqu'à la fin de la saison). La pêche (canne de Firmin) est × 1,5.
+- **Générateur** : « se sème aujourd'hui » = hors serre (saison du jour) ; une charrette n'a que des caisses de cultures
+  différentes (moins de caisses s'il y a moins de cultures faisables) ; caisse ou commande de fruits : au plus 2 paniers
+  par arbre adulte. Défi « Aux petits soins » : pas les arbres ; défi « Bon marché » : ventes de récoltes **et** du
+  grenier (carrière).
+- **Réglages après simulation** (`src/data/variety.js` et `src/data/career/themes.js` font foi ; tableau complet :
+  game design § 16.10.1) : taux des commandes × 1,05 (poids 6), × 1,1 (3), × 1,15 (1) ; plafond de taille
+  ⌊parcelles / 2⌋ ; charrette 5 % + 5 % ; cartes : bourse 12 + 4 × saison (carrière 20 + 10 × rang), engrais + 8 %, poule
+  3 pièces, arrosoir magique 3 parcelles (carrière 4), affiche + 4 %, recette et foin + 10 %, sachet 3 graines (carrière 6),
+  défrichage de carrière − 25 % (`CARD_VALUES.clearing.careerFactor` ; le champ d'état garde son nom `clearingHalf`) ;
+  défis plus exigeants (voir `CHALLENGES`) ; médailles de carrière `careerCoins` 5 / 10 × rang (`MEDALS`) ; sachets de
+  graines rares de carrière : 8 semis ; averse de l'année des grenouilles : 15 %. Seuils d'étoiles Détente recalculés
+  (`src/data/difficulty.js`, § 13.3).
+- **Simulation** : `tools/simulate.js --variety …`, `--compare-variety`, `--stars` (seuils suggérés) ; les décisions des
+  joueurs simulés sont exportées (`varietyChoices`, `varietyDay`, `sowRare`) et réutilisées par
+  `tools/simulate-career.js` (`--variety …`, `--compare-variety`).
+
 ## Lot 3 — rendu et interface (UI/RENDER, 2026-10-02)
 
 Code contre le contrat ci-dessus (« Lot 3 — contrats »). Tout est gardé par `state.variety` : en Classique (clé

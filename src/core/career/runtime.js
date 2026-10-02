@@ -68,7 +68,7 @@ import { careOf } from '../surprises.js';
 import { checkMedals, consumeSow, freeSowKind, noteHarvest, noteVariety, varietyWater } from '../variety.js';
 import { claimPreview, claimUnits } from '../requests.js';
 import { themeGiantValueFactor } from '../variety-effects.js';
-import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety.js';
+import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety-host.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -817,6 +817,8 @@ export function createCareerRuntime(core) {
         core.refreshLevel();
         checkRanks(api);
         checkRecovery();
+        // (lot 3) Défis : un ramassage, une vente… peut donner une médaille tout de suite.
+        if (state.variety) checkMedals(careerVarietyHost(api));
       }
       return res;
     };

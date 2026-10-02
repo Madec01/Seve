@@ -521,6 +521,49 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
 - **Idées** : montrer la charrette depuis la feuille (bouton « Voir sur la route ») car elle est sous la maison en
   portrait ; messages groupés quand plusieurs nouveautés tombent le même matin.
 
+### 2026-10-02 — Lot 3 « Variété » : logique, simulation et équilibrage (paquet CORE)
+
+- **Nouveaux modules purs** : `src/data/variety.js` (clients, taux, tailles, cartes, défis, médailles, colporteur,
+  textes, conseils), `src/data/career/themes.js` (9 thèmes), `src/core/requests.js` (générateur « faisable cette
+  saison », tableau, charrette, récoltes comptées), `src/core/variety.js` (état, activation, migration, vérification,
+  aube / soir, cartes, défis, colporteur, graines rares, requêtes), `src/core/variety-effects.js` (lecture des effets sans
+  cycle d'imports), `src/core/career/{variety,variety-host,themes}.js` (extension de carrière enregistrée en dernier,
+  hôte de carrière, années à thème). `RARE_CROPS` (petits pois, melon, poireau) hors de `CROPS`, trouvées par `getCrop` ;
+  3 décors trouvés dans `cosmetics.js`.
+- **Branché** : `game.js` (création, migration, vérification, aube et soir, plantation des graines rares et semis offerts,
+  récolte comptée, géants = 4 unités, parcelle gratuite, actions et requêtes du contrat, almanach), `economy.js`
+  (engrais, foin, fermage −20 %), `farm.js` (affiche, parcelle gratuite), `processing.js` (recette), `surprises.js`
+  (trèfle, fer à cheval, géants × 2, heure dorée), `trees.js` (vergers), `stats.js` (`varietyIncome` / `varietySpent`,
+  `summary.variety`), `progression.js` (`lifetime.variety`), carrière : `runtime.js` (récolte `{ divert, sell }`,
+  graines rares à la main, arrosoirs, ristourne, bilan), `events.js` (visiteur et marchand au poids 0, tirage 10 %,
+  touristes, corbeaux, canne de Firmin, visiteur du thème dans les offres, calendrier), `market.js`, `land.js`,
+  `animals.js`, `storage.js`, `effects.js`, `registry.js` (fournisseur `seasonChargeFactor`).
+- **Classique strictement inchangé** : clé `state.variety` absente, aucun flux ni champ nouveau ;
+  `node tools/capture-parity.js --check` : 400 parties identiques ; flux existants identiques avec ou sans variété (test).
+- **Simulation** : `tools/simulate.js --variety …`, `--compare-variety`, `--stars` ; `tools/simulate-career.js --variety …`,
+  `--compare-variety` ; joueurs humains réalistes (casual : regarde le tableau un jour sur deux, garde la moitié des
+  commandes qu'il peut semer, ses semis préfèrent ce qu'il a vu demandé, carte et défis au hasard, sachet rare 40 % du
+  temps s'il a la marge ; novice : première carte, aucun défi, colporteur 20 % au hasard ; optimal : au mieux).
+- **Équilibrage** (§ 16.10.1 du game design) : primes du tableau × 1,05 à × 1,15, charrette 5 % + 5 %, cartes et défis
+  revus, médailles de carrière divisées par deux. Résultats : niveaux (200 parties) casual **+8,5 %**, novice +6,2 %,
+  optimal +7,6 %, victoires inchangées, idle toujours ruiné ; carrière (60 × 10 ans) casual **+7,6 %**, rangs et Domaine
+  identiques, aucune faillite.
+- **Seuils d'étoiles Détente recalculés** (règle du § 13.3, `--stars`) : 570/870, 290/540, 310/620, 550/780, 450/840,
+  290/670, 250/580, 410/660, 290/490, 680/950, 440/640, 420/660 (anciens dans `difficulty.js` et au § 13.3).
+- **Tests** : `tests/requests.test.js`, `tests/variety.test.js`, `tests/variety-career.test.js`,
+  `tests/variety-migration.test.js` (générateur, refus sans pénalité, relance, primes, charrette partielle et pleine,
+  cartes, défis et médailles, colporteur et graines rares, thèmes, migration, sauvegardes, parité) ; tests existants
+  adaptés (`career-helpers.js` : `variety: false` par défaut ; cumuls de progression ; décors trouvés).
+- **Écarts au contrat** (notés dans `docs/ARCHITECTURE.md`, « Écarts et précisions (livraison CORE) ») : l'atelier allumé
+  avec une place passe avant le tableau (§ 16.2.4) ; deux fichiers en plus ; quelques champs ajoutés aux requêtes,
+  à l'état et aux événements (`themeShower`) ; en carrière les événements du soir précèdent `billPaid`.
+- **Bug corrigé en route** : l'extension de la variété s'enregistrait avant celles des événements et des quêtes (import
+  par `runtime.js`) ; la quête de Joseph doit passer avant le tableau → hôte sans enregistrement et enregistrement
+  explicite en dernier par `extensions.js`.
+- **Défaut d'avant le lot 3 corrigé** : en carrière, `query.plantableCrops().seedCost` ignorait les remises de saison
+  (foire aux semis ; désormais aussi cartes et thèmes) alors que le semis les appliquait : il affiche maintenant le prix
+  payé.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).

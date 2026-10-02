@@ -635,20 +635,22 @@ Pourquoi pas seulement « tout moins cher » : les coûts fixes (charges, fermag
 
 | # | Départ | Fermages (printemps → hiver) | ★★ / ★★★ | Réglage propre |
 |---|---|---|---|---|
-| 1 | 160 | 20 / 60 / 90 / 130 | 410 / 650 | tutoriel |
-| 2 | 180 | 20 / 60 / 80 / 120 | 180 / 470 | arrosage 1 pièce |
-| 3 | 160 | 20 / 50 / 100 / 170 | 230 / 450 | maladie 5 % |
-| 4 | 260 | 20 / 60 / 90 / 120 | 420 / 590 | 6 parcelles |
-| 5 | 160 | 20 / 80 / 140 / 500 | 240 / 510 | hiver de 14 jours |
-| 6 | 160 | 20 / 70 / 130 / 300 | 180 / 470 | marché fou |
-| 7 | 660 | 50 / 150 / 230 / 360 | 140 / 380 | crédit : **120** aux jours 4, 11, 18, 25 |
-| 8 | 160 | 20 / 80 / 130 / 240 | 260 / 530 | bio |
-| 9 | 360 | 20 / 60 / 120 / 260 | 170 / 340 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
-| 10 | 240 | 20 / 90 / 200 / 420 | 570 / 780 | pommiers sans ruche : demi-récolte |
-| 11 | 340 | 20 / 80 / 160 / 440 | 260 / 440 | montagne |
-| 12 | 310 | 20 / 100 / 190 / 480 | 290 / 560 | concours |
+| 1 | 160 | 20 / 60 / 90 / 130 | 570 / 870 | tutoriel |
+| 2 | 180 | 20 / 60 / 80 / 120 | 290 / 540 | arrosage 1 pièce |
+| 3 | 160 | 20 / 50 / 100 / 170 | 310 / 620 | maladie 5 % |
+| 4 | 260 | 20 / 60 / 90 / 120 | 550 / 780 | 6 parcelles |
+| 5 | 160 | 20 / 80 / 140 / 500 | 450 / 840 | hiver de 14 jours |
+| 6 | 160 | 20 / 70 / 130 / 300 | 290 / 670 | marché fou |
+| 7 | 660 | 50 / 150 / 230 / 360 | 250 / 580 | crédit : **120** aux jours 4, 11, 18, 25 |
+| 8 | 160 | 20 / 80 / 130 / 240 | 410 / 660 | bio |
+| 9 | 360 | 20 / 60 / 120 / 260 | 290 / 490 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
+| 10 | 240 | 20 / 90 / 200 / 420 | 680 / 950 | pommiers sans ruche : demi-récolte |
+| 11 | 340 | 20 / 80 / 160 / 440 | 440 / 640 | montagne |
+| 12 | 310 | 20 / 100 / 190 / 480 | 420 / 660 | concours |
 
 Seuils d'étoiles : ★★ ≈ argent final médian du joueur tranquille (la moitié l'obtient) ; ★★★ ≈ ses 12 % meilleures parties — un joueur appliqué (qui arrose tout, comme les robots) l'obtient à coup sûr.
+
+*(Lot 3, 2026-10-02 : seuils recalculés avec la variété active en Détente — tableau du village, cadeau de saison, charrette, défis, colporteur —, qui augmente le revenu de l'année du joueur tranquille d'environ 8,5 % et son argent final médian d'environ 55 % ; même règle, `node tools/simulate.js --stars` (200 parties par niveau) : chaque niveau donne ★★ ou mieux à 49–51 % des parties du joueur tranquille et ★★★ à 11–13 %. Au niveau 2, ★★★ = 540 (au lieu de 530) pour qu'il reste rare pour le débutant (≈ 16 %). Anciens seuils (lot 2) : 410/650, 180/470, 230/450, 420/590, 240/510, 180/470, 140/380, 260/530, 170/340, 570/780, 260/440, 290/560. Voir § 16.10.)*
 
 *(Lot 2, 2026-10-02 : seuils relevés pour tenir compte des surprises — qualité, géants, fée, coffres, vœux —, actives par défaut en Détente, qui augmentent l'argent final médian du joueur tranquille de ~30 % ; même règle, recalculée avec elles. Anciens seuils : 300/490, 130/420, 150/360, 320/510, 180/380, 150/360, 90/310, 190/380, 100/250, 440/620, 200/360, 190/420. Au niveau 2, ★★★ passe à 470 pour qu'il reste rare pour le novice (≈ 16 %, comme avant). Voir § 15.)*
 
@@ -1285,6 +1287,70 @@ prend la première carte, ignore les défis, achète au colporteur 20 % du temps
 
 Leviers si une cible n'est pas tenue (dans cet ordre) : taux de prime du tableau (poids), part de la prime de la
 charrette (10 % / 10 %), valeurs des cartes, tailles des commandes. Jamais les chiffres des niveaux.
+
+### 16.10.1 Réglages après simulation *(équilibré, 2026-10-02)*
+
+`src/data/variety.js` et `src/data/career/themes.js` font foi. Leviers employés, dans l'ordre du tableau ci-dessus :
+
+| Réglage | Conception (§ 16.2 à § 16.7) | Après simulation |
+|---|---|---|
+| Taux de prime d'une commande (poids) | × 1,2 (4), × 1,3 (3), × 1,4 (2), × 1,5 (1) | **× 1,05 (6), × 1,1 (3), × 1,15 (1)** (deux lignes : + 0,1 ; crieur : + 0,1) |
+| Taille d'une commande : plafond | ⌊parcelles / 3⌋ | **⌊parcelles / 2⌋** |
+| Prime de la charrette | 10 % + 10 % | **5 % + 5 %** (2 écus si pleine, cheval × 2) |
+| Cartes (niveaux) | bourse 20 + 5 × saison ; engrais + 10 % ; poule 4 ; arrosoir 4 ; affiche + 5 % ; recette, foin + 15 % ; sachet 4 graines | **bourse 12 + 4 × saison ; engrais + 8 % ; poule 3 ; arrosoir 3 ; affiche + 4 % ; recette, foin + 10 % ; sachet 3 graines** |
+| Cartes (carrière) | bourse 30 + 20 × rang ; arrosoir 6 ; défrichage − 50 % ; sachet 8 | **bourse 20 + 10 × rang ; arrosoir 4 ; défrichage − 25 % ; sachet 6** |
+| Défis : cibles (bronze / argent / or) | cueillette 12/20/30 × k ; ventes 150/260/380 × k × prix ; potager 2/3/4 ; semeur 2/3/4 ; soins 3/6/10 × k ; main verte 1/2/4 ; ami du village 1/2/3 ; fait maison 2/4/6 ; verger 1/2/4 ; basse-cour 25/45/70 ; abris 5/9/14 | **20/36/54 × k ; 300/520/760 × k × prix ; 3/4/6 ; 4/5/6 ; 6/12/20 × k ; 1/3/5 ; 2/3/5 ; 3/6/9 ; 2/4/6 ; 45/80/120 ; 6/11/17** |
+| Médailles (carrière) | argent 10 × rang, or 20 × rang pièces | **argent 5 × rang, or 10 × rang** (écus inchangés ; niveaux inchangés) |
+| Graines rares (carrière) | 12 semis par sachet | **8 semis** (mêmes prix) |
+| Année des grenouilles | averse 30 % des jours nuageux | **15 %** |
+
+### 16.10.2 Résultats *(2026-10-02 ; Détente, surprises actives des deux côtés, 200 parties par niveau ; carrière : 60 carrières × 10 ans, saisons de 7 jours)*
+
+`node tools/simulate.js --compare-variety` (sans → avec, même graine) :
+
+| # | casual : revenu (écart) | victoires | novice : revenu (écart) | victoires | casual, gain par partie : tableau · cartes · charrette · médailles · colporteur (dépense) · écus |
+|---|---|---|---|---|---|
+| 1 | 1889 → 2054 (+8,7 %) | 100 → 100 % | 1139 → 1218 (+6,9 %) | 99 → 98 % | 56 · 12 · 12 · 23 · 42 · 8 |
+| 2 | 1913 → 2115 (+10,6 %) | 99 → 100 % | 1154 → 1201 (+4,1 %) | 100 → 99 % | 57 · 10 · 15 · 27 · 45 · 9 |
+| 3 | 1991 → 2169 (+8,9 %) | 100 → 99 % | 1148 → 1231 (+7,2 %) | 98 → 99 % | 58 · 12 · 15 · 32 · 53 · 10 |
+| 4 | 1598 → 1750 (+9,5 %) | 100 → 100 % | 1055 → 1118 (+6,0 %) | 100 → 100 % | 33 · 10 · 4 · 22 · 55 · 7 |
+| 5 | 2657 → 3022 (+13,7 %) | 98 → 100 % | 1472 → 1581 (+7,4 %) | 95 → 95 % | 79 · 13 · 20 · 36 · 44 · 11 |
+| 6 | 2070 → 2241 (+8,3 %) | 97 → 99 % | 1152 → 1240 (+7,6 %) | 90 → 95 % | 58 · 9 · 15 · 29 · 51 · 10 |
+| 7 | 2438 → 2646 (+8,5 %) | 95 → 99 % | 1296 → 1370 (+5,7 %) | 94 → 96 % | 61 · 11 · 15 · 34 · 61 · 11 |
+| 8 | 2153 → 2343 (+8,8 %) | 100 → 99 % | 1116 → 1212 (+8,6 %) | 93 → 95 % | 57 · 12 · 15 · 28 · 51 · 9 |
+| 9 | 1603 → 1710 (+6,7 %) | 98 → 100 % | 863 → 939 (+8,8 %) | 100 → 100 % | 35 · 8 · 10 · 18 · 47 · 7 |
+| 10 | 2168 → 2289 (+5,6 %) | 100 → 100 % | 1330 → 1370 (+3,0 %) | 100 → 100 % | 33 · 10 · 9 · 22 · 69 · 8 |
+| 11 | 1910 → 2061 (+7,9 %) | 100 → 100 % | 1228 → 1272 (+3,6 %) | 100 → 100 % | 43 · 11 · 8 · 30 · 58 · 9 |
+| 12 | 2348 → 2469 (+5,2 %) | 100 → 100 % | 1469 → 1550 (+5,5 %) | 100 → 100 % | 44 · 11 · 12 · 22 · 57 · 8 |
+
+- **Revenu de l'année, moyenne des 12 niveaux** : casual **+8,5 %** (cible + 6 à + 10 %), novice **+6,2 %** (cible ≤ + 6 %,
+  tenue à l'arrondi), optimal **+7,6 %** (≤ + 12 %) ; careless + 9,0 %, balanced + 8,2 %, investor + 8,1 %, idle 0 %
+  (toujours 100 % de faillites). Le niveau 5 (hiver de 14 jours) donne le plus (+ 13,7 %) : le tableau y travaille tout
+  l'hiver.
+- **Victoires** : inchangées ou meilleures à ± 1 point (bruit) ; toutes les cibles du § 13.6 restent tenues.
+- **Argent final médian du joueur tranquille** : **+ 56 %** en moyenne (plus que les + 25 à + 35 % attendus : le revenu en
+  plus arrive presque tout au solde de fin d'année) — d'où les seuils d'étoiles Détente relevés (§ 13.3).
+- **Écus par année** (défis + charrette) : 6,5 à 11 pour le joueur tranquille (cible 8 à 15).
+- Une partie isolée ajoute peu (tableau seul ≈ + 1,5 à + 5 %, cadeaux ≈ + 2 à + 3,5 %, charrette ≈ + 1 à + 3 %, défis ≈
+  + 1 %, colporteur ≈ + 1 à + 2 %) : les parties se renforcent un peu (cultures demandées, primes réinvesties).
+
+`node tools/simulate-career.js --compare-variety --runs 60` :
+
+| Joueur | Revenu (moyenne des 10 ans) | Rang médian par année | Domaine (médiane) | Faillites | Sollicitations / semaine (événements au hasard) |
+|---|---|---|---|---|---|
+| casual | **+ 7,6 %** (cible ≤ + 8 %) | identique (2 2 3 4 4 5 5 6 6 6) | an 8 → an 8 | 0 % | 1,03 → 0,67 (0,88 → 0,56) |
+| novice | + 13,6 % | identique, an 10 : 5 → 6 | jamais → an 10 | 0 % | 1,01 → 0,61 |
+| optimal | + 3,1 % | identique | an 6 → an 6 | 0 % | 0,81 → 0,43 |
+| automator | + 3,0 % | identique | an 6 → an 6 | 0 % | 0,96 → 0,63 |
+| idle | + 6,6 % | identique (2) | jamais | 0 % | 1,11 → 0,57 |
+
+- Les événements au hasard **autres** que le visiteur et le marchand gardent leur fréquence (≈ 0,56 par semaine avant
+  comme après) ; les « sollicitations » baissent parce que le visiteur acheteur et le marchand ambulant sont remplacés par
+  le tableau (toujours là, sans échéance) et le colporteur (à date fixe).
+- Le débutant gagne le plus en pourcentage (thèmes : vedette, averses ; cadeaux) sans changer son rythme de rangs ; aucune
+  cible de carrière ne porte sur lui.
+- Gains moyens par carrière (casual, 10 ans) : tableau 818, cadeaux 246, charrette 388, médailles 1 491 pièces et 171 écus,
+  colporteur − 1 797 (graines rares, objets).
 
 ## 16.11 Points ouverts
 

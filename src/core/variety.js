@@ -401,7 +401,7 @@ export function challengeProgress(state, id) {
 function medalReward(state, tier) {
   const m = MEDALS[tier - 1];
   const rank = state.mode === 'career' ? state.career.rank || 1 : 1;
-  return { medal: m.id, ecus: m.ecus, coins: m.coins * (state.mode === 'career' ? rank : 1) };
+  return { medal: m.id, ecus: m.ecus, coins: state.mode === 'career' ? m.careerCoins * rank : m.coins };
 }
 
 /** Médailles des défis gardés : chaque palier atteint donne sa récompense, tout de suite. */
@@ -1207,7 +1207,7 @@ function effectsList(host) {
   if (p.chargeFactor !== 1) out.push({ id: 'card.landlord', name: CARDS_BY_ID.landlord.careerName, icon: 'icon.card.landlord', text: 'Prochaines charges de saison −20 %.', until: null, daysLeft: null });
   if (p.cartFactor !== 1 || v.cart?.horse) out.push({ id: 'card.cartHorse', name: CARDS_BY_ID.cartHorse.name, icon: 'icon.card.cartHorse', text: 'Prime de la charrette × 2.', until: null, daysLeft: null });
   if (p.freePlot) out.push({ id: 'card.clearing', name: CARDS_BY_ID.clearing.name, icon: 'icon.card.clearing', text: 'Prochaine parcelle achetée gratuite.', until: null, daysLeft: null });
-  if (p.clearingHalf) out.push({ id: 'card.clearing', name: CARDS_BY_ID.clearing.name, icon: 'icon.card.clearing', text: 'Prochain aménagement de terrain à moitié prix.', until: null, daysLeft: null });
+  if (p.clearingHalf) out.push({ id: 'card.clearing', name: CARDS_BY_ID.clearing.name, icon: 'icon.card.clearing', text: 'Prochain aménagement de terrain −25 %.', until: null, daysLeft: null });
   for (const id of ['copperCan', 'almanac', 'horseshoe']) {
     if (!v.owned[id]) continue;
     const item = MERCHANT_ITEMS_BY_ID[id];
