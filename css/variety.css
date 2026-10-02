@@ -238,3 +238,12 @@
 /* ─── Barre du haut : fermage réduit ─── */
 .bill-cut { margin-left: 3px; padding: 0 3px; font-size: 0.75rem; font-weight: 700; color: var(--green-text); background: #e8f6dc; box-shadow: 0 0 0 var(--px1) #a9d38c; }
 .bill-cut[hidden] { display: none; }
+
+/* Carrière : précision des offres (visiteur du thème) — texte ≥ 14 px. */
+.c-offer-detail { display: block; font-size: 0.875rem; line-height: 1.3; opacity: 0.9; }
+
+/* Texte agrandi (130–150 %) ou écran étroit : le bouton passe sous le texte plutôt que d'écraser la colonne
+   (« Vendre / pour / 375 pièces… » un mot par ligne). */
+.v-challenge, .v-item { flex-wrap: wrap; }
+.v-ch-main, .v-item-main { flex: 1 1 9.5rem; }
+.v-ch-keep, .v-buy { margin-left: auto; }

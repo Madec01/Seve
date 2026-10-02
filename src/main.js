@@ -1174,7 +1174,10 @@ function reactMessages(ev, game) {
       else if (inv.effects.chargeReduction) what = `Vos charges baissent de ${inv.effects.chargeReduction} par jour.`;
       else if (inv.effects.shearing) what = `Tonte : +${inv.effects.shearing} à la fin de chaque saison (sauf l'hiver).`;
       else if (q?.income || Object.values(q?.incomeBySeason || {}).some(Boolean)) what = `${incomePhrase(q.incomeBySeason)}.`;
-      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${['beehive', 'guestHouse', 'cow', 'goat', 'dairy'].includes(inv.id) ? 'e' : ''} !`, text: what });
+      // (lot 3) Cadeau (carte « Un essaim d'abeilles ») ou objet d'occasion du colporteur.
+      const fem = ['beehive', 'guestHouse', 'cow', 'goat', 'dairy'].includes(inv.id) ? 'e' : '';
+      const verb = ev.gift ? `offert${fem}` : ev.used ? `d'occasion acheté${fem}` : `acheté${fem}`;
+      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} ${verb} !`, text: what });
       break;
     }
     case 'harvested':
@@ -2393,9 +2396,10 @@ if (DEBUG) {
           }
           return n;
         },
-        /** Point (px de la page) d'une cible de la scène : 'board' | 'cart' | 'merchant'. */
+        /** Point (px de la page) d'une cible de la scène : 'board' | 'cart' | 'merchant' | 'visitor'. */
         point(kind = 'board') {
           const v = app.scene?.varietySpots?.();
+          if (v && kind === 'visitor') return v.visitor ? worldToPage(v.visitor.x + 8, v.visitor.y - 7) : null;
           const r = v ? (kind === 'merchant' ? v.merchant : kind === 'cart' ? v.cart : v.board) : null;
           return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
         },

@@ -564,6 +564,50 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
   (foire aux semis ; désormais aussi cartes et thèmes) alors que le semis les appliquait : il affiche maintenant le prix
   payé.
 
+### 2026-10-02 — Lot 3 « Variété » : intégration CORE ↔ UI/RENDER et QA au doigt
+
+- **Écarts du CORE vérifiés côté interface** : atelier d'abord (`claim` null, note « L'atelier passe d'abord ») ; ordre
+  du soir de la carrière ; `board.done` (carte « merci ») ; `cards().pending` et engrais du colporteur (« Effets en
+  cours ») ; `nextBill.reduced` (« −20 % ») ; carte « poule » de carrière (pas de poule voyageuse dessinée) ; sachets de
+  8 semis ; décors trouvés du lot 3 (« À trouver / Trouvé à la ferme »). Manquants, ajoutés :
+  - `themeShower` (averse de l'année des grenouilles) : résumé du matin, petit bruit d'eau, gouttes sur les parcelles ;
+  - `purchased` avec `gift` / `used` : « Ruche offerte ! », « Poulailler d'occasion acheté ! » (carrière : « (cadeau) »,
+    « (d'occasion) ») au lieu de « acheté » ;
+  - débogage `__debug.variety.medal(id, n)` : le cœur ne connaissait pas `triggerVariety('medal')` → ajouté au cœur
+    (compteurs de la saison amenés au palier, défi gardé s'il reste une place, puis vrai chemin `checkMedals`), avec
+    test ; `__debug.variety.point('visitor')`.
+- **Corrections trouvées en jouant au doigt** :
+  - carrière : la fenêtre courte de fin de saison s'intitulait toujours « Fin de la saison » (titre effacé avant
+    l'ouverture) et aurait nommé la nouvelle saison (le cadeau est proposé après l'aube) → titre pris le soir ;
+  - carrière : un toucher sur une récolte comptée pour le tableau affichait « → commande » en plus de « → Lili »
+    (`harvested.diverted` est un texte, lu comme un objet) → une seule étiquette, et les étiquettes des quêtes et
+    visiteurs affichent enfin leur nom ;
+  - récolte en série : les étiquettes « → charrette » de 4 parcelles se chevauchaient → une étiquette par destination
+    toutes les 0,9 s ;
+  - roulotte, charrette et visiteur du thème intouchables pendant leur arrivée (2 s, figée tant que le jeu est en pause)
+    → touchables à leur place dès leur apparition ;
+  - Basile : l'annonce de la veille et l'arrivée restaient affichées ensemble, et l'arrivée répétait son titre → un seul
+    message qui se met à jour (« Jusqu'à demain soir : touchez pour voir son étal. ») ;
+  - défis : « Remplir 1 caisses », « Récolter 1 belles ou dorées » → accord au nombre (`{s}` dans les textes, test) ;
+  - texte agrandi (150 %) sur 360 px : défis et objets de Basile en colonne d'un mot par ligne → le bouton passe sous le
+    texte quand la place manque ;
+  - fiche du visiteur du thème : précision en 13,3 px → 14 px ; « Il attend » (visiteuses) → « il vous attend » (le
+    cadeau) ;
+  - ton : la charrette « remplissez ses caisses avant le dernier soir » → « est là jusqu'au dernier soir : vos
+    récoltes à la main remplissent ses caisses ».
+- **QA au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`, sources puis paquet) :
+  Détente (commande remplie par de vraies récoltes, merci + prime, refus, relance et refus doux, punaise ; charrette
+  partielle puis pleine au niveau 7 : « +20 (3 caisses pleines sur 3) et 2 écus » ; cadeaux bourse +16 et engrais
+  pousse × 1,08 vérifiés ; médailles gagnées en jouant ; Basile atteint en faisant défiler la scène, sachet de petits
+  pois acheté, semé depuis la feuille des graines, récolté ; « Plus tard » → pastille du Bilan → carte choisie) ;
+  Classique (ni `state.variety`, ni flux, ni dessin, ni section, ni page) ; carrière (thème annoncé au bilan annuel,
+  bandeau, visiteur touché dans la scène puis accepté, fête du thème, livraison et chargement depuis le grenier, fenêtre
+  courte, Basile les jours 5 et 6 seulement, sachet de 8 melons) ; sauvegardes Détente et carrière fabriquées au
+  commit `154a4fa` (reprise sans erreur, tableau le lendemain, charrette et défis à la saison suivante) ; mouvements
+  réduits + texte 150 % ; cibles ≥ 48 px, textes ≥ 14 px, aucun débordement ; aucune erreur console.
+- **Chiffres** inchangés : niveaux casual + 8,5 % (novice + 6,2 %, optimal + 7,6 %), carrière casual + 7,6 %, parité
+  400 / 400. `node --test tests/` : 481 verts.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -709,3 +753,12 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-02 | Lot 2 : décor trouvé déjà possédé annoncé « rejoint vos décorations » alors que 5 écus sont versés | Corrigé (message réel) |
 | 2026-10-02 | Lot 2 : `game.surprises` du contrat absent ; météo spéciale lue dans l'état (arc-en-ciel de carrière ignoré par la barre du haut) | Corrigé |
 | 2026-10-02 | Carrière : case météo à 43 px et flèche coupée quand l'argent a 5 chiffres | Corrigé (≥ 48 px, icône seule si trop étroit) |
+| 2026-10-02 | Lot 3, carrière : fenêtre courte de fin de saison toujours titrée « Fin de la saison » (titre effacé avant l'ouverture) | Corrigé (`variety.js`) |
+| 2026-10-02 | Lot 3, carrière : récolte comptée pour le tableau : étiquettes « → commande » et « → Lili » superposées ; étiquettes des quêtes et visiteurs toujours « → commande » | Corrigé (`effects.js`) |
+| 2026-10-02 | Lot 3 : roulotte, charrette et visiteur du thème intouchables pendant leur arrivée (animation figée en pause) | Corrigé (`variety-actors.js`) |
+| 2026-10-02 | Lot 3 : `themeShower` et `purchased.gift/used` sans effet à l'écran ; `__debug.variety.medal` sans chemin dans le cœur | Corrigé (UI, cœur + test) |
+| 2026-10-02 | Lot 3 : défis « Remplir 1 caisses », « Récolter 1 belles ou dorées » | Corrigé (test) |
+| 2026-10-02 | Lot 3 : cartes de défi et objets de Basile illisibles à 150 % sur 360 px ; précision du visiteur en 13,3 px | Corrigé (`variety.css`) |
+| 2026-10-02 | Lot 3 : « Semeur curieux » / « Potager varié » quand il y a peu de cultures faisables (niveau 2 au printemps : 3) : paliers plafonnés à 3 / 3 / 3, les trois médailles tombent d'un coup dès le 2ᵉ jour | Ouvert (équilibrage : exclure le défi si le plafond écrase les paliers ; change les tirages, donc la simulation) |
+| 2026-10-02 | Lot 3 : une commande non gardée pour laquelle on a semé est remplacée à l'aube suivante si rien n'est encore livré (il faut penser à la punaise) | Ouvert (idée : garder d'office une commande dont on sème la culture ; à simuler) |
+| 2026-10-02 | Lot 3, carrière (Pixel 7) : début de saison très chargé en messages (comice, Joseph, charrette, abri plein) qui couvrent la bande de la maison et captent le toucher ; visiteur du thème sous la mini-carte tant qu'on ne fait pas défiler | Ouvert (regrouper les messages du matin ; repère du visiteur) |

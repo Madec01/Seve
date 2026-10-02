@@ -199,7 +199,7 @@ export function themeOfferInfo(state, offer) {
     icon: `portrait.theme.${d.visitorId}`,
     portrait: `portrait.theme.${d.visitorId}`,
     text: d.text,
-    detail: 'Un cadeau, sans rien demander en échange. Il attend jusqu\'à la fin de la saison.',
+    detail: 'Un cadeau, sans rien demander en échange : il vous attend jusqu\'à la fin de la saison.',
     acceptLabel: d.gift === 'wholesale' ? 'Vendre le grenier' : 'Accepter le cadeau',
     declineLabel: 'Plus tard',
   };

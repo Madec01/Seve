@@ -574,9 +574,13 @@ export function createEffects(images) {
           if (SPRITES[icon]) fly(icon, c.x - 8, c.y - 12, a.x - 8, a.y + 14, { life: 1.1, arc: 30 });
           break;
         }
-        if (payload.diverted) {
-          // (Carrière) Mise de côté pour un visiteur ou une quête.
-          floatText(c.x, c.y - 10 * k, `→ ${payload.diverted.label || payload.divertLabel || 'commande'}`, '#fff3b0', { icon: false, life: 1.6 });
+        if (payload.diverted && !payload.claimed) {
+          // (Carrière) Mise de côté pour un visiteur ou une quête. Le cœur donne l'étiquette (« → Joseph ») en texte.
+          // (Lot 3 : une récolte comptée pour le tableau ou la charrette est payée — pièces ci-dessous — et son
+          // étiquette « → Lili » est dessinée par src/render/variety-actors.js.)
+          const d = payload.diverted;
+          const label = typeof d === 'string' ? d : d.label || payload.divertLabel || 'commande';
+          floatText(c.x, c.y - 10 * k, label.startsWith('→') ? label : `→ ${label}`, '#fff3b0', { icon: false, life: 1.6 });
           break;
         }
         // Les pièces volent vers le compteur (interface) : au sol, juste un petit éclat (2 pièces).

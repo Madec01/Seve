@@ -750,7 +750,7 @@ export function createCareerUI(app) {
       case 'purchased': {
         const inv = game.query.investments().find((i) => i.id === ev.investmentId);
         app.audio.play('coin', { volume: 0.5 });
-        t.show({ kind: 'success', sprite: inv?.category === 'animal' ? animalIcon(ev.investmentId, 'sprite--sm') : icon('coin', 'md'), title: `${inv?.name || 'Achat'} ×${ev.owned}`, text: inv?.category === 'animal' ? 'Ses produits s\'accumulent dans l\'abri : touchez-le pour ramasser.' : inv?.description || '', duration: 3600 });
+        t.show({ kind: 'success', sprite: inv?.category === 'animal' ? animalIcon(ev.investmentId, 'sprite--sm') : icon('coin', 'md'), title: `${inv?.name || 'Achat'} ×${ev.owned}${ev.gift ? ' (cadeau)' : ev.used ? ' (d\'occasion)' : ''}`, text: inv?.category === 'animal' ? 'Ses produits s\'accumulent dans l\'abri : touchez-le pour ramasser.' : inv?.description || '', duration: 3600 });
         break;
       }
       case 'hardship':

@@ -121,6 +121,7 @@ export function createVariety(app) {
   let evening = null; // { day, cart: cartDeparted, judged: challengesJudged, medals: [challengeMedal] }
   const seasonMedals = []; // médailles de la saison en cours (bilan de fin de saison)
   let careerSeason = null; // carrière : fenêtre courte de fin de saison à montrer { at, seasonName }
+  let endingSeason = null; // carrière : { id, at } de la saison qui vient de se terminer (titre de la fenêtre courte)
   let lastBadge = null;
   let badgeAt = 0;
 
@@ -746,7 +747,7 @@ export function createVariety(app) {
   }
 
   /** Carrière : fenêtre courte de fin de saison (charrette, médailles, cadeau, défis). */
-  function openCareerSeason() {
+  function openCareerSeason(title = null) {
     const pages = seasonPages();
     const sum = seasonSummary();
     if (!pages.length && !sum) return false;
@@ -763,7 +764,7 @@ export function createVariety(app) {
     }
     if (sum) {
       show({
-        title: careerSeason?.title || 'Fin de la saison',
+        title: title || 'Fin de la saison',
         body: () => el('div.v-page', sum),
         actions: (nx) => [app.dialogs.btn(['Continuer', icon('play', 'sm')], () => nx(), 'btn--red', { id: 'v-season-next', 'data-autofocus': '' })],
       });
@@ -782,6 +783,8 @@ export function createVariety(app) {
     if (!g || !enabled(g)) return;
     game = g;
     const career = isCareer(g);
+    // Carrière : la saison qui se termine est connue le soir (le cadeau n'est proposé qu'après l'aube suivante).
+    if (career && ['cartDeparted', 'challengesJudged', 'challengesOffered', 'billPaid'].includes(ev.type)) endingSeason = { id: SEASON_IDS[g.state.time.seasonIndex], at: performance.now() };
     switch (ev.type) {
       case 'ordersRenewed': {
         const n = ev.added ?? (ev.slots || []).filter(Boolean).length;
@@ -872,11 +875,11 @@ export function createVariety(app) {
         break;
       case 'merchantSoon':
         morning(ev.text || 'Demain, Basile le colporteur passe à la ferme.');
-        app.toasts.show({ kind: 'info', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur', text: ev.text || 'Demain, Basile le colporteur passe à la ferme.', duration: 4200 });
+        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur', text: ev.text || 'Demain, Basile le colporteur passe à la ferme.', duration: 4200 });
         break;
       case 'merchantArrived':
         app.audio.tone?.('magic', { volume: 0.7, delay: 0.5 });
-        app.toasts.show({ kind: 'info', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.text || 'Jusqu\'à demain soir.'} Touchez pour voir son étal.`, onClick: () => openMerchant(), duration: 6000 });
+        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : touchez pour voir son étal.`, onClick: () => openMerchant(), duration: 6000 });
         morning('Basile le colporteur est là (jusqu\'à demain soir).');
         hint('variety.merchant', null);
         break;
@@ -914,6 +917,11 @@ export function createVariety(app) {
       case 'dawn':
         if (ev.varietyWatered?.length) morning(`L'arrosoir a arrosé ${plural(ev.varietyWatered.length, 'parcelle')} cette nuit.`);
         break;
+      case 'themeShower':
+        // Année des grenouilles : petite averse à l'aube (le cœur a déjà arrosé les parcelles).
+        morning(ev.text || 'Une petite averse à l\'aube : les champs sont arrosés.');
+        if (ev.plots?.length) app.audio.play('water', { volume: 0.4, throttle: 400 });
+        break;
       case 'seasonStart':
         seasonMedals.length = 0;
         break;
@@ -929,7 +937,8 @@ export function createVariety(app) {
   }
 
   function endTitle(g) {
-    const id = SEASON_IDS[g?.state?.time?.seasonIndex] || safe(() => g.query.calendar().seasonId, null);
+    const recent = endingSeason && performance.now() - endingSeason.at < 5000 ? endingSeason.id : null;
+    const id = recent || SEASON_IDS[g?.state?.time?.seasonIndex] || safe(() => g.query.calendar().seasonId, null);
     return id ? season(id, 'end') : 'Fin de la saison';
   }
 
@@ -1111,8 +1120,9 @@ export function createVariety(app) {
       }
     }
     if (careerSeason && isCareer(g) && now >= careerSeason.at && !app.dialogs.isOpen() && !app.tutorial?.active && g.state.status === 'playing') {
+      const title = careerSeason.title;
       careerSeason = null;
-      openCareerSeason();
+      openCareerSeason(title);
     }
   }
 
@@ -1124,6 +1134,7 @@ export function createVariety(app) {
     evening = null;
     seasonMedals.length = 0;
     careerSeason = null;
+    endingSeason = null;
     lastBadge = null;
     if (!g || !enabled(g)) app.tabbar?.setBadge('stats', false);
   }

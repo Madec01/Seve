@@ -40,7 +40,8 @@ export { VARIETY_VERSION };
 const PARTS_LEVELS = VARIETY_PARTS.filter((p) => p !== 'themes');
 const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const int = (v) => Number.isInteger(v) && v >= 0;
-const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => (vars[k] !== undefined ? String(vars[k]) : ''));
+// {s} : marque du pluriel, selon {n} (« 1 caisse », « 2 caisses »).
+const fill = (text, vars) => text.replace(/\{(\w+)\}/g, (_, k) => (k === 's' && vars.s === undefined ? (Number(vars.n) > 1 ? 's' : '') : vars[k] !== undefined ? String(vars[k]) : ''));
 
 // ── État ────────────────────────────────────────────────────────────────────────────────────────
 
@@ -968,7 +969,7 @@ function seasonStartVariety(host, { creation = false } = {}) {
   // Charrette.
   if (v.parts.cart && !firstSpring(host)) {
     v.cart = drawCart(host);
-    if (v.cart) events.push(['cartArrived', { cart: cartInfo(host), text: 'La charrette du marché est arrivée : remplissez ses caisses avant le dernier soir de la saison.' }]);
+    if (v.cart) events.push(['cartArrived', { cart: cartInfo(host), text: 'La charrette du marché est là jusqu\'au dernier soir de la saison : vos récoltes à la main remplissent ses caisses.' }]);
   } else v.cart = null;
   // Défis (après la charrette : « La charrette pleine » a besoin du nombre de caisses).
   startChallenges(host);

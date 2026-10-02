@@ -394,3 +394,36 @@ test('variété : bilan (summary.variety, varietyIncome compté dans le net) et 
   const level = levelFor(2, 'detente');
   assert.ok(level.starThresholds[0] > 0);
 });
+
+test('débogage : triggerVariety(\'medal\') amène un défi proposé au palier voulu par le vrai chemin des médailles', () => {
+  const g = detente(2, 9);
+  const rec = record(g);
+  const ch = g.query.challenges();
+  assert.ok(ch && ch.options.length === 3);
+  const id = ch.options.find((o) => o.id !== 'variety' && o.id !== 'sowing')?.id ?? ch.options[0].id;
+  const money = g.state.money;
+  const r = g.actions.triggerVariety('medal', { challengeId: id, medal: 2 });
+  assert.ok(r.ok, r.reason);
+  assert.equal(r.medal, 2);
+  assert.deepEqual(rec.of('challengeMedal').map((e) => e.medal), ['bronze', 'silver']);
+  assert.ok(g.query.challenges().kept.includes(id));
+  assert.equal(g.state.money, money + MEDALS[1].coins);
+  assert.equal(g.state.variety.stats.medals.silver, 1);
+  // Refus : défi non proposé.
+  assert.equal(g.actions.triggerVariety('medal', { challengeId: 'collect', medal: 1 }).ok, false);
+  // Classique : variété absente.
+  const c = createGame({ levelId: 2, seed: 9, difficulty: 'classique' });
+  assert.equal(c.actions.triggerVariety('medal', { challengeId: id }).ok, false);
+});
+
+test('défis : textes accordés au nombre (« 1 caisse », « 2 caisses »)', () => {
+  const g = detente(2, 9);
+  const ch = g.state.variety.challenges;
+  ch.options = ['crates', 'quality', 'orders'];
+  ch.kept = [];
+  ch.targets = { crates: [1, 2, 3], quality: [1, 3, 5], orders: [2, 3, 5] };
+  const texts = Object.fromEntries(g.query.challenges().options.map((c) => [c.id, c.text]));
+  assert.equal(texts.crates, 'Remplir 1 caisse de la charrette.');
+  assert.equal(texts.quality, 'Récolter 1 belle ou dorée.');
+  assert.equal(texts.orders, 'Livrer 2 commandes du tableau.');
+});

@@ -63,7 +63,7 @@
 
 import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEATHER_TYPES } from '../data/balance.js';
 import { getInvestment } from '../data/investments.js';
-import { getCrop, isRareCrop, isTreeCrop } from '../data/crops.js';
+import { CROPS, getCrop, isRareCrop, isTreeCrop } from '../data/crops.js';
 import { getLevel, yearLength } from '../data/levels.js';
 import { DEFAULT_DIFFICULTY, LEGACY_DIFFICULTY, getDifficulty, isDifficulty, levelFor } from '../data/difficulty.js';
 import { getPerk, perkMaxRank } from '../data/perks.js';
@@ -168,7 +168,7 @@ import {
   varietyDawn, varietyQuery, varietyStart, varietySummary, varietyWater,
 } from './variety.js';
 import { cartInfo, claimPreview, claimUnits, renewBoard, drawCart } from './requests.js';
-import { cardActive, hasVarietyAlmanac, seedFairFactor, vAbsDay } from './variety-effects.js';
+import { cardActive, hasVarietyAlmanac, seedFairFactor, vAbsDay, vSeasonAbs } from './variety-effects.js';
 import { careerVarietyHost, careerDeliverOrder, careerLoadCart } from './career/variety-host.js';
 import { triggerCareerVariety } from './career/variety.js';
 import { CARD_VALUES } from '../data/variety.js';
@@ -608,7 +608,7 @@ function wrap(state, { fresh = false } = {}) {
         v.cart = drawCart(host);
         if (!v.cart) return fail('Aucune culture faisable.');
         const info = cartInfo(host);
-        push('cartArrived', { cart: info, text: 'La charrette du marché est arrivée : remplissez ses caisses avant le dernier soir de la saison.' });
+        push('cartArrived', { cart: info, text: 'La charrette du marché est là jusqu\'au dernier soir de la saison : vos récoltes à la main remplissent ses caisses.' });
         return { ok: true, cart: info };
       }
       case 'merchant': {
@@ -633,6 +633,33 @@ function wrap(state, { fresh = false } = {}) {
         v.challenges.season = null;
         const ev = varietyRestartChallenges(host);
         return ev ? { ok: true, challenges: challengesQuery(host) } : fail('Impossible aujourd\'hui.');
+      }
+      case 'medal': {
+        // Débogage : amène les compteurs de la saison au palier voulu d'un défi proposé (gardé s'il reste une place),
+        // puis passe par le vrai chemin des médailles (checkMedals : récompense, statistiques, événement).
+        if (!v.parts.challenges) return fail('Pas de défis.');
+        const ch = v.challenges;
+        const id = arg?.challengeId ?? arg;
+        const tier = Math.max(1, Math.min(3, Math.round(arg?.medal ?? 1)));
+        if (ch.season === null || ch.season !== vSeasonAbs(state) || !v.season || v.season.abs !== ch.season) return fail('Pas de défis cette saison.');
+        if (!ch.options.includes(id) || !ch.targets[id]) return fail('Ce défi n\'est pas proposé.');
+        if (!ch.kept.includes(id)) {
+          const kept = keepChallenge(host, id, true);
+          if (!kept.ok) return kept;
+        }
+        const target = ch.targets[id][tier - 1];
+        const s = v.season;
+        if (id === 'variety' || id === 'sowing') {
+          const map = id === 'variety' ? s.harvested : s.sown;
+          for (const c of CROPS) {
+            if (Object.keys(map).length >= target) break;
+            if (!map[c.id]) map[c.id] = 1;
+          }
+        } else {
+          s[id] = Math.max(s[id] || 0, target);
+        }
+        const medals = checkMedals(host);
+        return { ok: true, medals, medal: ch.medals[id] || 0 };
       }
       case 'theme':
         return rt ? triggerCareerVariety(host, 'theme', arg) : fail('Les thèmes sont propres à la carrière.');

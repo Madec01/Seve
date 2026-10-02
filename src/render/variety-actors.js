@@ -262,6 +262,7 @@ export function createVarietyActors(effects) {
   const cart = { on: false, mode: 'gone', t: 0, x: 0, alpha: 1, crates: [], pending: false };
   const wagon = { on: false, mode: 'gone', t: 0, x: 0, alpha: 1, pending: false };
   const hen = { x: 0, y: 0, tx: 0, ty: 0, wait: 0, facing: 1, on: false };
+  const lastLabels = new Map(); // étiquette « → Lili » → instant du dernier affichage
   const visitorA = { on: false, x: 0, t: 0, from: 0, offerId: null, look: 1 };
   const hops = [0, 0, 0]; // feuille de commande qui saute (livrée)
   const doneSlots = new Map(); // place → jour de la livraison
@@ -443,7 +444,13 @@ export function createVarietyActors(effects) {
         if (p.fromStock) break;
         const at = plotTop(layout, p.plotIndex);
         const label = type === 'cartProgress' ? '→ charrette' : p.label || (p.clientName ? `→ ${p.clientName}` : '→ commande');
-        if (at) effects.floatText?.(at.x, at.y - 6, label, '#fff1d2', { icon: false, life: 1.6, delay: 0.25 });
+        // Récolte en série : une seule étiquette par destination toutes les 0,9 s (sinon les textes se chevauchent).
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const seen = lastLabels.get(label);
+        if (at && !(seen !== undefined && now - seen < 900)) {
+          lastLabels.set(label, now);
+          effects.floatText?.(at.x, at.y - 6, label, '#fff1d2', { icon: false, life: 1.6, delay: 0.25 });
+        }
         if (type === 'orderProgress') {
           const i = info.slots.findIndex((x) => x && x.id === p.orderId);
           if (i >= 0) hops[i] = Math.max(hops[i], 0.35);
@@ -480,14 +487,17 @@ export function createVarietyActors(effects) {
           infoT = -1;
         }
         break;
-      case 'dawn':
-        if (Array.isArray(p.varietyWatered)) {
-          for (const i of p.varietyWatered) {
+      case 'themeShower':
+      case 'dawn': {
+        const list = type === 'themeShower' ? p.plots : p.varietyWatered;
+        if (Array.isArray(list)) {
+          for (const i of list) {
             const r = safe(() => layout.plotRect(i), null);
             if (r) effects.droplets?.(r.x + r.w / 2, r.y + r.h / 2, reduced ? 4 : 8, layout.plotScale || 1);
           }
         }
         break;
+      }
       default:
         break;
     }
@@ -631,14 +641,17 @@ export function createVarietyActors(effects) {
     if (!enabled || !sp) return null;
     const within = (r, s) => r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
     const targets = [];
-    if (wagon.mode === 'parked' || wagon.mode === 'fadein') targets.push([sp.merchant, { type: 'merchant' }]);
-    if (cart.mode === 'parked' || cart.mode === 'fadein') {
+    // En route vers sa place (« arriving ») aussi : l'animation s'arrête quand le jeu est en pause, et la roulotte
+    // ou la charrette doivent rester touchables à leur place.
+    const here = (m) => m === 'parked' || m === 'fadein' || m === 'arriving';
+    if (here(wagon.mode)) targets.push([sp.merchant, { type: 'merchant' }]);
+    if (here(cart.mode)) {
       const c = sp.cart;
       const crates = (cart.crates || []).length;
       const x0 = crates ? sp.crates[Math.min(3, crates - 1)].x : c.x;
       targets.push([{ x: x0, y: c.y, w: c.x + c.w - x0, h: c.h }, { type: 'cart' }]);
     }
-    if (visitorA.on && visitorA.t >= 1) targets.push([{ x: sp.visitor.x, y: sp.visitor.y - 15, w: 16, h: 17 }, { type: 'themeVisitor', offerId: visitorA.offerId }]);
+    if (visitorA.on) targets.push([{ x: sp.visitor.x, y: sp.visitor.y - 15, w: 16, h: 17 }, { type: 'themeVisitor', offerId: visitorA.offerId }]);
     if (info.board) targets.push([sp.board, { type: 'villageBoard' }]);
     for (const [r, hit] of targets) if (within(r, 0)) return hit;
     if (slop > 0) for (const [r, hit] of targets) if (within(r, slop)) return hit;

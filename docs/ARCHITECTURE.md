@@ -2574,3 +2574,18 @@ src/main.js                app.variety ; onGameEvent → app.variety.onEvent ; p
   merchant(), cards(), challenges(), theme(id), medal(id, n), fill(slot), open(kind), seasonEnd(), point(kind), ui(),
   stats() }` — `trigger` et ses raccourcis passent par `actions.triggerVariety` du cœur ; `fill(slot)` remplit une
   commande par de vraies récoltes à la main.
+
+### Intégration CORE ↔ UI/RENDER (2026-10-02)
+
+- `triggerVariety('medal', { challengeId, medal })` (débogage, cœur) : défi proposé de la saison en cours, gardé s'il
+  reste une place, compteurs amenés au palier `medal` (1 à 3), puis `checkMedals` (récompense, statistiques,
+  `challengeMedal`). Refus : `'Pas de défis cette saison.'`, `'Ce défi n'est pas proposé.'`, `'Deux défis au plus.'`.
+  C'est le chemin de `__debug.variety.medal(id, n)`.
+- Textes des défis : `{s}` = marque du pluriel selon `{n}` (« Remplir 1 caisse », « Remplir 2 caisses »).
+- `harvested` : avec `claimed` (lot 3), `src/render/effects.js` montre les pièces (récolte vendue) et laisse l'étiquette
+  « → Lili » / « → charrette » à `variety-actors.js` (une par destination toutes les 0,9 s) ; sans `claimed`,
+  `diverted` (texte du cœur, « → Joseph ») est affiché tel quel.
+- Interface : `themeShower` → résumé du matin, gouttes sur `plots` ; `purchased.gift` / `used` → « offerte » /
+  « d'occasion » ; la roulotte, la charrette et le visiteur du thème se touchent dès leur apparition (aussi pendant
+  leur trajet) ; fenêtre courte de la carrière titrée d'après la saison qui se termine (connue le soir).
+- Débogage : `__debug.variety.point('visitor')` (visiteur du thème).
