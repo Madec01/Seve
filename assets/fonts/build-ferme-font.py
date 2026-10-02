@@ -10,7 +10,8 @@ Modifications (toutes sur la grille de 50 unités = 1 pixel de la police) :
   1. « I » majuscule avec empattements (barres en haut et en bas) : sans eux, « I » et « l » étaient
      identiques (« Il » illisible). Les I accentués (Ì Í Î Ï Ī Į İ) suivent.
   2. Symboles utilisés par le jeu et absents de la police, dessinés dans le même style :
-     → ← ↑ ↓ ↔ ✕ ★ ≥ ≤ ± et les espaces fines (U+2009, U+202F).
+     → ← ↑ ↓ ↔ ✕ ★ ≥ ≤ ± ✓ ✗ ½ et les espaces fines (U+2009, U+202F).
+     (✓ / ✗ : état du fermage dans le tutoriel ; ½ : vitesse lente « ×½ ».)
   3. Taille : le cadratin passe de 1350 à 1170 unités (lettres ×1,15) pour que, à taille CSS égale,
      les majuscules aient la même hauteur qu'avec l'ancienne police (le texte reste plus étroit).
   4. Instructions de hinting retirées (elles ne correspondent plus aux glyphes modifiés ; le rendu
@@ -218,7 +219,38 @@ def add_symbols(font):
         '###########',
         '###########',
     ]
+    check = [                               # ✓ : état « couvert » (tutoriel)
+        '..........###',
+        '.........###.',
+        '........###..',
+        '.......###...',
+        '###...###....',
+        '.###.###.....',
+        '..#####......',
+        '...###.......',
+        '....#........',
+    ]
+    half = [                                # ½ : vitesse lente « ×½ »
+        '.##.......##.',
+        '###......##..',
+        '.##.....##...',
+        '.##....##....',
+        '.##...##.....',
+        '####.##......',
+        '....##.......',
+        '...##..####..',
+        '..##..##..##.',
+        '.##.......##.',
+        '##.......##..',
+        '........##...',
+        '.......##....',
+        '......##.....',
+        '......######.',
+    ]
     specs = [
+        (0x2713, 'uni2713', check, 14, 3 + 9),
+        (0x2717, 'uni2717', cross, 12, 3 + 9),
+        (0x00BD, 'onehalf', half, 14, 0 + 15),
         (0x2192, 'arrowright', right, 17, 3 + 9),
         (0x2190, 'arrowleft', left, 17, 3 + 9),
         (0x2191, 'arrowup', up, 11, 0 + 15),

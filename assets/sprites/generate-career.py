@@ -265,6 +265,28 @@ HAT_F = HAT_M[:7] + [
     'AAARCOCCCCOCrAAA',
 ] + HAT_M[12:]
 
+# Joueuse (fermière du mode Carrière) : nattes qui descendent sur les épaules, terminées par un ruban
+# rose (P), et une fleur rose à cœur jaune (Q) sur le ruban du chapeau. Les employées gardent HAT_F.
+PLAYER_F_EXTRA = {'P': (236, 112, 150), 'Q': (255, 226, 122)}
+HAT_FP = [
+    HAT_M[0],
+    HAT_M[1],
+    HAT_M[2],
+    'AAAAAhhPhhhAAAAA',
+    'AAHhAbPQPbbAhHAA',
+    'AAHhhhhPhhhhhHAA',
+    HAT_M[6],
+] + HAT_F[7:11] + [
+    'AARRCOCCCCOCRRAA',
+    'ARrScOoOOoOcSrRA',
+    'APSSAOOOOOOASSPA',
+] + HAT_M[14:]
+NOHAT_FP = NOHAT_F[:11] + [
+    'AARrCOCCCCOCrRAA',
+    'ARrScOoOOoOcSrRA',
+    'APSSAOOOOOOASSPA',
+] + HAT_M[14:]
+
 
 def _set(rows, x, y, ch):
     r = rows[y]
@@ -753,10 +775,11 @@ def people_section():
                     add(f'staff.{key}', staff_image(gender, outfit, hat, tint, 'idle'))
                     for pose in ('walk', 'walk2', 'work'):
                         add(f'staff.{key}.{pose}', staff_image(gender, outfit, hat, tint, pose))
-    # Joueuse (fermière) : mêmes 4 tenues que farmer.outfit.N, cheveux bruns, peau du fermier Kenney
+    # Joueuse (fermière) : mêmes 4 tenues que farmer.outfit.N, cheveux bruns, peau du fermier Kenney ;
+    # nattes sur les épaules (rubans roses) et fleur au chapeau : bien distincte du fermier, même en petit.
     for i in range(4):
-        add(f'farmer.fermiere.outfit.{i}', person(HAT_F, i, 'brown', 'medium'))
-        add(f'farmer.fermiere.outfit.{i}.nohat', person(NOHAT_F, i, 'brown', 'medium'))
+        add(f'farmer.fermiere.outfit.{i}', person(HAT_FP, i, 'brown', 'medium', extra=PLAYER_F_EXTRA))
+        add(f'farmer.fermiere.outfit.{i}.nohat', person(NOHAT_FP, i, 'brown', 'medium', extra=PLAYER_F_EXTRA))
     for kind in TOOL_ART:
         add(f'tool.{kind}' if kind != 'hoe' else 'tool.hoe.carry', tool_carry(kind))
         add(f'tool.{kind}.work', tool_work(kind))

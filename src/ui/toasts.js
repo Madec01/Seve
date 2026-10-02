@@ -1,4 +1,10 @@
 // Messages temporaires (toasts) et grand bandeau (changement de saison, avertissements).
+//
+// createToasts(stack, bannerNode) → { show(opts), banner(opts), hideBanner(), clearAll(), trim(), setLogger(fn) }
+// Historique (lot 1 « confort », A9) : chaque message montré (et chaque bandeau) est aussi passé au
+// journal des messages (`setLogger(fn)`, src/ui/messages.js), sauf `log: false` (refus d'une action :
+// « Il manque 12 pièces »…). Les messages importants (alerte, gel, action à toucher, succès) restent au
+// moins 5 secondes à l'écran.
 
 import { el, clear, typo } from './dom.js';
 import { icon } from './icons.js';
@@ -8,6 +14,23 @@ const KIND_ICON = { info: 'info', error: 'lock', success: 'star', warn: 'bill', 
 export function createToasts(stack, bannerNode) {
   const recent = new Map(); // texte → { node, timer }
   let bannerTimer = null;
+  let logger = null;
+
+  /** Durée d'affichage : au moins 5 s pour ce qui compte (alerte, action à toucher, succès). */
+  function durationOf(o, kind) {
+    const d = o.duration || 3200;
+    const important = !!o.onClick || ['warn', 'frost', 'rot', 'achievement'].includes(kind) || (kind === 'error' && o.log !== false);
+    return important ? Math.max(5000, d) : d;
+  }
+
+  function log(o, kind, updated = false) {
+    if (!logger || o.log === false) return;
+    try {
+      logger({ kind, title: o.title || '', text: o.text || '', key: o.key || null, onClick: o.onClick || null, updated });
+    } catch (err) {
+      console.warn('Journal des messages :', err);
+    }
+  }
 
   function dismiss(node) {
     if (!node.isConnected || node.classList.contains('is-leaving')) return;
@@ -32,7 +55,9 @@ export function createToasts(stack, bannerNode) {
     const kind = o.kind || 'info';
     const key = o.key ? `key|${o.key}` : `${kind}|${o.title || ''}|${o.text}`;
     const prev = recent.get(key);
+    const duration = durationOf(o, kind);
     if (prev && prev.node.isConnected && !prev.node.classList.contains('is-leaving')) {
+      if (o.key) log(o, kind, true);
       if (o.key) {
         const t = prev.node.querySelector('.toast-text');
         if (t) t.textContent = typo(o.text);
@@ -43,13 +68,14 @@ export function createToasts(stack, bannerNode) {
       prev.node.classList.remove('is-bump');
       void prev.node.offsetWidth; // relance l'animation
       prev.node.classList.add('is-bump');
-      prev.timer = setTimeout(() => dismiss(prev.node), o.duration || 3200);
+      prev.timer = setTimeout(() => dismiss(prev.node), duration);
       clearTimeout(prev.forget);
       prev.forget = setTimeout(() => {
         if (recent.get(key) === prev) recent.delete(key);
-      }, (o.duration || 3200) + 400);
+      }, duration + 400);
       return prev.node;
     }
+    log(o, kind);
     const node = el(
       `div.toast.toast--${kind}`,
       { role: kind === 'error' ? 'alert' : 'status' },
@@ -70,11 +96,11 @@ export function createToasts(stack, bannerNode) {
     // (vérifié deux fois : tout de suite, puis une fois l'animation d'entrée finie)
     requestAnimationFrame(trim);
     setTimeout(trim, 320);
-    const entry = { node, timer: setTimeout(() => dismiss(node), o.duration || 3200) };
+    const entry = { node, timer: setTimeout(() => dismiss(node), duration) };
     recent.set(key, entry);
     entry.forget = setTimeout(() => {
       if (recent.get(key) === entry) recent.delete(key);
-    }, (o.duration || 3200) + 400);
+    }, duration + 400);
     return node;
   }
 
@@ -83,6 +109,13 @@ export function createToasts(stack, bannerNode) {
    * @param opts { title, text?, kind = 'season' | 'warn' | 'frost', icon?, duration = 4200 }
    */
   function banner(opts) {
+    if (logger && opts.log !== false) {
+      try {
+        logger({ kind: opts.kind === 'frost' ? 'frost' : opts.kind === 'warn' ? 'warn' : 'season', title: opts.title || '', text: opts.text || '', key: null, onClick: null, banner: true });
+      } catch (err) {
+        console.warn('Journal des messages :', err);
+      }
+    }
     clearTimeout(bannerTimer);
     clear(bannerNode);
     bannerNode.className = `banner banner--${opts.kind || 'season'}`;
@@ -106,12 +139,25 @@ export function createToasts(stack, bannerNode) {
     bannerNode.classList.remove('is-visible');
   }
 
+  /** Tout effacer (changement de partie) : messages, et aussi le TEXTE du bandeau (pas seulement caché :
+   *  « Hiver · Fermage de l'hiver » d'une partie de niveau restait dans le DOM au lancement d'une carrière). */
   function clearAll() {
     for (const n of [...stack.children]) n.remove();
     recent.clear();
     clearTimeout(bannerTimer);
     bannerNode.classList.remove('is-visible');
+    clear(bannerNode);
   }
 
-  return { show, banner, hideBanner, clearAll, trim };
+  return {
+    show,
+    banner,
+    hideBanner,
+    clearAll,
+    trim,
+    /** fn({ kind, title, text, key, onClick, updated, banner }) : appelé pour chaque message montré. */
+    setLogger(fn) {
+      logger = typeof fn === 'function' ? fn : null;
+    },
+  };
 }

@@ -174,7 +174,7 @@ test('salaires : payés à l\'aube qui suit l\'embauche, « Économe » −2, ri
   const b = hireAs(g, null, null);
   b.trait = 'loyal';
   b.wage = wageFor(1, 'loyal');
-  assert.deepEqual(g.query.career.charges().daily.filter((d) => d.source === 'wages'), [{ source: 'wages', amount: 14 }], 'estimation');
+  assert.deepEqual(g.query.career.charges().daily.filter((d) => d.source === 'wages').map(({ source, amount }) => ({ source, amount })), [{ source: 'wages', amount: 14 }], 'estimation');
   nextDay(g);
   assert.equal(wagesOf(ev.of('dawn')[0]), 6 + 8, 'sans affectation, le salaire est payé');
   assert.equal(g.state.career.yearStats.spentBy.wages, 14);

@@ -121,6 +121,14 @@ function farmTab(ui) {
       app.progression?.available() ? cBtn(app, [icon('star', 'sm'), 'Succès'], () => app.grange.open('achievements'), { id: 'c-j-ach' }) : null,
     ),
   );
+  // Lot 1 « confort » : messages passés et guide de la ferme, toujours à portée.
+  parts.push(
+    el(
+      'div.sheet-actions',
+      app.messages ? cBtn(app, [icon('info', 'sm'), 'Messages'], () => app.messages.open(), { id: 'c-j-messages' }) : null,
+      app.openGuide ? cBtn(app, [icon('info', 'sm'), 'Guide de la ferme'], () => app.openGuide(), { id: 'c-j-guide' }) : null,
+    ),
+  );
   void game;
   return el('div.c-jfarm', parts);
 }

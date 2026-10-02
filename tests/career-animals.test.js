@@ -73,8 +73,23 @@ test('ramasser tous les abris (collectAll) ; requête shelters()', () => {
   const list = g.query.career.shelters();
   assert.deepEqual(list.map((s) => [s.buildingId, s.count, s.pending, s.product]), [['coop', 3, 6, 'eggs'], ['hutch', 1, 2, 'angora']]);
   const r = g.actions.career.collectAll();
-  assert.deepEqual(r, { ok: true, amount: 8, count: 2 });
-  assert.equal(g.actions.career.collectAll().ok, false);
+  assert.deepEqual(r, { ok: true, total: 8, amount: 8, count: 2, byShelter: [{ buildingId: 'coop', name: 'Poulailler', amount: 6 }, { buildingId: 'hutch', name: 'Clapier', amount: 2 }] });
+  const none = g.actions.career.collectAll();
+  assert.equal(none.ok, false);
+  assert.equal(typeof none.reason, 'string');
+  assert.deepEqual([none.total, none.count, none.byShelter], [0, 0, []]);
+});
+
+test('« Tout ramasser » au niveau du jeu : game.actions.collectAll (carrière = career.collectAll, niveaux = sans effet)', () => {
+  const g = richCareer(3);
+  g.actions.buyInvestment('hen');
+  nextDay(g);
+  const money = g.state.money;
+  const r = g.actions.collectAll();
+  assert.equal(r.ok, true);
+  assert.equal(r.total, g.state.money - money);
+  assert.deepEqual(r.byShelter.map((x) => x.buildingId), ['coop']);
+  assert.equal(g.actions.collectAll().ok, false);
 });
 
 test('lait : part à la fromagerie (inchangé), le reste se ramasse ; sans fromagerie tout se ramasse', () => {

@@ -10,6 +10,7 @@
 // Parcelles d'un terrain : state.plots[i].lot === lot.id (index du cœur, ajoutées à la fin, jamais renumérotées).
 
 import { SEASONS } from '../../data/balance.js';
+import { countNoun } from '../../data/french.js';
 import { getCrop } from '../../data/crops.js';
 import { DIFFICULTY_CAREER, MAX_LOTS, seasonScale } from '../../data/career/career.js';
 import { FIRST_LOT_INDEX, FIXED_LOTS, FIXED_TYPE_NAMES, LOT_GRID, LOT_PRICES, LOT_TYPES, MAX_LOTS_BY_RANK, START_FIELD, getLotType, inLotGrid, lotCellOf, lotIdAt, lotNameAt } from '../../data/career/lots.js';
@@ -226,7 +227,7 @@ export function checkDevelop(state, lotId, type) {
   if (lot.type === type) return { ok: false, reason: 'Le terrain est déjà aménagé ainsi.' };
   if (lot.type !== 'wild' && !isLotEmpty(state, lot)) return { ok: false, reason: 'Videz d\'abord le terrain (cultures, bâtiments, animaux).' };
   if (def.rank > state.career.rank) return { ok: false, reason: rankLabel(def.rank) };
-  if (countType(state, type) >= def.max) return { ok: false, reason: `Au plus ${def.max} ${def.name.toLowerCase()}${def.max > 1 ? 's' : ''} dans la ferme.` };
+  if (countType(state, type) >= def.max) return { ok: false, reason: `Au plus ${countNoun(def.max, def.name.toLowerCase())} dans la ferme.` };
   if (state.money < def.cost) return { ok: false, reason: notEnoughMoney(def.cost - state.money) };
   return { ok: true, cost: def.cost, def };
 }

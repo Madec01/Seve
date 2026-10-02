@@ -152,6 +152,7 @@ import { createCareerRuntime } from './career/runtime.js';
 import './career/extensions.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
 import { createEmitter } from './events.js';
+import { allOptions, autoPauseAfterDawn, checkOptions, setOption as setGameOption } from './options.js';
 import { borrow, canBorrow, initialNeighbourLoan, loanAmount, maxMissing, repay, repaymentFrom, willLend } from './neighbour.js';
 
 export const STATE_VERSION = 2;
@@ -269,6 +270,8 @@ function checkState(s, level) {
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   if (!['playing', 'bankrupt', 'victory'].includes(s.status)) return 'statut';
   if (!SPEEDS.includes(s.speed)) return 'vitesse';
+  const opt = checkOptions(s);
+  if (opt) return opt;
   if (!num(s.money) || !num(s.startMoney)) return 'argent';
   const t = s.time;
   if (!t || typeof t !== 'object') return 'calendrier';
@@ -630,6 +633,8 @@ function wrap(state) {
       state.time.elapsed -= DAY_SECONDS;
       endOfDay();
       if (playing()) dawn();
+      // Option « pause chaque matin » : le nouveau jour commence en pause, sans enchaîner les suivants.
+      if (playing() && autoPauseAfterDawn(state, push, seasonId(state))) state.time.elapsed = 0;
       flush();
     }
     flush();
@@ -822,6 +827,18 @@ function wrap(state) {
       if (!SPEEDS.includes(speed)) return fail('Vitesse invalide.');
       state.speed = speed;
       return { ok: true, speed };
+    }),
+
+    /** Option de partie gérée par le cœur (src/core/options.js), ex. setOption('autoPauseDawn', true). */
+    setOption: act((name, value) => setGameOption(state, name, value)),
+
+    /**
+     * « Tout ramasser » : ramasse tous les abris (carrière). Partie de niveau : rien à ramasser (sans effet).
+     * → { ok, total, count, byShelter: [{ buildingId, amount }], amount (= total) } ; ok: false + reason si rien.
+     */
+    collectAll: act(() => {
+      if (rt && typeof actions.career?.collectAll === 'function') return actions.career.collectAll();
+      return { ok: false, reason: 'Rien à ramasser pour l\'instant.', total: 0, amount: 0, count: 0, byShelter: [] };
     }),
   };
 
@@ -1292,6 +1309,10 @@ function wrap(state) {
     update,
     on: emitter.on,
     serialize: () => JSON.parse(JSON.stringify(state)),
+    /** Règle une option de partie (src/core/options.js) → { ok, name, value } | { ok: false, reason }. */
+    setOption: (name, value) => actions.setOption(name, value),
+    /** Options de partie (copie, défauts compris), ex. { autoPauseDawn: false }. */
+    options: () => allOptions(state),
     actions,
     query,
   };

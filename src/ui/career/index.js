@@ -93,6 +93,7 @@ export function createCareerUI(app) {
     const res = act('buyLot', lotId);
     if (res?.ok) {
       const id = res.lotId || lotId;
+      lotAfterWindows = id; // une fenêtre (nouveau rang…) peut s'intercaler : la fiche se rouvre ensuite
       open.lot(id);
       requestAnimationFrame(() => requestAnimationFrame(() => {
         if (app.sheets.current === 'c-lot') app.revealLot?.(id, 'c-lot');
@@ -132,7 +133,7 @@ export function createCareerUI(app) {
     }
     if (res && !res.ok) {
       app.audio.play('error');
-      app.toasts.show({ kind: 'error', text: res.reason || 'Action impossible.' });
+      app.toasts.show({ kind: 'error', text: res.reason || 'Action impossible.', log: false });
     } else {
       app.vibrate?.(12);
     }
@@ -272,7 +273,6 @@ export function createCareerUI(app) {
   const open = {
     shop() {
       openLive({ id: 'c-shop', kind: 'panel', tall: true, title: 'Acheter', icon: () => icon('coin', 'md'), build: () => shopContent(ui) });
-      app.hints.maybe('career.lotForSale', { selector: '#c-shop-lot' });
     },
     map() {
       // « Vous êtes ici » : le terrain au centre de la vue, avant que la feuille ne la couvre.
@@ -516,7 +516,7 @@ export function createCareerUI(app) {
   }
 
   // ── Événements du jeu ─────────────────────────────────────────────────────────
-  const grouped = { stored: 0, storedCrop: null, collected: 0, collectedIcon: null, diverted: 0 };
+  const grouped = { stored: 0, storedCrop: null, collected: 0, collectedIcon: null, collectedAll: 0, diverted: 0 };
   let groupTimer = null;
   function flushGrouped() {
     groupTimer = null;
@@ -526,8 +526,10 @@ export function createCareerUI(app) {
       grouped.stored = 0;
     }
     if (grouped.collected) {
-      t.show({ kind: 'money', sprite: grouped.collectedIcon || icon('coin', 'md'), key: 'c-collect', title: 'Ramassé !', text: `+${fmt(grouped.collected)} pièces`, duration: 2200 });
+      const all = grouped.collectedAll > 1;
+      t.show({ kind: 'money', sprite: grouped.collectedIcon || icon('coin', 'md'), key: 'c-collect', title: all ? `Tout ramassé : ${grouped.collectedAll} abris` : 'Ramassé !', text: `+${fmt(grouped.collected)} pièces`, duration: 2600 });
       grouped.collected = 0;
+      grouped.collectedAll = 0;
     }
     if (grouped.diverted) {
       t.show({ kind: 'info', icon: 'harvest', key: 'c-divert', text: `${plural(grouped.diverted, 'récolte mise', 'récoltes mises')} de côté pour une commande.`, duration: 2600 });
@@ -622,6 +624,7 @@ export function createCareerUI(app) {
       case 'collected':
         if (ev.by === 'player' && ev.amount > 0) {
           grouped.collected += ev.amount;
+          grouped.collectedAll += 1; // abris ramassés dans ce groupe (« Tout ramasser », glissé sur les abris)
           const def = game.state.career.buildings?.[ev.buildingId];
           grouped.collectedIcon = def ? animalProductIcon(shelterAnimal(ev.buildingId), 'sprite--sm') : null;
           group();
@@ -660,7 +663,11 @@ export function createCareerUI(app) {
         break;
       case 'crow':
         app.audio.play('warning', { volume: 0.5 });
-        t.show({ kind: 'warn', sprite: cIcon('crow'), title: 'Des corbeaux !', text: `${plural((ev.plots || []).length || 1, 'parcelle')} : touchez-les pour les chasser.`, duration: 4600 });
+        {
+          const n = (ev.plots || []).length || 1;
+          // Texte accordé du cœur (« Un corbeau dans les champs : touchez-le pour le chasser. »), sinon le nôtre.
+          t.show({ kind: 'warn', sprite: cIcon('crow'), title: 'Des corbeaux !', text: ev.text || (n > 1 ? `${n} parcelles : touchez-les pour les chasser.` : 'Une parcelle : touchez-la pour les chasser.'), duration: 5000 });
+        }
         app.hints.maybe('career.crows', (ev.plots || []).length ? { plot: ev.plots[0] } : null);
         break;
       case 'crowChased':
@@ -683,7 +690,7 @@ export function createCareerUI(app) {
       }
       case 'offerResolved':
         if (ev.outcome === 'delivered' && ev.amount) t.show({ kind: 'money', icon: 'coin', title: 'Commande livrée', text: `+${fmt(ev.amount)} pièces`, duration: 3400 });
-        else if (ev.outcome === 'expired') t.show({ kind: 'info', icon: 'calendar', text: 'Une proposition a expiré : pas grave !', duration: 2600 });
+        else if (ev.outcome === 'expired') t.show({ kind: 'info', icon: 'calendar', text: `${ev.data?.name || ev.name ? `La proposition (${ev.data?.name || ev.name})` : 'Une proposition'} a expiré : pas grave !`, duration: 3400 });
         break;
       case 'questOffered':
         // Demandée depuis le Carnet : la feuille s'ouvre déjà (pas de message en double).
@@ -770,6 +777,7 @@ export function createCareerUI(app) {
         break;
       case 'dawn':
         maybeCollectHint();
+        maybeLotHint();
         break;
       default:
         break;
@@ -782,8 +790,21 @@ export function createCareerUI(app) {
   }
 
   function maybeCollectHint() {
-    const b = (q('buildings', []) || []).find((x) => (x.pending || 0) > 0);
-    if (b) app.hints.maybe('career.collect', { selector: '#tab-farm' });
+    const b = (q('buildings', []) || []).filter((x) => (x.pending || 0) > 0);
+    if (b.length) app.hints.maybe('career.collect', { selector: '#tab-farm' });
+    // Plusieurs abris à ramasser : le bouton « Tout ramasser » de la ligne « À faire ».
+    if (b.length >= 2) app.hints.maybe('career.collectAll', { selector: '#todo' });
+  }
+
+  /**
+   * « La forêt à vendre » : dès que le premier terrain devient abordable (ou presque), pas un an plus tard en
+   * ouvrant la boutique (le conseil couvrait alors le haut de la feuille « Acheter »).
+   */
+  function maybeLotHint() {
+    if ((game.state.career?.lotsBought || 0) > 0) return;
+    const next = q('nextLot', null);
+    if (!next) return;
+    if (next.canBuy || game.state.money >= (next.price || Infinity) * 0.8) app.hints.maybe('career.lotForSale', { selector: '#tab-buy' });
   }
 
   function developText(type) {
@@ -819,9 +840,11 @@ export function createCareerUI(app) {
   }
 
   // ── Cycle de vie ──────────────────────────────────────────────────────────────
-  function bind(g, { resumed = false, created = false } = {}) {
+  function bind(g, { resumed = false, created = false, quiet = false } = {}) {
     game = g;
     live = null;
+    lotAfterWindows = null;
+    interruptedLot = null;
     seen.candidatesDay = g.state.career?.candidatesDay ?? null;
     seen.questId = null;
     seen.offers = new Set((q('events', { offers: [] })?.offers || []).map((o) => o.offerId ?? o.id));
@@ -833,7 +856,8 @@ export function createCareerUI(app) {
     refreshBadges();
     const s = q('summary', null);
     if (resumed) {
-      app.toasts.show({ kind: 'info', icon: 'calendar', title: s?.farmName || 'Ma ferme', text: `Reprise : année ${s?.year ?? 1}, ${season(s?.seasonId || 'spring').toLowerCase()} jour ${s?.day ?? 1}.`, duration: 3600 });
+      // Reprise depuis le menu : la fenêtre « Où en étais-je ? » dit déjà tout (quiet).
+      if (!quiet) app.toasts.show({ kind: 'info', icon: 'calendar', title: s?.farmName || 'Ma ferme', text: `Reprise : année ${s?.year ?? 1}, ${season(s?.seasonId || 'spring').toLowerCase()} jour ${s?.day ?? 1}.`, duration: 3600 });
     } else if (!created) {
       app.toasts.banner({ kind: 'season', icon: s?.seasonId || 'spring', title: s?.farmName || 'Ma ferme', text: `Année ${s?.year ?? 1} · ${s?.rankName || ''}`, duration: 3800 });
     }
@@ -849,10 +873,28 @@ export function createCareerUI(app) {
     app.tabbar?.setTabs?.(null);
   }
 
+  // Fiche d'un terrain fermée par une fenêtre (achat d'un terrain → « Nouveau rang ! ») : rouverte quand toutes
+  // les fenêtres sont fermées (avant, la feuille restait vide, avec son seul titre : bug [42] de l'analyse).
+  let lotAfterWindows = null;
+  let interruptedLot = null;
+
   function processPending() {
     if (!active()) return;
     flushGrouped();
+    const lotOpen = app.sheets.current === 'c-lot' ? live?.spec.reveal?.lotId || null : null;
+    const wasOpen = app.dialogs.isOpen();
     windows.process();
+    if (!wasOpen && app.dialogs.isOpen()) {
+      if (lotOpen && lotOpen === lotAfterWindows) interruptedLot = lotOpen;
+      lotAfterWindows = null;
+    } else if (!app.dialogs.isOpen()) {
+      lotAfterWindows = null;
+      if (interruptedLot && !windows.pending && !app.sheets.isOpen()) {
+        const id = interruptedLot;
+        interruptedLot = null;
+        open.lot(id);
+      } else if (interruptedLot && app.sheets.isOpen()) interruptedLot = null;
+    }
   }
 
   /** À chaque image (après le dessin de la scène) : la mini-carte. */

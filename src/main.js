@@ -60,6 +60,9 @@ import { productIcon } from './ui/icons.js';
 import { productName } from './ui/panel.js';
 import { createCareerUI } from './ui/career/index.js';
 import { careerMenuButtons, openNewFarm } from './ui/career/menu.js';
+import { createMessages } from './ui/messages.js';
+import { createTodo } from './ui/todo.js';
+import { openGuide } from './ui/guide.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -115,6 +118,11 @@ app.hints = createHints(app);
 app.careerUI = createCareerUI(app);
 app.careerMenuButtons = (btn) => careerMenuButtons(app, btn);
 app.newFarm = () => openNewFarm(app, {});
+// Guidage (lot 1 « confort ») : historique des messages, ligne « À faire », guide de la ferme.
+app.messages = createMessages(app);
+app.toasts.setLogger((e) => app.messages.add(e));
+app.todo = createTodo(app);
+app.openGuide = (opts = {}) => openGuide(app, opts);
 
 applyDisplaySettings();
 
@@ -130,6 +138,7 @@ app.updateSettings = (patch) => {
   Object.assign(settings, patch);
   audio.setVolumes(settings);
   applyDisplaySettings();
+  app.applyA11y?.(); // taille du texte, police, contraste, scène, pause du matin (src/ui/a11y.js)
   app.hud.refreshMute();
   app.saveSettings();
   if ('keepAwake' in patch) updateWakeLock();
@@ -318,6 +327,8 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
     if (app.dialogs.isOpen()) return;
     pauseReasons.delete('tutorial');
     pauseReasons.delete('hidden');
+    // Pause de lecture d'une fiche (src/ui/sheets.js) : relancer le temps (clavier, bouton) la lève jusqu'à la fermeture.
+    if (speed > 0) app.sheets.releasePause?.();
     audio.play('toggle');
   }
   const res = g.actions.setSpeed(speed);
@@ -338,8 +349,21 @@ app.openPauseMenu = () => {
   if (!app.game || app.inMenu || app.game.state.status !== 'playing') return;
   if (app.dialogs.top() === 'pause') return;
   app.sheets.close('silent');
-  app.dialogs.pauseMenu();
+  const handle = app.dialogs.pauseMenu();
+  addPauseGuidance(handle?.node);
 };
+
+/** Menu Pause : « Messages » et « Guide de la ferme », juste après « Reprendre » (lot 1 « confort »). */
+function addPauseGuidance(node) {
+  const list = node?.querySelector('.menu-buttons');
+  if (!list || list.querySelector('#pause-guide')) return;
+  const unread = app.messages.unread;
+  const messages = app.dialogs.btn([el('span', 'Messages'), unread ? el('span.pause-count', ` (${unread} nouveaux)`) : null], () => app.messages.open(), 'btn--big', { id: 'pause-messages' });
+  const guide = app.dialogs.btn('Guide de la ferme', () => app.openGuide(), 'btn--big', { id: 'pause-guide' });
+  const after = list.querySelector('#pause-resume');
+  if (after) after.after(messages, guide);
+  else list.prepend(messages, guide);
+}
 
 // ── Onglets et feuilles ───────────────────────────────────────────────────────────
 /** Onglet du bas : 'farm' | 'shop' | 'stats' | 'menu'. */
@@ -380,6 +404,10 @@ app.onSheetChange = () => {
   requestAnimationFrame(() => app.toasts.trim?.());
   updateInsets();
   updateSheetOverlay();
+};
+app.onTodoResize = () => {
+  insetsKey = '';
+  updateInsets();
 };
 app.onDecorChange = () => {
   insetsKey = '';
@@ -473,7 +501,7 @@ app.revealPlot = (index) => {
 function report(res) {
   if (res && !res.ok) {
     audio.play('error');
-    app.toasts.show({ kind: 'error', text: res.reason });
+    app.toasts.show({ kind: 'error', text: res.reason, log: false });
   }
   return res;
 }
@@ -508,7 +536,7 @@ app.repayNeighbour = (amount, { explain = false } = {}) => {
   if (!g || typeof g.actions.repayNeighbour !== 'function') return null;
   if (explain) {
     audio.play('error');
-    app.toasts.show({ kind: 'error', text: `Il vous faut ${plural(amount, 'pièce')} pour rendre cette somme (vous en avez ${fmt(Math.max(0, g.state.money))}).` });
+    app.toasts.show({ kind: 'error', text: `Il vous faut ${plural(amount, 'pièce')} pour rendre cette somme (vous en avez ${fmt(Math.max(0, g.state.money))}).`, log: false });
     return null;
   }
   const res = report(g.actions.repayNeighbour(amount));
@@ -525,10 +553,35 @@ app.openNeighbour = () => {
   requestAnimationFrame(() => app.panel.focusNeighbour?.());
 };
 
-/** Sème la même culture sur la parcelle choisie puis sur toutes les parcelles libres. */
+/**
+ * Sème la même culture sur la parcelle choisie puis sur toutes les parcelles libres. Si cela coûte plus de la
+ * moitié de l'argent, le joueur confirme d'abord (renvoie alors une promesse du nombre de parcelles semées).
+ */
 app.plantAll = (cropId, firstIndex) => {
   const g = app.game;
   if (!g) return 0;
+  const crop = getCrop(cropId);
+  if (crop?.kind !== 'tree') {
+    const others = g.query.plots().filter((p) => p.action === 'plant' && p.index !== firstIndex).length;
+    const seed = g.query.plantableCrops(firstIndex).find((c) => c.id === cropId)?.seedCost ?? 0;
+    const money = Math.max(0, g.state.money);
+    const n = Math.min(others + 1, seed > 0 ? Math.floor(money / seed) : others + 1);
+    const cost = n * seed;
+    if (others > 0 && n > 1 && cost > money * 0.5) {
+      return app.dialogs
+        .confirm({
+          title: 'Semer partout ?',
+          text: `${plural(n, 'parcelle')} de ${cropName(cropId).toLowerCase()} : ${plural(cost, 'pièce')} sur vos ${fmt(money)}. Il vous restera ${plural(money - cost, 'pièce')}.`,
+          ok: `Semer (${fmt(cost)})`,
+          cancel: 'Annuler',
+        })
+        .then((ok) => (ok && app.game === g ? plantAllNow(g, cropId, firstIndex) : 0));
+    }
+  }
+  return plantAllNow(g, cropId, firstIndex);
+};
+
+function plantAllNow(g, cropId, firstIndex) {
   const first = g.actions.plant(firstIndex, cropId);
   if (!first.ok) {
     report(first);
@@ -545,7 +598,7 @@ app.plantAll = (cropId, firstIndex) => {
   }
   if (n > 1) app.toasts.show({ kind: 'success', sprite: cropIcon(cropId, 'sprite--sm'), text: `${n} parcelles semées (${cropName(cropId).toLowerCase()}).` });
   return n;
-};
+}
 
 // ── Géométrie de la scène ─────────────────────────────────────────────────────────
 /** Partie de la scène vraiment visible (sous la barre du haut, au-dessus des onglets). */
@@ -614,7 +667,11 @@ function wantedMinZoom(w, h, dpr) {
 }
 
 function viewportHeight() {
-  return Math.round(window.visualViewport?.height || window.innerHeight);
+  // Zoom à deux doigts (autorisé par l'option d'accessibilité) : la hauteur visible rétrécit ; la mise en page garde
+  // la hauteur réelle de l'écran (hauteur visible × zoom).
+  const vv = window.visualViewport;
+  if (!vv) return Math.round(window.innerHeight);
+  return Math.round(vv.height * (vv.scale > 1.01 ? vv.scale : 1));
 }
 
 // Zones de l'écran couvertes par l'interface (px CSS), transmises à la scène.
@@ -628,15 +685,19 @@ function updateInsets() {
   // Mode décoration depuis le menu : la barre de décoration remplace les onglets.
   const decorH = app.decor?.active && app.inMenu ? $('#decorbar')?.offsetHeight || 0 : 0;
   insets.top = inGame ? hudH : 0;
-  insets.bottom = inGame && !app.isWide() ? tabH : decorH && !app.isWide() ? decorH : 0;
+  // La ligne « À faire » (src/ui/todo.js) garde sa place en bas pendant toute la partie, même cachée un instant
+  // (feuille, bulle) : la scène ne saute pas à chaque fois, et rien d'utile ne reste dessous.
+  const todoH = inGame && !app.isWide() && !(app.decor?.active) ? app.todo?.reserve?.() || 0 : 0;
+  insets.bottom = inGame && !app.isWide() ? tabH + todoH : decorH && !app.isWide() ? decorH : 0;
   insets.left = 0;
   // Grand écran : le panneau rangé à droite (achats, bilan) réduit la scène visible.
   insets.right = inGame && app.isWide() && app.sheets.isOpen() ? Math.round(app.sheets.box.getBoundingClientRect().width) : 0;
-  const key = `${insets.top},${insets.bottom},${insets.left},${insets.right}`;
+  const key = `${insets.top},${insets.bottom},${insets.left},${insets.right},${todoH}`;
   if (key === insetsKey) return;
   insetsKey = key;
   document.documentElement.style.setProperty('--inset-top', `${insets.top}px`);
-  document.documentElement.style.setProperty('--inset-bottom', `${insets.bottom}px`);
+  // CSS : haut des onglets seulement (feuilles, messages, ligne « À faire » se posent dessus).
+  document.documentElement.style.setProperty('--inset-bottom', `${insets.bottom - todoH}px`);
   if (typeof app.scene?.setInsets === 'function') app.scene.setInsets({ ...insets });
   app.tutorial.relayout();
 }
@@ -656,6 +717,8 @@ function resizeScene() {
     syncSceneCareer();
     app.applyCosmetics();
     if (app.decor.active && typeof app.scene.setDecorMode === 'function') app.scene.setDecorMode(true);
+    // Nouvelle scène : réglages d'accessibilité du canvas (mouvements réduits, repères des parcelles : src/ui/a11y.js).
+    app.applySceneA11y?.();
   }
   app.scene.resize(w, h, dpr);
   updateInsets();
@@ -862,6 +925,7 @@ function wire(game) {
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
+    app.todo.onEvent(ev, game);
     reactAudio(ev, game);
     if (!career || SHARED_MESSAGES.has(ev.type)) reactMessages(ev, game);
     if (career) {
@@ -1393,11 +1457,13 @@ function startRun(game, { resumed = false, created = false } = {}) {
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
+  app.messages.clear();
   app.sheets.close('silent');
   app.input.cancel();
   app.tooltip.hide();
 
   app.game = game;
+  app.todo.reset(game);
   app.inMenu = false;
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
@@ -1421,7 +1487,9 @@ function startRun(game, { resumed = false, created = false } = {}) {
 
   if (career) {
     // Mode Carrière : onglets, feuilles, fenêtres et conseils propres (src/ui/career/*).
-    app.careerUI.bind(game, { resumed, created });
+    app.careerUI.bind(game, { resumed, created, quiet: resumed });
+    // Reprise depuis le menu : « Où en étais-je ? » (fenêtre courte, la partie attend).
+    if (resumed) app.todo.showResume(game);
     save();
     scheduleRefresh();
     updateWakeLock();
@@ -1435,7 +1503,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
   const farm = app.progression.available() ? `${app.progression.farmName()} · ` : '';
   const modeName = difficultyName(game.difficulty);
   if (resumed) {
-    app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()} (mode ${modeName}).` });
+    // « Où en étais-je ? » remplace l'ancien message « Partie reprise » (la fenêtre dit tout).
+    if (!app.todo.showResume(game)) app.toasts.show({ kind: 'info', icon: 'calendar', text: `Partie reprise : jour ${c.day}, ${season(c.seasonId).toLowerCase()} (mode ${modeName}).` });
   } else if (lvl.contest) {
     app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${modeName} · jugement le soir du ${lvl.contest.deadlineDay}ᵉ jour`, duration: 4800 });
   } else {
@@ -1535,6 +1604,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.game = null;
   app.inMenu = true;
   if (DEBUG) window.__game = null;
+  app.todo.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1749,7 +1819,11 @@ function frame(t) {
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
   app.hints.frame();
+  app.todo.tick();
   app.hud.frame(dt);
+  // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
+  // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
+  if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
 }
 
 // ── Chargement ────────────────────────────────────────────────────────────────────
@@ -1789,6 +1863,13 @@ async function boot() {
     'assets/sprites/ui/panel-slate.png',
     'assets/sprites/ui/checkbox-on.png',
     'assets/sprites/ui/checkbox-off.png',
+    // Contrastes renforcés (lot 1 « confort ») : cadres foncés des boutons et des rubans.
+    'assets/sprites/ui/button-red-deep.png',
+    'assets/sprites/ui/button-slate-deep.png',
+    'assets/sprites/ui/button-blue.png',
+    'assets/sprites/ui/slot-wood-deep.png',
+    'assets/sprites/ui/banner-red-deep.png',
+    'assets/sprites/ui/banner-red-ribbon-deep.png',
   ];
 
   // Sons attendus avant « Commencer » : seulement les petits bruits de l'écran d'accueil et du
@@ -1955,6 +2036,9 @@ if (DEBUG) {
       return app.startLevel(levelId, { skipConfirm: true });
     },
     insets: () => ({ ...insets }),
+    /** Ligne « À faire » : ce que le jeu propose, dans l'ordre (texte, id, priorité). */
+    todo: () => app.todo.items().map((x) => ({ id: x.id, prio: x.prio, text: x.text, short: x.short })),
+    messages: () => app.messages.list().map((m) => ({ kind: m.kind, title: m.title, text: m.text, day: m.day })),
     /** Change l'argent de la partie (tests : provoquer le prêt du voisin). */
     setMoney(n) {
       const g = app.game;

@@ -4,8 +4,11 @@
 /** Durée d'un jour en secondes, à la vitesse ×1. */
 export const DAY_SECONDS = 20;
 
-/** Vitesses autorisées (0 = pause). */
-export const SPEEDS = [0, 1, 2, 4];
+/** Vitesses autorisées (0 = pause, 0.5 = vitesse douce ×½ : un jour dure 40 s). */
+export const SPEEDS = [0, 0.5, 1, 2, 4];
+
+/** Options de partie gérées par le cœur (game.setOption) et leur valeur par défaut. */
+export const GAME_OPTIONS = { autoPauseDawn: false };
 
 /** Vitesse au lancement d'une partie. */
 export const DEFAULT_SPEED = 1;

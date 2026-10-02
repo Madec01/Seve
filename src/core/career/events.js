@@ -13,6 +13,7 @@
 //   - corbeaux (chaseCrow ; non chassé à l'aube suivante → plot.crowPenalty) ; pêche (fish, une fois par jour).
 // Aucun événement ne détruit une culture, un animal ou un bâtiment. Tous les tirages : flux « events ».
 
+import { agree, countNoun, nounPlural } from '../../data/french.js';
 import { DAY_SECONDS, SEASONS } from '../../data/balance.js';
 import { CROPS, getCrop, isTreeCrop } from '../../data/crops.js';
 import { BUILDINGS_BY_ID, WORKSHOPS } from '../../data/career/buildings.js';
@@ -429,7 +430,7 @@ function startEvent(api, id, ctx) {
       const plots = shuffleTake(rng, candidates, n).sort((a, b) => a - b);
       for (const i of plots) state.plots[i].crow = true;
       active.data = { plots };
-      api.push('crow', { plots: [...plots] });
+      api.push('crow', { plots: [...plots], text: plots.length === 1 ? 'Un corbeau dans les champs : touchez-le pour le chasser.' : `${plots.length} corbeaux dans les champs : touchez-les pour les chasser.` });
       break;
     }
     case 'rainbow':
@@ -495,7 +496,7 @@ function eventText(state, active) {
   const d = active.data || {};
   switch (active.kind) {
     case 'visitor':
-      return `${capital(d.name)} voudrait ${d.n} ${cropPlural(d.cropId, d.n)}, payé${d.n > 1 ? 's' : ''} × ${String(VISITOR.factor).replace('.', ',')}.`;
+      return `${capital(d.name)} voudrait ${d.n} ${cropPlural(d.cropId, d.n)}, ${agree(cropPlural(d.cropId, d.n), d.n, 'payé')} × ${String(VISITOR.factor).replace('.', ',')}.`;
     case 'tourists':
       return `Des touristes se promènent sur la route : +${d.perPass} pièces à chaque passage.`;
     case 'crows':
@@ -509,7 +510,7 @@ function eventText(state, active) {
     case 'lostPet':
       return PETS.find((p) => p.id === d.petId)?.text || '';
     case 'josephGift':
-      return d.gift === 'seeds' ? `Joseph vous a semé ${d.n} parcelle${d.n > 1 ? 's' : ''} de ${d.cropName.toLowerCase()}${d.n > 1 ? 's' : ''}.` : `Joseph vous offre ${d.amount} pièces.`;
+      return d.gift === 'seeds' ? `Joseph vous a semé ${countNoun(d.n, 'parcelle')} de ${cropMass(d.cropId, d.cropName)}.` : `Joseph vous offre ${d.amount} pièces.`;
     default:
       return '';
   }
@@ -523,6 +524,14 @@ function lowerFirst(s) {
 }
 
 /** « 6 tomates », « 1 blé »… (pluriel simple des noms de culture). */
+/** « de carottes », « de blé », « de choux » : la culture au sens d'une masse (après « parcelle de »). */
+export function cropMass(cropId, fallbackName) {
+  const name = (getCrop(cropId)?.name || fallbackName || cropId || '').toLowerCase();
+  if (name === 'blé' || name === 'maïs') return name;
+  if (name === 'pommier') return 'pommiers';
+  return nounPlural(name);
+}
+
 export function cropPlural(cropId, n) {
   const name = (getCrop(cropId)?.name || cropId).toLowerCase();
   if (n <= 1) return name;
@@ -624,7 +633,7 @@ export function offerInfo(state, offer) {
       ...base,
       title: capital(d.name),
       icon: 'npc.visitor.1',
-      text: `${capital(d.name)} voudrait ${d.n} ${cropPlural(d.cropId, d.n)}, payé${d.n > 1 ? 's' : ''} ${d.total} pièces (× ${String(VISITOR.factor).replace('.', ',')}).`,
+      text: `${capital(d.name)} voudrait ${d.n} ${cropPlural(d.cropId, d.n)}, ${agree(cropPlural(d.cropId, d.n), d.n, 'payé')} ${d.total} pièces (× ${String(VISITOR.factor).replace('.', ',')}).`,
       detail: offer.accepted ? `Mises de côté : ${offer.delivered} / ${d.n} · ${base.daysLeft === 0 ? 'dernier jour' : `encore ${base.daysLeft + 1} jours`}` : 'Livrée depuis le grenier ou avec vos prochaines récoltes.',
       acceptLabel: 'Accepter',
       declineLabel: 'Refuser',

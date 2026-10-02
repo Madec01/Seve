@@ -11,7 +11,8 @@
 // couvrir ; la scène défile pour montrer la parcelle visée (scene.focusPlot). Textes courts.
 
 import { append, clear, el, fmt, placeNear, setText } from './dom.js';
-import { icon, sprite } from './icons.js';
+import { icon } from './icons.js';
+import { joseph } from './career/util.js';
 import { waterEffect } from './text.js';
 
 const NAME = 'Joseph, votre voisin';
@@ -127,8 +128,8 @@ export function createTutorial(layer, app) {
       title: 'Le fermage',
       text: () =>
         game.query.finance().neighbourLoan
-          ? `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison. Vert : c'est couvert ; orange : récoltez encore. S'il manque un peu, je vous avancerai l'argent !`
-          : `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Vert : c'est couvert ; orange : récoltez encore ; rouge : danger !`,
+          ? `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison. Regardez le signe : ✓ « couvert », c'est payé d'avance ; ! « juste », récoltez encore. S'il manque un peu, je vous avancerai l'argent !`
+          : `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Regardez le signe : ✓ « couvert », c'est bon ; ! « juste », récoltez encore ; ✗ « danger », attention !`,
       pauses: true,
       target: () => ({ type: 'ui', selector: '#hud-bill' }),
       buttons: [{ label: 'Compris', primary: true, action: () => next() }],
@@ -297,7 +298,7 @@ export function createTutorial(layer, app) {
     const tallSheet = hidden === 'popup' && app.sheets?.box.classList.contains('is-tall');
     const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup') && !tallSheet);
     if (show) {
-      if (!pillAvatar.firstChild) pillAvatar.append(sprite('farmer', 'sprite--xs'));
+      if (!pillAvatar.firstChild) pillAvatar.append(joseph('content', 'sprite--xs'));
       pillTitle.textContent = s.title;
       setText(pillText, s.hint());
       pill.classList.add('is-visible');
@@ -332,7 +333,7 @@ export function createTutorial(layer, app) {
     const canMinimize = !!s.hint && (!s.buttons || s.id === 'coop');
     append(bubble, [
       canMinimize ? el('button.tuto-min', { type: 'button', 'aria-label': 'Réduire la bulle', 'data-tip': 'Réduire (le conseil reste affiché en haut à gauche)', onclick: () => minimize() }, el('span.tuto-min-bar')) : null,
-      el('div.tuto-avatar', sprite('farmer', 'sprite--avatar')),
+      el('div.tuto-avatar', joseph('content', 'sprite--avatar')), // même portrait de Joseph qu'en carrière
       el(
         'div.tuto-content',
         el('div.tuto-name', NAME),

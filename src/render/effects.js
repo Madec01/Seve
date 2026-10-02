@@ -188,6 +188,11 @@ export function createEffects(images) {
   let time = 0;
   let flash = 0; // éclair (0..1)
   let nextFlash = 3;
+  // Mouvements réduits (option « Réduire les animations » / prefers-reduced-motion) : pas d'éclair blanc
+  // (léger assombrissement à la place, jamais double), pas de brume de chaleur, pas de tremblement,
+  // moitié moins de particules, textes flottants qui s'effacent presque sur place.
+  let reduced = false;
+  let skipToggle = false;
   const intensity = { rain: 0, snow: 0, leaves: 0, petals: 0, clouds: 0 };
   let primed = false;
   const grade = [1, 1, 1];
@@ -252,6 +257,11 @@ export function createEffects(images) {
   }
 
   function particle(kind, x, y, vx, vy, g, life, color = '', delay = 0, floor = Infinity) {
+    if (reduced && kind !== 'smoke') {
+      // Une particule sur deux (alternance déterministe : le motif reste lisible).
+      skipToggle = !skipToggle;
+      if (skipToggle) return null;
+    }
     const p = parts.spawn();
     p.kind = kind;
     p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.g = g;
@@ -571,7 +581,7 @@ export function createEffects(images) {
 
   function updateWeather(dt) {
     const { season, weather, view } = env;
-    const area = (view.w * view.h) / (512 * 320);
+    const area = ((view.w * view.h) / (512 * 320)) * (reduced ? 0.5 : 1);
     const wantRain = weather === 'rain' ? 1 : weather === 'storm' ? 1.6 : 0;
     const wantSnow = season === 'winter' ? (weather === 'snow' ? 1 : 0.18) : 0;
     const wantLeaves = season === 'autumn' ? (weather === 'storm' || weather === 'rain' ? 0.6 : 1) : 0;
@@ -776,10 +786,11 @@ export function createEffects(images) {
       nextFlash -= dt;
       if (nextFlash <= 0) {
         flash = 1;
-        nextFlash = Math.random() < 0.3 ? 0.18 : rand(4, 9); // parfois un double éclair
+        // Parfois un double éclair (jamais en mouvements réduits).
+        nextFlash = !reduced && Math.random() < 0.3 ? 0.18 : rand(4, 9);
       }
     }
-    flash = Math.max(0, flash - dt * 4);
+    flash = Math.max(0, flash - dt * (reduced ? 1.5 : 4)); // réduit : s'estompe lentement, sans à-coup
     primed = true;
   }
 
@@ -848,7 +859,7 @@ export function createEffects(images) {
         // L'arbre descend sous la ligne du sol : on découpe tout ce qui passe sous la parcelle.
         const u = Math.min(1, g.t / g.life);
         const depth = Math.round(u * u * g.h);
-        const shake = g.t < 0.25 ? (Math.floor(g.t * 40) % 2 ? k : -k) : 0;
+        const shake = !reduced && g.t < 0.25 ? (Math.floor(g.t * 40) % 2 ? k : -k) : 0;
         ctx.globalAlpha = u > 0.8 ? (1 - u) / 0.2 : 1;
         ctx.save();
         ctx.beginPath();
@@ -913,7 +924,7 @@ export function createEffects(images) {
         case 'confetti': {
           ctx.globalAlpha = k > 0.8 ? (1 - k) / 0.2 : 1;
           ctx.fillStyle = p.color;
-          const flip = Math.sin(p.t * 14 + p.frame * 2) > 0;
+          const flip = reduced ? p.frame % 2 === 0 : Math.sin(p.t * 14 + p.frame * 2) > 0;
           ctx.fillRect(x, y, flip ? 2 : 1, flip ? 1 : 2);
           if (p.vy > 0) p.vx *= 0.98;
           break;
@@ -941,7 +952,7 @@ export function createEffects(images) {
       } else {
         const e = u < 0.5 ? 2 * u * u : 1 - 2 * (1 - u) ** 2;
         x = f.x0 + (f.x1 - f.x0) * e;
-        y = f.y0 + (f.y1 - f.y0) * e - Math.sin(Math.PI * u) * f.arc;
+        y = f.y0 + (f.y1 - f.y0) * e - Math.sin(Math.PI * u) * (reduced ? f.arc * 0.3 : f.arc);
         ctx.globalAlpha = u > 0.9 ? (1 - u) / 0.1 : 1;
       }
       drawSprite(ctx, images, f.sprite, Math.round(x), Math.round(y));
@@ -1053,8 +1064,14 @@ export function createEffects(images) {
     }
     ctx.globalCompositeOperation = 'source-over';
     if (flash > 0.01) {
-      ctx.globalAlpha = flash * 0.55;
-      ctx.fillStyle = '#ffffff';
+      if (reduced) {
+        // Éclair « doux » : un léger voile sombre qui s'estompe (aucun blanc plein écran).
+        ctx.globalAlpha = Math.min(1, flash) * 0.14;
+        ctx.fillStyle = '#1c1830';
+      } else {
+        ctx.globalAlpha = flash * 0.55;
+        ctx.fillStyle = '#ffffff';
+      }
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
     }
@@ -1067,7 +1084,7 @@ export function createEffects(images) {
    * @param scratch  canvas de travail de même taille
    */
   function postProcess(ctx, canvas, scratch) {
-    if (env.weather !== 'heatwave') return;
+    if (env.weather !== 'heatwave' || reduced) return;
     const w = canvas.width;
     const h = canvas.height;
     const sctx = scratch.getContext('2d');
@@ -1101,7 +1118,7 @@ export function createEffects(images) {
     for (const p of texts.items) {
       if (!p.alive || p.delay > 0) continue;
       const k = p.t / p.life;
-      const rise = (1 - (1 - Math.min(1, k * 1.6)) ** 3) * 14; // monte vite puis ralentit
+      const rise = (1 - (1 - Math.min(1, k * 1.6)) ** 3) * (reduced ? 3 : 14); // monte vite puis ralentit
       toScreen(p.x, p.y - rise, tmpPt);
       const alpha = k < 0.1 ? k / 0.1 : k > 0.7 ? (1 - k) / 0.3 : 1;
       const tw = Math.ceil(ctx.measureText(p.text).width);
@@ -1141,6 +1158,14 @@ export function createEffects(images) {
   }
 
   return {
+    /** Mouvements réduits (voir plus haut). */
+    setReducedMotion(on) {
+      reduced = !!on;
+      if (reduced) flash = Math.min(flash, 0.5);
+    },
+    get reducedMotion() {
+      return reduced;
+    },
     onEvent,
     floatText,
     fly,

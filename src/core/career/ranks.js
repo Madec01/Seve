@@ -118,11 +118,15 @@ export function unlocksFor(rank) {
   for (const a of careerAnimals()) if ((a.rank ?? 1) === rank) out.push({ kind: 'animal', id: a.id, name: a.name });
   for (const t of LOT_TYPES) if (t.rank === rank && t.id !== 'wild') out.push({ kind: 'lotType', id: t.id, name: t.name });
   for (const b of BUILDINGS) {
+    // Tous les niveaux d'un même bâtiment débloqués à ce rang → une seule ligne
+    // (« Atelier de confitures (niv. 1 à 3) », « Étable (niv. 1 et 2) », « Maison (niv. 2) »).
+    const levels = [];
     b.levels.forEach((lvl, k) => {
       if (lvl.rank !== rank || (k === 0 && b.startLevel)) return;
       if (k === 0 && b.placement === 'lot') return; // payé avec l'aménagement (déjà listé)
-      out.push({ kind: 'building', id: b.id, level: k + 1, name: k === 0 ? b.name : `${lvl.name} (niv. ${k + 1})` });
+      levels.push(k + 1);
     });
+    if (levels.length) out.push({ kind: 'building', id: b.id, level: levels[0], levels, name: buildingUnlockName(b, levels) });
   }
   const prev = rank > 1 ? maxLotsForRank(rank - 1) : 0;
   const now = maxLotsForRank(rank);
@@ -140,6 +144,30 @@ export function unlocksFor(rank) {
     seen.add(k);
     return true;
   });
+}
+
+/** « niv. 2 », « niv. 2 et 3 », « niv. 1 à 3 » (niveaux consécutifs ou non). */
+export function levelsLabel(levels) {
+  if (levels.length === 1) return `niv. ${levels[0]}`;
+  const consecutive = levels.every((n, i) => i === 0 || n === levels[i - 1] + 1);
+  if (levels.length > 2 && consecutive) return `niv. ${levels[0]} à ${levels[levels.length - 1]}`;
+  return `niv. ${levels.slice(0, -1).join(', ')} et ${levels[levels.length - 1]}`;
+}
+
+/**
+ * Nom d'un déblocage de bâtiment, sans doublon « niv. 2 (niv. 2) » :
+ * niveau 1 seul → nom du bâtiment ; un autre niveau seul → son nom (+ « (niv. N) » s'il ne le dit pas déjà) ;
+ * plusieurs niveaux → nom du bâtiment + « (niv. 1 à 3) ».
+ */
+export function buildingUnlockName(b, levels) {
+  if (levels.length === 1) {
+    const k = levels[0];
+    if (k === 1) return b.name;
+    const name = b.levels[k - 1].name;
+    return /\bniv\.\s*\d/.test(name) ? name : `${name} (niv. ${k})`;
+  }
+  const base = String(b.name).replace(/\s*niv\.\s*\d+$/, '');
+  return `${base} (${levelsLabel(levels)})`;
 }
 
 /** Écus du passage au rang `rank`. */

@@ -149,6 +149,31 @@ function popScale(t) {
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 
+// ── Repères des parcelles (lot 1 « confort », lisibles sans la couleur : chaque état a sa FORME) ──
+// Cartes de pixels : O contour, autres lettres = couleurs de PLOT_MARK_COLORS ; '.' transparent.
+const PLOT_MARK_COLORS = { O: '#3f2631', B: '#5fb4f0', W: '#eef8ff', L: '#86cf62', S: '#4f9a45', Y: '#fffbe8', K: '#2e6b34' };
+// Goutte : la parcelle a soif (à arroser aujourd'hui).
+const MARK_DROP = ['..O..', '.OBO.', 'OBBBO', 'OWBBO', 'OWBBO', 'OBBBO', '.OOO.'];
+// Pastille cochée : culture mûre, à récolter.
+const MARK_RIPE = ['.OOOOO.', 'OYYYYKO', 'OYYYKYO', 'OKYKYYO', 'OYKYYYO', 'OYYYYYO', '.OOOOO.'];
+// Pousse : graine tout juste semée (deux feuilles bien visibles sur la terre).
+const MARK_SPROUT = ['.OO.OO.', 'OLLOLLO', '.OLSLO.', '..OSO..', '..OSO..'];
+// Terre arrosée : reflets (petits traits clairs) — une texture en plus de la teinte plus sombre.
+const WET_GLINTS = [[4, 7, 2], [10, 9, 2]];
+const WET_DAMP = [[4, 9], [10, 10], [7, 13], [12, 7], [2, 11]];
+
+function drawPixelMap(c, map, x, y, k) {
+  for (let row = 0; row < map.length; row++) {
+    const line = map[row];
+    for (let col = 0; col < line.length; col++) {
+      const ch = line[col];
+      if (ch === '.') continue;
+      c.fillStyle = PLOT_MARK_COLORS[ch];
+      c.fillRect(x + col * k, y + row * k, k, k);
+    }
+  }
+}
+
 export function createScene(canvas, images, level, opts = {}) {
   const ctx = noSmooth(canvas.getContext('2d'));
   const seasonSheets = buildSeasonSheets(images);
@@ -215,6 +240,11 @@ export function createScene(canvas, images, level, opts = {}) {
   let scrollAnim = null; // { from, to, t, dur } défilement animé (px réels, secondes)
   let scrollBeforeOverlay = null; // défilement d'avant l'ouverture de la feuille (px réels)
   const SCROLL_ANIM = 0.32;
+
+  // Lot 1 « confort » : mouvements réduits (setReducedMotion) et repères des parcelles (setPlotHints).
+  let reducedMotion = false;
+  let plotHints = true;
+  let plotDayKey = ''; // jour + météo : les besoins d'eau changent à l'aube (repères à relire)
 
   let staticKey = -1;
   let lastTime = null;
@@ -501,7 +531,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const to = Math.max(0, Math.min(scrollLimitDev(), Math.round(target)));
     const baseToX = scrollAnim ? scrollAnim.toX : scrollXDev;
     const toX = Math.max(0, Math.min(maxScrollXDev, Math.round(targetX ?? baseToX)));
-    const reduce = typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion');
+    const reduce = reducedMotion || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion'));
     if (reduce || (Math.abs(to - scrollDev) < 2 && Math.abs(toX - scrollXDev) < 2)) {
       scrollAnim = null;
       setScrollDev(to);
@@ -1369,6 +1399,12 @@ export function createScene(canvas, images, level, opts = {}) {
   function syncPlots(game, raining) {
     const plots = game.state.plots;
     const n = Math.min(plots.length, layout.plots.length);
+    // Nouveau jour ou nouvelle météo : « à arroser » a pu changer sans que la parcelle change (repères).
+    const dayKey = `${game.state.time?.year || 0}|${game.state.time?.day || 0}|${game.state.weather?.today || ''}|${game.state.status || ''}`;
+    if (dayKey !== plotDayKey) {
+      plotDayKey = dayKey;
+      for (let i = 0; i < n; i++) if (plotViews[i]) plotViews[i] = game.query.plot(i);
+    }
     // Une parcelle achetée change le prix (ou la possibilité d'achat) des autres : on les relit.
     let open = 0;
     for (let i = 0; i < n; i++) if (plots[i].unlocked) open++;
@@ -1440,8 +1476,12 @@ export function createScene(canvas, images, level, opts = {}) {
   function farmerGoTo(plotIndex, tool) {
     const r = layout.plotRect(plotIndex);
     if (!r) return;
-    // Debout juste sous la parcelle (sur la rangée suivante en paysage, dans l'allée en portrait).
-    const target = { x: r.x + r.w / 2, y: r.y + r.h + (layout.plotScale > 1 ? 3 : 11), tool, plot: plotIndex };
+    // Paysage : debout juste sous la parcelle (sur la rangée suivante). Portrait (parcelles en grand) :
+    // au coin bas-droit, tourné vers elle, pour ne pas cacher la culture qu'on soigne.
+    const big = layout.plotScale > 1;
+    const target = big
+      ? { x: r.x + r.w + 1, y: r.y + r.h + 3, tool, plot: plotIndex, facing: -1 }
+      : { x: r.x + r.w / 2, y: r.y + r.h + 11, tool, plot: plotIndex };
     farmer.path.length = 0;
     if (careerMode) {
       // Carrière : par les allées et l'épine (layout.route), le dernier point porte l'outil.
@@ -1504,7 +1544,7 @@ export function createScene(canvas, images, level, opts = {}) {
       if (next.tool) {
         farmer.tool = next.tool;
         farmer.toolT = 1.1;
-        farmer.facing = 1;
+        farmer.facing = next.facing || 1;
       }
       farmer.where = inField(farmer.x, farmer.y) ? 'field' : farmer.path.length ? 'road' : 'home';
       farmer.idle = 0;
@@ -1576,7 +1616,7 @@ export function createScene(canvas, images, level, opts = {}) {
     let s = 1;
     if (start !== undefined) {
       const k = (time - start) / POP_TIME;
-      if (k >= 1) pops.delete(popKey);
+      if (k >= 1 || reducedMotion) pops.delete(popKey);
       else s = popScale(k);
     }
     if (s === 1) return pushSprite(name, x, y, bottom, set);
@@ -1656,7 +1696,9 @@ export function createScene(canvas, images, level, opts = {}) {
         right = nb.right >= 0 && !!plotViews[nb.right]?.unlocked;
       }
       // Portrait : chaque parcelle est une motte bien séparée (cible tactile lisible).
-      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, r.y + (k > 1 ? 1 : 0), sc);
+      const sy = r.y + (k > 1 ? 1 : 0);
+      drawSprite(c, sheetsEnv, soilSprite(wet, left, right), r.x, sy, sc);
+      if (wet) drawWetSoil(c, r.x, sy, k, left, right);
     }
     // Parcelles à acheter : herbe un peu plus sombre et pointillés clairs ; en portrait, une pièce
     // (« à vendre », qui se balance doucement) sur celles qui touchent le potager ouvert — on voit
@@ -1695,13 +1737,17 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       const stage = Math.max(0, Math.min(4, pv.stage | 0));
       let dy = 1;
-      if (pv.mature) {
+      if (reducedMotion) {
+        // Mouvements réduits : pas de balancement.
+      } else if (pv.mature) {
         // Balancement doux + scintillement
         dy += Math.sin(time * 2.4 + i * 1.7) > 0.35 ? -1 : 0;
       } else if (stage >= 2 && season !== 'winter') {
         dy += Math.sin(time * 1.3 + i * 0.9) > 0.8 ? -1 : 0;
       }
       drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+      // Graine tout juste semée : une pousse bien lisible (forme), même sur une terre sombre.
+      if (stage === 0) drawPixelMap(c, MARK_SPROUT, r.x + 5 * k, r.y + 7 * k, k);
       if (pv.mature) {
         const ph = (time * 0.55 + i * 0.37) % 1;
         if (ph < 0.18) {
@@ -1821,6 +1867,52 @@ export function createScene(canvas, images, level, opts = {}) {
   }
 
   // Bulles au-dessus des ateliers qui travaillent : l'icône d'un produit en cours, par intermittence.
+  /** Terre arrosée : un peu plus sombre (taches d'humidité) et quelques reflets clairs (texture). */
+  function drawWetSoil(c, x, y, k, left = false, right = false) {
+    // Intérieur de la motte (les sillons continus du paysage vont jusqu'au bord de la tuile).
+    const x0 = left ? 0 : 2;
+    const x1 = right ? 16 : 14;
+    c.fillStyle = 'rgba(70,28,24,0.16)';
+    c.fillRect(x + x0 * k, y + 6 * k, (x1 - x0) * k, 8 * k);
+    c.fillRect(x + (left ? 0 : 3) * k, y + 5 * k, ((right ? 16 : 13) - (left ? 0 : 3)) * k, k);
+    c.fillRect(x + (left ? 0 : 3) * k, y + 14 * k, ((right ? 16 : 13) - (left ? 0 : 3)) * k, k);
+    c.fillStyle = 'rgba(90,40,30,0.45)';
+    for (const [px, py] of WET_DAMP) c.fillRect(x + px * k, y + py * k, k, k);
+    c.fillStyle = 'rgba(214,236,255,0.6)';
+    const t = Math.max(1, k >> 1); // reflets fins
+    for (const [px, py, w] of WET_GLINTS) c.fillRect(x + px * k, y + py * k, w * k, t);
+  }
+
+  /**
+   * Repères des parcelles, par-dessus le fermier et les objets : goutte = à arroser aujourd'hui,
+   * pastille cochée = mûre (à récolter). Formes différentes : lisibles sans la couleur. Désactivables
+   * (setPlotHints(false)). Calculés depuis query.plot(i).action ('water' | 'harvest').
+   */
+  function drawPlotMarkers() {
+    if (!plotHints || decorMode) return;
+    const L = layout;
+    const k = L.plotScale || 1;
+    const m = Math.max(1, Math.round(k / 2)); // repères discrets : 1 px du monde par pixel du dessin
+    const c = vctx;
+    const cy0 = windowed ? -oy - 40 : -Infinity;
+    const cy1 = windowed ? -oy + viewH + 8 : Infinity;
+    const cx0 = windowed ? -ox - 40 : -Infinity;
+    const cx1 = windowed ? -ox + viewW + 8 : Infinity;
+    for (let i = 0; i < L.plots.length; i++) {
+      const pv = plotViews[i];
+      if (!pv || !pv.cropId || !pv.unlocked) continue;
+      const r = L.plots[i];
+      if (r.retired || r.y > cy1 || r.y + r.h < cy0 || r.x > cx1 || r.x + r.w < cx0) continue;
+      if (pv.action === 'water') {
+        const bob = reducedMotion ? 0 : Math.sin(time * 2.2 + i * 0.7) > 0.55 ? -1 : 0;
+        // Goutte bien visible (au-dessus de la terre, en haut à droite de la parcelle).
+        drawPixelMap(c, MARK_DROP, r.x + r.w - 6 * k, r.y + (bob + 1) * k, k);
+      } else if (pv.action === 'harvest') {
+        drawPixelMap(c, MARK_RIPE, r.x + r.w - 7 * m, r.y + (k > 1 ? 1 : -1), m);
+      }
+    }
+  }
+
   function drawWorkBubbles(owned) {
     const c = vctx;
     const ids = careerMode ? WORKSHOP_IDS : PROCESSING_IDS;
@@ -1985,7 +2077,7 @@ export function createScene(canvas, images, level, opts = {}) {
         const y = Math.round(a.y) + hop;
         let scale = 1;
         const age = time - a.born;
-        if (age < POP_TIME) scale = popScale(age / POP_TIME);
+        if (age < POP_TIME && !reducedMotion) scale = popScale(age / POP_TIME);
         const name = `animal.${kind}`;
         if (scale !== 1) {
           const w = 16 * scale;
@@ -3146,6 +3238,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawBees(owned, season, weather, dayProgress);
     if (contestDay(cal)) drawBunting();
     drawWorkBubbles(owned);
+    drawPlotMarkers();
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3412,6 +3505,7 @@ export function createScene(canvas, images, level, opts = {}) {
     if (contestDay(cal)) drawBunting();
     drawWorkBubbles(owned);
     drawCollectBubbles();
+    drawPlotMarkers();
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3456,6 +3550,26 @@ export function createScene(canvas, images, level, opts = {}) {
   resize(canvas.clientWidth || canvas.width || 1024, canvas.clientHeight || canvas.height || 640, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
 
   return {
+    /**
+     * Mouvements réduits dans le canevas (lot 1) : pas d'éclair plein écran (léger assombrissement), pas de
+     * brume de chaleur, pas de tremblement ni d'apparition « ressort », cultures immobiles, moitié moins de
+     * particules, textes flottants presque sur place, défilements sans animation.
+     */
+    setReducedMotion(on) {
+      reducedMotion = !!on;
+      effects.setReducedMotion?.(reducedMotion);
+      actors.setReducedMotion?.(reducedMotion);
+    },
+    get reducedMotion() {
+      return reducedMotion;
+    },
+    /** Repères des parcelles (goutte « à arroser », pastille « mûre ») : true par défaut. */
+    setPlotHints(on) {
+      plotHints = on !== false;
+    },
+    get plotHints() {
+      return plotHints;
+    },
     resize,
     render,
     screenToWorld,

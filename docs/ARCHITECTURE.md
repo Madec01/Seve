@@ -1611,3 +1611,166 @@ sur une case `(lot.col, lot.row)` et donne `query.career.grid()` ; le rendu en f
 - **Quêtes** (`src/ui/career/events.js`) : `questTimeFacts(quest)` (proposition : `deadline` + `daysLeft` « si vous
   acceptez », `offerDaysLeft` ; acceptée : `deadlineText`, « plus que N jours », « demain soir », « ce soir »),
   `askJosephBlock(ui)` (`#c-ask-joseph`, `joseph().ask`, `actions.career.askQuest()`).
+
+## Lot 1 — confort (cœur et rendu, 2026-10-02)
+
+Feuille de route : `docs/analyse/0-SYNTHESE.md` (A2, A6, A7, F2 et bugs de l'annexe B de
+`1-analyse-du-jeu.md`). Tout est facultatif côté interface : sans appel, le jeu se comporte comme avant
+(le mode classique rejoue à l'identique, `tests/parity.test.js`). Tests : `tests/comfort.test.js`.
+
+### Vitesse douce ×½ (A2)
+
+- `SPEEDS = [0, 0.5, 1, 2, 4]` (`src/data/balance.js`) ; `game.actions.setSpeed(0.5)` → un jour dure 40 s.
+  Sauvegardé / rechargé comme les autres vitesses (niveaux et carrière). `loadSettings` (UI) doit accepter 0.5.
+
+### Option « pause chaque matin » (A2)
+
+- `game.setOption('autoPauseDawn', true | false)` (aussi `game.actions.setOption`) → `{ ok, name, value }` ou
+  `{ ok: false, reason }` (option inconnue, valeur non booléenne). `game.options()` → `{ autoPauseDawn }`
+  (défauts compris ; `GAME_OPTIONS` dans `balance.js`). Logique : `src/core/options.js`.
+- Effet : juste après chaque aube (niveaux et carrière), la vitesse passe à 0, le jour commence au matin
+  (`time.elapsed = 0`) et un grand `dt` n'enchaîne pas les jours suivants. Événement **`autoPaused`**
+  `{ day, seasonId, previousSpeed }`, émis après `dawn` (et `seasonWarning`) : l'interface met à jour le bouton de
+  vitesse et peut proposer « Reprendre » (`setSpeed(previousSpeed)`).
+- Sauvegarde : `state.options` n'existe qu'après le premier `setOption` (état inchangé sinon) ; vérifié au
+  chargement (`checkOptions` : objet, valeurs du bon type ; une option inconnue d'une version future est ignorée).
+- C'est une option **de la partie** (sauvegardée avec elle) : l'interface la règle au lancement / chargement
+  depuis ses réglages (`storage.js`) si elle veut un réglage global.
+
+### « Tout ramasser » (F2)
+
+- `game.actions.collectAll()` (tous modes) ; en carrière = `game.actions.career.collectAll()`.
+  → `{ ok: true, total, amount /* = total */, count, byShelter: [{ buildingId, name, amount }] }` ;
+  rien à ramasser (ou partie de niveau, sans abri) : `{ ok: false, reason, total: 0, amount: 0, count: 0,
+  byShelter: [] }` sans aucun effet. Chaque abri émet toujours `collected` (avec `all: true`).
+
+### Charges détaillées (bug « Panneaux solaires +−5 », « Entretien » en double)
+
+- `query.career.charges().daily` : **une ligne par poste** (l'entretien des machines est fusionné avec celui des
+  animaux et bâtiments) ; chaque ligne `{ source, amount ≥ 0, label }` ; les panneaux solaires ont
+  `credit: true` et un montant **positif** (à afficher « +5 », déjà déduit de `dailyTotal`). `dailyTotal` est
+  inchangé. Les interfaces existantes (`hud.js`, `career/journal.js`) affichent donc correctement « +5 » ;
+  elles peuvent utiliser `label` (« Entretien (animaux, bâtiments, machines) »).
+
+### Déblocages de rang (bug « niv. 2 (niv. 2) »)
+
+- `unlocksFor(rank)` (`src/core/career/ranks.js`, utilisé par `rankUp.unlocks` et `summary().nextRank.unlocks`) :
+  tous les niveaux d'un même bâtiment débloqués au même rang → **une seule ligne**
+  `{ kind: 'building', id, level /* le premier */, levels: [1, 2, 3], name: 'Atelier de confitures (niv. 1 à 3)' }`.
+  Noms : `buildingUnlockName(b, levels)`, `levelsLabel(levels)` (« niv. 2 », « niv. 2 et 3 », « niv. 1 à 3 »).
+
+### Accords en français (`src/data/french.js`)
+
+- `nounPlural(nom)` (cheval → chevaux, chou → choux, pomme de terre → pommes de terre, cour des ateliers → cours des
+  ateliers), `countNoun(n, nom)` (« 1 parcelle », « 3 chevaux »), `nounGender(groupe)` ('f' | 'm'),
+  `agree(groupe, n, mot)` (« 5 pommes de terre, payées »). `cropMass(cropId)` (`career/events.js`) : « de blé »,
+  « de choux ». Corrigés : visiteur (« payées »), cadeau de Joseph (« 8 parcelles de choux »), « Au plus 3 cours des
+  ateliers », « Loge jusqu'à 2 chevaux ». L'événement `crow` porte un `text` accordé (« Un corbeau dans les champs :
+  touchez-le pour le chasser. ») : **l'interface doit l'utiliser** au lieu de son « N parcelle : touchez-les »
+  (`src/ui/career/index.js`, cas `crow`).
+
+### Rendu : mouvements réduits (A6)
+
+- `scene.setReducedMotion(bool)` (et `scene.reducedMotion`) ; transmis à `effects.setReducedMotion` et
+  `actors.setReducedMotion`. Effet : orage sans voile blanc plein écran (léger assombrissement à 14 %, qui
+  s'estompe lentement, jamais de double éclair) ; pas de brume de chaleur ; pas de tremblement (arbre arraché) ni
+  d'apparition « ressort » (bâtiments, animaux, employés) ; cultures immobiles ; moitié moins de particules (pluie,
+  neige, feuilles, pièces, gouttes…) ; textes flottants qui montent de 3 px au lieu de 14 ; défilements sans
+  animation. **À câbler par l'interface** : `applyDisplaySettings` → `scene.setReducedMotion(reduced)` (option
+  « Réduire les animations » ou `prefers-reduced-motion`, avec un écouteur `change`) à chaque création de scène.
+
+### Rendu : parcelles lisibles (A7, sans la couleur)
+
+- **Goutte** (forme de goutte, contour sombre) en haut à droite d'une parcelle **à arroser aujourd'hui**
+  (`query.plot(i).action === 'water'` : rien quand elle est arrosée, qu'il pleut ou que les arroseurs sont passés) ;
+  **pastille cochée ✓** sur une culture **mûre** (`action === 'harvest'`, pommiers compris). Dessinées au-dessus du
+  fermier et des objets ; relues à chaque nouveau jour / météo. `scene.setPlotHints(false)` les masque (défaut
+  `true`) ; cachées en mode décoration.
+- **Graine tout juste semée** : une pousse à deux feuilles bien contourée (toujours affichée).
+- **Terre arrosée** : plus sombre (voile + taches d'humidité) et deux reflets clairs : texture en plus de la teinte.
+- **Fermier** : en portrait, il se place au coin bas-droit de la parcelle travaillée, tourné vers elle (il ne cache
+  plus la culture).
+- Vérifié avec simulation de daltonisme (deutéranopie, protanopie, tritanopie, niveaux de gris) : goutte, coche,
+  pousse et terre humide restent distinctes.
+- Aperçu : `tools/scene-preview.html?reduced=1&hints=0`.
+
+### Personnages
+
+- **Fermière** (`farmer.fermiere.outfit.N[.nohat]`, `playerSprite(outfit, { female: true })`) : nattes à rubans roses
+  et fleur au chapeau (`assets/sprites/generate-career.py`, `HAT_FP` / `NOHAT_FP`) ; elle ne ressemble plus au
+  fermier à la création.
+- **Joseph** : `josephPortrait(expr)` (`src/render/atlas.js`, 'content' | 'surprised' | 'proud' | 'happy') →
+  `portrait.joseph[.expr]` (32 × 32). **À câbler** : le tutoriel des niveaux (`src/ui/tutorial.js`, `sprite('farmer')`
+  l. 300 et 335) doit utiliser `spriteAny([josephPortrait(), 'npc.joseph', 'farmer'], …)` comme la carrière.
+
+## Lot 1 — confort (interface : guidage, 2026-10-02)
+
+Feuille de route : `docs/analyse/0-SYNTHESE.md` (E2, E5, E6, A9, F2 côté interface, conseils à contretemps, bug [42]).
+Styles : **`css/guidance.css`** (ajoutée à `CSS_FILES` de `tools/build.js`, donc au paquet et à `dev.html`).
+
+```
+src/ui/todo.js        createTodo(app) → app.todo : items(game?) → [{ id, prio, text, short, icon(), go() }] (le plus
+                      utile d'abord), tick() (boucle de main.js ; recalcul ≤ 4 fois/s, seulement si visible),
+                      onEvent(ev, game), reset(game), showResume(game), morningToggle(), focusPlots(indexes), ring(rects),
+                      collectAll(), reserve() (place gardée en bas de la scène), visible
+src/ui/messages.js    createMessages(app) → app.messages : add(entry), list(), unread, markRead(), clear(), open(),
+                      onChange(fn) ; bellIcon(cls) (cloche en pixels, SVG)
+src/ui/guide.js       openGuide(app, { topic }) (= app.openGuide), guideContent(app), GUIDE_SECTIONS, GLOSSARY
+src/ui/guide-prefs.js readPrefs() / writePrefs(patch) : localStorage `une-annee-a-la-ferme.guidance` { morning, sowAll }
+```
+
+- **Ligne « À faire maintenant »** (`#todo`, E2) : posée au-dessus des onglets sur toute la largeur (`bottom:
+  --inset-bottom + 6px`), `#todo-main` (≥ 52 px : icône, « À FAIRE », texte sur 2 lignes au plus, chevron),
+  `#todo-collect` (« Tout ramasser », carrière, ≥ 2 abris à ramasser et la ligne parle d'autre chose), `#todo-bell`
+  (messages, pastille du nombre de non-lus). Cachée pendant une fenêtre, une feuille (téléphone), une bulle de conseil,
+  le tutoriel (sauf son attente de l'hiver), la décoration, le téléphone tourné. `body.has-todo`, `--todo-h` ; les
+  messages (`#toasts`) et la mini-carte remontent au-dessus d'elle. **Place réservée** : `main.js` ajoute
+  `app.todo.reserve()` à `insets.bottom` passé à la scène pendant toute la partie (la scène ne saute pas quand la
+  ligne se cache un instant) ; la variable CSS `--inset-bottom` reste le haut des onglets (feuilles, messages).
+  Priorités (plus petit = plus important) : corbeaux 10 · fermage / charges qui manquent dans ≤ 3 jours 15–25 ·
+  proposition d'un visiteur 30 · abri plein 32 · demande de Joseph 34 · livrable depuis le grenier 36–37 · récolter 40 ·
+  ramasser 45 · arroser 50 (sans les terrains arrosés par une machine ou un employé) · semer 55 (si une graine est
+  abordable) · terrain à vendre (argent ≥ prix + charges de saison) 70 · concours 72 · commande / quête en cours 75–76 ·
+  achat abordable (niveaux) 78 · objectif du rang / étoiles de l'année 90. Toucher : la vue va sur la parcelle la plus
+  proche du centre (`scene.focusPlot`, `bottom` = place couverte) et un anneau doré entoure les parcelles (1,9 s) ;
+  semer ouvre les graines ; offre, quête, terrain, Carnet, fiche du fermage, boutique s'ouvrent.
+- **Corbeaux** : à l'événement `crow`, la vue va sur la parcelle visée (sans feuille ni fenêtre ouverte) ; message
+  du cœur (`ev.text`, accordé) ; la ligne « À faire » les met en tête.
+- **Résumé du matin** (E5) : à chaque aube (sauf la première), « Bonjour ! Jour N » + « Hier : +46 pièces.
+  Aujourd'hui : 3 parcelles à récolter, une proposition (M. Garnier). » (3 choses au plus, ni objectif ni étoiles).
+  Montré après les fenêtres (bilan de saison), au plus un toutes les 25 s à l'écran (à ×4 une journée dure 5 s), toujours
+  noté dans les messages ; interrupteur « Résumé du matin » dans la feuille Messages. Option « pause chaque matin »
+  (`autoPaused`) : le résumé le dit et reste 7 s (sinon un petit message « Pause du matin »).
+- **« Où en étais-je ? »** (E6) : `app.todo.showResume(game)` à la reprise depuis le menu (« Continuer le niveau »,
+  « Ma ferme » → Continuer) : ferme / niveau, date, argent, fermage ou charges (couvert ou manque), état du champ, les
+  3 choses à faire ; bouton `#resume-ok` « Reprendre » (fenêtre `resume`, la partie est en pause). Remplace les messages
+  « Partie reprise » (`careerUI.bind(game, { quiet })`).
+- **Messages** (A9) : `toasts.setLogger(fn)` (main.js → `app.messages.add`) : chaque message montré et chaque bandeau
+  sont notés (50 derniers, jour de jeu et heure) ; `show({ log: false })` pour les refus d'action (« Il manque… ») ;
+  un message mis à jour (`key`) remplace sa ligne. Messages importants (alerte, gel, action à toucher, succès, erreur)
+  ≥ 5 s à l'écran. Feuille `messages` : depuis la cloche, le menu Pause (`#pause-messages`) et le Carnet
+  (`#c-j-messages`) ; un message qui proposait une action garde un bouton « Voir ». Effacés à chaque partie.
+- **Guide de la ferme** (E5, A10) : feuille `guide`, sections repliables (gestes, temps, ligne « À faire », cultures,
+  argent et fermage / ma ferme, animaux, équipe et machines, visiteurs et Joseph, **mots de la ferme** : fermage =
+  loyer de la ferme, charges, entretien, patrimoine, cours…, conseils de Joseph) ; phrases de 25 mots au plus
+  (`tests/guidance.test.js`). Depuis le menu Pause (`#pause-guide`, injecté par `main.js` après `dialogs.pauseMenu()`)
+  et le Carnet (`#c-j-guide`).
+- **Tout ramasser** (F2) : bouton `#todo-collect` et ligne « À faire » → `careerUI.act('collectAll')` (message groupé
+  « Tout ramassé : N abris ») ; **glisser** en partant d'un abri qui a des produits ramasse chaque abri traversé, et un
+  glissé de récolte qui passe sur un abri le ramasse aussi (`gestures.js`, `g.collected`).
+- **Conseils** (`hints.js`) : `HINTS[id].relevant(app)` (faux → jamais montré, compté comme vu : `career.hire` si un
+  employé est déjà embauché, `career.lotForSale` si un terrain est acheté, `career.leave` si l'équipe est déjà en
+  congé) ; feuille ouverte (téléphone) : un conseil n'apparaît (ou ne reste) que si sa cible est **dans** la feuille,
+  sinon il attend la fermeture ; cible dans une feuille sans place au-dessus : la bulle passe sur la feuille sans couvrir
+  la cible ; cible `{ rect: () => rect }`. « La forêt à vendre » vient à l'aube où le premier terrain devient abordable
+  (≥ 80 % du prix), vers l'onglet « Acheter » (plus en ouvrant la boutique) ; nouveau `career.collectAll`.
+- **« Semer partout »** : le choix est retenu (`guide-prefs`, `sowAll`) ; `app.plantAll` demande confirmation
+  (`dialogs.confirm`) quand la dépense dépasse la moitié de l'argent (renvoie alors une promesse).
+- **Bugs** : feuille de terrain vide après « Nouveau rang ! » [42] — `careerUI.processPending` rouvre la fiche du terrain
+  acheté quand toutes les fenêtres sont fermées, et `main.js` retire `is-visible` d'une feuille fermée dans la même
+  image (cause : `sheets.open` pose `is-visible` dans un `requestAnimationFrame` qui passe après la fermeture) ; bandeau
+  d'une partie de niveau resté dans `.banner-titles` : `toasts.clearAll()` vide aussi le bandeau.
+- **Câblé dans main.js pour les autres lots** : `app.applySceneA11y()` à chaque nouvelle scène, `app.applyA11y()` dans
+  `updateSettings`, `app.sheets.releasePause()` quand le joueur relance le temps (clavier), hauteur zoomée
+  (`viewportHeight`), préchargement des cadres foncés, portrait de Joseph dans le tutoriel des niveaux.
+- **Débogage** : `__debug.todo()` (liste de la ligne « À faire »), `__debug.messages()`.

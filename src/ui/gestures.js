@@ -9,6 +9,8 @@
 //       en friche → ouvrir · déjà arrosée (ou second toucher) → fiche de la parcelle
 //   - toucher bref sur un bâtiment → sa fiche (revenus, achat)
 //   - appui long (450 ms) sur une parcelle ou un bâtiment → sa fiche, avec une petite vibration
+//   - glisser en partant d'un abri qui a des produits (carrière) : ramasser tous les abris traversés ; un glissé
+//     de récolte qui passe sur un abri le ramasse aussi (lot 1 « confort », F2)
 //   - glisser en partant d'une parcelle : arroser / récolter en série toutes les parcelles
 //     traversées (la première action trouvée fixe l'action de la série), sans faire défiler ; en
 //     carrière, seulement si cette parcelle est à arroser ou à récolter (sinon, on fait défiler)
@@ -142,6 +144,24 @@ export function createSceneInput(canvas, app) {
     if (res?.ok) app.vibrate(8);
   }
 
+  /** Carrière : abri qui a des produits à ramasser ? */
+  function shelterHasGoods(buildingId) {
+    const b = app.careerUI?.q?.('building', null, buildingId);
+    return !!b && Math.round(b.pending || 0) > 0;
+  }
+
+  /** Glisser sur les abris : chaque abri traversé est ramassé (une fois par glissé). */
+  function collectOver(buildingId) {
+    if (!g || g.collected.has(buildingId)) return;
+    g.collected.add(buildingId);
+    if (!shelterHasGoods(buildingId)) return;
+    const res = app.game?.actions.career?.collect?.(buildingId);
+    if (res?.ok) {
+      app.vibrate(10);
+      app.careerUI?.refresh?.();
+    }
+  }
+
   // ── Défilement avec inertie ─────────────────────────────────────────────────
   function stopInertia() {
     inertia = null;
@@ -190,7 +210,7 @@ export function createSceneInput(canvas, app) {
     } catch {
       /* rien */
     }
-    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastX: p.x, lastY: p.y, lastT: performance.now(), v: 0, vx: 0, axis: null, hit, mode: null, action: null, done: new Set(), long: false, timer: null, decor: decorOn() };
+    g = { id: e.pointerId, touch, x0: p.x, y0: p.y, lastX: p.x, lastY: p.y, lastT: performance.now(), v: 0, vx: 0, axis: null, hit, mode: null, action: null, done: new Set(), collected: new Set(), long: false, timer: null, decor: decorOn() };
 
     if (g.decor) {
       // Mode décoration : à la souris, le clic agit tout de suite ; au doigt, au lever.
@@ -256,7 +276,12 @@ export function createSceneInput(canvas, app) {
       // fait défiler la vue (sinon on ne pourrait pas bouger en partant du champ). Niveaux : inchangé.
       const act = g.hit?.type === 'plot' && twoD() ? app.game?.query.plot(g.hit.index)?.action : null;
       const seriesOk = g.hit?.type === 'plot' && (!twoD() || act === 'water' || act === 'harvest');
-      if (seriesOk && !g.decor) {
+      const shelterOk = g.hit?.type === 'shelter' && shelterHasGoods(g.hit.buildingId);
+      if (shelterOk && !g.decor) {
+        g.mode = 'field';
+        g.action = 'collect';
+        collectOver(g.hit.buildingId);
+      } else if (seriesOk && !g.decor) {
         g.mode = 'field';
         dragOver(g.hit.index);
       } else {
@@ -277,7 +302,8 @@ export function createSceneInput(canvas, app) {
         const x = (g.px ?? p.x) + ((p.x - (g.px ?? p.x)) * i) / steps;
         const y = (g.py ?? p.y) + ((p.y - (g.py ?? p.y)) * i) / steps;
         const h = hitAt(x, y, false);
-        if (h?.type === 'plot') dragOver(h.index);
+        if (h?.type === 'plot' && g.action !== 'collect') dragOver(h.index);
+        else if (h?.type === 'shelter' && (g.action === 'collect' || g.action === 'harvest' || !g.action)) collectOver(h.buildingId);
       }
     } else if (g.mode === 'scroll' && canScroll()) {
       const now = performance.now();

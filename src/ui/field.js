@@ -12,6 +12,7 @@ import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './ic
 import { incomeProfile, season, seasonList, waterEffect } from './text.js';
 import { buildingContent, buildingSignature, confirmSellRaw, isProcessing, processingOf } from './buildings.js';
 import { aboutSection } from './career/util.js';
+import { readPrefs, writePrefs } from './guide-prefs.js';
 
 const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
 
@@ -38,7 +39,8 @@ function treeProgress(t) {
 export function createField(app) {
   let current = null; // { kind: 'seeds' | 'unlock' | 'plot' | 'investment', index?, id? }
   let refreshQueued = false;
-  let plantEverywhere = false;
+  // « Semer partout » : le choix du joueur est retenu d'une fois sur l'autre (lot 1 « confort »).
+  let plantEverywhere = readPrefs().sowAll;
 
   function close(sound = true) {
     if (!current) return;
@@ -143,6 +145,7 @@ export function createField(app) {
             'aria-checked': plantEverywhere ? 'true' : 'false',
             onclick: (e) => {
               plantEverywhere = !plantEverywhere;
+              writePrefs({ sowAll: plantEverywhere });
               app.audio.play('toggle');
               e.currentTarget.classList.toggle('is-on', plantEverywhere);
               e.currentTarget.setAttribute('aria-checked', plantEverywhere ? 'true' : 'false');
@@ -168,7 +171,7 @@ export function createField(app) {
   function openSeedPicker(index, silent = false) {
     const game = app.game;
     if (!game) return;
-    if (!silent) plantEverywhere = false;
+    if (!silent) plantEverywhere = readPrefs().sowAll;
     show('seeds', { index }, { title: 'Que semer ?', icon: icon('seed', 'md'), content: seedContent(index) }, silent);
     const first = app.sheets.body.querySelector('.seed-row:not(.is-disabled)');
     if (first && app.keyboardMode && !silent) first.focus({ preventScroll: true });
@@ -181,8 +184,10 @@ export function createField(app) {
     const index = current.index;
     // « Semer partout » ne plante jamais d'arbre.
     if (all && !(crop.kind === 'tree' || crop.tree || crop.sowAll === false)) {
-      const n = app.plantAll(crop.id, index);
-      if (n > 0) close(false);
+      // plantAll peut demander confirmation (grosse dépense) : sa réponse arrive alors plus tard.
+      Promise.resolve(app.plantAll(crop.id, index)).then((n) => {
+        if (n > 0 && current?.kind === 'seeds' && current.index === index) close(false);
+      });
       return;
     }
     const res = app.plant(index, crop.id);

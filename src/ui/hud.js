@@ -10,6 +10,18 @@ import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon, spriteAny } from './icons.js';
 import { season, weatherHint, weatherName } from './text.js';
+import { applyGameA11y, applySceneA11y, initA11y, nextSpeed, speedCycle, speedText } from './a11y.js';
+
+// État de la prévision du fermage, lisible sans la couleur : un symbole et un mot (et dans le
+// libellé lu par les lecteurs d'écran). 'loan' : Joseph avancera ce qui manque (rassurant).
+const BILL_STATES = {
+  ok: { glyph: 'ok', word: 'couvert', say: 'couvert : vous avez déjà de quoi payer' },
+  warn: { glyph: 'warn', word: 'juste', say: 'juste : récoltez encore' },
+  loan: { glyph: 'warn', word: 'juste', say: 'juste : Joseph pourra avancer le manque' },
+  danger: { glyph: 'danger', word: 'danger', say: 'danger : vous ne pourrez pas payer' },
+  victory: { glyph: 'ok', word: 'payé', say: 'payé, année finie' },
+  bankrupt: { glyph: 'danger', word: 'impayé', say: 'impayé' },
+};
 
 export function createHud(root, app) {
   let game = null;
@@ -54,15 +66,20 @@ export function createHud(root, app) {
 
   const billAmount = el('b.bill-amount', '');
   const billDays = el('span.bill-days', '');
+  // Symbole (✓ / ! / ✗, dessiné en CSS) et mot d'état : la couleur n'est jamais seule à parler.
+  const billGlyph = el('span.bill-glyph', { 'aria-hidden': 'true' });
+  const billWord = el('span.bill-word', '');
   const bill = el(
     'button.hud-cell.hud-bill.has-tip',
     { type: 'button', id: 'hud-bill', 'data-tip-side': 'bottom', 'aria-label': 'Prochain fermage', onclick: () => openInfo('bill') },
-    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount),
-    el('span.hud-line.hud-small', billDays),
+    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount, billGlyph),
+    el('span.hud-line.hud-small.bill-line', billWord, billDays),
   );
   bill._tip = () => billTip();
 
-  // Vitesse : un seul gros bouton. Toucher : ×1 → ×2 → ×4 → pause → ×1 ; appui long : pause.
+  // Vitesse : un seul gros bouton. Toucher : ×1 → ×2 → ×4 → pause → ×1 (avec l'option « vitesse
+  // lente » : ×½ → ×1 → ×2 → ×4 → pause → ×½) ; appui long : pause. Option « Commandes en bas » :
+  // le bouton passe dans la barre d'onglets (syncDock), à gauche avec « disposition miroir ».
   const speedIcon = icon('play', 'md');
   const speedLabel = el('span.speed-label', '×1');
   const speedBtn = el(
@@ -71,7 +88,7 @@ export function createHud(root, app) {
     speedIcon,
     speedLabel,
   );
-  speedBtn._tip = () => 'Vitesse : ×1 → ×2 → ×4 → pause (Espace : pause, touches 1, 2, 3). Appui long : pause.';
+  speedBtn._tip = () => `Vitesse : ${speedCycle(app.settings).map(speedText).join(' → ')} → pause (Espace : pause, touches 1, 2, 3). Appui long : pause.`;
   let pressTimer = null;
   let longPressed = false;
   speedBtn.addEventListener('pointerdown', () => {
@@ -96,10 +113,15 @@ export function createHud(root, app) {
       return;
     }
     if (!game) return;
-    const sp = game.state.speed;
-    const next = sp === 0 ? 1 : sp === 1 ? 2 : sp === 2 ? 4 : 0;
     app.vibrate?.(8);
-    app.setSpeed(next, { fromUser: true });
+    // Pause de lecture (fiche ouverte, le bouton affiche « Pause ») : toucher reprend la vitesse
+    // d'avant, comme pour une pause normale.
+    if (app.sheets?.releasePause?.()) {
+      const sp = game.state.speed;
+      app.setSpeed(sp > 0 ? sp : nextSpeed(0, app.settings), { fromUser: true });
+      return;
+    }
+    app.setSpeed(nextSpeed(game.state.speed, app.settings), { fromUser: true });
   });
 
   const dayFill = el('span.dayline-fill');
@@ -358,9 +380,13 @@ export function createHud(root, app) {
     setText(billAmount, fmt(p.amount));
     if (status === 'victory') setText(billDays, 'payé : année finie !');
     else if (status === 'bankrupt') setText(billDays, career ? 'impayées' : 'impayé');
-    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} j`);
-    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces, ${billDays.textContent}`);
+    else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `${p.daysLeft} j`); // après le mot d'état : « couvert · 6 j »
     const state = status === 'victory' ? 'ok' : status === 'bankrupt' ? 'danger' : p.state;
+    const look = BILL_STATES[status === 'victory' || status === 'bankrupt' ? status : p.state] || BILL_STATES.ok;
+    billGlyph.dataset.glyph = look.glyph;
+    setText(billWord, status === 'playing' ? look.word : '');
+    bill.dataset.state = state;
+    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces, ${status === 'playing' ? (p.daysLeft === 0 ? 'ce soir' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`) : billDays.textContent}. Prévision : ${look.say}.`);
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn' || state === 'loan');
     bill.classList.toggle('is-loan', state === 'loan');
@@ -369,10 +395,10 @@ export function createHud(root, app) {
     bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && (p.state === 'warn' || p.state === 'danger'));
 
     const sp = game.state.speed;
-    setIcon(speedIcon, sp === 0 ? 'pause' : sp === 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
-    setText(speedLabel, sp === 0 ? 'Pause' : `×${sp}`);
+    setIcon(speedIcon, sp === 0 ? 'pause' : sp <= 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
+    setText(speedLabel, sp === 0 ? 'Pause' : speedText(sp));
     speedBtn.dataset.speed = String(sp);
-    speedBtn.setAttribute('aria-label', sp === 0 ? 'En pause : toucher pour reprendre' : `Vitesse ×${sp} : toucher pour changer`);
+    speedBtn.setAttribute('aria-label', sp === 0 ? 'En pause : toucher pour reprendre' : `Vitesse ${sp === 0.5 ? 'lente, ×½' : `×${sp}`} : toucher pour changer`);
     root.classList.toggle('is-paused', sp === 0);
     app.tooltip?.refresh(money);
     app.tooltip?.refresh(bill);
@@ -460,8 +486,35 @@ export function createHud(root, app) {
     shownInt = null;
     shownDay = -1;
     moneyPops.textContent = '';
+    // Réglages d'accessibilité qui touchent la partie et la scène (pause chaque matin, animations
+    // réduites et repères des parcelles dans le canvas) : appliqués à chaque début de partie.
+    applyGameA11y(app);
+    applySceneA11y(app);
+    syncDock();
     refresh();
     frame(0);
+  }
+
+  /**
+   * « Commandes en bas » : le bouton de vitesse quitte la barre du haut pour la barre d'onglets
+   * (à droite, ou à gauche en disposition miroir). Grand écran en paysage : il reste en haut.
+   * Un seul bouton (même id, mêmes écouteurs) : il est simplement déplacé.
+   */
+  function syncDock() {
+    const s = app.settings;
+    const wide = document.body.classList.contains('layout-wide');
+    const dock = !!s.controlsBottom && !wide && !!app.tabbar?.setDock;
+    const side = s.leftHanded ? 'start' : 'end';
+    if (dock) {
+      app.tabbar.setDock(speedBtn, side);
+      speedBtn.dataset.tipSide = 'top';
+    } else {
+      if (app.tabbar?.dockNode?.() === speedBtn) app.tabbar.setDock(null);
+      const row = root.querySelector('.hud-row');
+      if (row && speedBtn.parentNode !== row) row.insertBefore(speedBtn, rankCell.nextSibling);
+      speedBtn.dataset.tipSide = 'bottom';
+    }
+    root.classList.toggle('is-docked', dock);
   }
 
   function onEvent(ev) {
@@ -507,5 +560,9 @@ export function createHud(root, app) {
     });
   }
 
-  return { bind, refresh, frame, onEvent, refreshMute, projection, stateText, openInfo, el: root };
+  // Réglages d'accessibilité (classes de <html>, écouteurs système) : une fois, juste après la
+  // création de l'interface (app.hud et app.tabbar existent alors).
+  queueMicrotask(() => initA11y(app));
+
+  return { bind, refresh, frame, onEvent, refreshMute, projection, stateText, openInfo, syncDock, speedButton: speedBtn, el: root };
 }

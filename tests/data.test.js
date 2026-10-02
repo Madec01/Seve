@@ -7,7 +7,7 @@ import { LEVELS, getLevel, yearLength } from '../src/data/levels.js';
 
 test('constantes de temps', () => {
   assert.equal(DAY_SECONDS, 20);
-  assert.deepEqual(SPEEDS, [0, 1, 2, 4]);
+  assert.deepEqual(SPEEDS, [0, 0.5, 1, 2, 4]);
   assert.deepEqual(SEASONS, ['spring', 'summer', 'autumn', 'winter']);
 });
 

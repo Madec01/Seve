@@ -237,19 +237,25 @@ registerCareerExtension({
   actions(api) {
     return {
       collect: (buildingId) => collectShelter(api, buildingId, 'player'),
-      /** Ramasse tous les abris (glisser sur plusieurs abris). → { ok, amount, count } */
+      /**
+       * « Tout ramasser » : tous les abris (bouton, glisser sur plusieurs abris).
+       * → { ok, total, amount (= total), count, byShelter: [{ buildingId, name, amount }] } ;
+       *   rien à ramasser : { ok: false, reason, total: 0, amount: 0, count: 0, byShelter: [] }.
+       */
       collectAll: () => {
         let amount = 0;
-        let count = 0;
+        const byShelter = [];
         for (const id of builtShelters(api.state)) {
           if (Math.round(api.state.career.buildings[id].pending || 0) <= 0) continue;
-          const r = collectShelter(api, id, 'player');
+          const r = collectShelter(api, id, 'player', { all: true });
           if (r.ok) {
             amount += r.amount;
-            count++;
+            const b = api.state.career.buildings[id];
+            byShelter.push({ buildingId: id, name: BUILDINGS_BY_ID[id].levels[Math.max(0, (b?.level || 1) - 1)].name, amount: r.amount });
           }
         }
-        return count > 0 ? { ok: true, amount, count } : api.fail('Rien à ramasser pour l\'instant.');
+        if (!byShelter.length) return { ...api.fail('Rien à ramasser pour l\'instant.'), total: 0, amount: 0, count: 0, byShelter };
+        return { ok: true, total: amount, amount, count: byShelter.length, byShelter };
       },
     };
   },

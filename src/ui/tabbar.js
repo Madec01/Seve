@@ -2,9 +2,12 @@
 //   Niveaux  : Ferme · Acheter · Bilan · Menu
 //   Carrière : Ferme · Acheter · Équipe · Carnet · Menu (src/ui/career/index.js, CAREER_TABS)
 //
-// createTabbar(root, app) → { refresh(), setBadge(id, on), setLocked(id, on), setTabs(list | null) }
+// createTabbar(root, app) → { refresh(), setBadge(id, on), setLocked(id, on), setTabs(list | null),
+//                             setDock(node | null, side), dockNode() }
 // « Ferme » ferme la feuille ouverte et recentre la vue sur le champ (carrière : re-toucher → la carte) ;
 // les autres ouvrent leur feuille (ou la ferment si elle est déjà ouverte) ; « Menu » ouvre la pause.
+// Option « Commandes en bas » (src/ui/a11y.js) : le bouton de vitesse de la barre du haut est
+// rangé ici (setDock), au bout de la barre (à droite, ou à gauche en disposition miroir).
 
 import { el } from './dom.js';
 import { icon, spriteAny } from './icons.js';
@@ -19,6 +22,16 @@ const TABS = [
 export function createTabbar(root, app) {
   const buttons = new Map();
   let current = TABS;
+  let dock = null; // { node, side: 'start' | 'end' }
+
+  function placeDock() {
+    root.classList.toggle('has-dock', !!dock);
+    root.classList.toggle('dock-start', !!dock && dock.side === 'start');
+    if (!dock) return;
+    if (dock.side === 'start') {
+      if (root.firstChild !== dock.node) root.prepend(dock.node);
+    } else if (root.lastChild !== dock.node) root.append(dock.node);
+  }
 
   function build(list) {
     buttons.clear();
@@ -46,6 +59,7 @@ export function createTabbar(root, app) {
       buttons.set(t.id, { b, badge, lock });
       root.append(b);
     }
+    placeDock();
     refresh();
   }
 
@@ -84,6 +98,18 @@ export function createTabbar(root, app) {
     build(next);
   }
 
+  /** Range un nœud (le bouton de vitesse) au bout de la barre ; null : le retire de la gestion. */
+  function setDock(node, side = 'end') {
+    if (!node) {
+      if (dock && dock.node.parentNode === root) dock.node.remove();
+      dock = null;
+      placeDock();
+      return;
+    }
+    dock = { node, side: side === 'start' ? 'start' : 'end' };
+    placeDock();
+  }
+
   build(TABS);
-  return { refresh, setBadge, setLocked, setTabs, el: root };
+  return { refresh, setBadge, setLocked, setTabs, setDock, dockNode: () => dock?.node || null, el: root };
 }

@@ -49,6 +49,7 @@ import { setTree } from '../trees.js';
 import { advanceProcessing, fillMilk, tryProcessHarvest } from '../processing.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteSeasonHarvest } from '../stats.js';
 import { borrow, loanAmount, repay, repaymentFrom, willLend } from '../neighbour.js';
+import { autoPauseAfterDawn } from '../options.js';
 import { careerDailyCharges, careerDifficulty, careerIncomes, careerInvestments, seasonChargeDetail } from './effects.js';
 import { careerFlag, hooksOf, providedFactor, careerExtensions } from './registry.js';
 import { updateCareerMarket, isOffSeason, marketInfo } from './market.js';
@@ -587,6 +588,8 @@ export function createCareerRuntime(core) {
         state.time.elapsed = 0;
         endOfDay();
         if (core.playing()) dawn();
+        // Option « pause chaque matin » : le nouveau jour commence en pause, sans enchaîner les suivants.
+        if (core.playing() && autoPauseAfterDawn(state, push, seasonId(state))) remaining = 0;
         core.flush();
       } else {
         state.time.elapsed = from + remaining;
@@ -718,18 +721,32 @@ export function createCareerRuntime(core) {
     };
   }
 
+  /** Libellés des postes de charges quotidiennes (query.career.charges().daily[].label). */
+  const CHARGE_LABELS = { farm: 'Charges de la ferme', upkeep: 'Entretien (animaux, bâtiments, machines)', wages: 'Salaires', fuel: 'Carburant', heating: 'Chauffage de la serre', solar: 'Panneaux solaires', neighbour: 'Part de Joseph', other: 'Autres' };
+
   function chargesInfo() {
     const level = L();
     const base = careerDailyCharges(state, level, state.time.seasonIndex);
-    const daily = [...base.detail];
+    const raw = [...base.detail];
     for (const fn of hooksOf('charges')) {
       const r = fn(api, { money: state.money, seasonId: seasonId(state), estimate: true });
-      if (Array.isArray(r)) for (const ch of r) if (ch && ch.amount > 0) daily.push({ source: ch.source || 'other', amount: ch.amount });
+      if (Array.isArray(r)) for (const ch of r) if (ch && ch.amount > 0) raw.push({ source: ch.source || 'other', amount: ch.amount });
+    }
+    const dailyTotal = raw.reduce((s, x) => s + x.amount, 0);
+    // Une ligne par poste (l'entretien des machines rejoint celui des animaux et bâtiments) ; les
+    // panneaux solaires sont une économie : montant POSITIF + credit: true (affiché « +5 », déduit du total).
+    const daily = [];
+    for (const ch of raw) {
+      const credit = ch.amount < 0;
+      const amount = Math.abs(ch.amount);
+      const line = daily.find((d) => d.source === ch.source && !!d.credit === credit);
+      if (line) line.amount += amount;
+      else daily.push(credit ? { source: ch.source, amount, credit: true, label: CHARGE_LABELS[ch.source] || ch.source } : { source: ch.source, amount, label: CHARGE_LABELS[ch.source] || ch.source });
     }
     const season = seasonChargeDetail(state);
     return {
       daily,
-      dailyTotal: daily.reduce((s, x) => s + x.amount, 0),
+      dailyTotal,
       season: { amount: season.amount, daysLeft: daysLeftInSeason(state, level), perLot: season.perLot, base: season.base, lots: season.lots, scale: season.scale, seasonId: seasonId(state) },
     };
   }
