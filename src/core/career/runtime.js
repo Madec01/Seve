@@ -62,7 +62,7 @@ import { addStock, sellStock, sellStockFor, setStorageMode, stockInfo, stockUsed
 import { emptyYearStats } from './save.js';
 import {
   advanceSky, applyGrowthCare, dawnSurprise, expireEffects, expireForage, fogForage, giantAt, growthSnapshot, newWish, noteSown,
-  recordQuality, rollQuality, skyGrowthFactor, specialInfo, takeForage, tryGiant, validateGiants, GIANT,
+  recordQuality, rollQuality, skyGrowthFactor, specialInfo, takeForage, tryGiant, validateGiants, giantOpenToHelpers, GIANT,
 } from '../surprises.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
@@ -159,7 +159,9 @@ export function createCareerRuntime(core) {
     const p = state.plots[plotIndex];
     if (!p.unlocked) return fail('Cette parcelle n\'est pas encore ouverte.');
     if (p.cropId) return fail('Cette parcelle est déjà plantée.');
-    if (p.forage) return fail('Cueillez d\'abord les champignons.');
+    // (lot 2) Champignons : le joueur les cueille d'abord ; un salarié ou une machine qui sème là les ramasse
+    // pour vous (payés), pour qu'un champ tenu par les machines ne soit jamais bloqué.
+    if (p.forage && by === 'player') return fail('Cueillez d\'abord les champignons.');
     const crop = getCrop(cropId);
     if (!crop) return fail('Culture inconnue.');
     if (!core.getCrops().includes(crop)) {
@@ -173,6 +175,13 @@ export function createCareerRuntime(core) {
     if (!inGreenhouse(p) && !crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
     const cost = seedCost(crop);
     if (state.money < cost) return fail(notEnough(cost - state.money));
+    if (p.forage) {
+      const f = takeForage(state, plotIndex);
+      if (f) {
+        earn('other', f.value);
+        push('foragePicked', { plotIndex, kind: f.kind, amount: f.value, by });
+      }
+    }
     if (tree) setTree(state, p, crop.id);
     else {
       p.cropId = crop.id;
@@ -223,18 +232,21 @@ export function createCareerRuntime(core) {
     const f = takeForage(state, plotIndex);
     if (!f) return fail('Rien à cueillir ici.');
     earn('other', f.value);
-    push('foragePicked', { plotIndex, kind: f.kind, amount: f.value });
+    push('foragePicked', { plotIndex, kind: f.kind, amount: f.value, by });
     repayJoseph(f.value, 'harvest');
     return { ok: true, amount: f.value, forage: f.kind, plotIndex };
   }
 
-  /** (lot 2) Récolte d'un légume géant (à la main seulement) : vendu tout de suite, 4 parcelles vidées. */
+  /**
+   * (lot 2) Récolte d'un légume géant : vendu tout de suite, 4 parcelles vidées. À la main : 6 × une parcelle.
+   * Salariés et machines : seulement après GIANT.handDays jours d'attente, sans la prime (4 × leur valeur).
+   */
   function harvestGiant(plotIndex, by) {
-    if (by !== 'player') return fail('Le légume géant se récolte à la main.');
+    if (by !== 'player' && !giantOpenToHelpers(state, plotIndex)) return fail('Le légume géant attend d\'être récolté à la main.');
     const g = giantAt(state, plotIndex);
     const cropId = g.cropId;
     const sid = seasonId(state);
-    const amount = giantValue(g.anchor);
+    const amount = by === 'player' ? giantValue(g.anchor) : harvestAmount(state.plots[g.anchor], by) * g.plots.length;
     const life = c().lifetime;
     for (const k of g.plots) {
       const q = state.plots[k];
@@ -244,7 +256,7 @@ export function createCareerRuntime(core) {
       q.crowPenalty = false;
       addHarvest(state, cropId);
       life.harvests += 1;
-      life.handPicked = (life.handPicked || 0) + 1;
+      if (by === 'player') life.handPicked = (life.handPicked || 0) + 1;
       life.cropsInSeason = life.cropsInSeason || {};
       life.cropsInSeason[`${cropId}@${sid}`] = (life.cropsInSeason[`${cropId}@${sid}`] || 0) + 1;
     }
@@ -258,7 +270,7 @@ export function createCareerRuntime(core) {
     const part = repaymentFrom(state, L(), amount);
     const giant = { anchor: g.anchor, plots: [...g.plots], cropId };
     const res = {
-      plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, by, handPicked: true, stored: false, crowPenalty: false,
+      plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, by, handPicked: by === 'player', stored: false, crowPenalty: false,
       quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(part > 0 ? { loanRepayment: part } : {}),
     };
     push('harvested', res);

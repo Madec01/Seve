@@ -218,6 +218,7 @@ export function clearPlot(p) {
   // (lot 2) soins et légume géant : propres à la culture en place.
   if (p.care !== undefined) delete p.care;
   if (p.giant !== undefined) delete p.giant;
+  if (p.giantSince !== undefined) delete p.giantSince;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */

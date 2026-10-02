@@ -7,7 +7,7 @@ import { createCareer, loadCareer, checkCareerState } from '../src/core/career/c
 import { careerCropPrice } from '../src/core/career/market.js';
 import { getCrop } from '../src/data/crops.js';
 import { FINDS, GIANT, SKY } from '../src/data/surprises.js';
-import { giantCandidates } from '../src/core/surprises.js';
+import { giantCandidates, mergeGiant } from '../src/core/surprises.js';
 import { sowChoice } from '../src/core/career/crew.js';
 import { lotFinds } from '../src/core/career/surprises.js';
 import { DAY_SECONDS, nextDay, record, setRank, withExtension } from './career-helpers.js';
@@ -113,7 +113,7 @@ test('carrière : légume géant (grille du terrain), récolte à la main seulem
     assert.equal(rec.of('giant').length, 1);
     const one = g.query.plot(0).handValue / GIANT.valueFactor;
     assert.ok(g.query.plot(5).giant);
-    // Salarié, machine : non.
+    // Salarié, machine : pas tout de suite (le géant attend le joueur GIANT.handDays jours).
     assert.equal(api.harvest(5, { by: 'staff' }).ok, false);
     assert.equal(api.harvest(5, { by: 'machine' }).ok, false);
     const r = g.actions.harvest(5);
@@ -122,6 +122,23 @@ test('carrière : légume géant (grille du terrain), récolte à la main seulem
     assert.equal(rec.of('giantHarvested')[0].by, 'player');
     for (const i of SQUARE) assert.equal(g.state.plots[i].cropId, null);
     assert.equal(g.state.career.lifetime.handPicked, 4);
+    // Géant laissé aux machines : après 3 jours, elles le récoltent sans la prime (4 × leur valeur).
+    const g2 = career();
+    g2.state.money = 1e5;
+    for (const i of SQUARE) {
+      g2.state.plots[i].cropId = 'carrot';
+      g2.state.plots[i].growth = 2;
+    }
+    mergeGiant(g2.state, SQUARE);
+    const api2 = ext.api();
+    assert.equal(api2.harvest(0, { by: 'machine' }).ok, false);
+    g2.state.plots[0].giantSince -= GIANT.handDays;
+    const one2 = api2.harvestAmount(0, 'machine');
+    const r2 = api2.harvest(4, { by: 'machine' });
+    assert.equal(r2.ok, true);
+    assert.equal(r2.amount, one2 * 4);
+    assert.equal(r2.handPicked, false);
+    for (const i of SQUARE) assert.equal(g2.state.plots[i].cropId, null);
   } finally {
     GIANT.chance = save;
     ext.off();
@@ -235,7 +252,7 @@ test('trouvailles : puits (arrosage à l\'aube), bocal (graines anciennes), agne
   }
 });
 
-test('carrière : champignons cueillis à la main seulement ; le semoir et les jardiniers les laissent', () => {
+test('carrière : champignons cueillis à la main ; salariés et machines qui sèment là les ramassent pour vous', () => {
   const ext = withExtension();
   try {
     const g = career();
@@ -245,13 +262,24 @@ test('carrière : champignons cueillis à la main seulement ; le semoir et les j
     assert.equal(ring.ok, true);
     const i = ring.surprise.plotIndex;
     assert.equal(g.state.plots[i].env, 'field');
-    assert.equal(sowChoice(api, i), null);
-    assert.equal(api.plant(i, 'carrot', { by: 'machine' }).ok, false);
     assert.equal(api.harvest(i, { by: 'staff' }).ok, false);
+    assert.equal(g.actions.plant(i, 'carrot').ok, false);
     const m = g.state.money;
     const r = g.actions.harvest(i);
     assert.equal(r.ok, true);
     assert.equal(g.state.money, m + ring.surprise.value);
+    // Une machine qui sème sur des champignons les ramasse pour vous (payés) : jamais de champ bloqué.
+    const again = g.actions.triggerSurprise('ring').surprise;
+    const k = again.plotIndex;
+    const rec = record(g);
+    const m2 = g.state.money;
+    const cost = api.seedCost('carrot');
+    assert.equal(api.plant(k, 'carrot', { by: 'machine' }).ok, true);
+    assert.equal(g.state.money, m2 + again.value - cost);
+    g.update(0.01); // (les événements poussés par l'API des extensions partent au prochain update)
+    assert.equal(rec.of('foragePicked')[0].by, 'machine');
+    assert.equal(g.state.plots[k].forage, undefined);
+    void sowChoice;
   } finally {
     ext.off();
   }

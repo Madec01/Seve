@@ -32,8 +32,10 @@ export const QUALITY_NAMES = { normal: 'Normale', fine: 'Belle', gold: 'Dorée' 
  * Légumes géants : un carré 2 × 2 de la même culture (pas un arbre), semée le même jour à 1 jour près, toute mûre,
  * chaque parcelle arrosée le jour où elle a mûri → à chaque aube, `chance` de fusionner (un carré par aube au plus).
  * Valeur : `valueFactor` × la valeur d'une parcelle (au lieu de 4).
+ * Carrière : le géant attend le joueur `handDays` jours ; ensuite salariés et machines peuvent le récolter, sans la
+ * prime du géant (4 × leur valeur d'une parcelle) : un champ tenu par les machines n'est jamais bloqué.
  */
-export const GIANT = { chance: 0.06, valueFactor: 6, sownSpread: 1 };
+export const GIANT = { chance: 0.06, valueFactor: 6, sownSpread: 1, handDays: 3 };
 
 /**
  * Surprises de l'aube : à chaque aube (après `graceDays` jours), `chance` d'en tirer une parmi celles qui sont

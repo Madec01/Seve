@@ -779,7 +779,9 @@ chances de la prochaine récolte à la main et les soins remplis. Les belles et 
 Un carré 2 × 2 de la **même culture** (pas un arbre), **semée le même jour (à un jour près)**, **toute mûre** et
 **arrosée le jour où elle a mûri** peut, à chaque aube, fusionner en un légume géant (**6 %** par aube, un carré au plus
 par aube). Le géant occupe les 4 parcelles et vaut **6 fois** une parcelle (au lieu de 4) ; il ne pourrit pas ; il se
-récolte **à la main** (en carrière, salariés et machines le laissent), en une fois, avec une grande fête. Le carré
+récolte **à la main**, en une fois, avec une grande fête. En carrière, salariés et machines le laissent **3 jours** au
+joueur ; ensuite ils peuvent le récolter, sans la prime (4 fois leur valeur d'une parcelle) : un champ tenu par les
+machines n'est jamais bloqué. De même, un salarié ou une machine qui sème sur des champignons les ramasse pour vous. Le carré
 est cherché dans la grille du cœur (niveaux : grille du champ ; carrière : les 4 colonnes de chaque champ).
 
 ## 15.3 Surprises de l'aube (B4)
@@ -823,4 +825,46 @@ Tirées en même temps que la prévision de demain (elles se voient **la veille*
 
 ## 15.6 Équilibre (simulation)
 
-RESULTATS_LOT2
+Cible : les surprises ajoutent **au plus ~8 %** au revenu de l'année du joueur tranquille, sans changer les victoires ni le
+rythme des rangs. Commandes : `node tools/simulate.js --compare-surprises [--strategy casual]` et
+`node tools/simulate-career.js --compare-surprises` (même graine, sans → avec).
+
+### Niveaux (Détente, 200 parties par niveau et par stratégie)
+
+| # | casual : revenu (sans → avec) | casual : ★★★ (seuils du lot 2) | novice : revenu | optimal : revenu |
+|---|---|---|---|---|
+| 1 | 1 751 → 1 889 (+7,9 %) | 13 % | +4,3 % | +8,9 % |
+| 2 | 1 744 → 1 913 (+9,7 %) | 6 % | +4,2 % | +10,3 % |
+| 3 | 1 819 → 1 991 (+9,5 %) | 12 % | +3,3 % | +8,3 % |
+| 4 | 1 503 → 1 598 (+6,3 %) | 13 % | +3,6 % | +6,3 % |
+| 5 | 2 485 → 2 657 (+6,9 %) | 14 % | +5,1 % | +9,2 % |
+| 6 | 1 900 → 2 070 (+8,9 %) | 12 % | +3,9 % | +8,5 % |
+| 7 | 2 314 → 2 438 (+5,4 %) | 12 % | +2,9 % | +1,1 % |
+| 8 | 2 020 → 2 153 (+6,6 %) | 11 % | +4,0 % | +10,6 % |
+| 9 | 1 504 → 1 603 (+6,6 %) | 12 % | +3,6 % | +7,2 % |
+| 10 | 2 046 → 2 168 (+6,0 %) | 9 % | +3,8 % | +11,1 % |
+| 11 | 1 836 → 1 910 (+4,0 %) | 11 % | +3,3 % | +7,5 % |
+| 12 | 2 188 → 2 348 (+7,3 %) | 12 % | +2,2 % | +14,9 % |
+| **moyenne** | **+7,1 %** | ≈ 12 % (avant le lot 2 : 12 %) | **+3,7 %** | **+8,7 %** |
+
+Par partie (casual, niveau 1) : ~2,4 belles, ~0,6 dorée, 0,15 géant, 1,2 surprise de l'aube, 1,5 météo spéciale ;
+gain moyen : qualité ~46 pièces, géants ~23 (dont la prime : un tiers), surprises ~16. Le joueur appliqué (optimal)
+arrose tout et gagne un peu plus (soins → plus de belles et dorées) : c'est voulu.
+
+Victoires : inchangées ou meilleures (casual 92 → 95 % au niveau 7, novice 88 → 94 %) ; toutes les cibles du § 13.6
+tiennent. L'argent final médian du joueur tranquille monte de ~30 % (l'argent final est ce qui reste après tout le
+reste : 7 % de revenu en plus pèsent beaucoup sur lui) : **seuils d'étoiles de la Détente relevés** (§ 13.3) selon la même
+règle qu'avant (★★ ≈ argent médian du joueur tranquille : 45 à 51 % l'obtiennent ; ★★★ ≈ ses 12 % meilleures parties).
+Le mode Classique ne change pas (pas de surprises, mêmes seuils, test de parité).
+
+### Carrière (Détente, saisons de 7 jours, 60 carrières × 10 ans)
+
+| Robot | Revenu des 10 ans | Années 1 à 3 | Rang médian par année (sans → avec) | Domaine (médiane) |
+|---|---|---|---|---|
+| casual | **+5,0 %** | +5,5 % | identique, sauf an 8 : 5 → 6 | an 9 → an 8 |
+| novice | +6,2 % | +20 % (trouvailles : grosses au regard d'un petit revenu) | identique, sauf an 5 : 3 → 4 | jamais → jamais |
+| optimal | +4,6 % | +6,3 % | identique, sauf an 2 : 3 → 4 | an 6 → an 6 |
+
+Aucune faillite, rythme des rangs inchangé à un an près. Un premier réglage bloquait des champs tenus par les machines
+(géant jamais récolté, champignons jamais cueillis : revenu −3 %) : d'où le délai de 3 jours du géant et la cueillette
+par les salariés et machines qui sèment (§ 15.2).

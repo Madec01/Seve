@@ -1889,6 +1889,7 @@ Champs optionnels d'une parcelle (seulement quand c'est activé) :
 - `care: { sown, dry, rotated, wetEnd }` : jour de semis, jours « à arroser » passés sans eau, rotation (culture
   différente de la dernière récolte sur cette parcelle), arrosée le jour où elle a mûri ;
 - `giant: anchorIndex` : sur les 4 parcelles d'un géant (ancre = parcelle en haut à gauche dans la grille du cœur) ;
+  `giantSince` (jour absolu de la fusion) sur l'ancre seulement ;
 - `forage: { kind: 'mushroom' | 'ring', value, until }` : champignons à cueillir sur une parcelle VIDE.
 
 ### Actions
@@ -1897,13 +1898,15 @@ Champs optionnels d'une parcelle (seulement quand c'est activé) :
   `quality: 'normal' | 'fine' | 'gold'`, `qualityBonus` (pièces en plus, déjà comprises dans `amount`),
   `qualityMultiplier` (1 · 1,5 · 2). Sur une parcelle d'un géant : récolte tout le géant (4 parcelles vidées),
   `giant: { anchor, plots: [4], cropId }`, `amount` = 6 × la valeur d'une parcelle, puis `giantHarvested`.
-  Carrière : un géant ne se récolte qu'à la main (`by: 'player'`) ; salariés et machines le laissent.
+  Carrière : un géant attend le joueur 3 jours (`GIANT.handDays`, jour de fusion : `giantSince` sur l'ancre) ;
+  ensuite salariés et machines peuvent le récolter sans la prime (4 × leur valeur d'une parcelle, `handPicked: false`).
   Sur une parcelle vide avec `forage` : cueillette → `{ ok, amount, forage: kind }`, événement `foragePicked`.
 - `game.actions.makeWish(boonId)` → `{ ok, boon, amount? }` | `{ ok: false, reason }` ; événement `wishGranted`.
 - `game.actions.triggerSurprise(id)` (débogage `__debug`, tests) : lance une surprise de l'aube tout de suite si elle
   est possible → `{ ok, surprise }` + événement `surprise`.
 - Carrière : `game.actions.career.buyLot(lotId?)` renvoie aussi `finds: [...]` (mêmes objets que l'événement `finds`).
-- Une parcelle avec `forage` ne se sème pas (« Cueillez d'abord les champignons. ») ; semoir et jardiniers la laissent.
+- Une parcelle avec `forage` ne se sème pas à la main (« Cueillez d'abord les champignons. ») ; un salarié ou une machine
+  qui y sème les ramasse pour vous (payés, `foragePicked { …, by }`) ; la cueillette elle-même (`harvest`) est à la main.
 
 ### Requêtes
 

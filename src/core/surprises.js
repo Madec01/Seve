@@ -88,6 +88,7 @@ export function checkSurprises(state) {
     if (p.giant !== undefined) {
       if (!int(p.giant) || p.giant >= state.plots.length || !p.cropId || state.plots[p.giant].giant !== p.giant) return 'légume géant';
     }
+    if (p.giantSince !== undefined && (!int(p.giantSince) || p.giant !== i)) return 'légume géant';
     if (p.forage !== undefined && !(obj(p.forage) && ['mushroom', 'ring'].includes(p.forage.kind) && int(p.forage.value) && int(p.forage.until) && !p.cropId)) return `champignons (parcelle ${i})`;
   }
   return null;
@@ -286,11 +287,15 @@ export function validateGiants(state) {
       const q = state.plots[k];
       return q.cropId === g.cropId && q.unlocked && q.env !== null && isMature(q);
     });
-    if (!ok) for (const k of g.plots) delete state.plots[k].giant;
+    if (!ok) {
+      for (const k of g.plots) delete state.plots[k].giant;
+      delete state.plots[g.anchor].giantSince;
+    }
   }
   // Marques orphelines (ancre disparue).
-  state.plots.forEach((p) => {
+  state.plots.forEach((p, i) => {
     if (p.giant !== undefined && state.plots[p.giant]?.giant !== p.giant) delete p.giant;
+    if (p.giantSince !== undefined && p.giant !== i) delete p.giantSince;
   });
 }
 
@@ -319,10 +324,22 @@ export function giantCandidates(state, level) {
   return out;
 }
 
-/** Fusionne un carré en géant (ancre = première parcelle). */
+/** Fusionne un carré en géant (ancre = première parcelle, qui garde le jour de la fusion : giantSince). */
 export function mergeGiant(state, square) {
   for (const k of square) state.plots[k].giant = square[0];
+  state.plots[square[0]].giantSince = absDay(state);
   return giantAt(state, square[0]);
+}
+
+/**
+ * Carrière : salariés et machines peuvent-ils récolter ce géant ? Seulement après GIANT.handDays jours (il attend
+ * d'abord le joueur). true aussi pour une parcelle qui n'est pas un géant.
+ */
+export function giantOpenToHelpers(state, i) {
+  const p = state.plots[i];
+  if (!p || p.giant === undefined) return true;
+  const since = state.plots[p.giant]?.giantSince ?? 0;
+  return absDay(state) - since >= GIANT.handDays;
 }
 
 /**

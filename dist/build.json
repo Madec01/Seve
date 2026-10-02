@@ -1,7 +1,7 @@
 {
-  "id": "bfa0bfd819d2",
+  "id": "9078ca503453",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.2cf1b22587.js",
+  "js": "dist/game.58b525b86f.js",
   "css": "dist/game.20ab919a89.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -161,27 +161,27 @@
     "src/core/career/animals.js": "6dd93503ac1ac55a",
     "src/core/career/buildings.js": "ae8d8e2f5324ce3b",
     "src/core/career/career.js": "7164015b392d6fdd",
-    "src/core/career/crew.js": "c091db129cf64396",
+    "src/core/career/crew.js": "896a32d6dfa49dc4",
     "src/core/career/effects.js": "d0c32e79d003a3c6",
     "src/core/career/events.js": "44034079b380650f",
     "src/core/career/extensions.js": "376a67f1131fce1f",
     "src/core/career/land.js": "6221c5ee43fa2dd3",
     "src/core/career/level.js": "369b1b4a616754a3",
-    "src/core/career/machines.js": "51fff162682352cd",
+    "src/core/career/machines.js": "d79de630a42fc8a3",
     "src/core/career/market.js": "1ddd0ac42e554fb4",
     "src/core/career/quests.js": "9aabd3a757953486",
     "src/core/career/ranks.js": "cfe71f0ff19130c6",
     "src/core/career/registry.js": "af2cc8625fa2b383",
-    "src/core/career/runtime.js": "cb53581c1ebb0bd9",
+    "src/core/career/runtime.js": "5e6e80339bda17ec",
     "src/core/career/save.js": "f283b16f323262f0",
     "src/core/career/staff.js": "f5f46323c16fbd97",
     "src/core/career/storage.js": "afe0cd9374491826",
     "src/core/career/surprises.js": "ad2ae7b9583caa2b",
-    "src/core/career/work.js": "50c7691925c63c5f",
+    "src/core/career/work.js": "0431cbc0d3dd66dc",
     "src/core/contest.js": "ece98131e7c91d99",
     "src/core/economy.js": "5e63263fdfaa01f8",
     "src/core/events.js": "467b3069052f8d70",
-    "src/core/farm.js": "d276bdc24cbabc41",
+    "src/core/farm.js": "dfbb742db9f6cd5a",
     "src/core/game.js": "034a112821343215",
     "src/core/market.js": "b44b99ed21844017",
     "src/core/neighbour.js": "625c041def630a9b",
@@ -191,7 +191,7 @@
     "src/core/progression.js": "9b7d03067f3d9ede",
     "src/core/rng.js": "025e534f65322939",
     "src/core/stats.js": "4c87a10ff71264bf",
-    "src/core/surprises.js": "b59cd0f7c324129b",
+    "src/core/surprises.js": "6821309b36eb1f8b",
     "src/core/trees.js": "7b5d36eb1d128ce5",
     "src/core/weather.js": "875f3410fa4564a6",
     "src/data/achievements.js": "6c5e44e492fe9a43",
@@ -215,7 +215,7 @@
     "src/data/levels.js": "845dce7aaa606262",
     "src/data/perks.js": "64d88e2fd12b657e",
     "src/data/products.js": "ca4308ec37323ecd",
-    "src/data/surprises.js": "9086072a6921ed1d",
+    "src/data/surprises.js": "eec619c07ec58a5e",
     "src/index.template.html": "abb0b4a4a78081a7",
     "src/loader.js": "8cd0d03467331dd6",
     "src/main.js": "6f051c118a528717",
@@ -273,6 +273,14 @@
   },
   "history": [
     {
+      "id": "9078ca503453",
+      "files": [
+        "dist/game.58b525b86f.js",
+        "dist/game.58b525b86f.js.map",
+        "dist/game.20ab919a89.css"
+      ]
+    },
+    {
       "id": "bfa0bfd819d2",
       "files": [
         "dist/game.2cf1b22587.js",
@@ -302,14 +310,6 @@
         "dist/game.2246414fbe.js",
         "dist/game.2246414fbe.js.map",
         "dist/game.649c238685.css"
-      ]
-    },
-    {
-      "id": "2e6967fa87af",
-      "files": [
-        "dist/game.d5701ea12e.js",
-        "dist/game.d5701ea12e.js.map",
-        "dist/game.498ef5f91d.css"
       ]
     }
   ]
