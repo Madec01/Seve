@@ -18,6 +18,7 @@ import { BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { ensureLotPlots, newPlot, notEnoughMoney, placeBuilding, rankLabel, removeBuilding } from './buildings.js';
 import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
+import { lotFinds } from './surprises.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
 
@@ -199,6 +200,11 @@ export function buyLot(api, lotId) {
   state.career.lots.push(lot);
   state.career.lotsBought += 1;
   api.push('lotBought', { lotId: lot.id, index: lot.index, col: lot.col, row: lot.row, cost: info.price, name: lot.name });
+  // (lot 2) Trouvailles au défrichage : 1 ou 2, juste après l'achat (événement finds ; champ finds du résultat).
+  if (state.surprises) {
+    const finds = lotFinds(api, lot.id);
+    return { ok: true, lotId: lot.id, index: lot.index, col: lot.col, row: lot.row, cost: info.price, finds };
+  }
   return { ok: true, lotId: lot.id, index: lot.index, col: lot.col, row: lot.row, cost: info.price };
 }
 

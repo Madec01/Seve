@@ -10,6 +10,8 @@ import { DAY_SECONDS } from '../data/balance.js';
 import { el, fmt, plural, setText, signed } from './dom.js';
 import { icon, setIcon, spriteAny } from './icons.js';
 import { season, weatherHint, weatherName } from './text.js';
+import { specialIcon } from './lot2.js';
+import { SPECIAL_WEATHERS_BY_ID } from '../data/surprises.js';
 import { applyGameA11y, applySceneA11y, initA11y, nextSpeed, speedCycle, speedText } from './a11y.js';
 
 // État de la prévision du fermage, lisible sans la couleur : un symbole et un mot (et dans le
@@ -56,10 +58,17 @@ export function createHud(root, app) {
   const wToday = icon('sunny', 'md');
   const wName = el('span.w-name', '');
   const wTomorrow = icon('sunny', 'sm');
+  // (Lot 2) Météo spéciale (pluie chaude, brouillard, étoiles filantes, heure dorée, arc-en-ciel) : son icône
+  // prend la place de l'icône de base (aujourd'hui et demain).
+  const wTodayAlt = el('span.w-alt');
+  const wTomorrowAlt = el('span.w-alt');
+  const specialShown = { today: null, tomorrow: null };
+  wTodayAlt.hidden = true;
+  wTomorrowAlt.hidden = true;
   const weather = el(
     'button.hud-cell.hud-weather.has-tip',
     { type: 'button', id: 'hud-weather', 'data-tip-side': 'bottom', 'aria-label': 'Météo', onclick: () => openInfo('weather') },
-    el('span.hud-line.w-icons', wToday, el('span.w-arrow', '›'), el('span.w-tomorrow', wTomorrow)),
+    el('span.hud-line.w-icons', wToday, wTodayAlt, el('span.w-arrow', '›'), el('span.w-tomorrow', wTomorrow, wTomorrowAlt)),
     el('span.hud-line.hud-small', wName),
   );
   weather._tip = () => weatherTip();
@@ -229,14 +238,25 @@ export function createHud(root, app) {
     return el('div.tip-rows', rows);
   }
 
+  /** (Lot 2) Icône de météo spéciale à la place de l'icône de base (nœud mis en cache par météo). */
+  function showSpecial(slot, id, base, alt, cls) {
+    if (specialShown[slot] === id) return;
+    specialShown[slot] = id;
+    base.hidden = !!id;
+    alt.hidden = !id;
+    alt.replaceChildren(...(id ? [specialIcon(id, cls)] : []));
+  }
+
   function weatherTip() {
     if (!game) return null;
     const w = game.query.forecast();
+    const sky = game.state.surprises?.sky || {};
+    const sp = (id) => SPECIAL_WEATHERS_BY_ID[id] || null;
     return el(
       'div.tip-rows',
-      el('div.tip-title', `Aujourd'hui : ${weatherName(w.today)}`),
-      el('div', weatherHint(w.today, game.level)),
-      el('div.tip-sub', `Demain : ${weatherName(w.tomorrow)}. ${weatherHint(w.tomorrow, game.level)}`),
+      el('div.tip-title', `Aujourd'hui : ${sky.today ? sp(sky.today)?.name : weatherName(w.today)}`),
+      el('div', sky.today ? sp(sky.today)?.text || '' : weatherHint(w.today, game.level)),
+      el('div.tip-sub', `Demain : ${sky.tomorrow ? `${sp(sky.tomorrow)?.name} (rare !)` : weatherName(w.tomorrow)}. ${weatherHint(w.tomorrow, game.level)}`),
       w.afterTomorrow ? el('div.tip-sub', `Après-demain : ${weatherName(w.afterTomorrow)} (almanach).`) : null,
     );
   }
@@ -369,8 +389,14 @@ export function createHud(root, app) {
     money.dataset.season = c.seasonId;
 
     setIcon(wToday, w.today);
-    setText(wName, weatherName(w.today));
     setIcon(wTomorrow, w.tomorrow || 'sunny');
+    const sky = game.state.surprises?.sky || null;
+    const spToday = sky?.today || null;
+    const spTomorrow = sky?.tomorrow || null;
+    showSpecial('today', spToday, wToday, wTodayAlt, 'sprite--md');
+    showSpecial('tomorrow', spTomorrow, wTomorrow, wTomorrowAlt, 'sprite--sm');
+    weather.classList.toggle('is-special', !!spToday);
+    setText(wName, spToday ? SPECIAL_WEATHERS_BY_ID[spToday]?.name || weatherName(w.today) : weatherName(w.today));
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
     weather.querySelector('.w-arrow').style.visibility = w.tomorrow ? '' : 'hidden';
     weather.setAttribute('aria-label', `Météo : ${weatherName(w.today)}${w.tomorrow ? `, demain ${weatherName(w.tomorrow)}` : ''}`);
@@ -444,16 +470,53 @@ export function createHud(root, app) {
       const pop = el(`span.money-pop.${d > 0 ? 'pos' : 'neg'}`, signed(d));
       moneyPops.append(pop);
       setTimeout(() => pop.remove(), 1400);
-    }, 120);
+    }, pendingDelta > 0 ? 620 : 120); // (lot 2) un gain s'affiche quand les pièces arrivent au compteur
+  }
+
+  // (Lot 2) Pièces de la récolte en vol (src/ui/juice.js) : le compteur attend leur arrivée pour monter.
+  const holds = [];
+  function heldSum() {
+    let n = 0;
+    for (const h of holds) n += h.amount;
+    return n;
+  }
+  /** Retient `hold.amount` pièces (objet { amount }) jusqu'à releaseMoney(hold), au plus `ms` millisecondes. */
+  function holdMoney(hold, ms = 1400) {
+    if (!hold || !(hold.amount > 0)) return;
+    hold.until = performance.now() + ms;
+    holds.push(hold);
+  }
+  function releaseMoney(hold) {
+    const i = holds.indexOf(hold);
+    if (i >= 0) holds.splice(i, 1);
+  }
+  /** Une pièce arrive au compteur : petit bond (au plus ~8 fois par seconde, sans lecture de mise en page). */
+  let catchAt = 0;
+  let catchQueued = false;
+  function catchCoin() {
+    const now = performance.now();
+    if (catchQueued || now - catchAt < 120) return;
+    catchAt = now;
+    catchQueued = true;
+    money.classList.remove('is-catch');
+    requestAnimationFrame(() => {
+      catchQueued = false;
+      money.classList.add('is-catch');
+    });
   }
 
   function frame(dt) {
     if (!game) return;
+    if (holds.length) {
+      const now = performance.now();
+      for (let i = holds.length - 1; i >= 0; i--) if (now > holds[i].until) holds.splice(i, 1);
+    }
+    const goal = targetMoney - heldSum();
     // Compteur d'argent animé
-    if (shownMoney !== targetMoney) {
-      const diff = targetMoney - shownMoney;
+    if (shownMoney !== goal) {
+      const diff = goal - shownMoney;
       const step = diff * Math.min(1, dt * 9);
-      shownMoney = Math.abs(diff) < 0.6 || Math.abs(step) >= Math.abs(diff) ? targetMoney : shownMoney + step;
+      shownMoney = Math.abs(diff) < 0.6 || Math.abs(step) >= Math.abs(diff) ? goal : shownMoney + step;
     }
     const n = Math.round(shownMoney);
     if (n !== shownInt) {
@@ -483,6 +546,7 @@ export function createHud(root, app) {
     bill.querySelector('.hud-line--big .ico')?.setAttribute('data-kind', career ? 'charges' : 'rent');
     shownMoney = g.state.money;
     targetMoney = g.state.money;
+    holds.length = 0;
     shownInt = null;
     shownDay = -1;
     moneyPops.textContent = '';
@@ -564,5 +628,5 @@ export function createHud(root, app) {
   // création de l'interface (app.hud et app.tabbar existent alors).
   queueMicrotask(() => initA11y(app));
 
-  return { bind, refresh, frame, onEvent, refreshMute, projection, stateText, openInfo, syncDock, speedButton: speedBtn, el: root };
+  return { bind, refresh, frame, onEvent, refreshMute, projection, stateText, openInfo, syncDock, holdMoney, releaseMoney, catchCoin, speedButton: speedBtn, el: root };
 }

@@ -53,7 +53,7 @@ export function createTodo(app) {
   let lastKey = '';
   let lastCollectKey = '';
   let lastH = -1;
-  const morning = { prevMoney: null, pending: null, lastShownAt: -Infinity };
+  const morning = { prevMoney: null, pending: null, lastShownAt: -Infinity, notes: [] };
 
   app.messages?.onChange(() => paintBell());
 
@@ -452,6 +452,8 @@ export function createTodo(app) {
     const parts = [];
     const d = p.delta;
     const yesterday = d > 0 ? `Hier : +${fmt(d)} pièces.` : d < 0 ? `Hier : ${fmt(d)} pièces.` : 'Hier : ni gain ni perte.';
+    // (Lot 2) Surprises de la nuit, météo rare, légume géant : en tête du programme du jour.
+    if (morning.notes.length) parts.push(morning.notes.splice(0).slice(0, 2).join(' '));
     const list = safe(() => items(p.game), []).filter((x) => !['goal', 'rank'].includes(x.id)).slice(0, 3);
     if (list.length) parts.push(`Aujourd'hui : ${list.map((x) => x.short).join(', ')}.`);
     else parts.push('Aujourd\'hui : rien d\'urgent, profitez !');
@@ -479,6 +481,13 @@ export function createTodo(app) {
     } else {
       app.messages?.add({ kind: 'info', title, text });
     }
+  }
+
+  /** (Lot 2) Ligne ajoutée au prochain résumé du matin (surprise de l'aube, météo rare, légume géant). */
+  function morningNote(text) {
+    if (!text) return;
+    morning.notes.push(text);
+    if (morning.notes.length > 4) morning.notes.shift();
   }
 
   function morningToggle() {
@@ -568,6 +577,7 @@ export function createTodo(app) {
   function reset(game) {
     morning.prevMoney = game ? game.state.money : null;
     morning.pending = null;
+    morning.notes.length = 0;
     current = null;
     lastKey = '';
     lastCollectKey = '';
@@ -585,6 +595,7 @@ export function createTodo(app) {
     reset,
     showResume,
     morningToggle,
+    morningNote,
     ring,
     focusPlots,
     collectAll,

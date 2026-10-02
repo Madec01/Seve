@@ -73,7 +73,7 @@ function gardenAction(api, i, t, pass) {
     case 'chase':
       return p.crow && p.cropId ? 'chase' : null;
     case 'harvest': {
-      if (!crop || !isMature(p)) return null;
+      if (!crop || !isMature(p) || p.giant !== undefined) return null; // (lot 2) le géant se récolte à la main
       const kind = tree ? 'pick' : 'harvest';
       return machineWillPass(api, p.lot, kind, t) ? null : kind;
     }

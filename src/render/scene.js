@@ -95,6 +95,12 @@
 // Portrait : le zoom est le plus grand entier tel que la partie essentielle du monde (12 tuiles)
 // tienne dans la largeur ; les colonnes de forêt des bords peuvent être rognées.
 //
+// Lot 2 « Toucher & surprises » : légumes géants (crop.<id>.giant sur le carré 2 × 2, balancement doux),
+// champignons de cueillette sur les parcelles vides (forage), surprises de l'aube et trouvailles du défrichage
+// (lot2-actors.js), météos spéciales (state.surprises.sky.today → effects : pluie chaude, brouillard, heure
+// dorée, arc-en-ciel, étoiles filantes), légère secousse de la vue à la récolte d'un géant (effects.cameraNudge,
+// jamais en mouvements réduits). scene.lot2Stats() : mesures.
+//
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import {
@@ -106,7 +112,8 @@ import { createCareerActors } from './career-actors.js';
 import { getCrop } from '../data/crops.js';
 import { buildSeasonSheets } from './assets.js';
 import { createLayout, tileHash } from './layout.js';
-import { createEffects } from './effects.js';
+import { createEffects, canDraw, giantRect } from './effects.js';
+import { createLot2Actors } from './lot2-actors.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -178,6 +185,9 @@ export function createScene(canvas, images, level, opts = {}) {
   const ctx = noSmooth(canvas.getContext('2d'));
   const seasonSheets = buildSeasonSheets(images);
   const effects = opts.effects || createEffects(images);
+  const lot2 = createLot2Actors(effects); // (lot 2) surprises de l'aube, trouvailles
+  lot2.setImages(images);
+  const nudgeOut = { x: 0, y: 0 };
   const minZoom = Math.max(1, opts.minZoom || MIN_ZOOM);
 
   const modeOpt = opts.layoutMode || 'auto';
@@ -260,6 +270,8 @@ export function createScene(canvas, images, level, opts = {}) {
   let prevWatered = [];
   let prevUnlocked = [];
   let prevFruit = [];
+  let prevGiant = []; // (lot 2) ancre du géant de chaque parcelle (state.plots[i].giant)
+  let prevForage = []; // (lot 2) cueillette sur une parcelle vide (state.plots[i].forage)
   let unlockedCount = -1;
 
   // ── (v3) Personnalisation et mode décoration ──────────────────────────────────────
@@ -308,6 +320,8 @@ export function createScene(canvas, images, level, opts = {}) {
     prevGrowth = new Array(n).fill(-1);
     prevWatered = new Array(n).fill(false);
     prevUnlocked = new Array(n).fill(false);
+    prevGiant = new Array(n).fill(undefined);
+    prevForage = new Array(n).fill(null);
     unlockedCount = -1;
     visualIndex = null;
     for (const k of Object.keys(prevOwned)) delete prevOwned[k];
@@ -1419,7 +1433,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const p = plots[i];
       const crop = p.cropId || null;
       const fruit = p.fruit || 0;
-      if (plotViews[i] && crop === prevCrop[i] && p.growth === prevGrowth[i] && p.watered === prevWatered[i] && p.unlocked === prevUnlocked[i] && fruit === prevFruit[i]) continue;
+      if (plotViews[i] && crop === prevCrop[i] && p.growth === prevGrowth[i] && p.watered === prevWatered[i] && p.unlocked === prevUnlocked[i] && fruit === prevFruit[i] && p.giant === prevGiant[i] && (p.forage || null) === prevForage[i]) continue;
       const was = plotViews[i];
       const view = game.query.plot(i);
       if (initialized && was) {
@@ -1447,6 +1461,8 @@ export function createScene(canvas, images, level, opts = {}) {
       prevGrowth[i] = p.growth;
       prevWatered[i] = p.watered;
       prevUnlocked[i] = p.unlocked;
+      prevGiant[i] = p.giant;
+      prevForage[i] = p.forage || null;
     }
     // Une action du joueur touche une ou deux parcelles ; au-delà, c'est l'aube (pluie, arroseurs).
     if (changed >= 1 && changed <= 2) farmerGoTo(lastIdx, lastTool);
@@ -1725,12 +1741,26 @@ export function createScene(canvas, images, level, opts = {}) {
         drawSprite(c, sheetsEnv, 'coin', r.x + (n - TILE) / 2, r.y + (n - TILE) / 2 + bob);
       }
     }
+    // (Lot 2) Champignons à cueillir sur les parcelles vides (brouillard, cercle de fées).
+    for (let i = 0; i < L.plots.length; i++) {
+      const pv = plotViews[i];
+      if (!pv || pv.cropId || !pv.forage) continue;
+      const r = L.plots[i];
+      if (windowed && skip(r)) continue;
+      drawForage(c, i, pv.forage, r, k);
+    }
     // Cultures
+    giantCount = 0;
     for (let i = 0; i < L.plots.length; i++) {
       const pv = plotViews[i];
       if (!pv || !pv.cropId) continue;
       const r = L.plots[i];
       if (windowed && skip(r)) continue;
+      if (pv.giant) {
+        // (Lot 2) Parcelle d'un légume géant : dessiné une fois, par-dessus le carré (après les autres cultures).
+        if (pv.giant.isAnchor || pv.giant.anchor === i) giantList[giantCount++] = i;
+        continue;
+      }
       if (pv.cropId === 'apple' || pv.kind === 'tree') {
         drawTree(c, i, pv, r, k, sc, season, sheetsEnv);
         continue;
@@ -1763,6 +1793,104 @@ export function createScene(canvas, images, level, opts = {}) {
             c.fillRect(sx, sy + k, k, k);
           }
         }
+      }
+    }
+    for (let j = 0; j < giantCount; j++) drawGiant(c, giantList[j], k);
+  }
+
+  // ── (Lot 2) Légumes géants et cueillette ─────────────────────────────────────────
+  const giantList = [];
+  let giantCount = 0;
+  const GIANT_FALLBACK_K = 2;
+
+  /** Légume géant sur son carré 2 × 2 (ou sur l'ancre si les parcelles ne se touchent pas à l'écran). */
+  function drawGiant(c, anchor, k) {
+    const pv = plotViews[anchor];
+    const g = pv?.giant;
+    if (!g) return;
+    const r = giantRect(layout, g.plots, anchor);
+    if (!r) return;
+    const cropId = g.cropId || pv.cropId;
+    const name = `crop.${cropId}.giant`;
+    const has = canDraw(images, name);
+    const sw = has ? (SPRITES[name].w || 2) * TILE : TILE;
+    const sh = has ? (SPRITES[name].h || 2) * TILE : TILE;
+    // Échelle entière la plus grande qui tient dans le carré (net), au moins 1.
+    const sc = has ? Math.max(1, Math.floor(Math.min(r.w / sw, r.h / sh) + 0.15)) : Math.max(1, Math.floor(Math.min(r.w, r.h) / TILE));
+    const fallbackName = cropSprite(cropId, 4);
+    const w = sw * sc;
+    const h = sh * sc;
+    const bx = r.x + r.w / 2;
+    const by = r.y + r.h - (k > 1 ? 2 : 1);
+    // Balancement doux : un petit « souffle » toutes les ~3,5 s (aucun en mouvements réduits).
+    let sx = 1;
+    let sy = 1;
+    if (!reducedMotion) {
+      const ph = (time * 0.29 + anchor * 0.173) % 1;
+      if (ph < 0.12) {
+        const v = Math.sin((ph / 0.12) * Math.PI);
+        sx = 1 + 0.045 * v;
+        sy = 1 - 0.04 * v;
+      } else if (ph < 0.2) {
+        const v = Math.sin(((ph - 0.12) / 0.08) * Math.PI);
+        sx = 1 - 0.02 * v;
+        sy = 1 + 0.025 * v;
+      }
+    }
+    // Ombre au sol
+    c.fillStyle = 'rgba(40,24,32,0.2)';
+    c.fillRect(Math.round(bx - w * 0.36), Math.round(by - 2 * sc), Math.round(w * 0.72), 2 * sc);
+    c.save();
+    c.translate(Math.round(bx), Math.round(by));
+    if (sx !== 1 || sy !== 1) c.scale(sx, sy);
+    if (has) drawSprite(c, images, name, -w / 2, -h, sc === 1 ? undefined : { scale: sc });
+    else if (SPRITES[fallbackName]) {
+      const fs = Math.max(1, k * GIANT_FALLBACK_K);
+      drawSprite(c, images, fallbackName, -(TILE * fs) / 2, -TILE * fs, { scale: fs });
+    }
+    c.restore();
+    // Scintillement (mûr, comme les autres cultures)
+    const ph2 = (time * 0.7 + anchor * 0.41) % 1;
+    if (ph2 < 0.2) {
+      const px = Math.max(1, sc);
+      const sxp = Math.round(r.x + r.w * (0.25 + tileHash(anchor, Math.floor(time * 0.7), 5) * 0.5));
+      const syp = Math.round(r.y + r.h * (0.25 + tileHash(anchor, Math.floor(time * 0.7), 6) * 0.4));
+      c.fillStyle = '#ffffff';
+      c.fillRect(sxp, syp, px, px);
+      if (ph2 > 0.06 && ph2 < 0.14) {
+        c.fillStyle = '#fff3b0';
+        c.fillRect(sxp - px, syp, px, px);
+        c.fillRect(sxp + px, syp, px, px);
+        c.fillRect(sxp, syp - px, px, px);
+        c.fillRect(sxp, syp + px, px, px);
+      }
+    }
+  }
+
+  /** Champignons de cueillette (parcelle vide) : cercle de fées ou petits champignons du brouillard. */
+  function drawForage(c, i, f, r, k) {
+    const ring = f.kind === 'ring';
+    const name = ring ? 'mushroom.ring' : canDraw(images, 'mushrooms') ? 'mushrooms' : canDraw(images, 'mushroom') ? 'mushroom' : 'mushroom.ring';
+    const sc = k === 1 ? undefined : { scale: k };
+    if (canDraw(images, name)) {
+      drawSprite(c, images, name, r.x, r.y - (k > 1 ? 1 : 0), sc);
+    } else {
+      // Repli : trois petits champignons rouges à pois blancs.
+      const spots = ring ? [[3, 4], [10, 3], [12, 9], [7, 11], [2, 9]] : [[4, 6], [9, 9], [11, 4]];
+      for (const [x, y] of spots) {
+        c.fillStyle = OUTLINE;
+        c.fillRect(r.x + (x - 1) * k, r.y + (y - 1) * k, 4 * k, 3 * k);
+        c.fillStyle = '#d8453a';
+        c.fillRect(r.x + x * k, r.y + y * k, 2 * k, 1 * k);
+        c.fillStyle = '#fff3e0';
+        c.fillRect(r.x + x * k, r.y + (y + 1) * k, 2 * k, 1 * k);
+      }
+    }
+    if (ring) {
+      const ph = (time * 0.8 + i * 0.37) % 1;
+      if (ph < 0.15) {
+        c.fillStyle = '#ffd6f0';
+        c.fillRect(Math.round(r.x + r.w * 0.5), Math.round(r.y + r.h * 0.3), k, k);
       }
     }
   }
@@ -1903,6 +2031,13 @@ export function createScene(canvas, images, level, opts = {}) {
       if (!pv || !pv.cropId || !pv.unlocked) continue;
       const r = L.plots[i];
       if (r.retired || r.y > cy1 || r.y + r.h < cy0 || r.x > cx1 || r.x + r.w < cx0) continue;
+      if (pv.giant) {
+        // (Lot 2) Légume géant : une seule pastille, en haut à droite du carré.
+        if (pv.giant.anchor !== i || pv.action !== 'harvest') continue;
+        const gr = giantRect(L, pv.giant.plots, i);
+        if (gr) drawPixelMap(c, MARK_RIPE, gr.x + gr.w - 7 * m, gr.y + (k > 1 ? 1 : -1), m);
+        continue;
+      }
       if (pv.action === 'water') {
         const bob = reducedMotion ? 0 : Math.sin(time * 2.2 + i * 0.7) > 0.55 ? -1 : 0;
         // Goutte bien visible (au-dessus de la terre, en haut à droite de la parcelle).
@@ -2275,7 +2410,7 @@ export function createScene(canvas, images, level, opts = {}) {
   /** Arc-en-ciel (événement au hasard) : en surimpression dans le ciel de la vue, qui apparaît doucement. */
   let rainbowT = 0;
   function drawRainbow(dt) {
-    const on = careerInfo.active === 'rainbow';
+    const on = careerInfo.active === 'rainbow' || effects.env.special === 'rainbow'; // (lot 2) niveaux aussi
     rainbowT = Math.max(0, Math.min(1, rainbowT + (on ? dt : -dt) * 0.6));
     if (rainbowT <= 0 || !SPRITES['effect.rainbow']) return;
     const c = vctx;
@@ -3189,6 +3324,7 @@ export function createScene(canvas, images, level, opts = {}) {
       lastGame = game;
       resetTracking();
       effects.clear();
+      lot2.clear();
     }
 
     const cal = game.query.calendar();
@@ -3201,6 +3337,7 @@ export function createScene(canvas, images, level, opts = {}) {
 
     syncOwned(game);
     syncPlots(game, raining);
+    lot2.sync(game, layout, { day: game.state.time?.day || 0, dayProgress });
     initialized = true;
 
     // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
@@ -3216,12 +3353,14 @@ export function createScene(canvas, images, level, opts = {}) {
     emitAmbient(dt, owned, season, weather, dayProgress);
     fxState.season = season;
     fxState.weather = weather;
+    fxState.special = game.state.surprises?.sky?.today || null; // (lot 2) météo spéciale du jour
     fxState.dayProgress = dayProgress;
     fxState.view.x = -ox;
     fxState.view.y = -oy;
     fxState.view.w = viewW;
     fxState.view.h = viewH;
     effects.update(dt, fxState);
+    lot2.update(dt);
 
     // Tampon de vue
     const c = vctx;
@@ -3234,6 +3373,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawGround(c, images);
     collectDrawables(owned, season, sheetsEnv, weather, dayProgress);
     drawEntries();
+    lot2.draw(c);
     effects.drawSmoke(c);
     drawBees(owned, season, weather, dayProgress);
     if (contestDay(cal)) drawBunting();
@@ -3242,6 +3382,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
+    drawRainbow(dt);
     c.setTransform(1, 0, 0, 1, 0, 0);
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
@@ -3251,7 +3392,8 @@ export function createScene(canvas, images, level, opts = {}) {
     // Canvas final
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
+    effects.cameraNudge(nudgeOut); // (lot 2) secousse douce (géant), 0 en mouvements réduits
+    ctx.drawImage(view, 0, 0, viewW, viewH, blitX + nudgeOut.x * zoom, blitY + nudgeOut.y * zoom, viewW * zoom, viewH * zoom);
     drawSignText();
     effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
   }
@@ -3292,6 +3434,7 @@ export function createScene(canvas, images, level, opts = {}) {
     if (first) {
       resetTracking();
       effects.clear();
+      lot2.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -3314,6 +3457,8 @@ export function createScene(canvas, images, level, opts = {}) {
     grow(prevGrowth, -1);
     grow(prevWatered, false);
     grow(prevUnlocked, false);
+    grow(prevGiant, undefined);
+    grow(prevForage, null);
     for (let i = 0; i < n; i++) plotViews[i] = null; // positions et parcelles retirées : tout relire
     visualIndex = null;
     unlockedCount = -1;
@@ -3323,6 +3468,7 @@ export function createScene(canvas, images, level, opts = {}) {
       for (const p of farmer.path) p.y += dy;
       effects.shift(0, dy);
       actors.shift(dy);
+      lot2.shift(0, dy);
     }
     computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
     if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
@@ -3381,8 +3527,16 @@ export function createScene(canvas, images, level, opts = {}) {
     }
   }
 
+  /** (Lot 2) Jour absolu de la carrière : (année − 1) × 4 × durée d'une saison + jour. */
+  function careerDay(g) {
+    const t = g.state.time || {};
+    const len = g.level?.seasonLength || g.state.career?.seasonLength || 0;
+    return ((t.year || 1) - 1) * 4 * len + (t.day || 0);
+  }
+
   function careerEvent(type, payload = {}) {
     const L = layout;
+    if (LOT2_EVENTS.has(type)) lot2.onEvent(type, payload, L);
     switch (type) {
       case 'lotBought':
         clearing = { lotId: payload.lotId, t0: time };
@@ -3464,6 +3618,7 @@ export function createScene(canvas, images, level, opts = {}) {
     syncCareerBuildings(game.state);
     syncPlots(game, raining);
     actors.sync(game, layout, time);
+    lot2.sync(game, layout, { day: careerDay(game), dayProgress, career: true });
     initialized = true;
     flushDeferred();
 
@@ -3478,12 +3633,14 @@ export function createScene(canvas, images, level, opts = {}) {
     emitCareerAmbient(dt, owned, season, weather, dayProgress);
     fxState.season = season;
     fxState.weather = weather;
+    fxState.special = game.state.surprises?.sky?.today || null; // (lot 2) météo spéciale du jour
     fxState.dayProgress = dayProgress;
     fxState.view.x = -ox;
     fxState.view.y = -oy;
     fxState.view.w = viewW;
     fxState.view.h = viewH;
     effects.update(dt, fxState);
+    lot2.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -3499,6 +3656,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawClearing(season, sheetsEnv);
     collectCareer(owned, season, sheetsEnv);
     drawEntries();
+    lot2.draw(c);
     effects.drawSmoke(c);
     drawCareerBees(owned, season, weather, dayProgress);
     drawFairGarlands();
@@ -3520,7 +3678,8 @@ export function createScene(canvas, images, level, opts = {}) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, devW, devH);
-    ctx.drawImage(view, 0, 0, viewW, viewH, blitX, blitY, viewW * zoom, viewH * zoom);
+    effects.cameraNudge(nudgeOut); // (lot 2) secousse douce (géant), 0 en mouvements réduits
+    ctx.drawImage(view, 0, 0, viewW, viewH, blitX + nudgeOut.x * zoom, blitY + nudgeOut.y * zoom, viewW * zoom, viewH * zoom);
     drawSignText();
     drawCareerLabels();
     effects.drawScreen(ctx, worldToDevice, zoom, images, dpr);
@@ -3530,6 +3689,7 @@ export function createScene(canvas, images, level, opts = {}) {
     layout = createLayout(lvl, { mode });
     resetTracking();
     effects.clear();
+    lot2.clear();
     userScrolled = false;
     stopFling();
     scrollAnim = null;
@@ -3546,6 +3706,8 @@ export function createScene(canvas, images, level, opts = {}) {
     computeCamera();
   }
 
+  const LOT2_EVENTS = new Set(['surprise', 'forage', 'foragePicked', 'finds']);
+
   // Taille initiale : celle du canvas tel qu'il est.
   resize(canvas.clientWidth || canvas.width || 1024, canvas.clientHeight || canvas.height || 640, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
 
@@ -3559,6 +3721,7 @@ export function createScene(canvas, images, level, opts = {}) {
       reducedMotion = !!on;
       effects.setReducedMotion?.(reducedMotion);
       actors.setReducedMotion?.(reducedMotion);
+      lot2.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -3597,6 +3760,7 @@ export function createScene(canvas, images, level, opts = {}) {
           effects.sinkTree(r, name, season === 'winter' ? seasonSheets.winter : images, layout.plotScale || 1);
         }
       }
+      if (LOT2_EVENTS.has(type)) lot2.onEvent(type, payload || {}, layout);
       effects.onEvent(type, payload, layout);
     },
     setLevel,
@@ -3660,6 +3824,10 @@ export function createScene(canvas, images, level, opts = {}) {
     },
     get actors() {
       return actors;
+    },
+    /** (Lot 2) Surprises en cours (mesures, débogage). */
+    lot2Stats() {
+      return { ...lot2.stats(), effects: effects.stats() };
     },
     careerStats() {
       return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: staticW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };

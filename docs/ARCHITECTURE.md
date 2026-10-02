@@ -42,7 +42,9 @@ src/
     assets.js              chargement des images/sons (promesses)
     atlas.js               sprites nommés → {image, x, y, w, h}
     scene.js               dessin de la ferme (sol, champ, bâtiments, animaux, décor)
-    effects.js             particules (pluie, neige, feuilles, pièces), lumière du jour, teintes de saison
+    effects.js             particules (pluie, neige, feuilles, pièces), lumière du jour, teintes de saison ;
+                           (lot 2) récolte qui saute, étincelles de qualité, géant, météos spéciales
+    lot2-actors.js         (lot 2) fée, renard, coffre, hérisson, chouette, trouvailles du défrichage
     layout.js              positions des éléments de la scène (grille du champ, emplacements des bâtiments) + hit-testing
   ui/                      interface DOM (téléphone en portrait d'abord, voir « Interface » plus bas)
     hud.js                 barre du haut (2 lignes) : argent + saison, météo, fermage, bouton de vitesse
@@ -55,10 +57,13 @@ src/
     grange.js, decor.js, hints.js, buildings.js, progress.js, v3.js   contenu v3 (voir « Interface »)
     tutorial.js            tutoriel du niveau 1 (bulles ancrées en haut ou en bas en portrait)
     toasts.js, tooltip.js, icons.js, text.js, dom.js
+    juice.js               (lot 2) récolte « juteuse » : pièces qui volent au compteur, notes qui montent, total
+    lot2.js                (lot 2) messages, sons, récompenses, fenêtres « Faites un vœu » et « Trouvailles »
     career/                mode Carrière : menu « Ma ferme », création, Acheter, carte, terrains, équipe, Carnet,
                            offres, fenêtres (voir « Mode Carrière — interface livrée »)
   audio/
     audio.js               musique (fondus), ambiances, effets sonores, volumes
+    synth.js               (lot 2) sons synthétisés (marimba pentatonique, scintillements, fanfare…)
   storage.js               localStorage (partie, carrière + copie de secours, progression, options) avec try/catch
 assets/
   sprites/                 packs Kenney (Tiny Farm, Tiny Town, UI Pack Pixel Adventure)
@@ -1834,3 +1839,196 @@ src/ui/dialogs.js section « Accessibilité » des options (textSizePicker, a11y
   vitesse en haut à droite » suit l'option (en bas / à gauche).
 - **Feuilles** (`sheets.js`) : `is-visible` n'est posé que si la feuille est toujours ouverte à l'image suivante
   (cause du bug [42], en plus du garde-fou de `main.js`).
+
+---
+
+## Lot 2 — contrats (CORE · RENDER · UI, 2026-10-02)
+
+Qualité des récoltes (B2), légumes géants (B3), surprises de l'aube (B4), météos spéciales (B5), trouvailles au
+défrichage (B6). Règles chiffrées : `docs/GAME_DESIGN.md`, « Lot 2 — surprises ». Principe F1 : **la qualité dorée
+n'existe que pour une récolte faite à la main** (machines et salariés : « belle » au plus), le géant se récolte à la main.
+
+### Fichiers
+
+- `src/data/surprises.js` (pur) : chances de qualité, géants, surprises, météos spéciales, vœux, trouvailles, textes.
+- `src/core/surprises.js` (pur, partagé niveaux / carrière) : tirages, soins des parcelles, géants, cueillette,
+  effets des météos, vœux, trouvailles. Appelé par `game.js` (niveaux) et `career/runtime.js` (carrière).
+- `src/core/career/surprises.js` : extension de carrière (`id: 'surprises'`) : prix × 1,2 de l'heure dorée
+  (`priceFactor`), puits des trouvailles (`water`), sauvegarde (`init` / `migrate` / `check`).
+
+### Activation
+
+- `createGame({ …, surprises })` : défaut **`true` en Détente, `false` en Classique** (parité des niveaux 1 à 8 :
+  rien ne change en Classique, ni l'état projeté ni les événements). `createCareer({ …, surprises })` : défaut `true`.
+- `game.surprises` (booléen). Sauvegardes anciennes : Détente et carrière → activées à la reprise, Classique → non.
+- Flux aléatoires **nouveaux** (`state.rng.quality`, `state.rng.surprise`, `state.rng.sky`), créés seulement quand
+  c'est activé : météo, marché, maladie et événements de carrière tirent exactement les mêmes nombres qu'avant.
+
+### État (`state.surprises`, `null` quand c'est désactivé)
+
+```js
+{
+  v: 1,
+  sky: { today: null | specialId, tomorrow: null | specialId },   // météo spéciale (en plus de weather.today)
+  fox: null | { until },          // carrière : renard installé (jour absolu inclus) → pas de corbeaux
+  hedgehog: null | { until },     // niveaux à maladie : hérisson → aucune pourriture
+  luck: null | { until },         // vœu « chance » : chances de qualité × 2
+  wish: null | { day, options: [boonId, boonId, boonId] },   // vœu à faire (étoile filante)
+  wells: [lotId],                 // carrière : terrains avec un vieux puits (arrosés chaque aube)
+  found: { owl: bool, statue: bool },
+  lastDay: 0,                     // jour absolu de la dernière surprise de l'aube
+  stats: { fine: {cropId: n}, gold: {cropId: n}, giants: {cropId: n}, surprises: {kind: n},
+           weathers: {specialId: n}, finds: {kind: n}, forage: n, wishes: n },   // pour l'album (lot 4)
+}
+```
+
+Jour absolu : `state.time.day` (niveaux), `(année − 1) × 4 × durée + jour` (carrière). Carrière :
+`state.career.heirlooms = [{ cropId, lotId, year, day }]` (bocaux de graines anciennes, pour « La Vallée vivante »).
+
+Champs optionnels d'une parcelle (seulement quand c'est activé) :
+- `care: { sown, dry, rotated, wetEnd }` : jour de semis, jours « à arroser » passés sans eau, rotation (culture
+  différente de la dernière récolte sur cette parcelle), arrosée le jour où elle a mûri ;
+- `giant: anchorIndex` : sur les 4 parcelles d'un géant (ancre = parcelle en haut à gauche dans la grille du cœur) ;
+- `forage: { kind: 'mushroom' | 'ring', value, until }` : champignons à cueillir sur une parcelle VIDE.
+
+### Actions
+
+- `game.actions.harvest(i)` (inchangée) : résultat et événement `harvested` ont en plus, quand c'est activé,
+  `quality: 'normal' | 'fine' | 'gold'`, `qualityBonus` (pièces en plus, déjà comprises dans `amount`),
+  `qualityMultiplier` (1 · 1,5 · 2). Sur une parcelle d'un géant : récolte tout le géant (4 parcelles vidées),
+  `giant: { anchor, plots: [4], cropId }`, `amount` = 6 × la valeur d'une parcelle, puis `giantHarvested`.
+  Carrière : un géant ne se récolte qu'à la main (`by: 'player'`) ; salariés et machines le laissent.
+  Sur une parcelle vide avec `forage` : cueillette → `{ ok, amount, forage: kind }`, événement `foragePicked`.
+- `game.actions.makeWish(boonId)` → `{ ok, boon, amount? }` | `{ ok: false, reason }` ; événement `wishGranted`.
+- `game.actions.triggerSurprise(id)` (débogage `__debug`, tests) : lance une surprise de l'aube tout de suite si elle
+  est possible → `{ ok, surprise }` + événement `surprise`.
+- Carrière : `game.actions.career.buyLot(lotId?)` renvoie aussi `finds: [...]` (mêmes objets que l'événement `finds`).
+- Une parcelle avec `forage` ne se sème pas (« Cueillez d'abord les champignons. ») ; semoir et jardiniers la laissent.
+
+### Requêtes
+
+- `query.plot(i)` (ajouts quand c'est activé) : `quality: { fine, gold }` (chances de la prochaine récolte À LA MAIN,
+  0..1), `care: { wateredEveryDay, bees, rotation }`, `giant: null | { anchor, plots, isAnchor, cropId }`,
+  `forage: null | { kind, value, daysLeft }` ; `action` vaut `'harvest'` sur une parcelle vide qui a `forage` ;
+  `harvestValue` d'une parcelle de géant = valeur du géant entier.
+- `query.forecast()` : en plus `special: { today, tomorrow }` (ids ci-dessous ou `null`).
+- `query.surprises()` → `null` (désactivé) ou `{ enabled, sky, fox, hedgehog, luck, wish: null | { day, options:
+  [{ id, name, text, icon }] }, wells, heirlooms, giants: [{ anchor, plots, cropId, value }], forage: [{ plotIndex,
+  kind, value, daysLeft }], stats }`.
+
+### Événements (seulement quand c'est activé)
+
+| Type | Données | Pour |
+|---|---|---|
+| `harvested` | + `quality`, `qualityBonus`, `qualityMultiplier` ; géant : `giant` | étincelle (belle : argentée, dorée : or), son |
+| `giant` | `{ anchor, plots: [4], cropId, cropName, value }` | à l'aube : fusion en légume géant (sprite `crop.<id>.giant`, 2×2) |
+| `giantHarvested` | `{ anchor, plots, cropId, cropName, amount, by }` | grande fête (confettis, son) |
+| `surprise` | `{ kind, title, text, icon, … }` (voir plus bas) | message de l'aube + animation |
+| `specialWeather` | `{ id, name, text, icon }` | à l'aube du jour spécial |
+| `forage` | `{ kind: 'mushroom' | 'ring', plots: [index], text }` | champignons apparus (brouillard, cercle de fées) |
+| `foragePicked` | `{ plotIndex, kind, amount }` | cueillette |
+| `wish` | `{ day, options: [{ id, name, text, icon }], text }` | fenêtre « Faites un vœu » (3 boutons → `makeWish`) |
+| `wishGranted` | `{ id, name, text, amount?, plots? }` | message |
+| `finds` | `{ lotId, lotName, finds: [{ kind, title, text, icon, … }] }` | carrière : après `lotBought` |
+| `weather` | + `special: { today, tomorrow }` | icône de prévision |
+
+`surprise.kind` : `'fairy'` (`plots`, `center` : cultures mûries d'un coup, carré 3×3), `'fox'` (`until`, `days` ;
+carrière), `'chest'` (`amount` pièces OU `ecus`), `'hedgehog'` (`until`, `days` ; niveaux à maladie), `'owl'`
+(`cosmeticId: 'owl.carved'`, `ecusIfOwned`), `'ring'` (`plotIndex`, `value`).
+`finds[].kind` : `'chest'` (`amount` OU `ecus`), `'well'` (`lotId`), `'statue'` (`cosmeticId: 'statue.small'`,
+`ecusIfOwned`), `'coins'` (`amount`), `'seedjar'` (`cropId`, `cropName`), `'lamb'` (`animal: 'sheep' | 'hen'`
+ou `amount` si aucun abri n'a de place).
+Météos spéciales (`id`, icône `icon.weather.<id>`) : `'warmrain'` (sur une pluie : pousse × 1,5 ce jour),
+`'fog'` (sur un temps nuageux : champignons sur des parcelles vides), `'shootingstar'` (nuit claire : vœu le
+lendemain matin), `'goldenhour'` (soleil : ventes de récoltes × 1,2 ce jour), `'rainbow'` (après la pluie : pousse
++10 % ; en carrière c'est l'événement « arc-en-ciel » déjà existant, montré comme `special.today = 'rainbow'`).
+
+### À faire côté interface / rendu
+
+- **Écus** : `surprise.ecus`, `finds[].ecus` → `progression.recordCareerEcus(p, ecus)` (vaut pour les deux modes).
+- **Décors trouvés** : `cosmeticId` → `progression.unlockCosmetic(p, id)` → `{ ok, progress, already }` ; si `already`,
+  verser `ecusIfOwned` écus. Les objets `found: true` de `src/data/cosmetics.js` (`owl.carved`, `statue.small`)
+  ne s'achètent pas (`buyCosmetic` refuse : « Cet objet se trouve à la ferme. ») : boutique « Trouvé à la ferme ».
+- **Géant et grille portrait** : le carré est cherché dans la grille DU CŒUR (`gridCols` des niveaux ; `cell` et
+  largeur du terrain en carrière : 4 colonnes). En portrait (niveaux), les cases visuelles du bloc de départ gardent
+  l'ordre de lecture ; si les 4 parcelles ne sont pas voisines à l'écran, dessiner le géant sur la case de l'ancre.
+- **Sprites attendus** (lot ART) : `crop.<id>.giant` (2×2 parcelles), `quality.fine`, `quality.gold`, `fairy`, `fox`,
+  `chest.old`, `hedgehog`, `owl.carved`, `mushroom.ring`, `icon.weather.{warmrain,fog,shootingstar,goldenhour,rainbow}`,
+  `find.{chest,well,statue,coins,seedjar,lostlamb}` ; champignons de cueillette : `mushroom.ring` (cercle) et
+  `mushrooms` (petits champignons du brouillard). Décors trouvés posés dans la ferme : `owl.carved` et
+  `statue.small` (ids de cosmétiques, à relier aux sprites `owl.carved` / `find.statue` dans la table des décors).
+
+### Écarts et précisions (livraison CORE, 2026-10-02)
+
+- Argent des surprises dans les niveaux : statistique `surpriseIncome` (année et saison), créée seulement quand il y
+  en a (le bilan du mode Classique reste identique) ; comptée dans `summary.net`. Carrière : poste `other` du bilan.
+- Pas de météo spéciale ni de surprise pendant les 4 premiers jours (tutoriel, premiers gestes) ; une surprise au
+  plus tous les 3 jours.
+- Les trouvailles sont tirées dans `buyLot` (`src/core/career/land.js`) : elles valent aussi pour « le verger de
+  Joseph » (action `buyLot` de l'extension des quêtes).
+
+## Lot 2 — rendu, son et interface (RENDER/UI, 2026-10-02)
+
+Code contre le contrat ci-dessus (« Lot 2 — contrats »). Tout est gardé : un sprite du lot 2 absent (`canDraw`) ou
+des surprises désactivées (Classique) → le jeu se comporte comme avant. Mouvements réduits (lot 1) respectés partout.
+Styles : **`css/lot2.css`** (ajoutée à `CSS_FILES`). Tests : `tests/lot2-render.test.js`.
+
+```
+src/audio/synth.js     createSynth(ctx, destination) → { note(step, {when, volume}), play(name, opts), voices }
+                       comboMidi(step) : mi 4 + un degré pentatonique (do ré mi sol la) par parcelle, sol 6 au plus,
+                       puis alternance des deux notes du haut ; sons 'belle' | 'gold' | 'fanfare' | 'thud' | 'splash' |
+                       'pop' | 'chime' | 'magic' | 'wish' | 'reveal'. Compresseur doux en sortie (aucune saturation :
+                       12 notes à 70 ms + dorée → crête 0,33 ; 30 notes à 30 ms + fanfare → 0,40), 42 oscillateurs au plus.
+src/audio/audio.js     audio.note(step, opts), audio.tone(name, { volume, delay, throttle }) : sur le bus des effets
+                       (volume du joueur, muet), rien avant le déverrouillage ; audio.synthVoices (mesures)
+src/render/effects.js  canDraw(images, name), qualityOf(payload) ('normal' | 'fine' | 'gold', noms tolérants),
+                       giantRect(layout, plots, anchor) (union des 4 parcelles si voisines à l'écran, sinon l'ancre) ;
+                       effects.setCoinFlight(on), harvestPop, burst, ring, badge, qualityFx, giantFx, nudge,
+                       cameraNudge(out), rainbowAlpha() ; env.special (météo spéciale) ; stats() + rings, stars
+src/render/lot2-actors.js  createLot2Actors(effects) : sync(game, layout, { day, dayProgress }), onEvent('surprise' |
+                       'forage' | 'foragePicked' | 'finds'), update, draw, clear, shift, stats
+src/render/scene.js    géants (pv.giant), cueillette (pv.forage), acteurs du lot 2, fxState.special =
+                       state.surprises.sky.today, arc-en-ciel aussi dans les niveaux, secousse douce ; scene.lot2Stats()
+src/ui/juice.js        createJuice(app) → app.juice : onEvent, frame(dt), swipeStart(), swipeEnd(), reset(), stats()
+src/ui/lot2.js         createLot2(app) → app.lot2 : onEvent, frame(), reset(), openWish(game), openFinds(ev),
+                       specialIcon(id, cls) ; récompenses (écus, décors trouvés)
+src/ui/hud.js          holdMoney(hold, ms), releaseMoney(hold), catchCoin() ; icône et nom de la météo spéciale
+src/ui/todo.js         morningNote(text) : ligne en tête du prochain résumé du matin (2 au plus)
+```
+
+- **Récolte juteuse (B1)** : la culture mûre (fantôme du sprite) s'écrase (0–25 %), s'étire en sautant (25–60 %) puis
+  rétrécit et s'efface (0,36 s), feuilles et terre ; 1 à 3 pièces (nœuds DOM réutilisés, `#fx-layer`, z-index 21 :
+  au-dessus de la barre du haut, sous les feuilles) partent 0,12 s après et filent en courbe jusqu'à l'icône du compteur ;
+  le compteur **attend leur arrivée** (`holdMoney`, 1,4 s au plus) et fait un petit bond doré à chaque prise (« +N » sous
+  le compteur après 0,62 s). Au sol, la gerbe de pièces est réduite à 2 (`setCoinFlight(true)`, posé par `main.js`).
+  Note marimba qui monte à chaque parcelle d'une série (glissé ou touchers rapprochés) ; la série retombe après 1 s
+  sans récolte (0,38 s après le lever du doigt) ; total « +46 » (gros, apparition « ressort ») au-dessus de la dernière
+  parcelle si ≥ 2 parcelles. Vibration de `gestures.js` (8–12 ms) ; dorée : `[14, 50, 22]`. Semis : bouffée de terre en
+  anneau + bruit sourd ; arrosage : anneau d'eau + éclaboussure. Seulement pour le joueur (`by` absent ou `'player'`) :
+  l'équipe et les machines gardent l'ancien rendu discret. Cueillette (`foragePicked`) : même plaisir.
+- **Qualité (B2)** : belle → couronne d'étincelles argentées, onde claire, badge `quality.fine`, son « belle » ; dorée →
+  étincelles d'or, onde dorée, badge `quality.gold` (repli : étoile dessinée), arpège + clochette, texte « +N » doré ;
+  message pour la **première dorée de chaque culture** (`localStorage` `une-annee-a-la-ferme.lot2.firsts`, par mode).
+- **Géants (B3)** : `crop.<id>.giant` à l'échelle entière la plus grande qui tient dans le carré (portrait : ×2), ombre,
+  petit souffle toutes les ~3,5 s, scintillement, une seule pastille « mûre » ; fusion (`giant`) : étincelles + onde,
+  message, ligne du matin ; récolte : grand saut, confettis, couronne, secousse douce de la vue (1–2 px du monde,
+  0,32 s, jamais en mouvements réduits), fanfare, vibration, message.
+- **Surprises (B4)** : fée (boucles en huit au-dessus du carré mûri, traînée d'étincelles, onde finale), renard (entre
+  par le côté du champ, ≤ 4 s, s'assoit au pied de la clôture / près de la maison en carrière, dort le soir, tant que
+  `state.surprises.fox`), coffre (tombe près de la maison, éclat, s'ouvre : pièces ou écus), hérisson (se promène dans
+  le champ tant que `hedgehog`), chouette sculptée (près de la maison toute la journée), cercle de fées (étincelles ; le
+  cercle est la cueillette dessinée par la scène). Chacune : message avec son dessin, son (carillon, magie, arpège),
+  ligne du résumé du matin, récompenses (écus → `careerEcus`, décor → `unlockCosmetic` ou `ecusIfOwned`).
+- **Météos spéciales (B5)** : pluie chaude (gouttes dorées, lumière chaude), brouillard (deux nappes tramées qui dérivent,
+  texture 128 × 128 créée une fois), heure dorée (étalonnage chaud toute la journée), arc-en-ciel (sprite
+  `effect.rainbow`, niveaux et carrière), étoiles filantes le soir (crépuscule bleu-violet, traînées `star.shooting.*`
+  par-dessus l'étalonnage). Barre du haut : icône `icon.weather.<id>` (repli : icône de base + petit signe) et nom ;
+  infobulle avec l'effet. Vœu : fenêtre « Faites un vœu » (ciel animé, 3 vœux du cœur → `makeWish`), ouverte quand rien
+  d'autre n'est ouvert (pause pendant la lecture) ; fermée sans choisir → message « Votre vœu attend » qui la rouvre.
+- **Trouvailles (B6, carrière)** : pendant le défrichage, chaque trouvaille sort d'une souche (`land.stump.find`) et saute
+  (`find.*`) ; puis carte « Une trouvaille ! » (liste animée, bouton « Merveilleux ! ») ~2,6 s après l'achat.
+- **Débogage** (`?debug=1`) : `__debug.lot2.{ enable(), forceQuality(i, q), matureAll(cropId), harvest(i, q), giant(cropId),
+  surprise(kind), weather(id, { tomorrow, dayProgress }), wish(), finds(lotId, kinds), swipe(ms, q), stats() }` ;
+  `onGameEvent(ev, game)` (main.js) est la réaction commune à tout événement du cœur.
+- **Mesures** (Pixel 7 émulé) : glissé de 12–24 parcelles à 60 i/s (médiane 16,7 ms, 95e centile 16,8 ms), aucune
+  erreur de console ; carrière : glissé, surprises et 10 jours sans erreur.

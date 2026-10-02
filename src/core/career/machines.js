@@ -97,7 +97,7 @@ function eligible(api, kind, i) {
   const p = api.state.plots[i];
   if (!p || !p.unlocked || !p.env) return false;
   const crop = p.cropId ? getCrop(p.cropId) : null;
-  if (kind === 'harvest') return !!crop && !isTreeCrop(crop) && isMature(p);
+  if (kind === 'harvest') return !!crop && !isTreeCrop(crop) && isMature(p) && p.giant === undefined; // (lot 2) géant : à la main
   if (kind === 'pick') return !!crop && isTreeCrop(crop) && isMature(p);
   if (kind === 'sow') return !p.cropId && p.env !== 'orchard' && sowChoice(api, i) !== null;
   return false;

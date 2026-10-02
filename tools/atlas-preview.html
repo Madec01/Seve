@@ -34,6 +34,7 @@
   <label><input type="checkbox" id="flip"> retourner (flipX)</label>
   <label><input type="checkbox" id="onlyv3"> contenu v3 seulement</label>
   <label><input type="checkbox" id="onlycareer"> carrière seulement</label>
+  <label><input type="checkbox" id="onlylot2"> lot 2 seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
@@ -60,6 +61,11 @@ const isV3 = (name) => {
 const isCareer = (name) => {
   const s = SPRITES[name];
   return s.sheet === 'career' || !!(s.layers && s.layers.some((l) => l.sheet === 'career'));
+};
+
+const isLot2 = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'lot2' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot2'));
 };
 
 const out = document.getElementById('out');
@@ -94,6 +100,7 @@ function render() {
   const filter = document.getElementById('filter').value.trim();
   const onlyV3 = document.getElementById('onlyv3').checked;
   const onlyCareer = document.getElementById('onlycareer').checked;
+  const onlyLot2 = document.getElementById('onlylot2').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
@@ -101,6 +108,7 @@ function render() {
     if (filter && !name.includes(filter)) continue;
     if (onlyV3 && !isV3(name)) continue;
     if (onlyCareer && !isCareer(name)) continue;
+    if (onlyLot2 && !isLot2(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -170,13 +178,14 @@ setInterval(() => {
   frame = (frame + 1) % WINDMILL_FRAMES;
 }, 180);
 
-// Préréglage par l'adresse : ?career=1 (carrière seulement), ?filter=staff.f
+// Préréglage par l'adresse : ?career=1 (carrière seulement), ?lot2=1 (lot 2 seulement), ?filter=staff.f
 {
   const q = new URLSearchParams(location.search);
   if (q.get('career')) document.getElementById('onlycareer').checked = true;
+  if (q.get('lot2')) document.getElementById('onlylot2').checked = true;
   if (q.get('filter')) document.getElementById('filter').value = q.get('filter');
 }
-for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer']) document.getElementById(id).addEventListener('input', render);
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>

@@ -14,8 +14,16 @@
 // coordonnées du monde se décale.
 //
 // Pas d'allocation par image : toutes les particules viennent de réserves préallouées.
+//
+// (Lot 2 « Toucher & surprises ») Récolte « juteuse » : la plante s'écrase, s'étire puis saute (fantôme
+// « harvest »), étincelles en couronne et badge étoile pour les récoltes belles / dorées, bouffée de terre au
+// semis, éclaboussure en anneau à l'arrosage, légume géant (gros saut, confettis, légère secousse de la vue
+// sauf mouvements réduits : cameraNudge()), météos spéciales (env.special : pluie chaude dorée, brouillard,
+// heure dorée, arc-en-ciel, étoiles filantes du soir) — voir drawWeather / drawLight.
+// setCoinFlight(true) : l'interface fait voler les pièces de la récolte jusqu'au compteur (src/ui/juice.js) ;
+// la gerbe de pièces au sol est alors réduite.
 
-import { TILE, SPRITES, drawSprite, productSprite } from './atlas.js';
+import { TILE, SPRITES, drawSprite, productSprite, cropSprite } from './atlas.js';
 
 const OUTLINE = '#3f2631';
 const GOLD = '#ffe27a';
@@ -121,7 +129,71 @@ function buildSprites() {
     }
     c.putImageData(img, 0, 0);
   });
-  return { rain, rainHeavy, splash, coin, sparkle, ice, cloud };
+  // (Lot 2) Étincelles argentées (récolte belle), pluie chaude dorée, étoile de secours (badge).
+  const silver = [
+    makeCanvas(5, 5, (c) => pix(c, '#ffffff', [2, 2])),
+    makeCanvas(5, 5, (c) => { pix(c, '#d8ecff', [2, 1, 1, 2, 3, 2, 2, 3]); pix(c, '#ffffff', [2, 2]); }),
+    makeCanvas(5, 5, (c) => { pix(c, '#b4cce6', [2, 0, 0, 2, 4, 2, 2, 4]); pix(c, '#e8f4ff', [2, 1, 1, 2, 3, 2, 2, 3]); pix(c, '#ffffff', [2, 2]); }),
+  ];
+  const rainWarm = makeCanvas(3, 7, (c) => {
+    pix(c, 'rgba(255,244,200,0.95)', [2, 0, 2, 1, 1, 2, 1, 3]);
+    pix(c, 'rgba(255,206,120,0.85)', [1, 4, 0, 5, 0, 6]);
+  });
+  const STAR = ['....O....', '...OYO...', '...OYO...', 'OOOOYOOOO', 'OYYYWYYYO', '.OYYYYYO.', '..OYYYO..', '.OYYOYYO.', '.OYO.OYO.', '.OO...OO.'];
+  const star = (fill, light) => makeCanvas(9, 10, (c) => {
+    for (let y = 0; y < STAR.length; y++) {
+      for (let x = 0; x < STAR[y].length; x++) {
+        const ch = STAR[y][x];
+        if (ch === '.') continue;
+        c.fillStyle = ch === 'O' ? OUTLINE : ch === 'W' ? '#ffffff' : ch === 'Y' ? fill : light;
+        c.fillRect(x, y, 1, 1);
+      }
+    }
+  });
+  const starGold = star('#ffcf3a', '#fff3b0');
+  const starSilver = star('#cfe0f0', '#ffffff');
+  return { rain, rainHeavy, rainWarm, splash, coin, sparkle, silver, ice, cloud, starGold, starSilver };
+}
+
+/** Le sprite existe-t-il, et ses planches sont-elles chargées ? (dessins du lot 2 : peuvent manquer) */
+export function canDraw(images, name) {
+  const s = name && SPRITES[name];
+  if (!s || !images) return false;
+  if (s.layers) return s.layers.every((l) => !!images[l.sheet]);
+  return !!images[s.sheet];
+}
+
+/**
+ * Rectangle (px du monde) d'un légume géant : l'union des 4 parcelles si elles se touchent à l'écran
+ * (au plus 2 × 2 parcelles d'étendue), sinon la parcelle de l'ancre (portrait : cases non voisines).
+ */
+export function giantRect(layout, plots, anchor) {
+  const rs = (plots || []).map((i) => layout.plotRect?.(i)).filter(Boolean);
+  const a = layout.plotRect?.(anchor ?? (plots || [])[0]);
+  if (rs.length < 4) return a || rs[0] || null;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const r of rs) {
+    x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y);
+    x1 = Math.max(x1, r.x + r.w); y1 = Math.max(y1, r.y + r.h);
+  }
+  const pw = rs[0].w;
+  const ph = rs[0].h;
+  // Deux parcelles de large et de haut au plus (avec l'allée entre elles) : sinon, pas voisines.
+  if (x1 - x0 > pw * 2.7 || y1 - y0 > ph * 2.7) return a || rs[0];
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+/** Qualité d'une récolte (contrat du cœur, noms tolérants) : 'normal' | 'fine' (belle) | 'gold' (dorée). */
+export function qualityOf(payload) {
+  const q = payload && (payload.quality ?? payload.grade);
+  if (!q) return 'normal';
+  const v = String(q).toLowerCase();
+  if (v === 'gold' || v === 'golden' || v === 'doree' || v === 'dorée' || v === 'or') return 'gold';
+  if (v === 'fine' || v === 'belle' || v === 'silver' || v === 'nice' || v === 'argent') return 'fine';
+  return 'normal';
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +211,13 @@ const WEATHER_GRADE = {
   storm: [0.68, 0.7, 0.82],
   heatwave: [1.0, 0.95, 0.84],
   snow: [0.9, 0.92, 0.98],
+};
+// (Lot 2) Météos spéciales : remplacent l'étalonnage de la météo de base.
+const SPECIAL_GRADE = {
+  warmrain: [0.96, 0.9, 0.78], // pluie chaude : lumière dorée sous la pluie
+  goldenhour: [1.0, 0.93, 0.8],
+  fog: [0.93, 0.94, 0.97],
+  rainbow: [1, 1, 0.98],
 };
 const DAWN = [1.0, 0.8, 0.86]; // rose
 const DUSK = [1.0, 0.78, 0.6]; // orangé
@@ -178,13 +257,17 @@ export function createEffects(images) {
   const parts = makePool(400, {
     kind: '', x: 0, y: 0, vx: 0, vy: 0, g: 0, t: 0, life: 1, delay: 0, color: '', floor: 0, frame: 0,
   });
-  const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false, sprite: '' });
-  const ghosts = makePool(48, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '', scale: 1, set: null, h: 16 });
+  const texts = makePool(48, { x: 0, y: 0, text: '', color: '', t: 0, life: 1.8, delay: 0, icon: false, sprite: '', size: 1, pop: false });
+  const ghosts = makePool(64, { x: 0, y: 0, sprite: '', t: 0, life: 3, delay: 0, kind: '', scale: 1, set: null, h: 16, w: 16, q: '' });
+  // (Lot 2) Anneaux qui s'élargissent (éclaboussure, bouffée de terre, onde dorée) : ellipses en pixels.
+  const rings = makePool(40, { x: 0, y: 0, t: 0, life: 0.5, delay: 0, r0: 2, r1: 10, color: '', flat: 0.5, k: 1 });
+  // (Lot 2) Étoiles filantes (météo « étoile filante », en coordonnées de la vue).
+  const stars = makePool(4, { x: 0, y: 0, vx: 0, vy: 0, t: 0, life: 1 });
   // (v3) Icônes qui volent (récolte → atelier) ou qui sautent (produit prêt) : sprites 16 × 16.
   const flyers = makePool(32, { sprite: '', x0: 0, y0: 0, x1: 0, y1: 0, t: 0, life: 0.8, delay: 0, arc: 0, kind: '' });
   const clouds = makePool(10, { x: 0, y: 0, vx: 0 });
 
-  const env = { season: 'spring', weather: 'sunny', dayProgress: 0.4, view: { x: 0, y: 0, w: 512, h: 320 } };
+  const env = { season: 'spring', weather: 'sunny', special: null, dayProgress: 0.4, view: { x: 0, y: 0, w: 512, h: 320 } };
   let time = 0;
   let flash = 0; // éclair (0..1)
   let nextFlash = 3;
@@ -193,6 +276,13 @@ export function createEffects(images) {
   // moitié moins de particules, textes flottants qui s'effacent presque sur place.
   let reduced = false;
   let skipToggle = false;
+  let coinFlight = false; // (lot 2) les pièces de la récolte volent vers le compteur (interface)
+  let nudgeT = 0; // (lot 2) secousse douce de la vue (légume géant), secondes restantes
+  let nudgeAmp = 0;
+  let starTimer = 1.5; // prochaine étoile filante
+  let fogPhase = 0;
+  let fogTex = null; // texture du brouillard (créée au premier besoin)
+  let rainbowA = 0; // arc-en-ciel (fondu)
   const intensity = { rain: 0, snow: 0, leaves: 0, petals: 0, clouds: 0 };
   let primed = false;
   const grade = [1, 1, 1];
@@ -210,6 +300,8 @@ export function createEffects(images) {
     p.delay = opts.delay || 0;
     p.icon = opts.icon === undefined ? /^\+/.test(p.text) : !!opts.icon;
     p.sprite = opts.sprite || '';
+    p.size = opts.size || 1; // (lot 2) taille relative (total d'une série : 1,35)
+    p.pop = !!opts.pop; // (lot 2) apparition « ressort » (sauf mouvements réduits)
     return p;
   }
 
@@ -322,6 +414,104 @@ export function createEffects(images) {
     for (let i = 0; i < 2; i++) particle('fly', wx, wy, 0, 0, 0, 2.6, OUTLINE, i * 0.4);
   }
 
+  // ── (Lot 2) Jus de la récolte, du semis et de l'arrosage ─────────────────────────────
+  /** Anneau qui s'élargit (px du monde, centre) ; flat = rapport hauteur / largeur de l'ellipse. */
+  function ring(cx, cy, r0, r1, color, life = 0.45, delay = 0, flat = 0.45, k = 1) {
+    const g = rings.spawn();
+    g.x = cx; g.y = cy; g.r0 = r0; g.r1 = r1; g.color = color; g.life = life; g.delay = delay; g.flat = flat; g.k = k; g.t = 0;
+    return g;
+  }
+
+  /** Couronne d'étincelles qui part du centre (récolte belle / dorée, géant). */
+  function burst(cx, cy, n, palette = 'gold', speed = 34, delay = 0, k = 1) {
+    const kind = palette === 'silver' ? 'silver' : palette === 'ice' ? 'ice' : 'spark';
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rand(-0.2, 0.2);
+      const v = rand(0.6, 1) * speed * Math.sqrt(k);
+      particle(kind, cx + Math.cos(a) * 2 * k, cy + Math.sin(a) * 2 * k, Math.cos(a) * v, Math.sin(a) * v * 0.8 - 6, 28, rand(0.55, 0.9), '', delay + rand(0, 0.06));
+    }
+  }
+
+  /**
+   * La culture récoltée s'écrase, s'étire et saute (fantôme du sprite mûr, ancré en bas au centre).
+   * Mouvements réduits : elle s'efface simplement sur place.
+   */
+  function harvestPop(rect, sprite, k = 1, q = 'normal', set = null) {
+    if (!sprite || !SPRITES[sprite]) return;
+    const g = ghosts.spawn();
+    g.x = rect.x;
+    g.y = rect.y;
+    g.w = rect.w;
+    g.h = rect.h;
+    g.scale = k;
+    g.sprite = sprite;
+    g.set = set;
+    g.t = 0;
+    g.life = reduced ? 0.22 : 0.36;
+    g.delay = 0;
+    g.kind = 'harvest';
+    g.q = q;
+  }
+
+  /** Badge étoile (argent / or) qui saute au-dessus de la parcelle puis s'efface. */
+  function badge(cx, cy, q, k = 1, delay = 0.12) {
+    const g = ghosts.spawn();
+    g.x = cx;
+    g.y = cy;
+    g.scale = k;
+    g.sprite = q === 'gold' ? 'quality.gold' : 'quality.fine';
+    g.set = null;
+    g.t = 0;
+    g.life = 1.5;
+    g.delay = delay;
+    g.kind = 'badge';
+    g.q = q;
+  }
+
+  /** Secousse douce de la vue (jamais en mouvements réduits). */
+  function nudge(amp = 1, dur = 0.3) {
+    if (reduced) return;
+    nudgeT = Math.max(nudgeT, dur);
+    nudgeAmp = Math.max(nudgeAmp, amp);
+  }
+
+  /** Récolte belle / dorée : couronne d'étincelles, onde, badge. */
+  function qualityFx(c, q, k) {
+    if (q === 'gold') {
+      burst(c.x, c.y - 4 * k, 16, 'gold', 40, 0.04, k);
+      sparkle({ x: c.x - 8 * k, y: c.y - 12 * k, w: 16 * k, h: 14 * k }, 8, 'gold', 0.15);
+      ring(c.x, c.y + 2 * k, 3 * k, 13 * k, '#ffe27a', 0.5, 0.02, 0.5, k);
+      badge(c.x + 9 * k, c.y - 4 * k, 'gold', k);
+    } else if (q === 'fine') {
+      burst(c.x, c.y - 4 * k, 10, 'silver', 30, 0.04, k);
+      ring(c.x, c.y + 2 * k, 3 * k, 10 * k, '#e8f4ff', 0.42, 0.02, 0.5, k);
+      badge(c.x + 9 * k, c.y - 4 * k, 'fine', k);
+    }
+  }
+
+  /**
+   * Légume géant récolté (ou apparu) : le gros sprite saute, confettis, étincelles, anneau, secousse.
+   * @param rect  rectangle (px du monde) du carré 2 × 2 de parcelles
+   */
+  function giantFx(rect, sprite, k = 1, harvested = true) {
+    const cx = rect.x + rect.w / 2;
+    const cy = rect.y + rect.h / 2;
+    if (harvested && sprite && SPRITES[sprite]) {
+      const g = ghosts.spawn();
+      g.x = rect.x; g.y = rect.y; g.w = rect.w; g.h = rect.h;
+      g.scale = rect.w / 32; // le sprite géant fait 32 × 32
+      g.sprite = sprite; g.set = null; g.t = 0; g.life = reduced ? 0.3 : 0.6; g.delay = 0; g.kind = 'giant'; g.q = '';
+    }
+    burst(cx, cy - 6 * k, 26, 'gold', 60, 0.05, k);
+    ring(cx, cy + 4 * k, 6 * k, 30 * k, '#ffe27a', 0.7, 0.05, 0.5, k);
+    sparkle({ x: rect.x, y: rect.y, w: rect.w, h: rect.h }, 16, 'gold', 0.1);
+    if (harvested) {
+      confetti({ x: cx - rect.w * 0.6, y: rect.y - 6, w: rect.w * 1.2, h: rect.h * 0.6 }, 46, 0.12);
+      leafBurst(cx, cy, 10 * k, k);
+      nudge(k > 1 ? 2 : 1, 0.32);
+    }
+  }
+
   const contestDone = new Set();
 
   function flyToBuilding(info, from, layout, delay) {
@@ -346,7 +536,30 @@ export function createEffects(images) {
       case 'harvested': {
         const c = layout.plotCenter(payload.plotIndex);
         if (!c) return;
-        leafBurst(c.x, c.y, 5 * k, k);
+        const r = layout.plotRect(payload.plotIndex);
+        const q = qualityOf(payload);
+        const tree = !!payload.tree || payload.cropId === 'apple' || /^tree\./.test(payload.kind || '');
+        if (payload.giant) {
+          // (Lot 2) Légume géant : grand saut du gros sprite, confettis, étincelles, secousse douce.
+          const g = payload.giant;
+          const gr = giantRect(layout, g.plots, g.anchor);
+          if (gr) {
+            const name = `crop.${g.cropId || payload.cropId}.giant`;
+            giantFx(gr, canDraw(images, name) ? name : null, k, true);
+            const gc = { x: gr.x + gr.w / 2, y: gr.y + gr.h / 2 };
+            coins(gc.x, gc.y - 6 * k, coinFlight ? 4 : 14);
+            if (payload.amount) floatText(gc.x, gc.y - 16 * k, `+${payload.amount}`, '#ffd23a', { size: 1.5, pop: true, life: 2.6 });
+            break;
+          }
+        } else if (!tree && r && payload.cropId) {
+          const name = cropSprite(payload.cropId, 4);
+          harvestPop(r, SPRITES[name] ? name : null, k, q);
+          leafBurst(c.x, c.y - 2 * k, (reduced ? 3 : 5) * k, k);
+          dirt(c.x, c.y + 4 * k, 4 * k, k);
+        } else {
+          leafBurst(c.x, c.y, 5 * k, k);
+        }
+        if (q !== 'normal') qualityFx(c, q, k);
         if (payload.processed) {
           // Part à l'atelier : pas de pièces, l'icône du produit s'envole (processingStarted).
           floatText(c.x, c.y - 10 * k, '→ atelier', '#fff3b0', { icon: false, life: 1.5 });
@@ -366,8 +579,16 @@ export function createEffects(images) {
           floatText(c.x, c.y - 10 * k, `→ ${payload.diverted.label || payload.divertLabel || 'commande'}`, '#fff3b0', { icon: false, life: 1.6 });
           break;
         }
-        coins(c.x, c.y - 4 * k, 7 + (k - 1) * 3);
-        if (payload.amount) floatText(c.x, c.y - 10 * k, `+${payload.amount}`, GOLD);
+        // Les pièces volent vers le compteur (interface) : au sol, juste un petit éclat (2 pièces).
+        const auto = payload.by && payload.by !== 'player';
+        coins(c.x, c.y - 4 * k, coinFlight && !auto ? 2 : 7 + (k - 1) * 3);
+        if (payload.amount) floatText(c.x, c.y - 10 * k, `+${payload.amount}`, q === 'gold' ? '#ffd23a' : q === 'fine' ? '#eaf6ff' : GOLD, { size: q === 'gold' ? 1.15 : 1 });
+        break;
+      }
+      case 'giant': {
+        // (Lot 2) Fusion en légume géant (aube) : étincelles et onde dorée sur le carré.
+        const gr = giantRect(layout, payload.plots, payload.anchor);
+        if (gr) giantFx(gr, null, k, false);
         break;
       }
       case 'processingStarted': {
@@ -416,12 +637,21 @@ export function createEffects(images) {
       }
       case 'watered': {
         const c = layout.plotCenter(payload.plotIndex);
-        if (c) droplets(c.x, c.y + 2 * k, 10 * k, k);
+        if (!c) break;
+        droplets(c.x, c.y + 2 * k, 10 * k, k);
+        // (Lot 2) Éclaboussure : anneau d'eau qui s'étale sur la terre quand les gouttes touchent le sol.
+        if (!payload.by || payload.by === 'player') {
+          ring(c.x, c.y + 4 * k, 2 * k, 9 * k, '#bfe6ff', 0.4, 0.14, 0.42, k);
+          ring(c.x, c.y + 4 * k, 1 * k, 5 * k, '#eef9ff', 0.3, 0.22, 0.42, k);
+        }
         break;
       }
       case 'planted': {
         const c = layout.plotCenter(payload.plotIndex);
-        if (c) dirt(c.x, c.y + 3 * k, 9 * k, k);
+        if (!c) break;
+        dirt(c.x, c.y + 3 * k, 9 * k, k);
+        // (Lot 2) Bouffée de terre : petit anneau poudreux au ras du sol.
+        if (!payload.by || payload.by === 'player') ring(c.x, c.y + 5 * k, 2 * k, 8 * k, '#e9b07c', 0.35, 0, 0.4, k);
         break;
       }
       case 'plotUnlocked': {
@@ -794,6 +1024,118 @@ export function createEffects(images) {
     primed = true;
   }
 
+  // ── (Lot 2) Météos spéciales ─────────────────────────────────────────────────────
+  /** Étoiles filantes le soir (météo « étoile filante ») ; brouillard qui dérive. */
+  function updateSpecial(dt) {
+    const { view } = env;
+    fogPhase += dt;
+    if (env.special === 'shootingstar' && env.dayProgress > 0.6) {
+      starTimer -= dt;
+      if (starTimer <= 0) {
+        starTimer = reduced ? rand(5, 8) : rand(1.4, 3.6);
+        const p = stars.spawn();
+        p.x = rand(-20, view.w * 0.6);
+        p.y = rand(-6, view.h * 0.35);
+        const sp = reduced ? 0.45 : 1;
+        p.vx = rand(150, 210) * sp;
+        p.vy = rand(55, 85) * sp;
+        p.t = 0;
+        p.life = reduced ? 1.6 : rand(0.8, 1.1);
+      }
+    }
+    for (const p of stars.items) {
+      if (!p.alive) continue;
+      p.t += dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.t >= p.life) p.alive = false;
+    }
+    const wantRainbow = env.special === 'rainbow' ? 1 : 0;
+    rainbowA = approach(rainbowA, wantRainbow, dt, 0.5);
+  }
+
+  /** Texture du brouillard : nappes douces tramées (pixel art), raccordable, créée une fois. */
+  function fogTexture() {
+    if (fogTex) return fogTex;
+    const N = 128;
+    fogTex = makeCanvas(N, N, (c) => {
+      const img = c.createImageData(N, N);
+      const blobs = [];
+      for (let i = 0; i < 9; i++) blobs.push([Math.random() * N, Math.random() * N, 18 + Math.random() * 26]);
+      // Trame de Bayer 4 × 4 : densité en paliers nets (pas de flou).
+      const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          let d = 0;
+          for (const [bx, by, r] of blobs) {
+            for (const ox of [-N, 0, N]) {
+              for (const oy of [-N, 0, N]) {
+                const dx = x - bx - ox;
+                const dy = (y - by - oy) * 1.6;
+                const q = 1 - (dx * dx + dy * dy) / (r * r);
+                if (q > 0) d += q;
+              }
+            }
+          }
+          const v = Math.min(1, d * 0.9);
+          const th = (bayer[(y % 4) * 4 + (x % 4)] + 0.5) / 16;
+          if (v > th) {
+            const i = (y * N + x) * 4;
+            img.data[i] = 236; img.data[i + 1] = 240; img.data[i + 2] = 246; img.data[i + 3] = 255;
+          }
+        }
+      }
+      c.putImageData(img, 0, 0);
+    });
+    return fogTex;
+  }
+
+  /** Nappe de brouillard : deux couches qui dérivent lentement (coût : quelques drawImage). */
+  function drawFog(ctx, w, h) {
+    const tex = fogTexture();
+    const N = tex.width;
+    const layers = [[0.16, 4, 1.5, 0], [0.11, -2.5, 0.8, 37]];
+    for (const [alpha, vx, vy, off] of layers) {
+      ctx.globalAlpha = alpha;
+      const sx = ((fogPhase * (reduced ? vx * 0.3 : vx) + off) % N + N) % N;
+      const sy = ((fogPhase * (reduced ? vy * 0.3 : vy) + off) % N + N) % N;
+      for (let y = -sy; y < h; y += N) {
+        for (let x = -sx; x < w; x += N) ctx.drawImage(tex, Math.round(x), Math.round(y));
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawStars(ctx) {
+    for (const p of stars.items) {
+      if (!p.alive) continue;
+      const u = p.t / p.life;
+      const a = u < 0.15 ? u / 0.15 : u > 0.6 ? Math.max(0, (1 - u) / 0.4) : 1;
+      ctx.globalAlpha = a;
+      const fr = Math.floor(p.t * 10) % 2;
+      const name = `star.shooting.${fr}`;
+      if (canDraw(images, name)) {
+        drawSprite(ctx, images, name, Math.round(p.x) - 28, Math.round(p.y) - 8);
+      } else {
+        // Traînée : 12 pixels qui pâlissent, tête blanche.
+        const len = 22;
+        const dx = p.vx / Math.hypot(p.vx, p.vy);
+        const dy = p.vy / Math.hypot(p.vx, p.vy);
+        for (let i = 0; i < len; i++) {
+          ctx.globalAlpha = a * (1 - i / len) * 0.9;
+          ctx.fillStyle = i < 2 ? '#ffffff' : '#fff3b0';
+          ctx.fillRect(Math.round(p.x - dx * i), Math.round(p.y - dy * i), 1, 1);
+        }
+        ctx.globalAlpha = a;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y), 3, 1);
+        ctx.fillRect(Math.round(p.x), Math.round(p.y) - 1, 1, 3);
+        ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function updateParts(dt) {
     for (const p of parts.items) {
       if (!p.alive) continue;
@@ -830,6 +1172,16 @@ export function createEffects(images) {
       f.t += dt;
       if (f.t >= f.life) f.alive = false;
     }
+    for (const g of rings.items) {
+      if (!g.alive) continue;
+      if (g.delay > 0) { g.delay -= dt; continue; }
+      g.t += dt;
+      if (g.t >= g.life) g.alive = false;
+    }
+    if (nudgeT > 0) {
+      nudgeT = Math.max(0, nudgeT - dt);
+      if (nudgeT === 0) nudgeAmp = 0;
+    }
   }
 
   /**
@@ -840,18 +1192,110 @@ export function createEffects(images) {
       env.season = state.season || env.season;
       env.weather = state.weather || env.weather;
       env.dayProgress = state.dayProgress ?? env.dayProgress;
+      env.special = state.special || null;
       if (state.view) env.view = state.view;
     }
     time += dt;
     updateWeather(dt);
+    updateSpecial(dt);
     updateParts(dt);
   }
 
   // ── Dessin ──────────────────────────────────────────────────────────────────────
+  /**
+   * (Lot 2) Culture récoltée : écrasement (0–25 %), étirement en sautant (25–60 %), puis elle rétrécit et
+   * s'efface (le « pop »). Ancrée en bas au centre de la parcelle. Géant : même chose, en plus ample.
+   */
+  function drawPop(ctx, g, sheets) {
+    const u = Math.min(1, g.t / g.life);
+    const set = g.set || images;
+    if (!canDraw(set, g.sprite)) return;
+    const k = g.scale || 1;
+    const w = g.w;
+    const h = g.h;
+    let sx = 1;
+    let sy = 1;
+    let lift = 0;
+    let alpha = 1;
+    if (reduced) {
+      alpha = 1 - u;
+    } else if (u < 0.25) {
+      const v = u / 0.25;
+      sx = 1 + 0.28 * Math.sin(v * Math.PI * 0.5);
+      sy = 1 - 0.26 * Math.sin(v * Math.PI * 0.5);
+    } else if (u < 0.6) {
+      const v = (u - 0.25) / 0.35;
+      const e = Math.sin(v * Math.PI * 0.5);
+      sx = 1.28 - 0.5 * e;
+      sy = 0.74 + 0.6 * e;
+      lift = e * (g.kind === 'giant' ? 10 : 5) * (k > 1 ? Math.min(2, k) : 1);
+    } else {
+      const v = (u - 0.6) / 0.4;
+      sx = 0.78 * (1 - v * 0.85);
+      sy = 1.34 * (1 - v * 0.85);
+      lift = (g.kind === 'giant' ? 10 : 5) * (k > 1 ? Math.min(2, k) : 1) + v * 3;
+      alpha = 1 - v * v;
+    }
+    const bx = g.x + w / 2;
+    const by = g.y + h - (g.kind === 'giant' ? 0 : 2 * Math.min(k, 2)) - lift;
+    ctx.globalAlpha = alpha;
+    ctx.save();
+    ctx.translate(Math.round(bx), Math.round(by));
+    ctx.scale(sx, sy);
+    const sw = (SPRITES[g.sprite].w || 1) * TILE * k;
+    const sh = (SPRITES[g.sprite].h || 1) * TILE * k;
+    drawSprite(ctx, set, g.sprite, -sw / 2, -sh, k === 1 ? undefined : { scale: k });
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    void sheets;
+  }
+
+  /** (Lot 2) Badge étoile au-dessus de la parcelle : saute, se balance un peu, s'efface. */
+  function drawBadge(ctx, g) {
+    const u = g.t / g.life;
+    const k = Math.min(2, g.scale || 1);
+    const pop = reduced ? 1 : u < 0.2 ? 0.3 + 0.9 * (u / 0.2) : u < 0.3 ? 1.2 - 0.2 * ((u - 0.2) / 0.1) : 1;
+    const rise = reduced ? 0 : Math.min(1, u * 3) * 6 * k;
+    ctx.globalAlpha = u > 0.75 ? (1 - u) / 0.25 : 1;
+    const useSprite = canDraw(images, g.sprite);
+    const img = g.q === 'gold' ? S.starGold : S.starSilver;
+    const w = useSprite ? (SPRITES[g.sprite].w || 1) * TILE : img.width;
+    const h = useSprite ? (SPRITES[g.sprite].h || 1) * TILE : img.height;
+    const sc = k * pop;
+    ctx.save();
+    ctx.translate(Math.round(g.x), Math.round(g.y - rise));
+    ctx.scale(sc, sc);
+    if (useSprite) drawSprite(ctx, images, g.sprite, -w / 2, -h / 2);
+    else ctx.drawImage(img, -Math.floor(w / 2), -Math.floor(h / 2));
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
   /** Sous les objets (contexte translaté en coordonnées du monde) : cultures mortes, ombres. */
   function drawGround(ctx, sheets) {
+    // (Lot 2) Anneaux au ras du sol (éclaboussure, bouffée de terre, onde dorée).
+    for (const g of rings.items) {
+      if (!g.alive || g.delay > 0) continue;
+      const u = g.t / g.life;
+      const e = 1 - (1 - u) * (1 - u);
+      const r = g.r0 + (g.r1 - g.r0) * e;
+      ctx.globalAlpha = (1 - u) * 0.85;
+      ctx.fillStyle = g.color;
+      const n = Math.max(10, Math.round(r * 1.4));
+      const px = g.k > 1 && r > 6 ? g.k : 1;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        ctx.fillRect(Math.round(g.x + Math.cos(a) * r), Math.round(g.y + Math.sin(a) * r * g.flat), px, px);
+      }
+    }
+    ctx.globalAlpha = 1;
     for (const g of ghosts.items) {
       if (!g.alive || g.delay > 0) continue;
+      if (g.kind === 'badge') continue; // dessiné au-dessus de tout (drawWorld)
+      if (g.kind === 'harvest' || g.kind === 'giant') {
+        drawPop(ctx, g, sheets);
+        continue;
+      }
       const fade = g.t < g.life - 1 ? 1 : Math.max(0, g.life - g.t);
       ctx.globalAlpha = fade;
       const k = g.scale || 1;
@@ -914,8 +1358,9 @@ export function createEffects(images) {
           ctx.fillRect(x + 1, y + 1, 1, 1);
           break;
         case 'spark':
+        case 'silver':
         case 'ice': {
-          const frames = p.kind === 'ice' ? S.ice : S.sparkle;
+          const frames = p.kind === 'ice' ? S.ice : p.kind === 'silver' ? S.silver : S.sparkle;
           const f = k < 0.25 ? 0 : k < 0.5 ? 1 : k < 0.75 ? 2 : 1;
           ctx.globalAlpha = k > 0.85 ? (1 - k) / 0.15 : 1;
           ctx.drawImage(frames[f], x - 2, y - 2);
@@ -958,6 +1403,9 @@ export function createEffects(images) {
       drawSprite(ctx, images, f.sprite, Math.round(x), Math.round(y));
     }
     ctx.globalAlpha = 1;
+    for (const g of ghosts.items) {
+      if (g.alive && g.delay <= 0 && g.kind === 'badge') drawBadge(ctx, g);
+    }
   }
 
   /** Météo (contexte non translaté, coordonnées de la vue). */
@@ -1016,9 +1464,10 @@ export function createEffects(images) {
       if (!s.alive) continue;
       ctx.drawImage(S.splash[s.t < 0.1 ? 0 : 1], s.x, s.y);
     }
+    const rainImg = env.special === 'warmrain' ? S.rainWarm : S.rain; // (lot 2) pluie chaude : gouttes dorées
     for (const p of rain.items) {
       if (!p.alive) continue;
-      ctx.drawImage(p.heavy ? S.rainHeavy : S.rain, Math.round(p.x), Math.round(p.y));
+      ctx.drawImage(p.heavy ? S.rainHeavy : rainImg, Math.round(p.x), Math.round(p.y));
     }
     // Neige
     ctx.fillStyle = '#ffffff';
@@ -1026,7 +1475,8 @@ export function createEffects(images) {
       if (!p.alive) continue;
       ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
     }
-    void view;
+    // (Lot 2) Brouillard, étoiles filantes.
+    if (env.special === 'fog') drawFog(ctx, view.w, view.h);
   }
 
   /** Lumière du jour + étalonnage saison/météo + éclair (sur toute la vue). */
@@ -1034,7 +1484,17 @@ export function createEffects(images) {
     const sg = SEASON_GRADE[env.season] || SEASON_GRADE.spring;
     const wg = WEATHER_GRADE[env.weather] || WEATHER_GRADE.sunny;
     dayGrade(env.dayProgress, dayTmp);
-    for (let k = 0; k < 3; k++) grade[k] = sg[k] * wg[k] * dayTmp[k];
+    const spg = SPECIAL_GRADE[env.special];
+    for (let k = 0; k < 3; k++) grade[k] = sg[k] * (spg ? spg[k] : wg[k]) * dayTmp[k];
+    // (Lot 2) Nuit des étoiles filantes : le soir bleuit doucement (les étoiles se voient).
+    if (env.special === 'shootingstar' && env.dayProgress > 0.6) {
+      // Crépuscule bleu-violet (sans l'orangé du soir, qui verdirait l'herbe).
+      const n = Math.min(1, (env.dayProgress - 0.6) / 0.22);
+      for (let k = 0; k < 3; k++) grade[k] = grade[k] / dayTmp[k] * (1 - (1 - dayTmp[k]) * (1 - n));
+      grade[0] *= 1 - 0.36 * n;
+      grade[1] *= 1 - 0.34 * n;
+      grade[2] *= 1 - 0.06 * n;
+    }
     if (grade[0] < 0.995 || grade[1] < 0.995 || grade[2] < 0.995) {
       ctx.globalCompositeOperation = 'multiply';
       ctx.fillStyle = `rgb(${Math.round(grade[0] * 255)},${Math.round(grade[1] * 255)},${Math.round(grade[2] * 255)})`;
@@ -1046,11 +1506,14 @@ export function createEffects(images) {
     if (p < 0.18) glow = (1 - p / 0.18) * 0.18;
     if (p > 0.72) glow = ((p - 0.72) / 0.28) * 0.22;
     if (env.weather === 'heatwave') glow += 0.12;
+    if (env.special === 'goldenhour') glow = Math.max(glow, 0.2) + 0.06; // (lot 2) lumière dorée toute la journée
+    if (env.special === 'warmrain') glow += 0.12;
     if (glow > 0.005) {
       ctx.globalCompositeOperation = 'soft-light';
       ctx.globalAlpha = glow;
       ctx.fillStyle = p < 0.5 ? '#ff9ec0' : '#ffb060';
       if (env.weather === 'heatwave' && p >= 0.18 && p <= 0.72) ctx.fillStyle = '#ffd070';
+      if ((env.special === 'goldenhour' || env.special === 'warmrain') && p >= 0.18) ctx.fillStyle = '#ffc060';
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
     }
@@ -1075,6 +1538,8 @@ export function createEffects(images) {
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
     }
+    // (Lot 2) Étoiles filantes : par-dessus l'étalonnage, pour qu'elles brillent dans le soir bleu.
+    if (env.special === 'shootingstar') drawStars(ctx);
   }
 
   /**
@@ -1114,10 +1579,20 @@ export function createEffects(images) {
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.lineJoin = 'round';
-    const iconScale = Math.max(1, Math.round(size / 8) - 1);
+    const iconScale0 = Math.max(1, Math.round(size / 8) - 1);
+    let curSize = size;
     for (const p of texts.items) {
       if (!p.alive || p.delay > 0) continue;
       const k = p.t / p.life;
+      // (Lot 2) Taille relative et apparition « ressort » (total d'une série de récolte).
+      let mul = p.size || 1;
+      if (p.pop && !reduced) mul *= k < 0.08 ? 0.5 + (k / 0.08) * 0.75 : k < 0.16 ? 1.25 - ((k - 0.08) / 0.08) * 0.25 : 1;
+      const sz = Math.round(size * mul);
+      if (sz !== curSize) {
+        curSize = sz;
+        ctx.font = `700 ${sz}px "Ferme", "Trebuchet MS", monospace`;
+      }
+      const iconScale = mul === 1 ? iconScale0 : Math.max(1, Math.round(sz / 8) - 1);
       const rise = (1 - (1 - Math.min(1, k * 1.6)) ** 3) * (reduced ? 3 : 14); // monte vite puis ralentit
       toScreen(p.x, p.y - rise, tmpPt);
       const alpha = k < 0.1 ? k / 0.1 : k > 0.7 ? (1 - k) / 0.3 : 1;
@@ -1125,14 +1600,14 @@ export function createEffects(images) {
       const iw = p.icon ? 10 * iconScale : 0;
       const total = tw + iw;
       // Centré sur son point d'ancrage, mais jamais coupé par un bord de l'écran.
-      const x = Math.round(Math.max(size * 0.3, Math.min(ctx.canvas.width - total - size * 0.3, tmpPt.x - total / 2)));
+      const x = Math.round(Math.max(curSize * 0.3, Math.min(ctx.canvas.width - total - curSize * 0.3, tmpPt.x - total / 2)));
       const y = Math.round(tmpPt.y);
       ctx.globalAlpha = alpha;
       if (p.icon && sheets) {
         // La pièce du pack occupe environ le centre 8 × 10 de sa tuile.
         drawSprite(ctx, sheets, p.sprite || 'coin', x - 4 * iconScale, y - 8 * iconScale, { scale: iconScale });
       }
-      ctx.lineWidth = Math.max(3, Math.round(size / 7));
+      ctx.lineWidth = Math.max(3, Math.round(curSize / 7));
       ctx.strokeStyle = OUTLINE;
       ctx.strokeText(p.text, x + iw, y);
       ctx.fillStyle = p.color;
@@ -1148,11 +1623,19 @@ export function createEffects(images) {
     for (const p of texts.items) if (p.alive) { p.x += dx; p.y += dy; }
     for (const g of ghosts.items) if (g.alive) { g.x += dx; g.y += dy; }
     for (const f of flyers.items) if (f.alive) { f.x0 += dx; f.x1 += dx; f.y0 += dy; f.y1 += dy; }
+    for (const g of rings.items) if (g.alive) { g.x += dx; g.y += dy; }
+  }
+
+  /** (Lot 2) Opacité de l'arc-en-ciel (météo spéciale), 0..1, avec fondu. */
+  function rainbowAlpha() {
+    return rainbowA;
   }
 
   function clear() {
-    for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers]) pool.clear();
+    for (const pool of [rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers, rings, stars]) pool.clear();
     flash = 0;
+    nudgeT = 0;
+    nudgeAmp = 0;
     primed = false;
     contestDone.clear();
   }
@@ -1168,6 +1651,26 @@ export function createEffects(images) {
     },
     onEvent,
     floatText,
+    /** (Lot 2) Les pièces de la récolte volent vers le compteur (interface) : gerbe au sol réduite. */
+    setCoinFlight(on) {
+      coinFlight = !!on;
+    },
+    ring,
+    burst,
+    badge,
+    harvestPop,
+    giantFx,
+    qualityFx,
+    nudge,
+    /** (Lot 2) Décalage de la vue (px du monde, entiers) pendant une secousse douce ; out = { x, y }. */
+    rainbowAlpha,
+    cameraNudge(out) {
+      if (nudgeT <= 0 || reduced) { out.x = 0; out.y = 0; return out; }
+      const a = nudgeAmp * Math.min(1, nudgeT / 0.15);
+      out.x = Math.round(Math.sin(time * 61) * a);
+      out.y = Math.round(Math.cos(time * 47) * a * 0.6);
+      return out;
+    },
     fly,
     popIcon,
     confetti,
@@ -1191,7 +1694,7 @@ export function createEffects(images) {
     /** Particules vivantes par réserve (débogage, mesures de performance). */
     stats() {
       const out = {};
-      for (const [k, pool] of Object.entries({ rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers })) {
+      for (const [k, pool] of Object.entries({ rain, splashes, flakes, leaves, petals, butterflies, fireflies, parts, texts, ghosts, clouds, flyers, rings, stars })) {
         out[k] = countAlive(pool);
       }
       return out;

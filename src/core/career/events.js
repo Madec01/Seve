@@ -27,6 +27,7 @@ import { careerFlag, registerCareerExtension } from './registry.js';
 import { isMature } from '../farm.js';
 import { stockUsed } from './storage.js';
 import { cheerStaff } from './staff.js';
+import { foxActive } from '../surprises.js';
 
 // ── Dates ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -355,7 +356,7 @@ function eventPossible(api, id, { seasonId, weather }) {
     case 'tourists':
       return attractiveness(state) > 0;
     case 'crows': {
-      if (seasonId === 'winter') return false;
+      if (seasonId === 'winter' || foxActive(state)) return false; // (lot 2) le renard éloigne les corbeaux
       const sown = fieldCrops(state);
       return sown.length >= CROWS.minSown && sown.some((i) => !isMature(state.plots[i]) && !state.plots[i].crow);
     }

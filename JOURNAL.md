@@ -426,6 +426,31 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
 - **Vérifié** (Playwright, Chromium, au doigt, Pixel 7 et 360 × 640, `dev.html` et `index.html` construit `?nosw`, `?debug=1`) : fenêtre du premier lancement (une fois, 150 % choisi puis réappliqué au rechargement) ; les 12 réglages (classes, scène, cœur, viewport) enregistrés et réappliqués, y compris à la reprise ; pause du matin (jour 2 à vitesse 0) ; ×½ mesuré (1,0 s de jeu en 2 s) ; temps arrêté fiche Acheter ouverte, reparti à la fermeture ; contrastes mesurés 5,0 à 7,6:1 sur les boutons clés (menu, options, tutoriel, bandeau, Pause bleu, couvert, Acheter, onglets, danger) ; daltonisme simulé (deutéranopie, protanopie, tritanopie) : ✓ / ! / ✗ + mot du fermage et goutte / coche / pousse / terre humide restent distincts ; ligne « À faire » → graines, « Semer partout » + confirmation, résumé du matin, cloche → Messages, Guide (mots de la ferme), « Où en étais-je ? », Tout ramasser (3 abris), tutoriel du niveau 1 joué au doigt jusqu'au bout puis année gagnée, une année de carrière ; cibles ≥ 48 px, textes ≥ 14 px, pas de débordement à 100, 130 et 150 % ; aucune erreur de console. Captures `scratchpad/screens/lot1-final-*.png`. `node --test tests/` (398) vert, `node tools/build.js` à jour.
 - **Reste** (hors lot 1 ou à confirmer) : A10 partiel (glossaire et guide en phrases courtes ; réécriture FALC complète du tutoriel et des fiches au lot suivant) ; icônes sans libellé dans la feuille des graines (friction 14) ; succès empilés en fin d'année (friction 21) ; annexe B n° 8 à confirmer au doigt réel.
 
+### 2026-10-02 — Lot 2 « Toucher & surprises » : rendu, son et interface (B1 à B6)
+
+- **Récolte « juteuse » (B1, priorité)** : la culture s'écrase, s'étire et saute avant de disparaître ; 1 à 3 pièces
+  volent en courbe de la parcelle jusqu'au compteur d'argent, qui attend leur arrivée pour monter et fait un petit
+  bond doré ; **note de marimba qui monte** (gamme pentatonique, sons synthétisés : `src/audio/synth.js`) à chaque
+  parcelle d'un même glissé, la série retombe après 1 s ; bulle du total « +46 » en fin de série ; vibration douce.
+  Semis : bouffée de terre + bruit sourd ; arrosage : anneau d'eau + éclaboussure.
+- **Qualité (B2)** : étincelles argentées / dorées, badge étoile, sons distincts (clochette pour l'or), message à la
+  première récolte dorée de chaque culture.
+- **Légumes géants (B3)** : gros sprite sur le carré 2 × 2 (petit souffle), une seule pastille « mûre » ; récolte : grand
+  saut, confettis, légère secousse de la vue, fanfare, message.
+- **Surprises de l'aube (B4)** : fée qui vole au-dessus du carré mûri, renard qui arrive et s'assoit (dort le soir),
+  coffre qui tombe et s'ouvre, hérisson qui se promène, chouette sculptée, cercle de fées ; message avec dessin, son,
+  ligne dans le résumé du matin, écus et décors trouvés versés à la progression.
+- **Météos spéciales (B5)** : pluie chaude dorée, brouillard qui dérive, heure dorée, arc-en-ciel (aussi dans les
+  niveaux), étoiles filantes au crépuscule ; icône et nom dans la barre du haut ; fenêtre « Faites un vœu ».
+- **Trouvailles (B6, carrière)** : elles sortent des souches pendant le défrichage, puis carte « Une trouvaille ! ».
+- Tout respecte « Réduire les animations » (pas de vol de pièces ni de secousse, la plante s'efface sur place, la fée
+  apparaît sans voler…). Aides `?debug=1` : `__debug.lot2.*` (qualité forcée, géant, chaque surprise, chaque météo,
+  vœu, trouvailles, glissé). Fichiers : `src/audio/synth.js`, `src/render/lot2-actors.js`, `src/ui/juice.js`,
+  `src/ui/lot2.js`, `css/lot2.css` ; test `tests/lot2-render.test.js` ; doc : `docs/ARCHITECTURE.md`, « Lot 2 — rendu ».
+- Vérifié sous Playwright (Pixel 7) : séquences d'images de chaque effet, variante animations réduites, son (12 notes à
+  70 ms : crête 0,33, aucune saturation ; hauteurs mesurées = gamme attendue), glissé de 24 parcelles à 60 i/s, année
+  de niveau jouée jusqu'à la victoire et 10 jours de carrière sans erreur de console.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -479,6 +504,7 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 À étudier plus tard (mode Carrière) : mesurer le « toucher compte » (récolte à la main +10 %) quand les employés existeront ; objectif « produits transformés » à revoir avec l'artisan (lot CORE-B) ; payer un terrain en 4 saisons (+10 %) ; option « saisons longues » ; renommer ses terrains ; mode « Zen » sans aucune charge ; commandes régulières de paniers (abonnements) ; concours régional entre fermes fictives ; saisonniers embauchés pour une saison seulement.
 
 ---
+- (Lot 2, rendu) Coffre de l'aube à ouvrir d'un toucher (il s'ouvre tout seul aujourd'hui) ; renard qui suit quelques pas le fermier ; vraie nuit étoilée le soir des étoiles filantes ; son de récolte propre à chaque culture (E2, bruitages par matière).
 
 ## Bugs
 

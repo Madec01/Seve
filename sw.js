@@ -34,13 +34,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '99eae64e9e2f';
-// 146 fichiers, 26.3 Mo ; installés d'emblée (core) : 64 fichiers, 1.18 Mo
+const VERSION = 'bfa0bfd819d2';
+// 147 fichiers, 26.4 Mo ; installés d'emblée (core) : 65 fichiers, 1.27 Mo
 const PRECACHE = [
-  ["index.html", '6ab495be5eb3d90f', 26044, 'core'],
+  ["index.html", 'a131c9a4011baaf5', 26044, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.270299cbfe.js", 'f24942eed6ea3ed0', 878362, 'core'],
-  ["dist/game.7b0c0c8d45.css", '7b0c0c8d453983ba', 118936, 'core'],
+  ["dist/game.2cf1b22587.js", 'ff9f0ef073ffa15e', 957229, 'core'],
+  ["dist/game.20ab919a89.css", '20ab919a8979bee7', 122357, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],
@@ -137,6 +137,7 @@ const PRECACHE = [
   ["assets/icons/icon-monochrome-512.png", '0e59bf529a1bdbba', 1506, 'core'],
   ["assets/sprites/career.png", '5a56f900f27067c2', 90000, 'core'],
   ["assets/sprites/extra.png", '098e40185d5f7f51', 1950, 'core'],
+  ["assets/sprites/lot2.png", '5655cb48e14ec3cd', 13147, 'core'],
   ["assets/sprites/tiny-farm.png", '0c4b3b4058cacf6a', 5866, 'core'],
   ["assets/sprites/tiny-town.png", '3a54d99ecde790d4', 5042, 'core'],
   ["assets/sprites/ui/banner-red-deep.png", '16bb0f1b1af14a60', 568, 'core'],

@@ -70,7 +70,11 @@ test('createGame : difficulté par défaut, inconnue refusée, query.difficulty(
   assert.throws(() => createGame({ levelId: 1, difficulty: 'difficile' }), /Difficulté inconnue/);
   // Même graine : même météo dans les deux modes (le mode ne consomme aucun tirage).
   assert.deepEqual(g.state.weather, c.state.weather);
-  assert.deepEqual(g.state.rng, c.state.rng);
+  // (les flux du lot 2 « quality », « surprise », « sky » n'existent qu'en Détente : flux d'origine identiques)
+  const base = (rng) => ({ weather: rng.weather, market: rng.market, rot: rng.rot });
+  assert.deepEqual(base(g.state.rng), base(c.state.rng));
+  assert.equal(c.state.surprises, undefined);
+  assert.ok(g.state.surprises);
 });
 
 // ── Nombres du mode détente ──────────────────────────────────────────────────────────

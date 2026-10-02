@@ -20,6 +20,7 @@ import { growTree, isFruitReady, pollinationFactor } from './trees.js';
 import { buildingLevelData } from './career/effects.js';
 import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
+import { SKY } from '../data/surprises.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -176,6 +177,7 @@ export function applyRot(state, rotChance, rng) {
     if (!p.cropId) return;
     const tree = isTreeCrop(getCrop(p.cropId));
     if (tree && !isFruitReady(p)) return;
+    if (p.giant !== undefined) return; // (lot 2) un légume géant ne pourrit pas (aucun tirage)
     if (rng.chance(rotChance)) {
       lost.push({ plotIndex: i, cropId: p.cropId, tree });
       if (tree) p.fruit = 0;
@@ -213,6 +215,9 @@ export function clearPlot(p) {
   p.fatigued = false;
   p.fruit = 0;
   p.insured = false;
+  // (lot 2) soins et légume géant : propres à la culture en place.
+  if (p.care !== undefined) delete p.care;
+  if (p.giant !== undefined) delete p.giant;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */
@@ -236,7 +241,9 @@ export function currentUnitPrice(state, crop) {
  */
 export function rawUnitPrice(state, level, crop) {
   if (state.mode === 'career') return careerCropPrice(state, level, crop);
-  return currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  const price = currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  // (lot 2) heure dorée : récoltes × 1,2 ce jour-là (jamais en Classique : pas de state.surprises).
+  return state.surprises?.sky?.today === 'goldenhour' ? price * SKY.goldenPrice : price;
 }
 
 /** Rendement de la récolte d'une parcelle : fatigue du sol × pollinisation (arbres). */

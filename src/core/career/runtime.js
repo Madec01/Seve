@@ -60,6 +60,10 @@ import { cropRank } from './level.js';
 import { checkRanks, patrimony, rankSummary } from './ranks.js';
 import { addStock, sellStock, sellStockFor, setStorageMode, stockInfo, stockUsed, wouldStore } from './storage.js';
 import { emptyYearStats } from './save.js';
+import {
+  advanceSky, applyGrowthCare, dawnSurprise, expireEffects, expireForage, fogForage, giantAt, growthSnapshot, newWish, noteSown,
+  recordQuality, rollQuality, skyGrowthFactor, specialInfo, takeForage, tryGiant, validateGiants, GIANT,
+} from '../surprises.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -155,6 +159,7 @@ export function createCareerRuntime(core) {
     const p = state.plots[plotIndex];
     if (!p.unlocked) return fail('Cette parcelle n\'est pas encore ouverte.');
     if (p.cropId) return fail('Cette parcelle est déjà plantée.');
+    if (p.forage) return fail('Cueillez d\'abord les champignons.');
     const crop = getCrop(cropId);
     if (!crop) return fail('Culture inconnue.');
     if (!core.getCrops().includes(crop)) {
@@ -175,6 +180,7 @@ export function createCareerRuntime(core) {
       p.fatigued = wouldFatigue(L(), p, crop.id);
       p.watered = !inGreenhouse(p) && weatherWaters(state.weather.today);
       p.insured = false;
+      noteSown(state, plotIndex);
     }
     addStat(state, 'cropsPlanted', 1);
     spend('seeds', cost);
@@ -204,17 +210,82 @@ export function createCareerRuntime(core) {
     return Math.round(unit * (by === 'player' ? HAND_BONUS : 1) * (p.crowPenalty ? CROW_PENALTY : 1));
   }
 
+  /** (lot 2) Valeur d'un géant récolté à la main : 6 × une parcelle (prime « à la main » comprise). */
+  function giantValue(anchor) {
+    const p = state.plots[anchor];
+    if (!p || !p.cropId || !isMature(p)) return 0;
+    return Math.round(harvestAmount(p, 'player') * GIANT.valueFactor);
+  }
+
+  /** (lot 2) Cueillette des champignons (à la main seulement). */
+  function pickForage(plotIndex, by) {
+    if (by !== 'player') return fail('Les champignons se cueillent à la main.');
+    const f = takeForage(state, plotIndex);
+    if (!f) return fail('Rien à cueillir ici.');
+    earn('other', f.value);
+    push('foragePicked', { plotIndex, kind: f.kind, amount: f.value });
+    repayJoseph(f.value, 'harvest');
+    return { ok: true, amount: f.value, forage: f.kind, plotIndex };
+  }
+
+  /** (lot 2) Récolte d'un légume géant (à la main seulement) : vendu tout de suite, 4 parcelles vidées. */
+  function harvestGiant(plotIndex, by) {
+    if (by !== 'player') return fail('Le légume géant se récolte à la main.');
+    const g = giantAt(state, plotIndex);
+    const cropId = g.cropId;
+    const sid = seasonId(state);
+    const amount = giantValue(g.anchor);
+    const life = c().lifetime;
+    for (const k of g.plots) {
+      const q = state.plots[k];
+      q.lastHarvested = cropId;
+      clearPlot(q);
+      q.crow = false;
+      q.crowPenalty = false;
+      addHarvest(state, cropId);
+      life.harvests += 1;
+      life.handPicked = (life.handPicked || 0) + 1;
+      life.cropsInSeason = life.cropsInSeason || {};
+      life.cropsInSeason[`${cropId}@${sid}`] = (life.cropsInSeason[`${cropId}@${sid}`] || 0) + 1;
+    }
+    addStat(state, 'harvestIncome', amount);
+    noteSeasonHarvest(state);
+    account('income', 'crops', amount);
+    const ys = c().yearStats;
+    ys.cropIncome = ys.cropIncome || {};
+    ys.cropIncome[cropId] = (ys.cropIncome[cropId] || 0) + amount;
+    changeMoney(amount);
+    const part = repaymentFrom(state, L(), amount);
+    const giant = { anchor: g.anchor, plots: [...g.plots], cropId };
+    const res = {
+      plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, by, handPicked: true, stored: false, crowPenalty: false,
+      quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(part > 0 ? { loanRepayment: part } : {}),
+    };
+    push('harvested', res);
+    push('giantHarvested', { ...giant, cropName: getCrop(cropId).name, amount, by });
+    repayJoseph(amount, 'harvest');
+    const { plotIndex: _i, by: _b, ...out } = res;
+    return { ok: true, ...out };
+  }
+
   function harvest(plotIndex, { by = 'player' } = {}) {
     if (!core.playing()) return fail(core.ENDED);
     if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
     const p = state.plots[plotIndex];
+    if (!p.cropId && p.forage && state.surprises) return pickForage(plotIndex, by);
     if (!p.cropId) return fail('Rien à récolter ici.');
     const crop = getCrop(p.cropId);
     const tree = isTreeCrop(crop);
     if (!isMature(p)) return fail(tree ? 'Pas encore de fruits mûrs.' : 'Pas encore mûre.');
+    if (p.giant !== undefined && state.surprises) return harvestGiant(plotIndex, by);
     const cropId = p.cropId;
     const sid = seasonId(state);
     const value = harvestAmount(p, by);
+    // (lot 2) Qualité : belle × 1,5 ; dorée × 2 seulement à la main (salariés, machines : belle au plus).
+    // La prime est versée tout de suite, même si la récolte part au grenier, à l'atelier ou à une commande.
+    const q = state.surprises ? rollQuality(state, p, by === 'player') : null;
+    const qualityBonus = q ? Math.round(value * (q.multiplier - 1)) : 0;
+    if (q) recordQuality(state, cropId, q.quality);
     const rawValue = harvestValue(state, L(), p);
     const yf = yieldFactor(state, L(), p);
     const fatigue = p.fatigued;
@@ -233,7 +304,7 @@ export function createCareerRuntime(core) {
       addStock(state, cropId);
       stored = true;
     }
-    const amount = diverted || processed || stored ? 0 : value;
+    const amount = (diverted || processed || stored ? 0 : value) + qualityBonus;
     if (tree) p.fruit = 0;
     else {
       p.lastHarvested = cropId;
@@ -255,15 +326,16 @@ export function createCareerRuntime(core) {
     life.cropsInSeason[`${cropId}@${sid}`] = (life.cropsInSeason[`${cropId}@${sid}`] || 0) + 1;
     changeMoney(amount);
     const part = repaymentFrom(state, L(), amount);
+    const qf = q ? { quality: q.quality, qualityBonus, qualityMultiplier: q.multiplier } : {};
     push('harvested', {
-      plotIndex, cropId, amount, fatigue, tree, processed, by, handPicked: by === 'player', stored, crowPenalty,
+      plotIndex, cropId, amount, fatigue, tree, processed, by, handPicked: by === 'player', stored, crowPenalty, ...qf,
       ...(diverted ? { diverted: diverted.label || true } : {}),
       ...(part > 0 ? { loanRepayment: part } : {}),
     });
     if (stored) push('stored', { cropId, n: 1, plotIndex });
     if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
     repayJoseph(amount, 'harvest');
-    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...(part > 0 ? { loanRepayment: part } : {}) };
+    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...(part > 0 ? { loanRepayment: part } : {}) };
   }
 
   function unlockPlot(plotIndex) {
@@ -439,6 +511,35 @@ export function createCareerRuntime(core) {
     if (lastOfYear) endYear();
   }
 
+  // ── Lot 2 : surprises de l'aube (carrière) ──
+  function surprisesDawnStart(level) {
+    const events = [];
+    const tomorrowSi = tomorrowSeasonIndex(state, level) ?? state.time.seasonIndex;
+    const sky = advanceSky(state, SEASONS[tomorrowSi]);
+    expireEffects(state);
+    expireForage(state);
+    validateGiants(state);
+    const g = tryGiant(state, level);
+    if (g) events.push(['giant', { anchor: g.anchor, plots: [...g.plots], cropId: g.cropId, cropName: getCrop(g.cropId).name, value: giantValue(g.anchor) }]);
+    if (sky.today) events.push(['specialWeather', specialInfo(sky.today)]);
+    return { events, sky };
+  }
+
+  function surprisesDawnEnd(level, { events, sky }) {
+    const surprise = dawnSurprise(state, { level, crops: core.getCrops(), earn: (amount) => earn('other', amount) });
+    if (surprise) {
+      events.push(['surprise', surprise]);
+      if (surprise.kind === 'ring') events.push(['forage', { kind: 'ring', plots: [surprise.plotIndex], text: surprise.text }]);
+    }
+    if (sky.today === 'fog') {
+      const f = fogForage(state, level, core.getCrops());
+      if (f) events.push(['forage', { kind: 'mushroom', plots: f.plots, value: f.value, text: 'Des champignons ont poussé dans le brouillard : touchez-les pour les cueillir.' }]);
+    }
+    if (sky.yesterday === 'shootingstar' && !state.surprises.wish) {
+      events.push(['wish', { ...newWish(state), text: 'Cette nuit, vous avez vu une étoile filante : faites un vœu !' }]);
+    }
+  }
+
   // ── Aube ──
   function dawn() {
     core.refreshLevel();
@@ -449,8 +550,10 @@ export function createCareerRuntime(core) {
     const prevWeather = state.weather.today;
     const extraIncomes = [];
 
-    // 1. Pousse (veille).
+    // 1. Pousse (veille) ; (lot 2) soins des cultures, pousse en plus de la pluie chaude.
+    const snap = growthSnapshot(state, level, prevWeather);
     growPlots(state, prevSeason, prevWeather, level);
+    if (snap) applyGrowthCare(state, snap, skyGrowthFactor(state.surprises.sky.today));
 
     // 2. Nouveau jour, nouvelle saison, gel.
     const newSeason = advanceDay(state, level);
@@ -470,11 +573,15 @@ export function createCareerRuntime(core) {
     state.weather.today = state.weather.tomorrow;
     state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? state.time.seasonIndex);
     const today = state.weather.today;
+    // (lot 2) Météo spéciale (aujourd'hui = prévision d'hier), effets passés, géants.
+    const lot2 = state.surprises ? surprisesDawnStart(level) : null;
     for (const fn of hooksOf('dawnEvents')) fn(api, { seasonId: sid, weather: today });
 
     // 5. Pluie (hors serre) ; 6. marché.
     if (weatherWaters(today)) rainWater(state);
     updateCareerMarket(state);
+    // (lot 2) Surprise de l'aube, champignons du brouillard, vœu de l'étoile filante.
+    if (lot2) surprisesDawnEnd(level, lot2);
 
     // 7. Arrosage des machines.
     const sprinkled = [];
@@ -556,8 +663,9 @@ export function createCareerRuntime(core) {
       milkToDairy: milk.milkToDairy,
     };
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
-    push('weather', { today, tomorrow: state.weather.tomorrow });
+    push('weather', lot2 ? { today, tomorrow: state.weather.tomorrow, special: { ...state.surprises.sky } } : { today, tomorrow: state.weather.tomorrow });
     push('dawn', dawnInfo);
+    if (lot2) for (const [type, payload] of lot2.events) push(type, payload);
     if (neighbourPayment > 0) {
       push('loanRepayment', { amount: neighbourPayment, remaining: state.neighbourLoan.debt, source: 'product' });
       if (neighbourDone) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: 'product' });
@@ -885,7 +993,7 @@ export function createCareerRuntime(core) {
       storeTarget: mature ? wouldStore(state, crop.id) : false,
       offSeason: crop ? isOffSeason(state, crop) : false,
       marketMultiplier: crop ? state.market[crop.id] ?? 1 : null,
-      handValue: mature ? harvestAmount(p, 'player') : null,
+      handValue: mature ? (p.giant !== undefined && state.surprises ? giantValue(p.giant) : harvestAmount(p, 'player')) : null,
     };
   }
 
@@ -940,6 +1048,7 @@ export function createCareerRuntime(core) {
     chargesInfo,
     isPaused,
     incomesEstimate: () => careerIncomes(state, state.time.seasonIndex, null, false),
+    giantValue,
     achievementContext: achievementContextCareer,
     yearReport,
   };

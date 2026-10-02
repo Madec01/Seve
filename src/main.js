@@ -64,6 +64,11 @@ import { createMessages } from './ui/messages.js';
 import { createTodo } from './ui/todo.js';
 import { openGuide } from './ui/guide.js';
 import { speedCycle } from './ui/a11y.js';
+import { createJuice } from './ui/juice.js';
+import { createLot2 } from './ui/lot2.js';
+import { nextFloat } from './core/rng.js';
+import * as surprisesCore from './core/surprises.js';
+import { SURPRISES_BY_ID, SPECIAL_WEATHERS_BY_ID, WISHES, FINDS_BY_ID } from './data/surprises.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -124,6 +129,10 @@ app.messages = createMessages(app);
 app.toasts.setLogger((e) => app.messages.add(e));
 app.todo = createTodo(app);
 app.openGuide = (opts = {}) => openGuide(app, opts);
+// Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
+// surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
+app.juice = createJuice(app);
+app.lot2 = createLot2(app);
 
 applyDisplaySettings();
 
@@ -715,6 +724,7 @@ function resizeScene() {
     currentMinZoom = mz;
     const level = (app.game && !app.inMenu ? app.game : attract)?.level || getLevel(1);
     app.scene = createScene(canvas, images, level, { minZoom: mz });
+    app.scene.effects?.setCoinFlight?.(true); // (lot 2) les pièces de la récolte volent vers le compteur
     insetsKey = '';
     syncSceneCareer();
     app.applyCosmetics();
@@ -920,10 +930,18 @@ function scheduleRefresh() {
 const SHARED_MESSAGES = new Set(['frost', 'harvested', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'loanRepayment', 'loanRepaid', 'contestProgress']);
 
 function wire(game) {
+  const off = game.on('*', (ev) => onGameEvent(ev, game));
+  return off;
+}
+
+/** Réaction de toute l'application à un événement du cœur (aussi utilisé par les aides de débogage du lot 2). */
+function onGameEvent(ev, game) {
   const career = game.mode === 'career';
-  const off = game.on('*', (ev) => {
+  {
     app.scene?.onEvent(ev.type, ev);
     app.hud.onEvent(ev);
+    app.juice.onEvent(ev, game);
+    app.lot2.onEvent(ev, game);
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
@@ -973,8 +991,7 @@ function wire(game) {
     }
     if (ev.type === 'dawn') app.progression.checkGame(game);
     scheduleRefresh();
-  });
-  return off;
+  }
 }
 
 // Succès vérifiés à chaque aube, et un peu après un achat ou une récolte (une fois par image).
@@ -1034,15 +1051,15 @@ function reactAudio(ev, game) {
   }
   switch (ev.type) {
     case 'planted':
-      audio.play('plant');
+      audio.play('plant'); // + bruit sourd synthétisé (src/ui/juice.js)
       break;
     case 'watered':
-      audio.play('water');
+      audio.play('water'); // + éclaboussure synthétisée (src/ui/juice.js)
       break;
     case 'harvested':
-      audio.play('harvest');
-      if (!ev.processed) audio.play('coin', { delay: 0.06 });
-      else audio.play('build', { delay: 0.08, volume: 0.45 });
+      // (Lot 2) La note qui monte et la pièce qui arrive au compteur sont jouées par src/ui/juice.js.
+      audio.play('harvest', { volume: 0.75 });
+      if (ev.processed) audio.play('build', { delay: 0.08, volume: 0.45 });
       break;
     case 'productSold':
       audio.play('coin', { delay: 0.5, volume: 0.7 });
@@ -1467,6 +1484,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
 
   app.game = game;
   app.todo.reset(game);
+  app.juice.reset();
+  app.lot2.reset(game);
   app.inMenu = false;
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
@@ -1609,6 +1628,8 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.inMenu = true;
   if (DEBUG) window.__game = null;
   app.todo.reset(null);
+  app.juice.reset();
+  app.lot2.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1827,6 +1848,8 @@ function frame(t) {
   app.hints.frame();
   app.todo.tick();
   app.hud.frame(dt);
+  app.juice.frame(dt);
+  app.lot2.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -2118,6 +2141,203 @@ if (DEBUG) {
       const res = fn(id);
       processPending();
       return res;
+    },
+    /**
+     * (Lot 2) Aides de vérification : récolte de qualité forcée, géant, chaque surprise, chaque météo spéciale,
+     * vœu, trouvailles. Elles modifient l'état comme le ferait le cœur, puis envoient l'événement à toute
+     * l'application (onGameEvent) — sauf harvest(), qui passe par la vraie action du joueur.
+     */
+    lot2: {
+      on: () => !!app.game?.state.surprises,
+      /** Active les surprises sur la partie en cours (Classique : désactivées par défaut). */
+      enable() {
+        const g = app.game;
+        if (!g) return false;
+        if (!g.state.surprises) surprisesCore.enableSurprises(g.state);
+        return !!g.state.surprises;
+      },
+      /** Prépare le flux « quality » pour que la prochaine récolte À LA MAIN de la parcelle i soit q. */
+      forceQuality(i, q = 'gold') {
+        const g = app.game;
+        if (!g?.state.surprises) return false;
+        const { fine, gold } = surprisesCore.qualityChances(g.state, g.state.plots[i], true);
+        const lo = q === 'gold' ? 0 : q === 'fine' ? gold : gold + fine;
+        const hi = q === 'gold' ? gold : q === 'fine' ? gold + fine : 1;
+        for (let k = 0; k < 400000; k++) {
+          const seed = (Math.random() * 4294967296) >>> 0;
+          const h = { x: seed };
+          const u = nextFloat(h, 'x');
+          if (u >= lo && u < hi) {
+            g.state.rng.quality = seed;
+            return true;
+          }
+        }
+        return false;
+      },
+      /** Rend mûres (même culture, semées le même jour, arrosées) toutes les parcelles ouvertes. */
+      matureAll(cropId = null) {
+        const g = app.game;
+        if (!g) return 0;
+        const id = cropId || g.level.crops?.[0] || 'carrot';
+        const crop = getCrop(id);
+        const day = surprisesCore.absDay ? surprisesCore.absDay(g.state) : g.state.time.day;
+        let n = 0;
+        g.state.plots.forEach((p) => {
+          if (!p.unlocked || p.env === null) return;
+          p.cropId = id;
+          p.growth = crop.growDays;
+          p.watered = true;
+          delete p.giant;
+          delete p.forage;
+          if (g.state.surprises) p.care = { sown: day, dry: 0, rotated: false, wetEnd: true };
+          n++;
+        });
+        return n;
+      },
+      /** Récolte (vraie action du joueur) de la parcelle i avec la qualité q. */
+      harvest(i, q = 'gold') {
+        window.__debug.lot2.forceQuality(i, q);
+        return app.harvest(i);
+      },
+      /** Fusionne un carré 2 × 2 mûr en légume géant et l'annonce (comme à l'aube). */
+      giant(cropId = null) {
+        const g = app.game;
+        if (!g) return null;
+        window.__debug.lot2.enable();
+        window.__debug.lot2.matureAll(cropId);
+        const cands = surprisesCore.giantCandidates(g.state, g.level);
+        if (!cands.length) return null;
+        const sq = cands[Math.floor(cands.length / 2)];
+        const res = surprisesCore.mergeGiant(g.state, sq);
+        const crop = getCrop(res.cropId);
+        onGameEvent({ type: 'giant', ...res, cropName: crop?.name || res.cropId, value: g.query.plot(res.anchor)?.harvestValue || 0 }, g);
+        return res;
+      },
+      /** Surprise de l'aube : 'fairy' | 'fox' | 'chest' | 'hedgehog' | 'owl' | 'ring'. */
+      surprise(kind) {
+        const g = app.game;
+        if (!g) return null;
+        window.__debug.lot2.enable();
+        const st = g.state;
+        const s = st.surprises;
+        const def = SURPRISES_BY_ID[kind];
+        if (!def) return null;
+        // D'abord le vrai chemin du cœur (actions.triggerSurprise), sinon une imitation (état + événement).
+        const trig = g.actions.triggerSurprise || g.actions.career?.triggerSurprise;
+        if (typeof trig === 'function') {
+          const r = trig(kind);
+          if (r?.ok) {
+            processPending();
+            return r.surprise || r;
+          }
+        }
+        const today = surprisesCore.absDay(st);
+        const ev = { type: 'surprise', kind, title: def.name, icon: def.icon, text: def.text };
+        const open = st.plots.map((p, i) => (p.unlocked && p.env !== null ? i : -1)).filter((i) => i >= 0);
+        switch (kind) {
+          case 'fairy': {
+            const center = open[Math.floor(open.length / 2)];
+            const c0 = surprisesCore.plotCell(st, g.level, center);
+            const plots = open.filter((i) => {
+              const c = surprisesCore.plotCell(st, g.level, i);
+              return c.group === c0.group && Math.abs(c.col - c0.col) <= 1 && Math.abs(c.row - c0.row) <= 1;
+            });
+            const id = g.level.crops?.[0] || 'carrot';
+            for (const i of plots) {
+              const p = st.plots[i];
+              p.cropId = p.cropId || id;
+              p.growth = getCrop(p.cropId).growDays;
+            }
+            Object.assign(ev, { center, plots, text: def.text.replace('{n}', plots.length).replace('{s}', 's').replace('{verb}', 'ont') });
+            break;
+          }
+          case 'chest':
+            st.money += 30;
+            Object.assign(ev, { amount: 30, text: def.text.replace('{reward}', '30 pièces') });
+            onGameEvent({ type: 'moneyChanged', money: st.money, delta: 30 }, g);
+            break;
+          case 'ring': {
+            const empty = open.filter((i) => !st.plots[i].cropId);
+            const plotIndex = empty.length ? empty[0] : open[0];
+            const p = st.plots[plotIndex];
+            if (p.cropId) { p.cropId = null; p.growth = 0; }
+            p.forage = { kind: 'ring', value: 40, until: today + 3 };
+            Object.assign(ev, { plotIndex, value: 40, plots: [plotIndex], text: def.text.replace('{value}', '40') });
+            break;
+          }
+          case 'fox':
+            s.fox = { until: today + 6 };
+            Object.assign(ev, { until: s.fox.until, days: 7 });
+            break;
+          case 'hedgehog':
+            s.hedgehog = { until: today + 5 };
+            Object.assign(ev, { until: s.hedgehog.until, days: 6, text: def.text.replace('{days}', '6') });
+            break;
+          case 'owl':
+            s.found.owl = true;
+            Object.assign(ev, { cosmeticId: 'owl.carved', ecusIfOwned: 5 });
+            break;
+          default:
+            break;
+        }
+        onGameEvent(ev, g);
+        if (kind === 'ring') onGameEvent({ type: 'forage', kind: 'ring', plots: [ev.plotIndex], text: ev.text }, g);
+        return ev;
+      },
+      /** Météo spéciale du jour : 'warmrain' | 'fog' | 'shootingstar' | 'goldenhour' | 'rainbow' (null = aucune). */
+      weather(id, { tomorrow = null, dayProgress = null } = {}) {
+        const g = app.game;
+        if (!g) return null;
+        window.__debug.lot2.enable();
+        const base = { warmrain: 'rain', fog: 'cloudy', shootingstar: 'sunny', goldenhour: 'sunny', rainbow: 'sunny' }[id];
+        if (base) g.state.weather.today = base;
+        g.state.surprises.sky.today = id || null;
+        g.state.surprises.sky.tomorrow = tomorrow;
+        if (dayProgress !== null) g.state.time.elapsed = DAY_SECONDS * dayProgress;
+        else if (id === 'shootingstar') g.state.time.elapsed = DAY_SECONDS * 0.82;
+        onGameEvent({ type: 'weather', today: g.state.weather.today, tomorrow: g.state.weather.tomorrow, special: { ...g.state.surprises.sky } }, g);
+        const def = SPECIAL_WEATHERS_BY_ID[id];
+        if (def) onGameEvent({ type: 'specialWeather', id, name: def.name, text: def.text, icon: def.icon }, g);
+        updateAmbience(g);
+        return g.state.surprises.sky;
+      },
+      /** Vœu de l'étoile filante (fenêtre « Faites un vœu »). */
+      wish() {
+        const g = app.game;
+        if (!g) return null;
+        window.__debug.lot2.enable();
+        const ids = WISHES.slice(0, 3).map((w) => w.id);
+        g.state.surprises.wish = { day: surprisesCore.absDay(g.state), options: ids };
+        const options = WISHES.slice(0, 3).map((w) => ({ id: w.id, name: w.name, text: w.text, icon: w.icon }));
+        onGameEvent({ type: 'wish', day: g.state.surprises.wish.day, options, text: 'Faites un vœu !' }, g);
+        return options;
+      },
+      /** (Carrière) Trouvailles du défrichage sur un terrain (visuel + carte). */
+      finds(lotId = null, kinds = ['chest', 'seedjar']) {
+        const g = app.game;
+        if (!g || g.mode !== 'career') return null;
+        const lot = lotId || g.query.career.lots().find((l) => !l.forSale)?.id;
+        const finds = kinds.map((k) => {
+          const d = FINDS_BY_ID[k];
+          return { kind: k, title: d.name, icon: d.icon, text: d.text.replace('{reward}', '40 pièces').replace('{amount}', '45').replace('{crop}', 'carottes').replace('{animal}', 'Un agneau perdu rejoint la bergerie.'), amount: k === 'coins' || k === 'chest' ? 40 : undefined };
+        });
+        onGameEvent({ type: 'finds', lotId: lot, lotName: 'Le terrain', finds }, g);
+        return finds;
+      },
+      /** Récolte en série (comme un glissé) des parcelles mûres, une toutes les `ms` millisecondes. */
+      swipe(ms = 70, q = null) {
+        const g = app.game;
+        if (!g) return 0;
+        const list = g.state.plots.map((p, i) => i).filter((i) => g.query.plot(i)?.action === 'harvest');
+        app.juice.swipeStart();
+        list.forEach((i, k) => setTimeout(() => {
+          if (q) window.__debug.lot2.forceQuality(i, q);
+          if (g.actions.harvest(i)?.ok) app.vibrate(8);
+          if (k === list.length - 1) app.juice.swipeEnd();
+        }, k * ms));
+        return list.length;
+      },
+      stats: () => ({ juice: app.juice.stats(), scene: app.scene?.lot2Stats?.(), voices: audio.synthVoices }),
     },
     /** Centre du panneau d'un terrain (px de la page), si le rendu le connaît. */
     lotPoint(id) {

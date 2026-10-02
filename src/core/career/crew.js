@@ -261,7 +261,7 @@ export function bestSafeCrop(api, plot) {
 export function sowChoice(api, plotIndex) {
   const { state } = api;
   const p = state.plots[plotIndex];
-  if (!p || !p.unlocked || !p.env || p.env === 'orchard' || p.cropId) return null;
+  if (!p || !p.unlocked || !p.env || p.env === 'orchard' || p.cropId || p.forage) return null; // (lot 2) champignons : à cueillir à la main
   const lot = api.lot(p.lot);
   if (!lot || !lot.plan) return null;
   const want = lot.plan[api.seasonId()];

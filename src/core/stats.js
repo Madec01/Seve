@@ -22,6 +22,8 @@ export function createStats() {
     contestPrize: 0, // prix du concours (niveau 12)
     minMoneyAfterRent: null, // argent le plus bas juste après un fermage payé (null : aucun fermage payé)
     bestSeasonHarvestIncome: 0, // meilleures ventes de récoltes d'une saison (année) / de la saison
+    // (lot 2) surpriseIncome : argent des surprises (coffres, champignons, vœux) — ajouté seulement quand il y en a
+    // (addSurpriseIncome de src/core/surprises.js), pour que le bilan du mode Classique reste identique.
   };
 }
 
@@ -71,7 +73,7 @@ export function buildSummary(state, seasonId, extra = {}) {
   const copy = (o) => JSON.parse(JSON.stringify(o));
   const year = copy(state.stats.year);
   const net = (s) =>
-    s.harvestIncome + s.investmentIncome + s.productIncome + s.rawSales + s.frostRefund + s.contestPrize
+    s.harvestIncome + s.investmentIncome + s.productIncome + s.rawSales + s.frostRefund + s.contestPrize + (s.surpriseIncome || 0)
     - s.charges - s.waterSpent - s.loanPaid - s.rentsPaid - s.seedsSpent - s.investmentsSpent - s.plotsSpent;
   const season = copy(state.stats.season);
   // Mode détente : prêt du voisin (absent du résumé en mode classique). Le bilan de l'année en tient

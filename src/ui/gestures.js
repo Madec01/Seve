@@ -283,6 +283,7 @@ export function createSceneInput(canvas, app) {
         collectOver(g.hit.buildingId);
       } else if (seriesOk && !g.decor) {
         g.mode = 'field';
+        app.juice?.swipeStart(); // (lot 2) série : notes qui montent, total en fin de glissé
         dragOver(g.hit.index);
       } else {
         g.mode = 'scroll';
@@ -329,6 +330,7 @@ export function createSceneInput(canvas, app) {
     g = null;
     clearTimeout(cur.timer);
     scene()?.setHover(null);
+    if (cur.mode === 'field') app.juice?.swipeEnd();
     if (cancelled) return;
     if (cur.decor) {
       if (cur.touch && !cur.mode && cur.hit) app.decor.onHit(cur.hit);

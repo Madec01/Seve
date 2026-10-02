@@ -167,7 +167,7 @@ test('événements au hasard : ≈ 30 % des jours libres, jamais deux fois le m�
   let started = 0;
   let free = 0;
   for (let seed = 1; seed <= 12; seed++) {
-    const g = createCareer({ seed });
+    const g = createCareer({ seed, surprises: false }); // (lot 2 : le renard chasserait les corbeaux)
     setRank(g, 2);
     g.state.money = 5000;
     let last = null;

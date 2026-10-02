@@ -14,6 +14,9 @@
 //   node tools/simulate.js --json               sortie JSON (pour comparer deux réglages)
 //   node tools/simulate.js --difficulty classique   mode de difficulté (detente par défaut ; classique = v3)
 //   node tools/simulate.js --compare-modes      tableau des victoires côte à côte : détente / classique
+//   node tools/simulate.js --surprises off      (lot 2) sans les surprises (qualité, géants, fée, météos spéciales…) ;
+//                                               défaut : celui du mode (détente : avec, classique : sans)
+//   node tools/simulate.js --compare-surprises  (lot 2) tableau côte à côte : sans / avec les surprises (revenus, ★)
 //
 // Les robots passent uniquement par l'API publique du jeu (actions / query), comme l'interface.
 // Chaque jour, juste après l'aube, ils récoltent, achètent, plantent et arrosent, puis la journée s'écoule.
@@ -75,6 +78,9 @@ const PERKS_ARG = String(arg('perks', 'none'));
 const COMPARE = !!arg('compare-perks', false);
 const COMPARE_MODES = !!arg('compare-modes', false);
 const DIFFICULTY = String(arg('difficulty', 'detente'));
+const SURPRISES_ARG = arg('surprises', null);
+const SURPRISES = SURPRISES_ARG === null ? undefined : !['off', 'false', '0', 'non'].includes(String(SURPRISES_ARG));
+const COMPARE_SURPRISES = !!arg('compare-surprises', false);
 // Réglages de la stratégie « optimal » (fonds de roulement gardé, rentabilité minimale d'un achat).
 const OPT_CAPITAL = Number(arg('opt-capital', 0.6));
 const OPT_RATIO = Number(arg('opt-ratio', 0.15));
@@ -933,16 +939,35 @@ const STRATEGIES = {
  * income : revenus par origine { crops, apples, products, investments, contest, raw, refund, total } (disjoints),
  *   et, pour les parts, trees = pommes vendues brutes + jus, milk = lait vendu + fromages.
  */
-export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFICULTY) {
-  const game = createGame({ levelId, seed, perks, difficulty });
+export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFICULTY, surprises = SURPRISES) {
+  const game = surprises === undefined ? createGame({ levelId, seed, perks, difficulty }) : createGame({ levelId, seed, perks, difficulty, surprises });
   const me = createHuman(strategy, levelId, seed);
   const total = game.query.calendar().totalDays;
   let result = null;
   // Sources disjointes (crops, apples, products, investments, contest, raw, refund) ; trees et milk
   // regroupent pour les parts : pommes brutes + jus ; lait vendu + fromages.
-  const income = { crops: 0, apples: 0, products: 0, investments: 0, contest: 0, raw: 0, refund: 0, trees: 0, milk: 0 };
+  const income = { crops: 0, apples: 0, products: 0, investments: 0, contest: 0, raw: 0, refund: 0, trees: 0, milk: 0, surprises: 0, quality: 0, giants: 0 };
+  // (lot 2) argent des surprises (coffres, champignons, vœux) ; part « qualité » et « géants » des récoltes.
+  const lot2 = { fine: 0, gold: 0, giants: 0, surprises: 0, specials: 0, wishes: 0 };
+  game.on('surprise', (e) => {
+    lot2.surprises++;
+    if (e.amount) income.surprises += e.amount;
+  });
+  game.on('foragePicked', (e) => (income.surprises += e.amount));
+  game.on('wishGranted', (e) => {
+    lot2.wishes++;
+    if (e.amount) income.surprises += e.amount;
+  });
+  game.on('specialWeather', () => lot2.specials++);
+  game.on('giantHarvested', (e) => {
+    lot2.giants++;
+    income.giants += e.amount;
+  });
   let contest = null;
   game.on('harvested', (e) => {
+    if (e.quality === 'fine') lot2.fine++;
+    if (e.quality === 'gold') lot2.gold++;
+    if (e.qualityBonus) income.quality += e.qualityBonus;
     if (e.tree) {
       income.apples += e.amount;
       income.trees += e.amount;
@@ -970,13 +995,16 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
   game.on('bankrupt', (e) => (result = { win: false, money: e.money, stars: 0, seasonId: e.seasonId, summary: e.summary }));
   for (let day = 0; day <= total && game.state.status === 'playing'; day++) {
     const before = game.state.money;
+    // (lot 2) Vœu de l'étoile filante : un joueur choisit la bourse si elle est proposée, sinon le premier vœu.
+    const wish = game.query.surprises?.()?.wish;
+    if (wish) game.actions.makeWish((wish.options.find((o) => o.id === 'coins') || wish.options[0]).id);
     STRATEGIES[strategy](game, me);
     if (TRACE) traceDay(game, before);
     game.update(DAY_SECONDS);
   }
   if (!result) throw new Error(`Partie non terminée (niveau ${levelId}, graine ${seed})`);
-  income.total = income.crops + income.apples + income.products + income.investments + income.contest + income.raw + income.refund;
-  return { ...result, income, contest };
+  income.total = income.crops + income.apples + income.products + income.investments + income.contest + income.raw + income.refund + income.surprises;
+  return { ...result, income, contest, lot2 };
 }
 
 function traceDay(game, before) {
@@ -1025,9 +1053,9 @@ function selectedLevels() {
 }
 
 /** Statistiques d'un niveau pour une stratégie. */
-function simulateRow(level, strategy, perks, difficulty = DIFFICULTY) {
+function simulateRow(level, strategy, perks, difficulty = DIFFICULTY, surprises = SURPRISES) {
   const results = [];
-  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks, difficulty));
+  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks, difficulty, surprises));
   const wins = results.filter((r) => r.win);
   const stars = [0, 1, 2, 3].map((s) => results.filter((r) => r.stars === s).length);
   const lossSeasons = {};
@@ -1051,6 +1079,11 @@ function simulateRow(level, strategy, perks, difficulty = DIFFICULTY) {
         .map(([k, v]) => [k, +(v / results.length).toFixed(2)]),
     ),
     avgPlotsSpent: Math.round(results.reduce((s, r) => s + r.summary.plotsSpent, 0) / results.length),
+    // (lot 2) revenu moyen de l'année, part des surprises, nombre moyen d'événements du lot 2 par partie.
+    avgIncome: Math.round(sum('total') / results.length),
+    avgMoney: Math.round(results.reduce((s, r) => s + r.money, 0) / results.length),
+    lot2: Object.fromEntries(['fine', 'gold', 'giants', 'surprises', 'specials', 'wishes'].map((k) => [k, +(results.reduce((s, r) => s + r.lot2[k], 0) / results.length).toFixed(2)])),
+    lot2Income: { quality: Math.round(sum('quality') / results.length), giants: Math.round(sum('giants') / results.length), surprises: Math.round(sum('surprises') / results.length) },
     // v3 : part du revenu par origine, prix du concours.
     share: {
       products: sum('products') / totalIncome,
@@ -1066,7 +1099,7 @@ function simulateRow(level, strategy, perks, difficulty = DIFFICULTY) {
   };
 }
 
-export function simulate(levels, strategies, perks, difficulty = DIFFICULTY) {
+export function simulate(levels, strategies, perks, difficulty = DIFFICULTY, surprises = SURPRISES) {
   return levels.map((base) => {
     const level = levelFor(base.id, difficulty);
     return {
@@ -1074,7 +1107,7 @@ export function simulate(levels, strategies, perks, difficulty = DIFFICULTY) {
       name: level.name,
       difficulty,
       thresholds: level.starThresholds,
-      rows: strategies.map((s) => simulateRow(level, s, perks, difficulty)),
+      rows: strategies.map((s) => simulateRow(level, s, perks, difficulty, surprises)),
     };
   });
 }
@@ -1124,9 +1157,37 @@ function printCompareModes(detente, classique) {
   });
 }
 
+/** (lot 2) Sans / avec les surprises : revenu de l'année, argent final, victoires, étoiles, événements. */
+function printCompareSurprises(off, on) {
+  console.log(`Surprises du lot 2 (mode ${DIFFICULTY}) : sans → avec, ${SEEDS} graines par niveau et par stratégie\n`);
+  console.log('niveau  stratégie   revenu moyen (sans → avec, écart)   argent moyen (écart)   victoires     ★★★ (sans → avec)   par partie : belles dorées géants surprises météos   gain : qualité géants surprises');
+  const totals = {};
+  off.forEach((lv, k) => {
+    lv.rows.forEach((r, j) => {
+      const a = on[k].rows[j];
+      const d = r.avgIncome ? (100 * (a.avgIncome - r.avgIncome)) / r.avgIncome : 0;
+      const dm = r.avgMoney ? (100 * (a.avgMoney - r.avgMoney)) / Math.abs(r.avgMoney) : 0;
+      (totals[r.strategy] = totals[r.strategy] || []).push(d);
+      const l = a.lot2;
+      console.log(
+        `${String(lv.level).padStart(4)}    ${r.strategy.padEnd(10)}  ${String(r.avgIncome).padStart(6)} → ${String(a.avgIncome).padStart(6)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)} %)        ${dm >= 0 ? '+' : ''}${dm.toFixed(1)} %       ${pct(r.winRate * 100, 100).padStart(4)} → ${pct(a.winRate * 100, 100).padStart(4)}   ${pct(r.stars[3], SEEDS).padStart(4)} → ${pct(a.stars[3], SEEDS).padStart(4)}          ${String(l.fine).padStart(6)} ${String(l.gold).padStart(6)} ${String(l.giants).padStart(6)} ${String(l.surprises).padStart(9)} ${String(l.specials).padStart(6)}        ${String(a.lot2Income.quality).padStart(6)} ${String(a.lot2Income.giants).padStart(6)} ${String(a.lot2Income.surprises).padStart(9)}`,
+      );
+    });
+  });
+  console.log('\nÉcart moyen du revenu de l\'année, tous niveaux :');
+  for (const [s, ds] of Object.entries(totals)) console.log(`  ${s.padEnd(10)} ${(ds.reduce((a, b) => a + b, 0) / ds.length).toFixed(1)} %`);
+}
+
 function run() {
   const levels = selectedLevels();
   const strategies = Object.keys(STRATEGIES).filter((s) => !STRATEGY_FILTER || s === STRATEGY_FILTER);
+  if (COMPARE_SURPRISES) {
+    const off = simulate(levels, strategies, {}, DIFFICULTY, false);
+    const on = simulate(levels, strategies, {}, DIFFICULTY, true);
+    if (JSON_OUT) console.log(JSON.stringify({ off, on }, null, 2));
+    else printCompareSurprises(off, on);
+    return;
+  }
   if (COMPARE_MODES) {
     const detente = simulate(levels, strategies, {}, 'detente');
     const classique = simulate(levels, strategies, {}, 'classique');

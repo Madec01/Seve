@@ -5,9 +5,13 @@ import { DAY_SECONDS, forceWeather, nextDay, record, skipDays } from './helpers.
 
 export { DAY_SECONDS, forceWeather, nextDay, record, skipDays };
 
-/** Nouvelle carrière ; 1er jour ensoleillé par défaut (tests indépendants de la météo tirée). */
+/**
+ * Nouvelle carrière ; 1er jour ensoleillé par défaut (tests indépendants de la météo tirée).
+ * Surprises du lot 2 désactivées par défaut (qualité, géants, fée… changeraient les nombres des règles testées
+ * ici) : les tests du lot 2 les demandent ({ surprises: true }, tests/surprises*.test.js).
+ */
 export function newCareer(opts = {}, { rawWeather = false } = {}) {
-  const game = createCareer({ seed: 7, ...opts });
+  const game = createCareer({ seed: 7, surprises: false, ...opts });
   if (!rawWeather) game.state.weather.today = 'sunny';
   return game;
 }
