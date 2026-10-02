@@ -68,7 +68,7 @@ import { createJuice } from './ui/juice.js';
 import { createLot2 } from './ui/lot2.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
-import { SURPRISES_BY_ID, SPECIAL_WEATHERS_BY_ID, WISHES, FINDS_BY_ID } from './data/surprises.js';
+import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -2213,76 +2213,19 @@ if (DEBUG) {
         onGameEvent({ type: 'giant', ...res, cropName: crop?.name || res.cropId, value: g.query.plot(res.anchor)?.harvestValue || 0 }, g);
         return res;
       },
-      /** Surprise de l'aube : 'fairy' | 'fox' | 'chest' | 'hedgehog' | 'owl' | 'ring'. */
+      /**
+       * Surprise de l'aube : 'fairy' | 'fox' | 'chest' | 'hedgehog' | 'owl' | 'ring'. Passe par le vrai chemin du
+       * cœur (actions.triggerSurprise : état, argent, statistiques et événements `surprise` / `forage`).
+       * → données de l'événement, ou { ok: false, reason } si elle est impossible aujourd'hui.
+       */
       surprise(kind) {
         const g = app.game;
         if (!g) return null;
         window.__debug.lot2.enable();
-        const st = g.state;
-        const s = st.surprises;
-        const def = SURPRISES_BY_ID[kind];
-        if (!def) return null;
-        // D'abord le vrai chemin du cœur (actions.triggerSurprise), sinon une imitation (état + événement).
-        const trig = g.actions.triggerSurprise || g.actions.career?.triggerSurprise;
-        if (typeof trig === 'function') {
-          const r = trig(kind);
-          if (r?.ok) {
-            processPending();
-            return r.surprise || r;
-          }
-        }
-        const today = surprisesCore.absDay(st);
-        const ev = { type: 'surprise', kind, title: def.name, icon: def.icon, text: def.text };
-        const open = st.plots.map((p, i) => (p.unlocked && p.env !== null ? i : -1)).filter((i) => i >= 0);
-        switch (kind) {
-          case 'fairy': {
-            const center = open[Math.floor(open.length / 2)];
-            const c0 = surprisesCore.plotCell(st, g.level, center);
-            const plots = open.filter((i) => {
-              const c = surprisesCore.plotCell(st, g.level, i);
-              return c.group === c0.group && Math.abs(c.col - c0.col) <= 1 && Math.abs(c.row - c0.row) <= 1;
-            });
-            const id = g.level.crops?.[0] || 'carrot';
-            for (const i of plots) {
-              const p = st.plots[i];
-              p.cropId = p.cropId || id;
-              p.growth = getCrop(p.cropId).growDays;
-            }
-            Object.assign(ev, { center, plots, text: def.text.replace('{n}', plots.length).replace('{s}', 's').replace('{verb}', 'ont') });
-            break;
-          }
-          case 'chest':
-            st.money += 30;
-            Object.assign(ev, { amount: 30, text: def.text.replace('{reward}', '30 pièces') });
-            onGameEvent({ type: 'moneyChanged', money: st.money, delta: 30 }, g);
-            break;
-          case 'ring': {
-            const empty = open.filter((i) => !st.plots[i].cropId);
-            const plotIndex = empty.length ? empty[0] : open[0];
-            const p = st.plots[plotIndex];
-            if (p.cropId) { p.cropId = null; p.growth = 0; }
-            p.forage = { kind: 'ring', value: 40, until: today + 3 };
-            Object.assign(ev, { plotIndex, value: 40, plots: [plotIndex], text: def.text.replace('{value}', '40') });
-            break;
-          }
-          case 'fox':
-            s.fox = { until: today + 6 };
-            Object.assign(ev, { until: s.fox.until, days: 7 });
-            break;
-          case 'hedgehog':
-            s.hedgehog = { until: today + 5 };
-            Object.assign(ev, { until: s.hedgehog.until, days: 6, text: def.text.replace('{days}', '6') });
-            break;
-          case 'owl':
-            s.found.owl = true;
-            Object.assign(ev, { cosmeticId: 'owl.carved', ecusIfOwned: 5 });
-            break;
-          default:
-            break;
-        }
-        onGameEvent(ev, g);
-        if (kind === 'ring') onGameEvent({ type: 'forage', kind: 'ring', plots: [ev.plotIndex], text: ev.text }, g);
-        return ev;
+        const r = g.actions.triggerSurprise?.(kind);
+        processPending();
+        if (!r?.ok) return { ok: false, reason: r?.reason || 'indisponible' };
+        return r.surprise;
       },
       /** Météo spéciale du jour : 'warmrain' | 'fog' | 'shootingstar' | 'goldenhour' | 'rainbow' (null = aucune). */
       weather(id, { tomorrow = null, dayProgress = null } = {}) {
@@ -2306,11 +2249,10 @@ if (DEBUG) {
         const g = app.game;
         if (!g) return null;
         window.__debug.lot2.enable();
-        const ids = WISHES.slice(0, 3).map((w) => w.id);
-        g.state.surprises.wish = { day: surprisesCore.absDay(g.state), options: ids };
-        const options = WISHES.slice(0, 3).map((w) => ({ id: w.id, name: w.name, text: w.text, icon: w.icon }));
-        onGameEvent({ type: 'wish', day: g.state.surprises.wish.day, options, text: 'Faites un vœu !' }, g);
-        return options;
+        // Tirage du cœur (3 vœux parmi 4, comme le matin après une nuit d'étoiles filantes).
+        const w = surprisesCore.newWish(g.state);
+        onGameEvent({ type: 'wish', ...w, text: 'Cette nuit, vous avez vu une étoile filante : faites un vœu !' }, g);
+        return w.options;
       },
       /** (Carrière) Trouvailles du défrichage sur un terrain (visuel + carte). */
       finds(lotId = null, kinds = ['chest', 'seedjar']) {

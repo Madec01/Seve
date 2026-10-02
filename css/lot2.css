@@ -105,7 +105,7 @@
   animation-delay: calc(var(--i, 0) * 180ms + 150ms);
 }
 .finds-list li .find-text { display: flex; flex-direction: column; min-width: 0; }
-.finds-list li small { opacity: 0.85; }
+.finds-list li small { font-size: 0.875rem; line-height: 1.3; opacity: 0.85; }
 @keyframes find-in { to { opacity: 1; transform: none; } }
 .reduced-motion .finds-list li { opacity: 1; transform: none; }
 
@@ -119,3 +119,21 @@
 .hud-weather .w-tomorrow .w-alt .sprite { width: 20px; height: 20px; max-width: none; max-height: none; }
 .hud-weather .w-alt .ico { --is: var(--u); }
 .hud-weather .w-tomorrow .w-alt .ico { --is: 1.25px; }
+
+/* Décors trouvés à la ferme (boutique de la grange, emplacements) : pas encore trouvés → silhouette douce. */
+.cos-tile.is-tofind { opacity: 0.75; }
+.cos-tile.is-tofind .cos-icon { filter: grayscale(1) brightness(0.75); }
+.cos-status.is-tofind { color: var(--text-soft); font-style: italic; }
+
+/* Fiche d'une parcelle : chances de qualité de la prochaine récolte à la main et soins remplis (§ 15.1). */
+.tip-quality { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 0.9375rem; }
+.tip-quality .q-fine { color: var(--slate-dark); }
+.tip-quality .q-gold { color: var(--warn); }
+.tip-care { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.875rem; color: var(--text-soft); }
+.tip-care .care.is-ok { color: var(--green-text); font-weight: 700; }
+
+/* Barre du haut : case météo trop étroite (mesurée par hud.js) → l'icône du jour seule. */
+.hud-weather.is-tight .w-arrow,
+.hud-weather.is-tight .w-tomorrow,
+.hud-weather.is-tight .w-name { display: none; }
+.hud-weather.is-tight { align-items: center; justify-content: center; }

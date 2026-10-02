@@ -1488,6 +1488,10 @@ function wrap(state) {
     /** Carrière : recalcule le niveau après une modification directe de l'état (outils de débogage, tests). */
     ...(career ? { refreshLevel } : {}),
     difficulty: state.difficulty,
+    /** (lot 2) Surprises actives (Détente et carrière par défaut ; Classique : non). */
+    get surprises() {
+      return !!state.surprises;
+    },
     update,
     on: emitter.on,
     serialize: () => JSON.parse(JSON.stringify(state)),

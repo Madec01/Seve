@@ -29,8 +29,10 @@ test('carrière : surprises actives par défaut ; désactivées (null) restent d
   assert.ok(g.state.surprises);
   assert.deepEqual(g.state.career.heirlooms, []);
   assert.ok(g.query.surprises().enabled);
+  assert.equal(g.surprises, true);
   const off = createCareer({ seed: 1, surprises: false });
   assert.equal(off.state.surprises, null);
+  assert.equal(off.surprises, false);
   assert.equal(off.query.surprises(), null);
   const back = loadCareer(JSON.parse(JSON.stringify(off.serialize())));
   assert.equal(back.state.surprises, null);

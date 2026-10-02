@@ -72,6 +72,19 @@ export function createLot2(app) {
     }
   }
 
+  /** Texte d'un décor trouvé déjà possédé. */
+  function ownedText(id) {
+    return id === 'statue.small' ? 'Vous aviez déjà la petite statue' : 'Vous aviez déjà la chouette sculptée';
+  }
+
+  /** Gain réel d'une surprise, pour le résumé du matin (« +24 pièces », « +4 écus »). */
+  function surpriseGain(ev, cos) {
+    if (ev.amount) return `+${plural(ev.amount, 'pièce')}`;
+    if (ev.ecus) return `+${plural(ev.ecus, 'écu')}`;
+    if (cos?.already && ev.ecusIfOwned) return `+${plural(ev.ecusIfOwned, 'écu')}`;
+    return '';
+  }
+
   function morning(text) {
     app.todo?.morningNote?.(text);
   }
@@ -174,7 +187,11 @@ export function createLot2(app) {
   function onFinds(ev) {
     for (const f of ev.finds || []) {
       if (f.ecus) grantEcus(f.ecus);
-      if (f.cosmeticId) grantCosmetic(f.cosmeticId, f.ecusIfOwned);
+      if (f.cosmeticId) {
+        const r = grantCosmetic(f.cosmeticId, f.ecusIfOwned);
+        // La carte dit ce qui a vraiment été reçu (décor déjà possédé → écus).
+        if (r?.already && f.ecusIfOwned) f.text = `${ownedText(f.cosmeticId)} : +${plural(f.ecusIfOwned, 'écu')} à la place.`;
+      }
     }
     // La carte arrive quand les trouvailles sont sorties des souches (défrichage ~1,6 s).
     findsQueue.push({ ev, at: performance.now() + 2100 + (ev.finds?.length || 1) * 550 });
@@ -212,11 +229,16 @@ export function createLot2(app) {
       }
       case 'surprise': {
         const names = SURPRISE_SPRITES[ev.kind] || [ev.icon];
-        app.toasts.show({ kind: 'success', sprite: spriteAny(names, 'sprite--sm', 'star'), title: ev.title || 'Une surprise !', text: ev.text || '', duration: 6500 });
-        morning(`Surprise de la nuit : ${(ev.title || 'une surprise').replace(/^./, (c) => c.toLowerCase())} !`);
-        app.audio.tone?.(SURPRISE_SOUND[ev.kind] || 'chime', { volume: 0.8, delay: 0.35 });
+        // Récompenses d'abord : le message dit ce qui a vraiment été reçu (coffre, décor déjà possédé).
         if (ev.ecus) grantEcus(ev.ecus);
-        if (ev.cosmeticId) grantCosmetic(ev.cosmeticId, ev.ecusIfOwned);
+        const cos = ev.cosmeticId ? grantCosmetic(ev.cosmeticId, ev.ecusIfOwned) : null;
+        let text = ev.text || '';
+        if (cos?.already && ev.ecusIfOwned) text = `${ownedText(ev.cosmeticId)} : +${plural(ev.ecusIfOwned, 'écu')} à la place.`;
+        else if (cos && !cos.already) text = `${text} Posez-la avec « Décorer la ferme » (Grange).`;
+        app.toasts.show({ kind: 'success', sprite: spriteAny(names, 'sprite--sm', 'star'), title: ev.title || 'Une surprise !', text, duration: 6500 });
+        const gain = surpriseGain(ev, cos);
+        morning(`Surprise de la nuit : ${(ev.title || 'une surprise').replace(/^./, (c) => c.toLowerCase())}${gain ? ` (${gain})` : ''} !`);
+        app.audio.tone?.(SURPRISE_SOUND[ev.kind] || 'chime', { volume: 0.8, delay: 0.35 });
         break;
       }
       case 'specialWeather':

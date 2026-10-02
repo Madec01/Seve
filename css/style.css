@@ -2106,6 +2106,9 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 
 /* ─── Barre du haut : année, rang ────────────────────────────────────────────── */
 #hud.is-career .hud-row { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 4px; }
+/* La météo reste une cible d'au moins 48 px même quand l'argent s'allonge (« 19 750 ») ; nom coupé proprement. */
+#hud.is-career .hud-weather { min-width: 48px; }
+#hud.is-career .hud-weather .w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .date-year { font-weight: 600; color: var(--text); }
 #hud.is-career .date-word, #hud.is-career .date-season { display: none; }
 .nf-outfits > .stats-note { grid-column: 1 / -1; margin: 0; }

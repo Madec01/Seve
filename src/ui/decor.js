@@ -91,11 +91,19 @@ export function farmNameForm(app, { onSaved } = {}) {
   return el('div.name-form', el('div.name-row', input, save), el('div.name-meta', error, count));
 }
 
-/** État d'un objet pour le joueur : 'placed' | 'owned' | 'buyable' | 'poor'. */
+/** État d'un objet pour le joueur : 'placed' | 'owned' | 'buyable' | 'poor' | 'tofind' (lot 2 : à trouver à la ferme). */
 function stateOf(app, item, placed) {
   if (placed) return 'placed';
-  if (app.progression.owns(item.id) || item.isDefault || !item.price) return 'owned';
+  if (app.progression.owns(item.id) || item.isDefault) return 'owned';
+  // (lot 2) Décor trouvé à la ferme (surprise, trouvaille) : ne s'achète jamais.
+  if (item.found) return 'tofind';
+  if (!item.price) return 'owned';
   return app.progression.ecus() >= item.price ? 'buyable' : 'poor';
+}
+
+/** (lot 2) Où se trouve un décor « trouvé à la ferme ». */
+function foundHint(item) {
+  return item.id === 'statue.small' ? 'en défrichant un terrain (carrière)' : 'au petit matin, sous une vieille souche';
 }
 
 /**
@@ -109,10 +117,12 @@ export function cosmeticTile(app, item, { placed = false, placedLabel = 'Posé',
     st === 'placed'
       ? el('span.cos-status.is-placed', `✓ ${placedLabel}`)
       : st === 'owned'
-        ? el('span.cos-status', count ? `Posé ×${count}` : 'Débloqué')
-        : st === 'buyable'
-          ? el('span.cos-status.is-price', ecuIcon('sprite--xs'), fmt(item.price))
-          : el('span.cos-status.is-poor', `Il manque ${plural(missing, 'écu')}`);
+        ? el('span.cos-status', count ? `Posé ×${count}` : item.found ? 'Trouvé à la ferme' : 'Débloqué')
+        : st === 'tofind'
+          ? el('span.cos-status.is-tofind', 'À trouver à la ferme')
+          : st === 'buyable'
+            ? el('span.cos-status.is-price', ecuIcon('sprite--xs'), fmt(item.price))
+            : el('span.cos-status.is-poor', `Il manque ${plural(missing, 'écu')}`);
   return el(
     `button.cos-tile.is-${st}`,
     {
@@ -131,7 +141,14 @@ export function cosmeticTile(app, item, { placed = false, placedLabel = 'Posé',
 /** Débloque un objet (confirmation, écus). Renvoie true si l'objet est possédé à la fin. */
 export async function unlockFlow(app, item) {
   const P = app.progression;
-  if (P.owns(item.id) || item.isDefault || !item.price) return true;
+  if (P.owns(item.id) || item.isDefault) return true;
+  if (item.found) {
+    // (lot 2) Ne s'achète pas (progression.buyCosmetic le refuse) : il se trouve en jouant.
+    app.audio.play('click');
+    app.toasts.show({ kind: 'info', icon: 'star', title: item.name, text: `Cet objet ne s'achète pas : il se trouve à la ferme, ${foundHint(item)}.` });
+    return false;
+  }
+  if (!item.price) return true;
   if (P.ecus() < item.price) {
     app.audio.play('error');
     app.toasts.show({ kind: 'error', text: `Il manque ${plural(item.price - P.ecus(), 'écu')} pour « ${item.name} ». Gagnez des écus en jouant (années réussies, succès).` });

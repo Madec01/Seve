@@ -536,6 +536,9 @@ export const DECOR_SPRITES = Object.freeze({
   mailbox: 'deco.mailbox',
   'hedge.bush': 'deco.hedge',
   pond: 'deco.pond',
+  // (lot 2) Décors trouvés à la ferme (src/data/cosmetics.js, found: true).
+  'owl.carved': 'owl.carved',
+  'statue.small': 'find.statue',
 });
 
 /** Sprite d'une décoration (accepte aussi « decor.<id> » ou un nom de sprite « deco.* »), ou null. */

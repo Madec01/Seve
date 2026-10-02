@@ -36,6 +36,9 @@ test('activation : Détente oui (flux nouveaux), Classique non (rien de neuf dan
   assert.deepEqual(Object.keys(c.state.rng), ['weather', 'market', 'rot']);
   assert.equal(c.query.surprises(), null);
   assert.equal(c.query.forecast().special, undefined);
+  // game.surprises (booléen du contrat) : Détente oui, Classique non.
+  assert.equal(d.surprises, true);
+  assert.equal(c.surprises, false);
   // Mêmes flux d'origine dans les deux modes.
   for (const k of ['weather', 'market', 'rot']) assert.equal(d.state.rng[k], c.state.rng[k]);
   // Classique : la récolte n'a pas de qualité ; l'événement weather n'a pas de special.
@@ -56,6 +59,7 @@ test('activation : Détente oui (flux nouveaux), Classique non (rien de neuf dan
   // Option explicite : Classique avec surprises, Détente sans.
   assert.ok(createGame({ levelId: 1, seed: 3, difficulty: 'classique', surprises: true }).state.surprises);
   assert.equal(createGame({ levelId: 1, seed: 3, surprises: false }).state.surprises, null);
+  assert.equal(createGame({ levelId: 1, seed: 3, surprises: false }).surprises, false);
 });
 
 // ── Qualité ────────────────────────────────────────────────────────────────────────────

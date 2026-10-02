@@ -3,6 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { comboMidi, midiFreq, PENTATONIC, COMBO_TOP } from '../src/audio/synth.js';
 import { qualityOf, giantRect } from '../src/render/effects.js';
+import { decorSprite, SPRITES } from '../src/render/atlas.js';
+import { COSMETICS } from '../src/data/cosmetics.js';
 
 test('série de récolte : la note monte d\'un degré pentatonique à chaque parcelle, sans devenir criarde', () => {
   const notes = Array.from({ length: 30 }, (_, i) => comboMidi(i));
@@ -32,4 +34,12 @@ test('légume géant : union des 4 parcelles voisines, sinon la parcelle de l\'a
   const far = { 0: rect(0, 0), 1: rect(200, 0), 2: rect(0, 36), 3: rect(200, 36) };
   assert.deepEqual(giantRect({ plotRect: (i) => far[i] }, [0, 1, 2, 3], 0), rect(0, 0));
   assert.equal(giantRect({ plotRect: () => null }, [0, 1, 2, 3], 0), null);
+});
+
+test('décors trouvés à la ferme (owl.carved, statue.small) : un sprite dans la ferme et la boutique', () => {
+  const found = COSMETICS.filter((c) => c.found);
+  assert.deepEqual(found.map((c) => c.id).sort(), ['owl.carved', 'statue.small']);
+  assert.equal(decorSprite('owl.carved'), 'owl.carved');
+  assert.equal(decorSprite('statue.small'), 'find.statue');
+  for (const c of found) assert.ok(SPRITES[decorSprite(c.id)], `${c.id} : sprite connu de l'atlas`);
 });

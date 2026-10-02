@@ -27,6 +27,8 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-02 | `backup/avant-lot1-confort-2026-10-02` | Avant les 4 lots issus de l'analyse comparative (confort & accessibilité, toucher & surprises, variété, collection & enjeux), commit `1a2edad` |
 | 2026-10-02 | `backup/lot1-confort-2026-10-02` | Lot 1 confort & accessibilité terminé, commit `fa61ca6` ; pull request n° 9 |
 | 2026-10-02 | `backup/avant-lot2-surprises-2026-10-02` | Avant le lot 2 (toucher & surprises), commit `c3ba2d4` |
+| 2026-10-02 | `backup/avant-lot2-2026-10-02` | Copie supplémentaire de l'état de la pull request n° 9 (lot 1) avant les commits du lot 2, commit `9076e6a` |
+| 2026-10-02 | `backup/lot2-surprises-2026-10-02` | Lot 2 toucher & surprises terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9 |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -463,6 +465,15 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
 - **Équilibrage** (`docs/GAME_DESIGN.md` § 15.6) : revenu de l'année du joueur tranquille **+7,1 %** (novice +3,7 %, optimal +8,7 %) ; victoires inchangées ou meilleures ; l'argent final médian du joueur tranquille montant de ~30 %, **seuils d'étoiles Détente relevés** selon la même règle (★★ ≈ médiane, ★★★ ≈ 12 % meilleures parties ; niveau 2 ★★★ 470 pour le novice) ; carrière : casual +5,0 %, rangs inchangés à un an près, aucune faillite. Un premier réglage bloquait des champs tenus par les machines (géant jamais récolté, champignons jamais cueillis : −3 %) : corrigé (délai de 3 jours, cueillette par qui sème).
 - **Contrat** : `docs/ARCHITECTURE.md`, « Lot 2 — contrats » (écrit en premier pour les lots RENDER / UI / ART).
 
+### 2026-10-02 — Lot 2 « Toucher & surprises » : intégration CORE ↔ RENDER/UI et QA au doigt
+
+- **Écarts corrigés entre l'interface et le cœur** : `game.surprises` (booléen du contrat) manquait sur l'objet partie → ajouté (`src/core/game.js`, tests niveaux et carrière) ; la barre du haut lit maintenant `query.forecast().special` (avant : `state.surprises.sky`, qui ratait l'arc-en-ciel de la carrière) ; `__debug.lot2.surprise()` passe uniquement par `actions.triggerSurprise` du cœur (imitation supprimée, `{ ok: false, reason }` si impossible), `__debug.lot2.wish()` par `newWish` du cœur.
+- **Décors trouvés** (`owl.carved`, `statue.small`) : reliés aux sprites `owl.carved` / `find.statue` (`DECOR_SPRITES`, `src/render/atlas.js` ; la statue ne se dessinait pas) ; boutique de la grange et emplacements : « À trouver à la ferme » (grisé, toucher → message « ne s'achète pas ») tant qu'ils ne sont pas trouvés, « Trouvé à la ferme » ensuite (avant : prix 0 → affichés « Débloqué » et posables sans les avoir) (`src/ui/decor.js`, `css/lot2.css`).
+- **Récompenses annoncées au réel** (`src/ui/lot2.js`) : chouette ou statue déjà possédée → « Vous aviez déjà … : +5 écus à la place » (message et carte des trouvailles) ; résumé du matin avec le gain de la surprise (« un vieux coffre (+27 pièces) », « (+4 écus) »).
+- **Fiche de la parcelle** (`src/ui/field.js`, GAME_DESIGN § 15.1) : chances de la prochaine récolte à la main (belle, dorée) et soins remplis (arrosée chaque jour, ruche, sol reposé) ; légume géant (« Carotte géante ! », valeur, à la main) ; champignons / cercle de fées (« Cueillir (+N) », jours restants) — le bouton affichait « Récolter (+0) » et « Parcelle libre ».
+- **Barre du haut** : case météo de la carrière à 43 px quand l'argent a 5 chiffres → 48 px au moins, et l'icône seule quand la flèche et le nom ne tiennent pas (`is-tight`, `src/ui/hud.js`). Carte des trouvailles : détails à 13,3 px → 14 px.
+- **QA au doigt** (Playwright, Pixel 7, `index.html?debug=1&nosw`, toucher seulement ; normal, mouvements réduits, texte 150 %) : Détente (glissé, belle/dorée forcées, géant, fée, coffre, cercle, chouette, chaque météo spéciale par la vraie aube, champignons du brouillard, vœu fermé puis rouvert, résumé du matin), Classique (aucun événement du lot 2 en 30 jours, récolte juteuse), carrière (achat d'un terrain → coffre en écus + statue déjà possédée, renard, coffre en écus, chouette déjà possédée, boutique) : tout vert, aucune erreur de console. Simulations : niveaux casual +7,1 % (novice +3,7 %, optimal +8,7 %), carrière casual +5,0 % (60 carrières), parité Classique exacte (400 parties).
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -602,3 +613,9 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-02 | Carrière : message « Poulailler : plein » avec l'icône carotte | Corrigé (icône du produit de l'abri) |
 | 2026-10-02 | Glissé partant d'une parcelle à moitié hors écran qui fait défiler la carte au lieu d'arroser (annexe B n° 8) | Non reproduit sous Playwright, à vérifier au doigt réel |
 | 2026-10-02 | Fin d'année de carrière : succès et messages empilés sur la moitié de la scène (friction 21) | À voir (lot 2 : regrouper les succès) |
+| 2026-10-02 | Lot 2 : décor « Petite statue » jamais dessiné dans la ferme (pas de sprite relié) | Corrigé (`DECOR_SPRITES`, test) |
+| 2026-10-02 | Lot 2 : chouette et statue affichées « Débloqué » et posables avant d'être trouvées (prix 0) | Corrigé (« À trouver à la ferme ») |
+| 2026-10-02 | Lot 2 : fiche d'une parcelle à champignons « Parcelle libre · Récolter (+0) » ; pas de chances de qualité dans la fiche (§ 15.1) | Corrigé (`field.js`) |
+| 2026-10-02 | Lot 2 : décor trouvé déjà possédé annoncé « rejoint vos décorations » alors que 5 écus sont versés | Corrigé (message réel) |
+| 2026-10-02 | Lot 2 : `game.surprises` du contrat absent ; météo spéciale lue dans l'état (arc-en-ciel de carrière ignoré par la barre du haut) | Corrigé |
+| 2026-10-02 | Carrière : case météo à 43 px et flèche coupée quand l'argent a 5 chiffres | Corrigé (≥ 48 px, icône seule si trop étroit) |

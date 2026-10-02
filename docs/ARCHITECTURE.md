@@ -2032,6 +2032,16 @@ src/ui/todo.js         morningNote(text) : ligne en tête du prochain résumé d
   (`find.*`) ; puis carte « Une trouvaille ! » (liste animée, bouton « Merveilleux ! ») ~2,6 s après l'achat.
 - **Débogage** (`?debug=1`) : `__debug.lot2.{ enable(), forceQuality(i, q), matureAll(cropId), harvest(i, q), giant(cropId),
   surprise(kind), weather(id, { tomorrow, dayProgress }), wish(), finds(lotId, kinds), swipe(ms, q), stats() }` ;
-  `onGameEvent(ev, game)` (main.js) est la réaction commune à tout événement du cœur.
+  `onGameEvent(ev, game)` (main.js) est la réaction commune à tout événement du cœur. `surprise(kind)` passe
+  uniquement par `actions.triggerSurprise` du cœur (→ `{ ok: false, reason }` si elle est impossible aujourd'hui :
+  renard hors carrière, hérisson sans maladie, chouette déjà trouvée) ; `wish()` par `newWish` du cœur ;
+  `giant`, `weather` et `finds` restent des aides de visuel (le cœur n'a pas d'action pour eux).
+- **Intégration (2026-10-02)** : `game.surprises` (booléen, getter de l'objet partie) ; la barre du haut lit
+  `query.forecast().special` (arc-en-ciel de carrière compris) ; fiche de la parcelle (`src/ui/field.js`) : chances
+  de la prochaine récolte à la main et soins (`query.plot().quality` / `care`, fiche seulement), géant, cueillette
+  (« Cueillir (+N) ») ; décors trouvés : `DECOR_SPRITES['owl.carved'] = 'owl.carved'`,
+  `DECOR_SPRITES['statue.small'] = 'find.statue'` ; tuile de boutique `is-tofind` « À trouver à la ferme » tant que
+  l'objet n'est pas possédé (`unlockFlow` refuse), « Trouvé à la ferme » ensuite ; messages et carte des trouvailles
+  disent le gain réel (déjà possédé → « +5 écus à la place ») ; résumé du matin : gain de la surprise.
 - **Mesures** (Pixel 7 émulé) : glissé de 12–24 parcelles à 60 i/s (médiane 16,7 ms, 95e centile 16,8 ms), aucune
   erreur de console ; carrière : glissé, surprises et 10 jours sans erreur.

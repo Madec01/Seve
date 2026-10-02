@@ -1,8 +1,8 @@
 {
-  "id": "9078ca503453",
+  "id": "a400d9b9f543",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.58b525b86f.js",
-  "css": "dist/game.20ab919a89.css",
+  "js": "dist/game.beb00c62a1.js",
+  "css": "dist/game.43fdc47c95.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -150,8 +150,8 @@
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/guidance.css": "f94433c31a91ab2e",
-    "css/lot2.css": "e1c96465d2f42dde",
-    "css/style.css": "a7b8f3b4b1cc6891",
+    "css/lot2.css": "abbc12b1669158cb",
+    "css/style.css": "19ab0d19191d1c26",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
     "src/audio/audio.js": "cc16585519b4f82c",
@@ -182,7 +182,7 @@
     "src/core/economy.js": "5e63263fdfaa01f8",
     "src/core/events.js": "467b3069052f8d70",
     "src/core/farm.js": "dfbb742db9f6cd5a",
-    "src/core/game.js": "034a112821343215",
+    "src/core/game.js": "04459f799997c9dd",
     "src/core/market.js": "b44b99ed21844017",
     "src/core/neighbour.js": "625c041def630a9b",
     "src/core/options.js": "26a28fd7cf748ba7",
@@ -218,10 +218,10 @@
     "src/data/surprises.js": "eec619c07ec58a5e",
     "src/index.template.html": "abb0b4a4a78081a7",
     "src/loader.js": "8cd0d03467331dd6",
-    "src/main.js": "6f051c118a528717",
+    "src/main.js": "4cd01aba545582e2",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
-    "src/render/atlas.js": "f32a8c62634417d7",
+    "src/render/atlas.js": "dff899ca8e05f500",
     "src/render/career-actors.js": "593ae15b849d2305",
     "src/render/effects.js": "5fb96089f6ca0d4f",
     "src/render/layout-career.js": "7d89b09fcb6b3a97",
@@ -244,19 +244,19 @@
     "src/ui/career/staff.js": "f776694ac71b068b",
     "src/ui/career/util.js": "47786af8ea3bb220",
     "src/ui/career/windows.js": "7552e1f1fe125b09",
-    "src/ui/decor.js": "4e0ebdca91841de3",
+    "src/ui/decor.js": "b2bb5cd16513d766",
     "src/ui/dialogs.js": "fbc1f7489164f936",
     "src/ui/dom.js": "4ce9149d5d52a48f",
-    "src/ui/field.js": "c057c904d185e240",
+    "src/ui/field.js": "f72c15599f903300",
     "src/ui/gestures.js": "d738516bbb555344",
     "src/ui/grange.js": "291f10fbeb707e40",
     "src/ui/guide-prefs.js": "e79573213ab6a060",
     "src/ui/guide.js": "26e4987639148cad",
     "src/ui/hints.js": "5e2db5912a972dd6",
-    "src/ui/hud.js": "c157e310667ddf40",
+    "src/ui/hud.js": "3c2299f8c9b198af",
     "src/ui/icons.js": "cd979dc037cdc49f",
     "src/ui/juice.js": "226804bb511a23ad",
-    "src/ui/lot2.js": "56f590a10b522d77",
+    "src/ui/lot2.js": "d05d1c529520f241",
     "src/ui/messages.js": "b29329e852fef705",
     "src/ui/panel.js": "2ab835a5c0dc4fab",
     "src/ui/progress.js": "42c5584d36f7e360",
@@ -273,43 +273,43 @@
   },
   "history": [
     {
-      "id": "9078ca503453",
+      "id": "a400d9b9f543",
       "files": [
-        "dist/game.58b525b86f.js",
-        "dist/game.58b525b86f.js.map",
-        "dist/game.20ab919a89.css"
+        "dist/game.beb00c62a1.js",
+        "dist/game.beb00c62a1.js.map",
+        "dist/game.43fdc47c95.css"
       ]
     },
     {
-      "id": "bfa0bfd819d2",
+      "id": "275aafe64adf",
       "files": [
-        "dist/game.2cf1b22587.js",
-        "dist/game.2cf1b22587.js.map",
-        "dist/game.20ab919a89.css"
+        "dist/game.2c493abab9.js",
+        "dist/game.2c493abab9.js.map",
+        "dist/game.1824341c2b.css"
       ]
     },
     {
-      "id": "d2e17fe5ad4b",
+      "id": "6fcbd588a19f",
       "files": [
-        "dist/game.5818eb93ba.js",
-        "dist/game.5818eb93ba.js.map",
-        "dist/game.20ab919a89.css"
+        "dist/game.2c493abab9.js",
+        "dist/game.2c493abab9.js.map",
+        "dist/game.3983aa8b76.css"
       ]
     },
     {
-      "id": "b03392f8fbf4",
+      "id": "0a1aab359225",
       "files": [
-        "dist/game.b8cf387cb8.js",
-        "dist/game.b8cf387cb8.js.map",
-        "dist/game.20ab919a89.css"
+        "dist/game.2c493abab9.js",
+        "dist/game.2c493abab9.js.map",
+        "dist/game.2804cc957c.css"
       ]
     },
     {
-      "id": "2ae2cdbe1554",
+      "id": "3df45b2b5a2a",
       "files": [
-        "dist/game.2246414fbe.js",
-        "dist/game.2246414fbe.js.map",
-        "dist/game.649c238685.css"
+        "dist/game.223514d81d.js",
+        "dist/game.223514d81d.js.map",
+        "dist/game.2804cc957c.css"
       ]
     }
   ]

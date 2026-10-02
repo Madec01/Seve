@@ -238,6 +238,19 @@ export function createHud(root, app) {
     return el('div.tip-rows', rows);
   }
 
+  /**
+   * Case météo trop étroite (carrière : argent à 5 chiffres, « couvert · demain ») : l'icône du jour seule,
+   * plutôt qu'une flèche coupée et « Nu… » (le nom et demain restent dans la fiche de la météo).
+   */
+  let fitKey = '';
+  function fitWeather() {
+    const key = `${window.innerWidth}|${document.documentElement.dataset.textScale || ''}|${weather.parentElement?.textContent || weather.textContent}`;
+    if (key === fitKey) return;
+    fitKey = key;
+    weather.classList.remove('is-tight');
+    if (weather.scrollWidth > weather.clientWidth + 1) weather.classList.add('is-tight');
+  }
+
   /** (Lot 2) Icône de météo spéciale à la place de l'icône de base (nœud mis en cache par météo). */
   function showSpecial(slot, id, base, alt, cls) {
     if (specialShown[slot] === id) return;
@@ -250,7 +263,7 @@ export function createHud(root, app) {
   function weatherTip() {
     if (!game) return null;
     const w = game.query.forecast();
-    const sky = game.state.surprises?.sky || {};
+    const sky = w.special || {}; // (lot 2) carrière : l'événement « arc-en-ciel » y est montré comme special.today
     const sp = (id) => SPECIAL_WEATHERS_BY_ID[id] || null;
     return el(
       'div.tip-rows',
@@ -390,7 +403,7 @@ export function createHud(root, app) {
 
     setIcon(wToday, w.today);
     setIcon(wTomorrow, w.tomorrow || 'sunny');
-    const sky = game.state.surprises?.sky || null;
+    const sky = w.special || null; // (lot 2) query.forecast().special (carrière : arc-en-ciel compris)
     const spToday = sky?.today || null;
     const spTomorrow = sky?.tomorrow || null;
     showSpecial('today', spToday, wToday, wTodayAlt, 'sprite--md');
@@ -399,6 +412,7 @@ export function createHud(root, app) {
     setText(wName, spToday ? SPECIAL_WEATHERS_BY_ID[spToday]?.name || weatherName(w.today) : weatherName(w.today));
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
     weather.querySelector('.w-arrow').style.visibility = w.tomorrow ? '' : 'hidden';
+    fitWeather();
     weather.setAttribute('aria-label', `Météo : ${weatherName(w.today)}${w.tomorrow ? `, demain ${weatherName(w.tomorrow)}` : ''}`);
 
     const p = projection();
