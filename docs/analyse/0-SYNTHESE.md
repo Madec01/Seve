@@ -96,3 +96,9 @@ Effort : S (petit), M (moyen), L (gros).
 | **5. Grand projet village** | D2, D4, D5, E1/E3 complets, B6 | But long de la carrière | gros |
 
 **À éviter absolument** (retours des études) : énergie ou endurance, délais stressants, séries de connexion à ne pas casser, notifications qui culpabilisent, multiplication des monnaies et des fermes, fabrication un objet à la fois, prestige qui fait tout perdre, classements en ligne.
+
+
+## Décisions de l'utilisateur (2026-10-02)
+
+- Lots 1, 2, 3 et 4 à développer dans l'ordre ; en carrière, salariés et machines « aident sans remplacer ».
+- Pas de copie de la restauration du village de Stardew : le grand projet de carrière sera **« La Vallée vivante »** (la Vallée qui revient + la Grainothèque vivante, voir `5-idees-projet-long.md`), développé **après les 4 lots**.
