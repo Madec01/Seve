@@ -14,6 +14,7 @@ import { MACHINES_BY_ID } from './machines.js';
 import { CAREER_ANIMALS_BY_ID, COLLECT } from './animals.js';
 import { LOT_TYPES_BY_ID } from './lots.js';
 import { PRODUCTS } from '../products.js';
+import { countNoun } from '../french.js';
 
 const pct = (x) => `${Math.round(x * 100)} %`;
 const plural = (n, one, many = `${one}s`) => `${n} ${n > 1 ? many : one}`;
@@ -175,7 +176,7 @@ export function buildingLines(id, level) {
     }
     case 'shelter': {
       const a = CAREER_ANIMALS_BY_ID[def.animal];
-      out.push(`Loge jusqu'à ${d.animals} ${(a?.name || def.animal).toLowerCase()}${d.animals > 1 ? 's' : ''}`);
+      out.push(`Loge jusqu'à ${countNoun(d.animals, (a?.name || def.animal).toLowerCase())}`);
       if (a?.collect) out.push(`Garde jusqu'à ${COLLECT.capDays} jours de production à ramasser`);
       break;
     }

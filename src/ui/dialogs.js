@@ -3,7 +3,10 @@
 //
 // createDialogs(layer, app) → { open, close, closeTop, isOpen, top, mainMenu, levelSelect, options,
 //                               credits, pauseMenu, seasonEnd, bankrupt, victory, contestResult,
-//                               confirm, frame, btn }
+//                               confirm, frame, btn, a11yWelcome }
+// Options : section « Accessibilité » (taille du texte, police, contrastes, pause pendant la
+// lecture, vitesse ×½, pause chaque matin, animations, repères, vibrations, commandes en bas,
+// gaucher, zoom). Ces réglages sont aussi proposés une fois au premier lancement (a11yWelcome).
 // Les fenêtres s'empilent ; seule celle du dessus est active. Échap ferme celle du dessus si elle
 // le permet. Le focus clavier reste dans la fenêtre active.
 
@@ -15,6 +18,8 @@ import { clear, el, fmt, gain, loss, plural, signed } from './dom.js';
 import { achievementIcon, cropIcon, ecuIcon, icon, investmentIcon, productIcon, sprite, spriteAny } from './icons.js';
 import { swipeToClose } from './sheets.js';
 import { cropCount, season, seasonArrives } from './text.js';
+import { TEXT_SCALES } from '../storage.js';
+import { applyA11y, autoPauseDawnSupported, pauseOnSheetActive, slowSpeedSupported } from './a11y.js';
 
 export function createDialogs(layer, app) {
   const stack = []; // { node, opts }
@@ -207,6 +212,148 @@ export function createDialogs(layer, app) {
     );
     const handle = open(node, { id: 'main-menu', closable: false, menu: true, sound: false });
     app.onMainMenu?.();
+    if (shouldWelcome()) a11yWelcome();
+    return handle;
+  }
+
+  // ── Réglages d'accessibilité (options et premier lancement) ───────────────────
+  /** Change un réglage d'accessibilité : enregistrement, puis application immédiate. */
+  function setA11y(patch) {
+    app.updateSettings(patch);
+    applyA11y(app);
+    if ('pauseOnSheet' in patch) app.sheets?.syncPause?.();
+  }
+
+  /**
+   * Interrupteur d'option : case (vraie coche) + libellé (+ précision) + « Oui » / « Non » écrit.
+   * @param key réglage (id « opt-<key> ») ; get() : état affiché ; onChange(v)
+   */
+  function optToggle(key, label, onChange, { get = () => !!app.settings[key], sub = null } = {}) {
+    const state = el('span.opt-state', { 'aria-hidden': 'true' });
+    const b = el(
+      'button.opt-toggle',
+      {
+        type: 'button',
+        role: 'switch',
+        id: `opt-${key}`,
+        onclick: () => {
+          app.audio.play('toggle');
+          onChange(!get());
+          sync();
+        },
+      },
+      el('span.checkbox'),
+      el('span.opt-label', sub ? [el('b', label), el('small', sub)] : label),
+      state,
+    );
+    const sync = () => {
+      const on = get();
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      state.textContent = on ? 'Oui' : 'Non';
+    };
+    sync();
+    return b;
+  }
+
+  /** Taille du texte : quatre boutons (groupe radio) 100 · 115 · 130 · 150 %. */
+  function textSizePicker() {
+    const group = el('div.seg', { role: 'radiogroup', 'aria-label': 'Taille du texte', id: 'opt-textScale' });
+    const items = TEXT_SCALES.map((k) => {
+      const pct = Math.round(k * 100);
+      return el(
+        'button.seg-btn',
+        {
+          type: 'button',
+          role: 'radio',
+          id: `opt-text-${pct}`,
+          'data-scale': String(k),
+          onclick: () => {
+            if (app.settings.textScale === k) return;
+            app.audio.play('toggle');
+            setA11y({ textScale: k });
+            sync();
+          },
+        },
+        el('span.seg-sample', { style: `font-size: ${k}rem` }, 'A'),
+        el('span.seg-pct', `${pct}\u00a0%`),
+      );
+    });
+    group.append(...items);
+    const sync = () => {
+      for (const b of items) {
+        const on = Number(b.dataset.scale) === app.settings.textScale;
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      }
+    };
+    group.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      e.preventDefault();
+      const i = Math.max(0, TEXT_SCALES.indexOf(app.settings.textScale));
+      const j = Math.min(TEXT_SCALES.length - 1, Math.max(0, i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1)));
+      items[j].click();
+      items[j].focus();
+    });
+    sync();
+    return el('div.opt-block', el('span.opt-label', el('b', 'Taille du texte')), group);
+  }
+
+  /** Les interrupteurs d'accessibilité (options complètes, ou sélection du premier lancement). */
+  function a11yToggles({ welcome = false } = {}) {
+    const t = {
+      readableFont: () => optToggle('readableFont', 'Police très lisible', (v) => setA11y({ readableFont: v }), { sub: 'Lettres simples et bien distinctes (Atkinson Hyperlegible) au lieu de la police pixel.' }),
+      highContrast: () => optToggle('highContrast', 'Contrastes renforcés', (v) => setA11y({ highContrast: v }), { sub: 'Contours plus épais, fonds plus foncés, couleurs d\'alerte plus nettes.' }),
+      pauseOnSheet: () =>
+        optToggle('pauseOnSheet', 'Pause pendant la lecture', (v) => setA11y({ pauseOnSheet: v ? 'on' : 'off' }), {
+          get: () => pauseOnSheetActive(app),
+          sub: 'Le temps s\'arrête tant qu\'une fiche est ouverte (achats, bilan, graines…).',
+        }),
+      slowSpeed: () => (slowSpeedSupported() ? optToggle('slowSpeed', 'Vitesse lente ×½', (v) => setA11y({ slowSpeed: v }), { sub: 'Ajoutée au bouton de vitesse : une journée dure deux fois plus longtemps.' }) : null),
+      autoPauseDawn: () => (autoPauseDawnSupported(app) ? optToggle('autoPauseDawn', 'Pause chaque matin', (v) => setA11y({ autoPauseDawn: v }), { sub: 'Le jeu s\'arrête au début de chaque journée : reprenez quand vous êtes prêt.' }) : null),
+      reducedMotion: () => optToggle('reducedMotion', 'Réduire les animations', (v) => setA11y({ reducedMotion: v }), { sub: 'Moins de mouvements à l\'écran, pas d\'éclairs d\'orage.' }),
+      plotHints: () => optToggle('plotHints', 'Repères sur les parcelles', (v) => setA11y({ plotHints: v }), { sub: 'Signale les parcelles à arroser et les jeunes pousses.' }),
+      vibration: () => ('vibrate' in navigator ? optToggle('vibration', 'Vibrations', (v) => { setA11y({ vibration: v }); if (v) app.vibrate(20); }, { sub: 'Petite vibration au toucher et aux alertes.' }) : null),
+      controlsBottom: () => optToggle('controlsBottom', 'Vitesse et pause en bas', (v) => setA11y({ controlsBottom: v }), { sub: 'Le bouton de vitesse passe dans la barre du bas, sous le pouce.' }),
+      leftHanded: () => optToggle('leftHanded', 'Disposition pour gaucher', (v) => setA11y({ leftHanded: v }), { sub: 'Le bouton de vitesse passe à gauche.' }),
+      pinchZoom: () => optToggle('pinchZoom', 'Zoom à deux doigts', (v) => setA11y({ pinchZoom: v }), { sub: 'Agrandir l\'écran en écartant deux doigts sur les barres et les fiches.' }),
+    };
+    const keys = welcome ? ['readableFont', 'pauseOnSheet', 'slowSpeed', 'reducedMotion', 'controlsBottom'] : Object.keys(t);
+    return keys.map((k) => t[k]());
+  }
+
+  /** Premier lancement : proposer les réglages d'accessibilité une fois (pas sous Playwright, sauf ?welcome). */
+  function shouldWelcome() {
+    if (app.settings.a11yOffered || top() === 'a11y-welcome') return false;
+    if (navigator.webdriver && !new URLSearchParams(location.search).has('welcome')) return false;
+    return true;
+  }
+
+  /** Fenêtre courte et amicale : taille du texte, quelques interrupteurs, « C'est parti » / « Plus tard ». */
+  function a11yWelcome() {
+    let handle = null;
+    const done = () => {
+      app.updateSettings({ a11yOffered: true });
+      handle?.close();
+    };
+    const node = frame({
+      title: 'Bienvenue !',
+      ribbon: 'ribbon',
+      cls: 'dialog--welcome',
+      body: [
+        el('p.welcome-text', 'Réglez le jeu pour jouer confortablement. Vous pourrez tout changer plus tard dans Options, rubrique Accessibilité.'),
+        el('div.options', textSizePicker(), ...a11yToggles({ welcome: true })),
+      ],
+      actions: [btn('Plus tard', () => done(), '', { id: 'welcome-later' }), btn('C\'est parti', () => done(), 'btn--red', { id: 'welcome-ok', 'data-autofocus': '' })],
+    });
+    handle = open(node, {
+      id: 'a11y-welcome',
+      onClose: (reason) => {
+        // Fermée par le jeu (menu reconstruit) : elle sera reproposée ; fermée par le joueur : jamais.
+        if (reason !== 'silent' && reason !== 'replace' && !app.settings.a11yOffered) app.updateSettings({ a11yOffered: true });
+      },
+    });
     return handle;
   }
 
@@ -402,31 +549,7 @@ export function createDialogs(layer, app) {
       });
       return el('label.opt-row', el('span.opt-label', label), input, value);
     };
-    const toggle = (key, label, onChange, get = () => !!app.settings[key]) => {
-      const box = el('span.checkbox');
-      const b = el(
-        'button.opt-toggle',
-        {
-          type: 'button',
-          role: 'switch',
-          id: `opt-${key}`,
-          onclick: () => {
-            app.audio.play('toggle');
-            onChange(!get());
-            sync();
-          },
-        },
-        box,
-        el('span.opt-label', label),
-      );
-      const sync = () => {
-        const on = get();
-        b.classList.toggle('is-on', on);
-        b.setAttribute('aria-checked', on ? 'true' : 'false');
-      };
-      sync();
-      return b;
-    };
+    const toggle = (key, label, onChange, get = () => !!app.settings[key]) => optToggle(key, label, onChange, { get });
     const inRun = app.game && !app.inMenu && app.game.state.status === 'playing' ? app.game : null;
     const runNote = el('p.opt-note');
     const inCareer = inRun?.mode === 'career';
@@ -445,10 +568,11 @@ export function createDialogs(layer, app) {
       slider('sfxVolume', 'Sons'),
       slider('ambienceVolume', 'Ambiance'),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
+      el('h3.opt-section', { id: 'opt-a11y' }, 'Accessibilité'),
+      textSizePicker(),
+      ...a11yToggles(),
       el('h3.opt-section', 'Téléphone et affichage'),
-      'vibrate' in navigator ? toggle('vibration', 'Vibrer au toucher', (v) => { app.updateSettings({ vibration: v }); if (v) app.vibrate(20); }) : null,
       app.wakeLockSupported() ? toggle('keepAwake', 'Garder l\'écran allumé pendant la partie', (v) => app.updateSettings({ keepAwake: v })) : null,
-      toggle('reducedMotion', 'Réduire les animations', (v) => app.updateSettings({ reducedMotion: v })),
       document.fullscreenEnabled && !app.isStandalone() ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
       app.canInstall() ? btn([icon('star', 'sm'), 'Installer le jeu sur l\'appareil'], () => app.installApp(), 'btn--wide', { id: 'opt-install' }) : null,
       el('h3.opt-section', 'En cas de problème'),
@@ -1031,6 +1155,7 @@ export function createDialogs(layer, app) {
     confirm,
     frame,
     btn,
+    a11yWelcome,
     yearLength,
   };
 }

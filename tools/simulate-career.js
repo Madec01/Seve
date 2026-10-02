@@ -11,6 +11,8 @@
 //   node tools/simulate-career.js --assume-objectives    objectifs « employés / quêtes / comice » supposés remplis
 //   node tools/simulate-career.js --trace --seed 3       une carrière, année par année
 //   node tools/simulate-career.js --json
+//   node tools/simulate-career.js --surprises off        (lot 2) sans qualité, géants, surprises, météos spéciales, trouvailles
+//   node tools/simulate-career.js --compare-surprises    (lot 2) sans / avec : revenu par année, rang médian, Domaine
 //
 // Robots (profils humains : budget de gestes par jour, comme tools/simulate.js ; « glisser » sur un terrain :
 // 1 geste + 0,25 par parcelle, « semer partout » : 3 gestes par terrain, ramasser un abri : 1, chasser un
@@ -876,8 +878,8 @@ export async function loadStaffHelper() {
   return staffHelperModule;
 }
 
-export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null } = {}) {
-  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée' });
+export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true } = {}) {
+  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises });
   const profile = CAREER_PROFILES[strategy];
   if (!profile) throw new Error(`Stratégie inconnue : ${strategy}`);
   const me = {
@@ -978,6 +980,9 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   while (game.state.time.year <= years && game.state.status === 'playing') {
     me.day++;
     me.pace.days++;
+    // (lot 2) Vœu de l'étoile filante : la bourse si elle est proposée, sinon le premier vœu.
+    const wish = game.query.surprises()?.wish;
+    if (wish) game.actions.makeWish((wish.options.find((o) => o.id === 'coins') || wish.options[0]).id);
     const open = (game.state.career.quest ? 1 : 0) + game.state.career.events.offers.filter((o) => o.kind === 'visitor').length;
     me.pace.maxOpen = Math.max(me.pace.maxOpen, open);
     const t = playDay(game, me);
@@ -1051,11 +1056,11 @@ function median(xs) {
 
 const pct = (n, d) => (d ? Math.round((100 * n) / d) : 0);
 
-export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null } = {}) {
+export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true } = {}) {
   const table = {};
   for (const strategy of strategies) {
     const careers = [];
-    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper }));
+    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises }));
     const rows = [];
     for (let yv = 1; yv <= years; yv++) {
       const at = careers.map((c) => c.years.find((x) => x.year === yv)).filter(Boolean);
@@ -1084,6 +1089,7 @@ export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10,
         animalLostShare: Math.round(100 * median(at.map((x) => (x.animalIncome + x.animalLost > 0 ? x.animalLost / (x.animalIncome + x.animalLost) : 0)))),
         visitors: Math.round(median(at.map((x) => x.incomeBy.visitors || 0))),
         questIncome: Math.round(median(at.map((x) => x.incomeBy.quests || 0))),
+        income: Math.round(at.reduce((s, x) => s + x.income, 0) / at.length),
       });
     }
     const recoveries = careers.flatMap((c) => c.years.flatMap((y) => y.recoveries));
@@ -1166,10 +1172,33 @@ function printMatrix(results) {
   }
 }
 
+/** (lot 2) Sans / avec les surprises : revenu moyen par année, rang médian, Domaine. */
+function printCompareSurprises(off, on, years) {
+  console.log('\nSurprises du lot 2 — carrière : sans → avec (revenu moyen de l\'année, rang médian)');
+  for (const strategy of Object.keys(off)) {
+    const a = off[strategy];
+    const b = on[strategy];
+    let ia = 0;
+    let ib = 0;
+    const cells = [];
+    for (let k = 0; k < Math.min(a.rows.length, b.rows.length, years); k++) {
+      ia += a.rows[k].income;
+      ib += b.rows[k].income;
+      cells.push(`an ${a.rows[k].year} : ${a.rows[k].rankMedian}→${b.rows[k].rankMedian}`);
+    }
+    const d = ia ? (100 * (ib - ia)) / ia : 0;
+    const y3 = (t) => t.rows.slice(0, 3).reduce((s, r) => s + r.income, 0);
+    const d3 = y3(a) ? (100 * (y3(b) - y3(a))) / y3(a) : 0;
+    console.log(`  ${strategy.padEnd(9)} revenu ${d >= 0 ? '+' : ''}${d.toFixed(1)} % (années 1 à 3 : ${d3 >= 0 ? '+' : ''}${d3.toFixed(1)} %) · Domaine ${a.domaineYear}→${b.domaineYear} · faillites ${a.bankrupt}→${b.bankrupt} % · rangs ${cells.join(', ')}`);
+  }
+}
+
 async function run() {
   const strategies = arg('strategy', null) ? String(arg('strategy')).split(',') : STRATEGIES;
   const helper = await loadStaffHelper();
+  const surprisesArg = arg('surprises', null);
   const opts = {
+    surprises: surprisesArg === null ? true : !['off', 'false', '0', 'non'].includes(String(surprisesArg)),
     strategies,
     runs: Number(arg('runs', 20)),
     years: Number(arg('years', 10)),
@@ -1178,6 +1207,13 @@ async function run() {
     assumeObjectives: !!arg('assume-objectives', false),
     helper: helper || null,
   };
+  if (arg('compare-surprises', false)) {
+    const off = simulateCareer({ ...opts, surprises: false });
+    const on = simulateCareer({ ...opts, surprises: true });
+    if (arg('json', false)) console.log(JSON.stringify({ off, on }, null, 2));
+    else printCompareSurprises(off, on, opts.years);
+    return;
+  }
   if (arg('trace', false)) {
     const c = playCareer({ ...opts, strategy: strategies[0], seed: Number(arg('seed', 1)) });
     for (const y of c.years) console.log(JSON.stringify({ ...y, incomeBy: undefined }));

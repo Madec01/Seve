@@ -34,13 +34,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '09c0bb5db863';
-// 138 fichiers, 26.2 Mo ; installés d'emblée (core) : 56 fichiers, 1.07 Mo
+const VERSION = 'a400d9b9f543';
+// 147 fichiers, 26.4 Mo ; installés d'emblée (core) : 65 fichiers, 1.28 Mo
 const PRECACHE = [
-  ["index.html", '1872d28d0a975517', 25863, 'core'],
+  ["index.html", '2398fb189d48c316', 26044, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.fa20fae291.js", 'c91b180d318e7cdd', 824087, 'core'],
-  ["dist/game.fafc621cce.css", 'fafc621cce73b891', 104225, 'core'],
+  ["dist/game.beb00c62a1.js", '18789fea21f4272c', 959480, 'core'],
+  ["dist/game.43fdc47c95.css", '43fdc47c95bc148a', 123205, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],
@@ -123,8 +123,10 @@ const PRECACHE = [
   ["assets/audio/sfx/warning.ogg", '14e8bfdb92deae18', 7606, 'lazy'],
   ["assets/audio/sfx/water.mp3", '898376bf9f725470', 49516, 'lazy'],
   ["assets/audio/sfx/water.ogg", '5e3fde1d073426cb', 43670, 'lazy'],
-  ["assets/fonts/JerseyFerme-Bold.woff2", '5a0b3c6fc315dd10', 8844, 'core'],
-  ["assets/fonts/JerseyFerme-Regular.woff2", '921e5a900c757d6a', 9176, 'core'],
+  ["assets/fonts/AtkinsonHyperlegible-Bold.woff2", 'fe3a2f1d39474c13', 23816, 'core'],
+  ["assets/fonts/AtkinsonHyperlegible-Regular.woff2", '6b70e57f1c665460', 23252, 'core'],
+  ["assets/fonts/JerseyFerme-Bold.woff2", 'bdc299036624e85b', 8952, 'core'],
+  ["assets/fonts/JerseyFerme-Regular.woff2", '0aaf11d9ba91c964', 9144, 'core'],
   ["assets/icons/apple-touch-icon.png", '207355e92ef9dfa2', 1174, 'core'],
   ["assets/icons/favicon-32.png", '535e1f2a1bd8c4ec', 727, 'core'],
   ["assets/icons/favicon-48.png", '58de2e31e833c24e', 757, 'core'],
@@ -133,16 +135,22 @@ const PRECACHE = [
   ["assets/icons/icon-maskable-192.png", '955883df454e3ac1', 1168, 'core'],
   ["assets/icons/icon-maskable-512.png", 'adfb6dc71f0d09e7', 2647, 'core'],
   ["assets/icons/icon-monochrome-512.png", '0e59bf529a1bdbba', 1506, 'core'],
-  ["assets/sprites/career.png", 'a05ea5957d8b0ab0', 89751, 'core'],
+  ["assets/sprites/career.png", '5a56f900f27067c2', 90000, 'core'],
   ["assets/sprites/extra.png", '098e40185d5f7f51', 1950, 'core'],
+  ["assets/sprites/lot2.png", '5655cb48e14ec3cd', 13147, 'core'],
   ["assets/sprites/tiny-farm.png", '0c4b3b4058cacf6a', 5866, 'core'],
   ["assets/sprites/tiny-town.png", '3a54d99ecde790d4', 5042, 'core'],
+  ["assets/sprites/ui/banner-red-deep.png", '16bb0f1b1af14a60', 568, 'core'],
+  ["assets/sprites/ui/banner-red-ribbon-deep.png", '1e8c7c63bd7e8aa6', 588, 'core'],
   ["assets/sprites/ui/banner-red-ribbon.png", 'a9c09c09bbfd099d', 594, 'core'],
   ["assets/sprites/ui/banner-red.png", 'e25d37fce435ce01', 571, 'core'],
   ["assets/sprites/ui/bar-red-slate.png", '67d9426c9c51149e', 312, 'core'],
+  ["assets/sprites/ui/button-blue.png", 'ff626056199b3aad', 159, 'core'],
   ["assets/sprites/ui/button-close.png", '4237f83967b7b6ab', 198, 'core'],
+  ["assets/sprites/ui/button-red-deep.png", 'bc7d76ba0b621af4', 162, 'core'],
   ["assets/sprites/ui/button-red.png", 'b2f03467f990179c', 162, 'core'],
   ["assets/sprites/ui/button-slate-close.png", '0f395624d17a58f0', 203, 'core'],
+  ["assets/sprites/ui/button-slate-deep.png", '53191adf741f6f28', 166, 'core'],
   ["assets/sprites/ui/button-slate.png", '6f312a0eb18c6698', 166, 'core'],
   ["assets/sprites/ui/checkbox-off.png", 'a88107a698a36b67', 172, 'core'],
   ["assets/sprites/ui/checkbox-on.png", 'dae54cd3c5734aae', 210, 'core'],
@@ -173,6 +181,7 @@ const PRECACHE = [
   ["assets/sprites/ui/round-parchment.png", 'b33632dda9100f70', 344, 'core'],
   ["assets/sprites/ui/round-wood.png", '5e218733d935467f', 317, 'core'],
   ["assets/sprites/ui/slot-parchment.png", '57ce96c6f85e42d1', 196, 'core'],
+  ["assets/sprites/ui/slot-wood-deep.png", 'ee73765497a9b1f2', 166, 'core'],
   ["assets/sprites/ui/slot-wood.png", '77631b56d79873e0', 174, 'core'],
   ["assets/sprites/v3.png", '897aacf1899d5794', 18649, 'core'],
 ];

@@ -11,6 +11,7 @@ import { DEFAULT_SPEED } from '../../data/balance.js';
 import { COSMETICS_BY_ID, DECOR_SLOTS_BY_ID, DEFAULT_FARM_NAME } from '../../data/cosmetics.js';
 import { CAREER_VERSION, DEFAULT_FARMER_GENDER, DEFAULT_SEASON_LENGTH, DIFFICULTY_CAREER, FARMER_GENDERS, SEASON_LENGTHS, START } from '../../data/career/career.js';
 import { createRngState, hashSeed } from '../rng.js';
+import { enableSurprises } from '../surprises.js';
 import { createStats } from '../stats.js';
 import { drawWeather } from '../weather.js';
 import { tomorrowSeasonIndex } from '../calendar.js';
@@ -47,7 +48,7 @@ export function careerOptions({ difficulty = 'detente', farmName, farmerGender =
  *   'fermiere'), outfit (id de tenue ; l'interface ne propose que les tenues débloquées), seasonLength (7 | 10 | 14),
  *   cosmetics: { decor } (décor posé dans la progression : copie de départ de state.career.cosmetics.decor) }
  */
-export function createCareer({ seed = Date.now(), cosmetics = null, ...rest } = {}) {
+export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, ...rest } = {}) {
   const o = careerOptions(rest);
   const d = DIFFICULTY_CAREER[o.difficulty];
   const rng = createRngState(seed);
@@ -94,6 +95,9 @@ export function createCareer({ seed = Date.now(), cosmetics = null, ...rest } = 
     },
   };
   state.career.cosmetics = { decor };
+  // (lot 2) Surprises : actives par défaut (null = désactivées, gardé tel quel à la reprise).
+  if (surprises) enableSurprises(state);
+  else state.surprises = null;
   placeBuilding(state, 'house', 'home', null, 1, 0);
   placeBuilding(state, 'coop', 'yard', 0, 1, 0);
   for (const ext of careerExtensions()) if (typeof ext.init === 'function') ext.init(state);

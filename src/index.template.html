@@ -2,7 +2,9 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <!-- Zoom à deux doigts autorisé (accessibilité, WCAG 1.4.4) : la scène (canvas, touch-action: none)
+       garde ses propres gestes ; l'option « Zoom à deux doigts » (src/ui/a11y.js) peut le rebloquer. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="Une année à la ferme : un jeu de gestion tout doux en pixel art. Tenez une année complète sans faire faillite.">
   <meta name="theme-color" content="#3f2631">
   <title>Une année à la ferme</title>

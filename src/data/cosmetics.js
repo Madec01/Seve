@@ -1,6 +1,7 @@
 // Personnalisation (v3) — données pures, AUCUN effet sur le jeu. Voir docs/GAME_DESIGN.md § 12.7.
 //
-// Objets : { id, name, category: 'small'|'large'|'path'|'fence'|'outfit', price (écus), isDefault? }
+// Objets : { id, name, category: 'small'|'large'|'path'|'fence'|'outfit', price (écus), isDefault?, found? }
+// found : objet trouvé à la ferme (lot 2), débloqué par progression.unlockCosmetic, jamais acheté.
 // Un objet acheté est débloqué pour toujours ; une décoration peut être posée sur autant
 // d'emplacements qu'on veut. Emplacements (DECOR_SLOTS) : identifiants stables, communs à tous
 // les niveaux et aux deux dispositions (portrait / paysage).
@@ -20,6 +21,9 @@ export const COSMETICS = [
   { id: 'gnome', name: 'Nain de jardin', category: 'small', price: 30 },
   { id: 'mailbox', name: 'Boîte aux lettres', category: 'small', price: 15 },
   { id: 'hedge.bush', name: 'Buisson taillé', category: 'small', price: 10 },
+  // (lot 2) Décors trouvés à la ferme (surprise de l'aube, trouvaille au défrichage) : ne s'achètent pas.
+  { id: 'owl.carved', name: 'Chouette sculptée', category: 'small', price: 0, found: true },
+  { id: 'statue.small', name: 'Petite statue', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   // Allées

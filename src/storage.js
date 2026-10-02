@@ -24,7 +24,22 @@ export const DEFAULT_SETTINGS = Object.freeze({
   reducedMotion: false,
   vibration: true, // petite vibration au toucher (téléphone)
   keepAwake: true, // garder l'écran allumé pendant la partie (Wake Lock)
+  // ── Accessibilité (src/ui/a11y.js, section « Accessibilité » des options) ──
+  textScale: 1, // taille du texte : 1 · 1,15 · 1,3 · 1,5 (toute l'interface en rem)
+  readableFont: false, // police très lisible (Atkinson Hyperlegible) au lieu de la police pixel
+  pauseOnSheet: 'auto', // pause pendant la lecture d'une fiche : 'auto' (oui en Détente) · 'on' · 'off'
+  slowSpeed: false, // la vitesse ×½ entre dans le cycle du bouton de vitesse
+  autoPauseDawn: false, // pause au début de chaque journée
+  plotHints: true, // repères sur les parcelles (à arroser, pousses) : scene.setPlotHints
+  controlsBottom: false, // bouton de vitesse en bas (dans la barre d'onglets), à portée de pouce
+  leftHanded: false, // disposition miroir : bouton de vitesse à gauche
+  highContrast: false, // contrastes renforcés (contours, fonds, couleurs d'état)
+  pinchZoom: true, // zoom de la page à deux doigts (barres et fiches ; la scène garde ses gestes)
+  a11yOffered: false, // les réglages d'accessibilité ont été proposés au premier lancement
 });
+
+export const TEXT_SCALES = Object.freeze([1, 1.15, 1.3, 1.5]);
+export const SPEED_SETTINGS = Object.freeze([0.5, 1, 2, 4]);
 
 function read(key) {
   try {
@@ -191,7 +206,9 @@ export function loadSettings() {
     }
   }
   for (const k of ['musicVolume', 'sfxVolume', 'ambienceVolume']) out[k] = Math.min(1, Math.max(0, Number(out[k]) || 0));
-  if (![1, 2, 4].includes(out.speed)) out.speed = DEFAULT_SETTINGS.speed;
+  if (!SPEED_SETTINGS.includes(out.speed)) out.speed = DEFAULT_SETTINGS.speed;
+  if (!TEXT_SCALES.includes(out.textScale)) out.textScale = DEFAULT_SETTINGS.textScale;
+  if (!['auto', 'on', 'off'].includes(out.pauseOnSheet)) out.pauseOnSheet = DEFAULT_SETTINGS.pauseOnSheet;
   return out;
 }
 

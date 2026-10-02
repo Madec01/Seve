@@ -9,11 +9,16 @@
 //   audio.setAmbience({ birds, rain, wind, bees })  niveaux cibles 0..1 (fondu)
 //   audio.setWorld({ active, owned, season, weather })  cris d'animaux ponctuels
 //   audio.setVolumes(settings)         { musicVolume, sfxVolume, ambienceVolume, muted }
+//   audio.note(step, opts)             (lot 2) note synthétisée n° step d'une série de récolte (gamme
+//                                      pentatonique qui monte, src/audio/synth.js), sur le bus des effets
+//   audio.tone(name, opts)             (lot 2) son synthétisé : 'belle' | 'gold' | 'fanfare' | 'thud' |
+//                                      'splash' | 'pop' | 'chime' | 'magic' | 'wish' | 'reveal'
 //
 // Avant le déverrouillage, les demandes de musique et d'ambiance sont mémorisées et appliquées
 // dès que le contexte existe ; les effets sonores sont ignorés.
 
 import { assetUrl } from '../version.js';
+import { createSynth } from './synth.js';
 
 const FADE = 2; // secondes
 const DEFAULT_THROTTLE = 45; // ms entre deux lectures du même son
@@ -211,6 +216,30 @@ export function createAudio(manifest, initialSettings = {}) {
     src.start(ctx.currentTime + (opts.delay || 0));
   }
 
+  // ── Sons synthétisés (lot 2) ─────────────────────────────────────────────────────
+  let synth = null;
+  const lastTone = new Map();
+  function synthReady() {
+    if (!ctx || settings.muted || ctx.state !== 'running' || settings.sfxVolume <= 0) return null;
+    if (!synth) synth = createSynth(ctx, bus.sfx);
+    return synth;
+  }
+  /** Note n° step d'une série de récolte (marimba, pentatonique montante). */
+  function note(step, opts = {}) {
+    const s = synthReady();
+    if (!s) return false;
+    return s.note(step, { volume: opts.volume ?? 1, when: ctx.currentTime + (opts.delay || 0) });
+  }
+  /** Son synthétisé ; opts { volume, delay, throttle (ms, 60 par défaut) }. */
+  function tone(name, opts = {}) {
+    const s = synthReady();
+    if (!s) return false;
+    const now = performance.now();
+    if (now - (lastTone.get(name) || -Infinity) < (opts.throttle ?? 60)) return false;
+    lastTone.set(name, now);
+    return s.play(name, { volume: opts.volume ?? 1, when: ctx.currentTime + (opts.delay || 0) });
+  }
+
   // ── Musique ──────────────────────────────────────────────────────────────────────
   const music = { key: null, wanted: null, token: 0, track: null };
 
@@ -386,6 +415,8 @@ export function createAudio(manifest, initialSettings = {}) {
     unlock,
     isUnlocked,
     play,
+    note,
+    tone,
     playMusic,
     setAmbience,
     setWorld,
@@ -396,6 +427,10 @@ export function createAudio(manifest, initialSettings = {}) {
     },
     get context() {
       return ctx;
+    },
+    /** (Mesures) voix synthétisées en cours. */
+    get synthVoices() {
+      return synth ? synth.voices : 0;
     },
     /** Précharge (décode) une entrée du catalogue en tâche de fond. Renvoie une promesse (jamais rejetée). */
     warm(entry) {

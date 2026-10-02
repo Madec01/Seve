@@ -466,6 +466,8 @@ if (params.get('proc') === '1') api.proc();
 if (params.get('decor') === 'all') api.decorAll();
 if (params.get('decorMode') === '1') scene.setDecorMode(true);
 if (params.get('contest') === '1') api.contest(true);
+if (params.get('reduced') === '1') scene.setReducedMotion(true);
+if (params.get('hints') === '0') scene.setPlotHints(false);
 if (params.get('panel') === '0') $('panel').classList.add('hidden');
 if (params.get('panel') === 'none') $('panel').style.display = 'none';
 if (params.get('scroll') !== null) scene.setScroll(Number(params.get('scroll')));

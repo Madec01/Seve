@@ -11,10 +11,18 @@
 // couvrir ; la scène défile pour montrer la parcelle visée (scene.focusPlot). Textes courts.
 
 import { append, clear, el, fmt, placeNear, setText } from './dom.js';
-import { icon, sprite } from './icons.js';
+import { icon } from './icons.js';
+import { joseph } from './career/util.js';
 import { waterEffect } from './text.js';
 
 const NAME = 'Joseph, votre voisin';
+
+/** Où se trouve le bouton de vitesse (options « Vitesse et pause en bas » et « gaucher », src/ui/a11y.js). */
+function speedWhere() {
+  const root = document.documentElement.classList;
+  const docked = !!document.querySelector('#tabbar #hud-speed');
+  return `${docked ? 'en bas' : 'en haut'} à ${root.contains('left-handed') ? 'gauche' : 'droite'}`;
+}
 
 export function createTutorial(layer, app) {
   let game = null;
@@ -23,6 +31,8 @@ export function createTutorial(layer, app) {
   let lastRect = '';
   let hidden = false; // 'dialog' (tout caché), 'popup' (bulle cachée, rappel visible) ou false
   let minimized = false;
+  let crowdedTried = -1; // étape pour laquelle la scène a déjà défilé faute de place pour la bulle
+  let crowdedAt = 0;
   let userExpanded = false; // la bulle a été rouverte à la main : plus de réduction automatique // la bulle a été réduite par le joueur : seul le rappel reste affiché
 
   const ring = el('div.tuto-ring', { 'aria-hidden': 'true' });
@@ -97,12 +107,12 @@ export function createTutorial(layer, app) {
     },
     {
       id: 'speed',
-      hint: () => `${tap()} le bouton de vitesse (en haut à droite).`,
+      hint: () => `${tap()} le bouton de vitesse (${speedWhere()}).`,
       title: 'Le temps passe',
       text: () =>
         app.isTouch
-          ? 'Une journée dure 20 secondes. Touchez le bouton de vitesse en haut à droite pour passer à ×2, puis ×4, puis pause. Appui long : pause.'
-          : 'Une journée dure 20 secondes. Cliquez sur le bouton de vitesse en haut à droite (×2, ×4, pause), ou touches 1, 2, 3 et Espace.',
+          ? `À ×1, une journée dure 20 secondes. Touchez le bouton de vitesse ${speedWhere()} pour passer à ×2, puis ×4, puis pause. Appui long : pause.`
+          : `À ×1, une journée dure 20 secondes. Cliquez sur le bouton de vitesse ${speedWhere()} (×2, ×4, pause), ou touches 1, 2, 3 et Espace.`,
       target: () => ({ type: 'ui', selector: '#hud-speed' }),
       advanceSpeed: (s) => s >= 2,
       advance: (ev) => ev.type === 'dawn',
@@ -127,8 +137,8 @@ export function createTutorial(layer, app) {
       title: 'Le fermage',
       text: () =>
         game.query.finance().neighbourLoan
-          ? `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison. Vert : c'est couvert ; orange : récoltez encore. S'il manque un peu, je vous avancerai l'argent !`
-          : `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Vert : c'est couvert ; orange : récoltez encore ; rouge : danger !`,
+          ? `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison. Regardez le signe : ✓ « couvert », c'est payé d'avance ; ! « juste », récoltez encore. S'il manque un peu, je vous avancerai l'argent !`
+          : `Bravo ! Voici le fermage : ${fmt(game.query.finance().nextBill.amount)} pièces à payer le dernier soir de la saison, sinon c'est la faillite. Regardez le signe : ✓ « couvert », c'est bon ; ! « juste », récoltez encore ; ✗ « danger », attention !`,
       pauses: true,
       target: () => ({ type: 'ui', selector: '#hud-bill' }),
       buttons: [{ label: 'Compris', primary: true, action: () => next() }],
@@ -271,6 +281,11 @@ export function createTutorial(layer, app) {
   }
 
   /** Réduit la bulle : il ne reste que le rappel compact de l'étape (cliquable pour la rouvrir). */
+  /** La scène finit de défiler (focusPlot animé) : on attend avant de juger la place. */
+  function scrollSettling() {
+    return performance.now() - crowdedAt < 700;
+  }
+
   function minimize(auto = false) {
     if (minimized) return;
     if (!auto) app.audio.play('close', { volume: 0.6 });
@@ -297,19 +312,35 @@ export function createTutorial(layer, app) {
     const tallSheet = hidden === 'popup' && app.sheets?.box.classList.contains('is-tall');
     const show = !!(s && !s.dormant && s.hint && game && (minimized || hidden === 'popup') && !tallSheet);
     if (show) {
-      if (!pillAvatar.firstChild) pillAvatar.append(sprite('farmer', 'sprite--xs'));
+      if (!pillAvatar.firstChild) pillAvatar.append(joseph('content', 'sprite--xs'));
       pillTitle.textContent = s.title;
       setText(pillText, s.hint());
       pill.classList.add('is-visible');
-      // Sous la barre du haut, à gauche (la feuille ouverte est en bas : elle n'est pas couverte).
-      const top = app.safeTop();
-      const left = app.safeLeft() + 8;
-      pill.style.left = `${Math.round(left)}px`;
-      pill.style.top = `${Math.round(top + 8)}px`;
+      placePill();
       pill.classList.toggle('is-static', hidden === 'popup' && !minimized);
       app.toasts?.hideBanner?.(); // le rappel se place là où s'affiche le bandeau
     }
     pill.classList.toggle('is-visible', show);
+  }
+
+  /**
+   * Rappel compact : sous la barre du haut, à gauche (la feuille ouverte est en bas : elle n'est pas couverte).
+   * S'il couvrirait la parcelle ou le bouton visé (grand texte, parcelle tout en haut), il passe en bas, au-dessus
+   * des onglets.
+   */
+  function placePill() {
+    const left = app.safeLeft() + 8;
+    let top = app.safeTop() + 8;
+    pill.style.left = `${Math.round(left)}px`;
+    pill.style.top = `${Math.round(top)}px`;
+    const h = hidden === 'popup' ? null : getHighlight();
+    const r = h ? targetRect(h) : null;
+    if (r) {
+      const p = pill.getBoundingClientRect();
+      const covers = p.left < r.right && p.right > r.left && top < r.bottom && top + p.height > r.top;
+      if (covers) top = Math.max(top, app.safeBottom() - p.height - 8);
+      pill.style.top = `${Math.round(top)}px`;
+    }
   }
 
   /** Montre la parcelle visée (la scène défile si elle dépasse l'écran). */
@@ -332,7 +363,7 @@ export function createTutorial(layer, app) {
     const canMinimize = !!s.hint && (!s.buttons || s.id === 'coop');
     append(bubble, [
       canMinimize ? el('button.tuto-min', { type: 'button', 'aria-label': 'Réduire la bulle', 'data-tip': 'Réduire (le conseil reste affiché en haut à gauche)', onclick: () => minimize() }, el('span.tuto-min-bar')) : null,
-      el('div.tuto-avatar', sprite('farmer', 'sprite--avatar')),
+      el('div.tuto-avatar', joseph('content', 'sprite--avatar')), // même portrait de Joseph qu'en carrière
       el(
         'div.tuto-content',
         el('div.tuto-name', NAME),
@@ -413,6 +444,7 @@ export function createTutorial(layer, app) {
     }
     if (app.isWide()) positionWide(h, rect, s);
     else positionPortrait(rect, s);
+    if (minimized && pill.classList.contains('is-visible')) placePill();
   }
 
   /**
@@ -450,6 +482,22 @@ export function createTutorial(layer, app) {
         // Pas de place sans recouvrir : du côté le plus grand, collée au bord.
         y = roomTop > roomBottom ? top : bottom - h;
         side = 'none';
+        // Grand texte (130–150 %) sur un petit écran : la bulle ne tient ni au-dessus ni au-dessous de la
+        // parcelle visée. D'abord la scène défile pour montrer la parcelle au-dessus de la bulle ; si cela ne
+        // suffit pas, la bulle se réduit en rappel compact (l'anneau montre la parcelle, un toucher la rouvre).
+        const hl = getHighlight();
+        if (hl?.type === 'plot' && !userExpanded && s?.hint) {
+          if (crowdedTried !== index && typeof app.scene?.focusPlot === 'function') {
+            crowdedTried = index;
+            crowdedAt = performance.now();
+            y = bottom - h;
+            app.scene.focusPlot(hl.index, { animate: true, bottom: h + 16 });
+            lastRect = ''; // rejugé après le défilement (même si la scène ne peut pas défiler)
+          } else if (crowdedTried === index) {
+            if (scrollSettling()) lastRect = ''; // rejugé à l'image suivante
+            else minimize(true);
+          }
+        }
       }
     }
     bubble.style.left = `${x}px`;

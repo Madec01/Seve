@@ -12,6 +12,8 @@ import { cropIcon, icon, investmentIcon, productIcon, seasonIncomes } from './ic
 import { incomeProfile, season, seasonList, waterEffect } from './text.js';
 import { buildingContent, buildingSignature, confirmSellRaw, isProcessing, processingOf } from './buildings.js';
 import { aboutSection } from './career/util.js';
+import { readPrefs, writePrefs } from './guide-prefs.js';
+import { agree } from '../data/french.js';
 
 const FIELD_SHEETS = ['seeds', 'unlock', 'plot', 'investment', 'building'];
 
@@ -38,7 +40,8 @@ function treeProgress(t) {
 export function createField(app) {
   let current = null; // { kind: 'seeds' | 'unlock' | 'plot' | 'investment', index?, id? }
   let refreshQueued = false;
-  let plantEverywhere = false;
+  // « Semer partout » : le choix du joueur est retenu d'une fois sur l'autre (lot 1 « confort »).
+  let plantEverywhere = readPrefs().sowAll;
 
   function close(sound = true) {
     if (!current) return;
@@ -143,6 +146,7 @@ export function createField(app) {
             'aria-checked': plantEverywhere ? 'true' : 'false',
             onclick: (e) => {
               plantEverywhere = !plantEverywhere;
+              writePrefs({ sowAll: plantEverywhere });
               app.audio.play('toggle');
               e.currentTarget.classList.toggle('is-on', plantEverywhere);
               e.currentTarget.setAttribute('aria-checked', plantEverywhere ? 'true' : 'false');
@@ -168,7 +172,7 @@ export function createField(app) {
   function openSeedPicker(index, silent = false) {
     const game = app.game;
     if (!game) return;
-    if (!silent) plantEverywhere = false;
+    if (!silent) plantEverywhere = readPrefs().sowAll;
     show('seeds', { index }, { title: 'Que semer ?', icon: icon('seed', 'md'), content: seedContent(index) }, silent);
     const first = app.sheets.body.querySelector('.seed-row:not(.is-disabled)');
     if (first && app.keyboardMode && !silent) first.focus({ preventScroll: true });
@@ -181,8 +185,10 @@ export function createField(app) {
     const index = current.index;
     // « Semer partout » ne plante jamais d'arbre.
     if (all && !(crop.kind === 'tree' || crop.tree || crop.sowAll === false)) {
-      const n = app.plantAll(crop.id, index);
-      if (n > 0) close(false);
+      // plantAll peut demander confirmation (grosse dépense) : sa réponse arrive alors plus tard.
+      Promise.resolve(app.plantAll(crop.id, index)).then((n) => {
+        if (n > 0 && current?.kind === 'seeds' && current.index === index) close(false);
+      });
       return;
     }
     const res = app.plant(index, crop.id);
@@ -241,7 +247,7 @@ export function createField(app) {
     if (p.action === 'water') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-water', onclick: () => { app.water(index); } }, icon('water', 'sm'), f.waterCost ? `Arroser (${fmt(f.waterCost)})` : 'Arroser'));
     } else if (p.action === 'harvest') {
-      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), toWorkshop ? 'Récolter → atelier' : p.storeTarget ? 'Récolter → grenier' : `Récolter (+${fmt(p.handValue ?? p.harvestValue)})`));
+      actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-harvest', onclick: () => { if (app.harvest(index)?.ok) close(false); } }, icon('harvest', 'sm'), p.forage && !p.cropId ? `Cueillir (+${fmt(p.forage.value)})` : toWorkshop ? 'Récolter → atelier' : p.storeTarget ? 'Récolter → grenier' : `Récolter (+${fmt(p.handValue ?? p.harvestValue ?? 0)})`));
     } else if (p.action === 'plant') {
       actions.push(el('button.btn.btn--red.btn--wide', { type: 'button', id: 'plot-plant', onclick: () => openSeedPicker(index) }, icon('seed', 'sm'), 'Semer'));
     }
@@ -274,7 +280,9 @@ export function createField(app) {
 
   function plotTitle(p) {
     if (!p.unlocked) return 'Parcelle en friche';
+    if (!p.cropId && p.forage) return p.forage.kind === 'ring' ? 'Cercle de fées' : 'Champignons à cueillir';
     if (!p.cropId) return 'Parcelle libre';
+    if (p.giant) return `${p.cropName} ${agree(p.cropName, 1, 'géant')} !`;
     if (p.kind === 'tree') return p.tree?.fruitReady ? 'Pommier : pommes mûres' : p.cropName || 'Pommier';
     return p.mature ? `${p.cropName} mûre` : p.cropName;
   }
@@ -348,6 +356,14 @@ export function createField(app) {
       if (!sheet) rows.push(el('div.tip-title', icon('lock', 'sm'), 'Parcelle en friche'));
       rows.push(el('div', p.unlockCost === null ? 'Le champ ne peut plus s\'agrandir.' : `Débloquer : ${plural(p.unlockCost, 'pièce')}`));
       if (verb && p.unlockCost !== null) rows.push(el('div.tip-sub', `${verb} pour l'ouvrir.`));
+    } else if (!p.cropId && p.forage) {
+      // (lot 2) Champignons du brouillard ou cercle de fées : à cueillir à la main.
+      const ring = p.forage.kind === 'ring';
+      if (!sheet) rows.push(el('div.tip-title', icon('harvest', 'sm'), ring ? 'Cercle de fées' : 'Champignons à cueillir'));
+      rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.forage.value, 'pièce')}`));
+      rows.push(el('div.tip-sub', p.forage.daysLeft > 0 ? `Encore ${plural(p.forage.daysLeft + 1, 'jour')} pour les cueillir.` : 'Dernier jour pour les cueillir !'));
+      rows.push(el('div.tip-sub', ring ? 'Des champignons rares, poussés en cercle pendant la nuit.' : 'Poussés dans le brouillard : cueillez-les avant de semer.'));
+      if (verb) rows.push(el('div.tip-sub', `${verb} pour cueillir.`));
     } else if (!p.cropId) {
       if (!sheet) rows.push(el('div.tip-title', icon('seed', 'sm'), 'Parcelle libre'));
       rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
@@ -364,9 +380,17 @@ export function createField(app) {
       if (t.stage === 'adult' && Number.isFinite(t.harvestsLeftEstimate)) rows.push(el('div.tip-sub', t.harvestsLeftEstimate > 0 ? `Encore environ ${plural(t.harvestsLeftEstimate, 'panier')} d'ici la fin de l'année.` : 'Plus de pommes d\'ici la fin de l\'année.'));
       else if (t.stage !== 'adult') rows.push(el('div.tip-sub', 'Adulte, il donne un panier de pommes tous les 3 jours en été et en automne.'));
       if (verb) rows.push(el('div.tip-sub', t.fruitReady ? `${verb} pour cueillir les pommes.` : `${verb} pour voir sa fiche.`));
+    } else if (p.mature && p.giant) {
+      // (lot 2) Légume géant : 4 parcelles, récolté à la main en une fois.
+      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} ${agree(p.cropName, 1, 'géant')} !`));
+      rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue ?? 0, 'pièce')}`));
+      rows.push(el('div.tip-ok', 'Un légume géant sur 4 parcelles : il vaut 6 parcelles et ne pourrit pas.'));
+      rows.push(el('div.tip-sub', 'Il se récolte à la main, en une fois.'));
+      if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else if (p.mature) {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
+      qualityRows(rows, p, sheet);
       careerRows(rows, p);
       processRow(rows, p, sheet);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
@@ -381,6 +405,7 @@ export function createField(app) {
             ? el('div.tip-ok', icon('water', 'xs'), 'Pousse sans arrosage (sauf en canicule)')
             : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? ((game.level.dryHeatwaveGrowth ?? 0) > 0 ? 'Pas arrosée : pousse à peine (canicule) !' : 'Pas arrosée : ne poussera pas (canicule) !') : `Pas arrosée : pousse ${waterEffect(game.level).slower}`),
       );
+      qualityRows(rows, p, sheet);
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
       if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
       if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
@@ -388,6 +413,20 @@ export function createField(app) {
       if (!p.watered && verb && p.needsWater !== false) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));
     }
     return el('div.tip-rows', rows);
+  }
+
+  /**
+   * (lot 2) Chances de la prochaine récolte à la main (belle, dorée) et soins remplis (docs/GAME_DESIGN.md § 15.1).
+   * Fiche seulement (l'infobulle reste courte) ; rien quand les surprises sont désactivées (Classique).
+   */
+  function qualityRows(rows, p, sheet) {
+    if (!sheet || !p.quality || p.kind === 'tree') return;
+    const pct = (x) => `${dec(Math.round(x * 1000) / 10, 1).replace(/,0$/, '')} %`;
+    rows.push(el('div.tip-quality', el('span', 'Prochaine récolte à la main :'), el('b.q-fine', `belle ${pct(p.quality.fine)}`), el('b.q-gold', `dorée ${pct(p.quality.gold)}`)));
+    const c = p.care;
+    if (!c) return;
+    const care = (ok, text) => el(`span.care${ok ? '.is-ok' : ''}`, `${ok ? '✓' : '·'} ${text}`);
+    rows.push(el('div.tip-care', care(c.wateredEveryDay, 'arrosée chaque jour'), care(c.bees, 'ruche'), care(c.rotation, 'sol reposé')));
   }
 
   /** Carrière : cueillie à la main (+10 %), grenier, cours du jour, corbeau (docs/CARRIERE.md § 3). */

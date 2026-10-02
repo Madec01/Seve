@@ -12,6 +12,9 @@
 //           Joseph, friche, pavés, fêtes, icônes, succès…) dessiné dans le style Kenney —
 //           assets/sprites/career.png, générée (avec le bloc « career:auto » plus bas) par
 //           assets/sprites/generate-career.py
+//   lot2  : « toucher et surprises » (légumes géants, qualité, surprises de l'aube, météos spéciales,
+//           trouvailles, effets de récolte) dessiné dans le style Kenney — assets/sprites/lot2.png,
+//           générée (avec le bloc « lot2:auto » plus bas) par assets/sprites/generate-lot2.py
 //
 // Une entrée simple : { sheet, col, row, w?, h? } (w/h en tuiles, 1 par défaut).
 // Une entrée composée (bâtiments) : { w, h, layers: [{ sheet, col, row, dx, dy }] }
@@ -32,6 +35,7 @@ export const SHEETS = {
   extra: 'assets/sprites/extra.png',
   v3: 'assets/sprites/v3.png',
   career: 'assets/sprites/career.png',
+  lot2: 'assets/sprites/lot2.png',
 };
 
 // Cultures disponibles (toutes présentes dans Tiny Farm ; le tournesol n'y a qu'une image mûre,
@@ -532,6 +536,9 @@ export const DECOR_SPRITES = Object.freeze({
   mailbox: 'deco.mailbox',
   'hedge.bush': 'deco.hedge',
   pond: 'deco.pond',
+  // (lot 2) Décors trouvés à la ferme (src/data/cosmetics.js, found: true).
+  'owl.carved': 'owl.carved',
+  'statue.small': 'find.statue',
 });
 
 /** Sprite d'une décoration (accepte aussi « decor.<id> » ou un nom de sprite « deco.* »), ou null. */
@@ -1283,6 +1290,92 @@ export const BUBBLE_CONTENT = Object.freeze({ x: 8, y: 4, w: 16, h: 16 });
 export const BUBBLE_SLICE = 5;
 // </career:auto>
 
+// ---------------------------------------------------------------------------
+// Lot 2 (planche « lot2 ») : légumes géants crop.<id>.giant (32 × 32, sur 2 × 2 parcelles, bas du sprite
+// = bas du carré), pastilles quality.fine / quality.gold (à poser sur la tuile, en haut à droite), icônes
+// dorées crop.<id>.icon.gold, fx.sparkle.0..3, fx.coin.0..3, fx.burst, fx.note ; surprises de l'aube
+// (fairy.0..2, animal.fox[.walk.1|.sit|.sleep], animal.hedgehog[.walk.1], butterfly.rare.0..1, chest.old[.open],
+// mushroom.ring, owl.carved 16 × 32) ; météos (icon.weather.*, star.shooting.0..1 32 × 16, fog 32 × 32
+// raccordable) ; trouvailles (find.*, find.well 16 × 32, land.stump.find). Animaux : regard vers la DROITE.
+// <lot2:auto>
+  // Généré par assets/sprites/generate-lot2.py — ne pas modifier à la main.
+const lot2 = {
+  'crop.carrot.giant': { sheet: 'lot2', col: 0, row: 0, w: 2, h: 2 },
+  'crop.turnip.giant': { sheet: 'lot2', col: 2, row: 0, w: 2, h: 2 },
+  'crop.wheat.giant': { sheet: 'lot2', col: 4, row: 0, w: 2, h: 2 },
+  'crop.cabbage.giant': { sheet: 'lot2', col: 6, row: 0, w: 2, h: 2 },
+  'crop.tomato.giant': { sheet: 'lot2', col: 8, row: 0, w: 2, h: 2 },
+  'crop.corn.giant': { sheet: 'lot2', col: 10, row: 0, w: 2, h: 2 },
+  'crop.sunflower.giant': { sheet: 'lot2', col: 12, row: 0, w: 2, h: 2 },
+  'crop.pumpkin.giant': { sheet: 'lot2', col: 14, row: 0, w: 2, h: 2 },
+  'crop.potato.giant': { sheet: 'lot2', col: 0, row: 2, w: 2, h: 2 },
+  'crop.strawberry.giant': { sheet: 'lot2', col: 2, row: 2, w: 2, h: 2 },
+  'crop.zucchini.giant': { sheet: 'lot2', col: 4, row: 2, w: 2, h: 2 },
+  'quality.fine': { sheet: 'lot2', col: 14, row: 2 },
+  'quality.gold': { sheet: 'lot2', col: 15, row: 2 },
+  'crop.carrot.icon.gold': { sheet: 'lot2', col: 9, row: 3 },
+  'crop.turnip.icon.gold': { sheet: 'lot2', col: 10, row: 3 },
+  'crop.corn.icon.gold': { sheet: 'lot2', col: 11, row: 3 },
+  'crop.tomato.icon.gold': { sheet: 'lot2', col: 12, row: 3 },
+  'crop.cabbage.icon.gold': { sheet: 'lot2', col: 14, row: 3 },
+  'crop.wheat.icon.gold': { sheet: 'lot2', col: 15, row: 3 },
+  'crop.sunflower.icon.gold': { sheet: 'lot2', col: 0, row: 4 },
+  'crop.pumpkin.icon.gold': { sheet: 'lot2', col: 1, row: 4 },
+  'crop.potato.icon.gold': { sheet: 'lot2', col: 2, row: 4 },
+  'crop.strawberry.icon.gold': { sheet: 'lot2', col: 3, row: 4 },
+  'crop.zucchini.icon.gold': { sheet: 'lot2', col: 4, row: 4 },
+  'fx.sparkle.0': { sheet: 'lot2', col: 5, row: 4 },
+  'fx.sparkle.1': { sheet: 'lot2', col: 6, row: 4 },
+  'fx.sparkle.2': { sheet: 'lot2', col: 7, row: 4 },
+  'fx.sparkle.3': { sheet: 'lot2', col: 8, row: 4 },
+  'fairy.0': { sheet: 'lot2', col: 9, row: 4 },
+  'fairy.1': { sheet: 'lot2', col: 10, row: 4 },
+  'fairy.2': { sheet: 'lot2', col: 11, row: 4 },
+  'animal.fox': { sheet: 'lot2', col: 12, row: 4 },
+  'animal.fox.walk.1': { sheet: 'lot2', col: 13, row: 4 },
+  'animal.fox.sit': { sheet: 'lot2', col: 14, row: 4 },
+  'animal.fox.sleep': { sheet: 'lot2', col: 15, row: 4 },
+  'animal.hedgehog': { sheet: 'lot2', col: 0, row: 5 },
+  'animal.hedgehog.walk.1': { sheet: 'lot2', col: 1, row: 5 },
+  'butterfly.rare.0': { sheet: 'lot2', col: 2, row: 5 },
+  'butterfly.rare.1': { sheet: 'lot2', col: 3, row: 5 },
+  'chest.old': { sheet: 'lot2', col: 4, row: 5 },
+  'chest.old.open': { sheet: 'lot2', col: 5, row: 5 },
+  'mushroom.ring': { sheet: 'lot2', col: 6, row: 5 },
+  'owl.carved': { sheet: 'lot2', col: 8, row: 2, w: 1, h: 2 },
+  'icon.weather.warmrain': { sheet: 'lot2', col: 7, row: 5 },
+  'icon.weather.fog': { sheet: 'lot2', col: 8, row: 5 },
+  'icon.weather.shootingstar': { sheet: 'lot2', col: 9, row: 5 },
+  'icon.weather.goldenhour': { sheet: 'lot2', col: 10, row: 5 },
+  'icon.weather.rainbow': { sheet: 'lot2', col: 11, row: 5 },
+  'icon.weather.mushroom': { sheet: 'lot2', col: 12, row: 5 },
+  'star.shooting.0': { sheet: 'lot2', col: 9, row: 2, w: 2, h: 1 },
+  'star.shooting.1': { sheet: 'lot2', col: 11, row: 2, w: 2, h: 1 },
+  'fog': { sheet: 'lot2', col: 6, row: 2, w: 2, h: 2 },
+  'find.well': { sheet: 'lot2', col: 13, row: 2, w: 1, h: 2 },
+  'find.statue': { sheet: 'lot2', col: 13, row: 5 },
+  'find.coins': { sheet: 'lot2', col: 14, row: 5 },
+  'find.seedjar': { sheet: 'lot2', col: 15, row: 5 },
+  'find.lostlamb': { sheet: 'lot2', col: 0, row: 6 },
+  'find.lostlamb.walk.1': { sheet: 'lot2', col: 1, row: 6 },
+  'land.stump.find': { sheet: 'lot2', col: 2, row: 6 },
+  'fx.coin.0': { sheet: 'lot2', col: 3, row: 6 },
+  'fx.coin.1': { sheet: 'lot2', col: 4, row: 6 },
+  'fx.coin.2': { sheet: 'lot2', col: 5, row: 6 },
+  'fx.coin.3': { sheet: 'lot2', col: 6, row: 6 },
+  'fx.burst': { sheet: 'lot2', col: 7, row: 6 },
+  'fx.note': { sheet: 'lot2', col: 8, row: 6 },
+  'fairy': { sheet: 'lot2', col: 9, row: 4 },
+  'fox': { sheet: 'lot2', col: 12, row: 4 },
+  'hedgehog': { sheet: 'lot2', col: 0, row: 5 },
+  'hedgehog.walk.1': { sheet: 'lot2', col: 1, row: 5 },
+  'butterfly.rare': { sheet: 'lot2', col: 2, row: 5 },
+  'star.shooting': { sheet: 'lot2', col: 9, row: 2, w: 2, h: 1 },
+  'find.chest': { sheet: 'lot2', col: 4, row: 5 },
+  'find.chest.open': { sheet: 'lot2', col: 5, row: 5 },
+};
+// </lot2:auto>
+
 export const SPRITES = {
   ...crops,
   ...ground,
@@ -1293,6 +1386,7 @@ export const SPRITES = {
   ...buildingParts,
   ...v3,
   ...career,
+  ...lot2,
 };
 
 // Alias du pommier en « culture » (crop.apple.*) : étapes sans saison (été).

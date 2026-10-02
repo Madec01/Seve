@@ -78,6 +78,7 @@ function pointAlong(pts, d, out) {
 }
 
 export function createCareerActors() {
+  let reducedMotion = false; // mouvements réduits (lot 1) : pas d'apparition « ressort » ni de rebond
   let layout = null;
   let game = null;
   let time = 0;
@@ -750,7 +751,7 @@ export function createCareerActors() {
         const x = Math.round(a.x);
         const y = Math.round(a.y) + hop;
         const age = time - a.born;
-        const scale = age < POP_TIME ? popScale(age / POP_TIME) : 1;
+        const scale = age < POP_TIME && !reducedMotion ? popScale(age / POP_TIME) : 1;
         if (scale !== 1) {
           const ww = w * scale;
           push(name, Math.round(x + (w - ww) / 2), Math.round(y + w - ww), a.y + w, base, { flipX: a.facing < 0, scale });
@@ -783,7 +784,7 @@ export function createCareerActors() {
         if (exists(tool)) overlay = tool;
       }
       const age = time - a.born;
-      const scale = age < POP_TIME ? popScale(age / POP_TIME) : 1;
+      const scale = age < POP_TIME && !reducedMotion ? popScale(age / POP_TIME) : 1;
       if (scale !== 1) push(name, Math.round(x + (16 - 16 * scale) / 2), Math.round(y + 16 - 16 * scale), a.y + 1, base, { scale });
       else push(name, x, y, a.y + 1, base, { flipX: a.facing < 0, overlay });
       n++;
@@ -849,7 +850,7 @@ export function createCareerActors() {
       if (p.moving) name = Math.floor((p.walkD || 0) / 4) % 2 ? `${name}.walk.1` : `${name}.walk.2`;
       if (!exists(name)) name = p.id === 'dog' ? 'pet.dog' : 'pet.cat';
       const age = time - p.born;
-      const scale = age < POP_TIME ? popScale(age / POP_TIME) : 1;
+      const scale = age < POP_TIME && !reducedMotion ? popScale(age / POP_TIME) : 1;
       push(name, Math.round(p.x) - 8, Math.round(p.y) - 14, p.y + 1, base, scale !== 1 ? { flipX: p.facing < 0, scale } : { flipX: p.facing < 0 });
       n++;
     }
@@ -873,7 +874,7 @@ export function createCareerActors() {
       return;
     }
     if (a.id === 'collector') {
-      const b = a.bounce > 0 ? -1 : 0;
+      const b = a.bounce > 0 && !reducedMotion ? -1 : 0;
       push('machine.collector', x, y + b, bottom, obj);
       return;
     }
@@ -972,5 +973,8 @@ export function createCareerActors() {
     return { staff: staff.size, animals, crows: crows.size, flying: flying.length, machines: machines.size, walkers: walkers.length, visitors: visitors.size, joseph: !!joseph, drawn: lastDrawn };
   }
 
-  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, markers, get joseph() { return joseph; } };
+  function setReducedMotion(on) {
+    reducedMotion = !!on;
+  }
+  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, markers, setReducedMotion, get joseph() { return joseph; } };
 }

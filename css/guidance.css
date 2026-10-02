@@ -1,0 +1,197 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Guidage (lot 1 « confort ») : ligne « À faire maintenant » au-dessus des onglets, bouton « Tout
+   ramasser », cloche des messages, anneaux sur les parcelles, feuille « Messages », « Guide de la
+   ferme », fenêtre « Où en étais-je ? ». Chargée après css/style.css (tools/build.js, CSS_FILES).
+   Variables lues : --inset-bottom (haut des onglets), --todo-h (hauteur de la ligne, écrite par
+   src/ui/todo.js, 0 si cachée).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root { --todo-h: 0px; }
+
+/* ─── Ligne « À faire » ──────────────────────────────────────────────────────── */
+.todo {
+  position: fixed;
+  z-index: 24; /* au-dessus de la scène et de la mini-carte, sous les feuilles (25), les messages et les fenêtres */
+  left: calc(var(--safe-l) + 8px);
+  right: calc(var(--safe-r) + 8px);
+  bottom: calc(var(--inset-bottom) + 6px);
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  pointer-events: none;
+  animation: todo-in 260ms var(--ease-out);
+}
+.todo[hidden] { display: none; }
+.todo > button { pointer-events: auto; }
+@keyframes todo-in { from { opacity: 0; transform: translateY(10px); } }
+html.reduced-motion .todo { animation: none; }
+
+.todo-main,
+.todo-collect,
+.todo-bell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  border-style: solid;
+  border-width: calc(var(--u) * 4);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  color: var(--text);
+  image-rendering: pixelated;
+  cursor: pointer;
+  filter: drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35));
+  transition: transform var(--t-fast) ease, filter var(--t-fast) ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.todo-main:active,
+.todo-collect:active,
+.todo-bell:active { transform: translateY(var(--u)); filter: brightness(0.95); }
+.todo-main:focus-visible,
+.todo-collect:focus-visible,
+.todo-bell:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+
+.todo-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 4px 0 2px;
+  text-align: left;
+}
+.todo-main.is-urgent { border-image-source: var(--img-btn-slate); color: var(--parch); text-shadow: 0 var(--px1) 0 var(--slate-dark); }
+.todo-ico { flex: none; display: grid; place-items: center; width: 28px; height: 28px; }
+.todo-ico .sprite,
+.todo-ico img { max-width: 28px; max-height: 28px; }
+.todo-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.todo-label { font-size: 0.875rem; color: var(--text-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.todo-main.is-urgent .todo-label { color: var(--parch-2); }
+.todo-text {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.todo-chevron { flex: none; font-size: 1.5rem; line-height: 1; padding: 0 2px 2px; opacity: 0.8; }
+
+.todo-collect {
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
+  width: 92px;
+  padding: 0 2px;
+  border-image-source: var(--img-btn-red);
+  color: var(--parch);
+  text-shadow: 0 var(--px1) 0 var(--red-dark);
+}
+.todo-collect[hidden] { display: none; }
+.todo-collect .todo-ico { width: 22px; height: 22px; }
+.todo-collect-text { font-size: 0.875rem; font-weight: 600; line-height: 1.05; text-align: center; }
+
+.todo-bell { flex: none; justify-content: center; width: 52px; padding: 0; }
+.bell-ico { width: 24px; height: 24px; display: block; }
+.bell-ico--md { width: 22px; height: 22px; }
+.todo-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  background: var(--red);
+  color: var(--parch);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 var(--u) var(--outline);
+}
+.todo-badge[hidden] { display: none; }
+
+/* La ligne posée, les messages et la mini-carte passent au-dessus d'elle. */
+body.has-todo:not(.has-sheet) #toasts { bottom: calc(var(--inset-bottom) + var(--todo-h) + 14px); }
+body.has-todo .minimap { bottom: calc(var(--inset-bottom) + var(--todo-h) + 12px); }
+
+/* Grand écran : une ligne compacte en bas à gauche. */
+body.layout-wide .todo { right: auto; width: min(30rem, calc(100vw - var(--panel-w) - 32px)); bottom: 12px; }
+
+/* ─── Anneaux autour des parcelles montrées ──────────────────────────────────── */
+.todo-rings { position: fixed; inset: 0; z-index: 23; pointer-events: none; }
+.todo-ring {
+  position: absolute;
+  border: calc(var(--u) * 1.5) solid var(--gold);
+  box-shadow: 0 0 0 var(--u) var(--outline), inset 0 0 0 var(--u) var(--outline);
+  animation: todo-ring 0.9s ease-in-out infinite;
+}
+@keyframes todo-ring { 50% { transform: scale(1.08); } }
+html.reduced-motion .todo-ring { animation: none; }
+
+/* ─── Feuille « Messages » ───────────────────────────────────────────────────── */
+.msg-intro { margin-top: 0; }
+.msg-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.msg-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--parch-2);
+  box-shadow: 0 0 0 var(--u) var(--parch-3);
+}
+.msg-row.is-banner { background: transparent; }
+.msg--warn,
+.msg--frost,
+.msg--error { box-shadow: 0 0 0 var(--u) var(--slate-light); }
+.msg-ico { flex: none; display: grid; place-items: center; width: 28px; }
+.msg-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; line-height: 1.2; }
+.msg-title { font-size: 1rem; }
+.msg-text { font-size: 0.9375rem; }
+.msg-when { font-size: 0.875rem; color: var(--text-soft); }
+.msg-go { flex: none; }
+.todo-morning-toggle { margin-top: 12px; }
+
+/* ─── Guide de la ferme ──────────────────────────────────────────────────────── */
+.guide-intro { margin-top: 0; }
+.guide-sec { margin: 8px 0 0; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.guide-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 52px;
+  padding: 4px 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.guide-head:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: calc(var(--u) * -1.5); }
+.guide-head-label { flex: 1 1 auto; }
+.guide-chevron { flex: none; font-size: 1.5rem; line-height: 1; transition: transform var(--t-med) ease; }
+.guide-head[aria-expanded='true'] .guide-chevron { transform: rotate(90deg); }
+.guide-body { padding: 0 12px 10px; }
+.guide-lines,
+.guide-hints { margin: 0; padding: 0 0 0 18px; display: flex; flex-direction: column; gap: 6px; font-size: 1rem; line-height: 1.3; }
+.guide-hints li { display: flex; flex-direction: column; gap: 1px; }
+.guide-hints b { font-size: 1rem; }
+.guide-words { margin: 0; display: grid; gap: 2px 0; font-size: 1rem; line-height: 1.3; }
+.guide-words dt { margin-top: 6px; font-weight: 700; }
+.guide-words dd { margin: 0; }
+
+/* ─── « Où en étais-je ? » ───────────────────────────────────────────────────── */
+.resume { display: flex; flex-direction: column; gap: 10px; }
+.resume-farm { margin: 0; font-size: 1.125rem; }
+.resume-lines,
+.resume-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 1rem; line-height: 1.3; }
+.resume-lines li,
+.resume-list li { display: flex; align-items: flex-start; gap: 8px; }
+.resume-lines li > .ico,
+.resume-list li > .ico,
+.resume-list li > img { flex: none; margin-top: 2px; }
+.resume-todo { padding: 8px 10px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+html.left-handed .todo { flex-direction: row-reverse; }

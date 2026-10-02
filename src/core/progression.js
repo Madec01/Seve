@@ -680,6 +680,7 @@ export function buyCosmetic(p, itemId) {
   const item = getCosmetic(itemId);
   if (!item) return { ok: false, reason: 'Objet inconnu.' };
   if (p.cosmetics.owned.includes(itemId)) return { ok: false, reason: 'Déjà débloqué.' };
+  if (item.found) return { ok: false, reason: 'Cet objet se trouve à la ferme.' };
   if ((p.ecus || 0) < item.price) {
     const missing = item.price - (p.ecus || 0);
     return { ok: false, reason: `Il manque ${missing} écu${missing > 1 ? 's' : ''}.` };
@@ -689,6 +690,20 @@ export function buyCosmetic(p, itemId) {
   const owned = new Set([...progress.cosmetics.owned, itemId]);
   progress.cosmetics.owned = COSMETICS.filter((i) => owned.has(i.id)).map((i) => i.id);
   return { ok: true, progress };
+}
+
+/**
+ * (lot 2) Débloque gratuitement un objet trouvé à la ferme (surprise `owl`, trouvaille `statue` : cosmeticId).
+ * → { ok, progress, already } (already : déjà possédé — l'interface verse alors ecusIfOwned écus).
+ */
+export function unlockCosmetic(p, itemId) {
+  const item = getCosmetic(itemId);
+  if (!item) return { ok: false, reason: 'Objet inconnu.' };
+  if (p.cosmetics.owned.includes(itemId)) return { ok: true, progress: clone(p), already: true };
+  const progress = clone(p);
+  const owned = new Set([...progress.cosmetics.owned, itemId]);
+  progress.cosmetics.owned = COSMETICS.filter((i) => owned.has(i.id)).map((i) => i.id);
+  return { ok: true, progress, already: false };
 }
 
 /** Pose (ou retire, itemId = null) une décoration sur un emplacement. */

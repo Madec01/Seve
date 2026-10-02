@@ -37,6 +37,7 @@ import { doRunStep, machineWillPass, nextRunStep, passesBetween, startPass } fro
 import { collectShelter } from './animals.js';
 import { gainXp, sellerThreshold, staffStatus } from './staff.js';
 import { chaseCrowAt } from './events.js';
+import { giantOpenToHelpers } from '../surprises.js';
 
 const EPS = 1e-9;
 const MAX_STEPS = 50000;
@@ -73,7 +74,7 @@ function gardenAction(api, i, t, pass) {
     case 'chase':
       return p.crow && p.cropId ? 'chase' : null;
     case 'harvest': {
-      if (!crop || !isMature(p)) return null;
+      if (!crop || !isMature(p) || !giantOpenToHelpers(state, i)) return null; // (lot 2) le géant attend d'abord le joueur
       const kind = tree ? 'pick' : 'harvest';
       return machineWillPass(api, p.lot, kind, t) ? null : kind;
     }

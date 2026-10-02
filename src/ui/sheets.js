@@ -9,10 +9,17 @@
 // « panneau » (achats, bilan) se rangent à droite, sans fond, et la scène reste utilisable.
 //
 // opts : { id, title, icon (nœud), content (nœud), kind: 'panel' | 'popup', tall: bool,
-//          onClose(reason), className }
+//          onClose(reason), className, pauses: bool (false : jamais de pause de lecture) }
+//
+// Pause pendant la lecture (option d'accessibilité, activée par défaut en Détente) : tant qu'une
+// feuille est ouverte, le temps s'arrête (raison de pause « sheet », qui s'ajoute aux autres :
+// fenêtres, tutoriel, onglet caché…). Pas sur grand écran pour les panneaux rangés à droite (la
+// scène reste jouable à côté). Toucher le bouton de vitesse lève cette pause (releasePause) jusqu'à
+// la fermeture de la feuille.
 
 import { clear, el } from './dom.js';
 import { icon } from './icons.js';
+import { pauseOnSheetActive } from './a11y.js';
 
 /**
  * Glisser vers le bas pour fermer. `grab` : zones qui démarrent toujours le glissement (poignée,
@@ -125,6 +132,19 @@ export function swipeToClose(box, { grab = [], scroller = null, onClose, canClos
 export function createSheets(layer, app) {
   let current = null; // { id, opts }
   let closeTimer = null;
+  let paused = false; // raison de pause « sheet » posée par cette feuille
+  let released = false; // le joueur a relancé le temps, feuille ouverte
+
+  function syncPause() {
+    const want = !!current && !released && current.opts.pauses !== false && pauseOnSheetActive(app) && !(current.opts.kind === 'panel' && document.body.classList.contains('layout-wide'));
+    if (want && !paused) {
+      paused = true;
+      app.pushPause?.('sheet');
+    } else if (!want && paused) {
+      paused = false;
+      app.popPause?.('sheet');
+    }
+  }
 
   const backdrop = el('div.sheet-backdrop', { 'aria-hidden': 'true' });
   // Poignée : zone de glissement (pas un bouton : le ✕ et Échap ferment la feuille).
@@ -180,11 +200,17 @@ export function createSheets(layer, app) {
     document.body.dataset.sheet = opts.id;
     if (!replacing) app.audio.play('open', { volume: 0.7 });
     box.style.transform = '';
+    const opened = current;
     requestAnimationFrame(() => {
+      // Fermée (ou remplacée) entre-temps, par exemple par une fenêtre « Nouveau rang ! » : ne pas
+      // réafficher une feuille vide (bug [42] de l'analyse).
+      if (current !== opened) return;
       box.classList.add('is-visible');
       publishHeight();
     });
     app.tooltip?.hide();
+    if (!replacing) released = false;
+    syncPause();
     return { body, close };
   }
 
@@ -200,8 +226,18 @@ export function createSheets(layer, app) {
     closeTimer = setTimeout(() => {
       if (!current) clear(body);
     }, 260);
+    released = false;
+    syncPause();
     opts.onClose?.(reason);
     publishHeight();
+  }
+
+  /** Le joueur relance le temps feuille ouverte : la pause de lecture est levée. true si elle l'était. */
+  function releasePause() {
+    if (!paused) return false;
+    released = true;
+    syncPause();
+    return true;
   }
 
   function isOpen(id) {
@@ -230,5 +266,9 @@ export function createSheets(layer, app) {
       title.textContent = t;
     },
     refit: publishHeight,
+    releasePause,
+    /** Réglage changé (options) : pose ou lève la pause de lecture de la feuille ouverte. */
+    syncPause,
+    isPausing: () => paused,
   };
 }

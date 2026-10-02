@@ -1,0 +1,139 @@
+/* Lot 2 « Toucher & surprises » : pièces qui volent jusqu'au compteur, bond du compteur, fenêtres du vœu,
+   des trouvailles et des surprises de l'aube, icônes des météos spéciales.
+   (Ajoutée à CSS_FILES de tools/build.js, donc au paquet et à dev.html.) */
+
+/* ─── Pièces en vol (src/ui/juice.js) : au-dessus de la barre du haut, sous les feuilles ─── */
+#fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+.fx-coin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  filter: drop-shadow(0 var(--px1, 1px) 0 rgba(63, 38, 49, 0.55));
+}
+.fx-coin .ico { display: block; }
+
+/* Le compteur « attrape » une pièce : la somme fait un petit bond doré. */
+.hud-money .money-value { display: inline-block; transform-origin: 30% 60%; }
+.hud-money.is-catch .money-value { animation: money-catch 260ms var(--ease-pop, cubic-bezier(.3, 1.6, .5, 1)); }
+@keyframes money-catch {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.16); color: #fff3b0; }
+  100% { transform: scale(1); }
+}
+.reduced-motion .hud-money.is-catch .money-value { animation: money-catch-still 400ms linear !important; animation-duration: 400ms !important; }
+@keyframes money-catch-still { 0%, 60% { color: #fff3b0; } }
+
+/* ─── Icônes des météos spéciales (repli : icône de base + petit signe) ─── */
+.w-special { position: relative; display: inline-block; line-height: 0; }
+.w-special::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 7px;
+  height: 7px;
+  background: #fff3b0;
+  box-shadow: 0 0 0 1px #3f2631;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+}
+.w-special .sprite { display: block; }
+.hud-weather.is-special .w-name { color: #8a4b08; font-weight: 700; }
+
+/* ─── Fenêtres du lot 2 (vœu, trouvailles, surprises) ─── */
+.lot2-card { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.lot2-lead { margin: 0; font-size: 1rem; line-height: 1.35; }
+.lot2-sky {
+  position: relative;
+  width: 100%;
+  height: 72px;
+  overflow: hidden;
+  background: linear-gradient(#2a2350, #5b4a86 70%, #e8a06a);
+  box-shadow: 0 0 0 var(--u) var(--outline);
+  image-rendering: pixelated;
+}
+.lot2-sky .star-streak {
+  position: absolute;
+  left: 8%;
+  top: 18%;
+  width: 46px;
+  height: 3px;
+  background: linear-gradient(90deg, rgba(255, 243, 176, 0), #fff3b0 80%, #fff);
+  transform: rotate(18deg);
+  animation: star-streak 2.4s ease-in infinite;
+}
+.lot2-sky .star-dot { position: absolute; width: 2px; height: 2px; background: #fff; opacity: 0.8; }
+@keyframes star-streak {
+  0% { transform: translate(0, 0) rotate(18deg); opacity: 0; }
+  10% { opacity: 1; }
+  60% { transform: translate(220px, 70px) rotate(18deg); opacity: 0; }
+  100% { opacity: 0; }
+}
+.reduced-motion .lot2-sky .star-streak { animation: none !important; left: 40%; }
+.wish-choices { display: grid; gap: 8px; width: 100%; }
+.wish-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px;
+  text-align: left;
+}
+.wish-choice .wish-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.wish-choice b { font-size: 1rem; }
+.wish-choice small { font-size: 0.875rem; opacity: 0.9; line-height: 1.25; }
+
+.finds-list { display: grid; gap: 6px; width: 100%; margin: 0; padding: 0; list-style: none; }
+.finds-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: #fff6e0;
+  box-shadow: 0 0 0 var(--u) var(--gold-2, #d9a441);
+  text-align: left;
+  opacity: 0;
+  transform: translateY(6px) scale(0.96);
+  animation: find-in 360ms var(--ease-pop, cubic-bezier(.3, 1.6, .5, 1)) forwards;
+  animation-delay: calc(var(--i, 0) * 180ms + 150ms);
+}
+.finds-list li .find-text { display: flex; flex-direction: column; min-width: 0; }
+.finds-list li small { font-size: 0.875rem; line-height: 1.3; opacity: 0.85; }
+@keyframes find-in { to { opacity: 1; transform: none; } }
+.reduced-motion .finds-list li { opacity: 1; transform: none; }
+
+.surprise-row { display: flex; align-items: center; gap: 10px; text-align: left; width: 100%; }
+.surprise-row .sprite, .surprise-row .ico { flex: none; }
+
+/* Icône de météo spéciale dans la barre du haut : même taille que l'icône de base (le nom reste visible). */
+.hud-weather .w-alt { display: inline-flex; line-height: 0; }
+.hud-weather .w-alt[hidden] { display: none; }
+.hud-weather .w-icons > .w-alt .sprite { width: calc(var(--u) * 16); height: calc(var(--u) * 16); max-width: none; max-height: none; }
+.hud-weather .w-tomorrow .w-alt .sprite { width: 20px; height: 20px; max-width: none; max-height: none; }
+.hud-weather .w-alt .ico { --is: var(--u); }
+.hud-weather .w-tomorrow .w-alt .ico { --is: 1.25px; }
+
+/* Décors trouvés à la ferme (boutique de la grange, emplacements) : pas encore trouvés → silhouette douce. */
+.cos-tile.is-tofind { opacity: 0.75; }
+.cos-tile.is-tofind .cos-icon { filter: grayscale(1) brightness(0.75); }
+.cos-status.is-tofind { color: var(--text-soft); font-style: italic; }
+
+/* Fiche d'une parcelle : chances de qualité de la prochaine récolte à la main et soins remplis (§ 15.1). */
+.tip-quality { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 0.9375rem; }
+.tip-quality .q-fine { color: var(--slate-dark); }
+.tip-quality .q-gold { color: var(--warn); }
+.tip-care { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.875rem; color: var(--text-soft); }
+.tip-care .care.is-ok { color: var(--green-text); font-weight: 700; }
+
+/* Barre du haut : case météo trop étroite (mesurée par hud.js) → l'icône du jour seule. */
+.hud-weather.is-tight .w-arrow,
+.hud-weather.is-tight .w-tomorrow,
+.hud-weather.is-tight .w-name { display: none; }
+.hud-weather.is-tight { align-items: center; justify-content: center; }

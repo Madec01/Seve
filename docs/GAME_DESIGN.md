@@ -633,20 +633,22 @@ Pourquoi pas seulement « tout moins cher » : les coûts fixes (charges, fermag
 
 | # | Départ | Fermages (printemps → hiver) | ★★ / ★★★ | Réglage propre |
 |---|---|---|---|---|
-| 1 | 160 | 20 / 60 / 90 / 130 | 300 / 490 | tutoriel |
-| 2 | 180 | 20 / 60 / 80 / 120 | 130 / 420 | arrosage 1 pièce |
-| 3 | 160 | 20 / 50 / 100 / 170 | 150 / 360 | maladie 5 % |
-| 4 | 260 | 20 / 60 / 90 / 120 | 320 / 510 | 6 parcelles |
-| 5 | 160 | 20 / 80 / 140 / 500 | 180 / 380 | hiver de 14 jours |
-| 6 | 160 | 20 / 70 / 130 / 300 | 150 / 360 | marché fou |
-| 7 | 660 | 50 / 150 / 230 / 360 | 90 / 310 | crédit : **120** aux jours 4, 11, 18, 25 |
-| 8 | 160 | 20 / 80 / 130 / 240 | 190 / 380 | bio |
-| 9 | 360 | 20 / 60 / 120 / 260 | 100 / 250 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
-| 10 | 240 | 20 / 90 / 200 / 420 | 440 / 620 | pommiers sans ruche : demi-récolte |
-| 11 | 340 | 20 / 80 / 160 / 440 | 200 / 360 | montagne |
-| 12 | 310 | 20 / 100 / 190 / 480 | 190 / 420 | concours |
+| 1 | 160 | 20 / 60 / 90 / 130 | 410 / 650 | tutoriel |
+| 2 | 180 | 20 / 60 / 80 / 120 | 180 / 470 | arrosage 1 pièce |
+| 3 | 160 | 20 / 50 / 100 / 170 | 230 / 450 | maladie 5 % |
+| 4 | 260 | 20 / 60 / 90 / 120 | 420 / 590 | 6 parcelles |
+| 5 | 160 | 20 / 80 / 140 / 500 | 240 / 510 | hiver de 14 jours |
+| 6 | 160 | 20 / 70 / 130 / 300 | 180 / 470 | marché fou |
+| 7 | 660 | 50 / 150 / 230 / 360 | 140 / 380 | crédit : **120** aux jours 4, 11, 18, 25 |
+| 8 | 160 | 20 / 80 / 130 / 240 | 260 / 530 | bio |
+| 9 | 360 | 20 / 60 / 120 / 260 | 170 / 340 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
+| 10 | 240 | 20 / 90 / 200 / 420 | 570 / 780 | pommiers sans ruche : demi-récolte |
+| 11 | 340 | 20 / 80 / 160 / 440 | 260 / 440 | montagne |
+| 12 | 310 | 20 / 100 / 190 / 480 | 290 / 560 | concours |
 
 Seuils d'étoiles : ★★ ≈ argent final médian du joueur tranquille (la moitié l'obtient) ; ★★★ ≈ ses 12 % meilleures parties — un joueur appliqué (qui arrose tout, comme les robots) l'obtient à coup sûr.
+
+*(Lot 2, 2026-10-02 : seuils relevés pour tenir compte des surprises — qualité, géants, fée, coffres, vœux —, actives par défaut en Détente, qui augmentent l'argent final médian du joueur tranquille de ~30 % ; même règle, recalculée avec elles. Anciens seuils : 300/490, 130/420, 150/360, 320/510, 180/380, 150/360, 90/310, 190/380, 100/250, 440/620, 200/360, 190/420. Au niveau 2, ★★★ passe à 470 pour qu'il reste rare pour le novice (≈ 16 %, comme avant). Voir § 15.)*
 
 ## 13.4 Joueurs humains simulés (`tools/simulate.js`)
 
@@ -738,3 +740,131 @@ La conception complète, chiffrée et découpée en lots, est dans **`docs/CARRI
 - **Détente par défaut, sans fin de partie** (stock et ateliers vendus, prêt de Joseph, coup dur, vente de secours limitée) ; Classique : faillite possible.
 - Écus, décor et succès **partagés** avec le mode Niveaux ; les bonus permanents (étoiles) n'ont **aucun effet** en carrière.
 
+
+---
+
+# 15. Lot 2 — surprises (toucher & surprises, 2026-10-02)
+
+Synthèse : `docs/analyse/0-SYNTHESE.md`, points B2 à B6 et principe F1 (« machines et salariés aident sans
+remplacer »). Contrat de code : `docs/ARCHITECTURE.md`, « Lot 2 — contrats » ; nombres : `src/data/surprises.js`.
+
+**Règle d'or : tout est positif et rare.** Aucune surprise ne fait perdre une culture, un animal ou une pièce ; rien
+ne presse (pas de compte à rebours stressant : les champignons restent quelques jours, le vœu attend qu'on le fasse).
+
+**Activation** : par défaut en **Détente** et en **Carrière** ; jamais par défaut en **Classique** (le mode Classique se
+joue exactement comme avant : test de parité des niveaux 1 à 8). Les tirages passent par trois flux aléatoires
+nouveaux (qualité, surprises, ciel) : météo, marché, maladie et événements de carrière ne changent pas.
+
+## 15.1 Récoltes de qualité (B2)
+
+Chaque récolte tire sa qualité : **normale**, **belle** (× 1,5) ou **dorée** (× 2). La prime est payée tout de suite,
+même si la récolte part à l'atelier, au grenier ou à une commande.
+
+| Chances (cumulées) | belle | dorée |
+|---|---|---|
+| base | 2 % | 0,4 % |
+| arrosée chaque jour où elle en avait besoin, depuis le semis (arbres : toujours) | + 1,5 % | + 0,4 % |
+| une ruche dans la ferme | + 1 % | + 0,3 % |
+| sol reposé : culture différente de la dernière récoltée sur cette parcelle | + 1 % | + 0,3 % |
+| bonus permanent « Main verte » | + 1 % | + 0,3 % |
+| vœu « main chanceuse » (3 jours) | × 2 | × 2 |
+
+Au mieux (tous les soins) : belle 6,5 %, dorée 1,7 %. **La dorée n'existe que pour une récolte faite à la main** :
+en carrière, salariés et machines récoltent au plus « belle » (principe F1). La fiche de la parcelle montre les
+chances de la prochaine récolte à la main et les soins remplis. Les belles et dorées sont comptées par culture
+(album du lot 4).
+
+## 15.2 Légumes géants (B3)
+
+Un carré 2 × 2 de la **même culture** (pas un arbre), **semée le même jour (à un jour près)**, **toute mûre** et
+**arrosée le jour où elle a mûri** peut, à chaque aube, fusionner en un légume géant (**6 %** par aube, un carré au plus
+par aube). Le géant occupe les 4 parcelles et vaut **6 fois** une parcelle (au lieu de 4) ; il ne pourrit pas ; il se
+récolte **à la main**, en une fois, avec une grande fête. En carrière, salariés et machines le laissent **3 jours** au
+joueur ; ensuite ils peuvent le récolter, sans la prime (4 fois leur valeur d'une parcelle) : un champ tenu par les
+machines n'est jamais bloqué. De même, un salarié ou une machine qui sème sur des champignons les ramasse pour vous. Le carré
+est cherché dans la grille du cœur (niveaux : grille du champ ; carrière : les 4 colonnes de chaque champ).
+
+## 15.3 Surprises de l'aube (B4)
+
+À chaque aube, à partir du 5e jour et au plus une tous les 3 jours, **6 %** de chances qu'une surprise arrive
+(≈ une toutes les deux semaines de jeu), tirée parmi celles qui sont possibles :
+
+| Surprise | Poids | Effet |
+|---|---|---|
+| La fée des cultures | 2 | mûrit d'un coup les cultures d'un carré 3 × 3 (celui qui en contient le plus) |
+| Un vieux coffre | 3 | 15 à 30 pièces (carrière : + 15 × rang), ou 3 à 6 écus (35 %) |
+| Un cercle de fées | 2 | champignons rares sur une parcelle vide : 1,5 × le prix de la culture la plus chère de la saison (au moins 25), 4 jours pour les cueillir |
+| Un renard s'installe | 2 | carrière : plus aucun corbeau jusqu'à la fin de la saison |
+| Un hérisson | 2 | niveaux où l'on peut pourrir : aucune pourriture pendant 6 jours |
+| Une chouette sculptée | 1 | une fois par partie : décor « Chouette sculptée » débloqué (5 écus s'il est déjà à vous) |
+
+## 15.4 Météos spéciales (B5)
+
+Tirées en même temps que la prévision de demain (elles se voient **la veille**), sur une météo de base :
+
+| Météo spéciale | Sur | Saisons | Chance | Effet |
+|---|---|---|---|---|
+| Pluie chaude | pluie | printemps → automne | 6 % | la pluie arrose, et la pousse du jour × 1,5 |
+| Brouillard | nuageux | printemps, automne | 8 % | 2 à 4 parcelles vides se couvrent de champignons (0,25 × le prix de la culture la plus chère, au moins 5 ; 2 jours) |
+| Étoiles filantes | soleil, nuageux | été → hiver | 3 % | le lendemain matin, un vœu parmi 3 : une bourse (20 pièces ; carrière + 15 × rang), un jour de pousse pour toutes les cultures, la main chanceuse (3 jours), une ondée (tout est arrosé) |
+| Heure dorée | soleil | printemps → automne | 4 % | les récoltes (et le grenier en carrière) se vendent 20 % plus cher ce jour-là |
+| Arc-en-ciel | soleil, nuageux, après la pluie | printemps → automne | 10 % | la pousse du jour + 10 % (niveaux ; en carrière c'est l'événement « arc-en-ciel » déjà existant, montré de la même façon) |
+
+## 15.5 Trouvailles au défrichage (B6, carrière)
+
+À l'achat d'un terrain, 1 trouvaille (2 dans 40 % des cas), tirées sans remise :
+
+| Trouvaille | Poids | Effet |
+|---|---|---|
+| Un vieux coffre | 3 | comme le coffre de l'aube |
+| Un pot de pièces | 3 | 30 à 60 pièces + 20 par terrain déjà acheté |
+| Un bocal de graines anciennes | 3 | une graine ancienne (culture au hasard) gardée pour « La Vallée vivante » (`state.career.heirlooms`) |
+| Un vieux puits | 2 | une fois : les cultures de ce terrain sont arrosées chaque matin |
+| Une petite statue | 2 | une fois : décor « Petite statue » débloqué (5 écus s'il est déjà à vous) |
+| Un agneau perdu | 2 | une fois : un mouton offert (s'il y a de la place à la bergerie ; sinon une poule, sinon 30 pièces) |
+
+## 15.6 Équilibre (simulation)
+
+Cible : les surprises ajoutent **au plus ~8 %** au revenu de l'année du joueur tranquille, sans changer les victoires ni le
+rythme des rangs. Commandes : `node tools/simulate.js --compare-surprises [--strategy casual]` et
+`node tools/simulate-career.js --compare-surprises` (même graine, sans → avec).
+
+### Niveaux (Détente, 200 parties par niveau et par stratégie)
+
+| # | casual : revenu (sans → avec) | casual : ★★★ (seuils du lot 2) | novice : revenu | optimal : revenu |
+|---|---|---|---|---|
+| 1 | 1 751 → 1 889 (+7,9 %) | 13 % | +4,3 % | +8,9 % |
+| 2 | 1 744 → 1 913 (+9,7 %) | 6 % | +4,2 % | +10,3 % |
+| 3 | 1 819 → 1 991 (+9,5 %) | 12 % | +3,3 % | +8,3 % |
+| 4 | 1 503 → 1 598 (+6,3 %) | 13 % | +3,6 % | +6,3 % |
+| 5 | 2 485 → 2 657 (+6,9 %) | 14 % | +5,1 % | +9,2 % |
+| 6 | 1 900 → 2 070 (+8,9 %) | 12 % | +3,9 % | +8,5 % |
+| 7 | 2 314 → 2 438 (+5,4 %) | 12 % | +2,9 % | +1,1 % |
+| 8 | 2 020 → 2 153 (+6,6 %) | 11 % | +4,0 % | +10,6 % |
+| 9 | 1 504 → 1 603 (+6,6 %) | 12 % | +3,6 % | +7,2 % |
+| 10 | 2 046 → 2 168 (+6,0 %) | 9 % | +3,8 % | +11,1 % |
+| 11 | 1 836 → 1 910 (+4,0 %) | 11 % | +3,3 % | +7,5 % |
+| 12 | 2 188 → 2 348 (+7,3 %) | 12 % | +2,2 % | +14,9 % |
+| **moyenne** | **+7,1 %** | ≈ 12 % (avant le lot 2 : 12 %) | **+3,7 %** | **+8,7 %** |
+
+Par partie (casual, niveau 1) : ~2,4 belles, ~0,6 dorée, 0,15 géant, 1,2 surprise de l'aube, 1,5 météo spéciale ;
+gain moyen : qualité ~46 pièces, géants ~23 (dont la prime : un tiers), surprises ~16. Le joueur appliqué (optimal)
+arrose tout et gagne un peu plus (soins → plus de belles et dorées) : c'est voulu.
+
+Victoires : inchangées ou meilleures (casual 92 → 95 % au niveau 7, novice 88 → 94 %) ; toutes les cibles du § 13.6
+tiennent. L'argent final médian du joueur tranquille monte de ~30 % (l'argent final est ce qui reste après tout le
+reste : 7 % de revenu en plus pèsent beaucoup sur lui) : **seuils d'étoiles de la Détente relevés** (§ 13.3) selon la même
+règle qu'avant (★★ ≈ argent médian du joueur tranquille : 45 à 51 % l'obtiennent ; ★★★ ≈ ses 12 % meilleures parties).
+Le mode Classique ne change pas (pas de surprises, mêmes seuils, test de parité).
+
+### Carrière (Détente, saisons de 7 jours, 60 carrières × 10 ans)
+
+| Robot | Revenu des 10 ans | Années 1 à 3 | Rang médian par année (sans → avec) | Domaine (médiane) |
+|---|---|---|---|---|
+| casual | **+5,0 %** | +5,5 % | identique, sauf an 8 : 5 → 6 | an 9 → an 8 |
+| novice | +6,2 % | +20 % (trouvailles : grosses au regard d'un petit revenu) | identique, sauf an 5 : 3 → 4 | jamais → jamais |
+| optimal | +4,6 % | +6,3 % | identique, sauf an 2 : 3 → 4 | an 6 → an 6 |
+
+Aucune faillite, rythme des rangs inchangé à un an près. Un premier réglage bloquait des champs tenus par les machines
+(géant jamais récolté, champignons jamais cueillis : revenu −3 %) : d'où le délai de 3 jours du géant et la cueillette
+par les salariés et machines qui sèment (§ 15.2).

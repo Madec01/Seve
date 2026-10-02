@@ -6,6 +6,7 @@
 // checkCareerState(state) renvoie le premier problème trouvé, ou null.
 
 import { DAY_SECONDS, SEASONS, SPEEDS, WEATHER_TYPES } from '../../data/balance.js';
+import { checkOptions } from '../options.js';
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import { getProduct } from '../../data/products.js';
 import { COSMETICS_BY_ID, DECOR_SLOTS_BY_ID, FARM_NAME_MAX } from '../../data/cosmetics.js';
@@ -125,6 +126,8 @@ export function checkCareerState(s) {
   if (!obj(c) || c.version !== CAREER_VERSION) return 'version de carrière';
   if (!['playing', 'bankrupt'].includes(s.status)) return 'statut';
   if (!SPEEDS.includes(s.speed)) return 'vitesse';
+  const opt = checkOptions(s);
+  if (opt) return opt;
   if (!num(s.money) || !num(s.startMoney)) return 'argent';
   if (!DIFFICULTY_CAREER[c.difficulty] || s.difficulty !== c.difficulty) return 'difficulté';
   if (!SEASON_LENGTHS.includes(c.seasonLength)) return 'durée des saisons';

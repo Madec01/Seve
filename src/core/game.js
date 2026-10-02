@@ -152,7 +152,14 @@ import { createCareerRuntime } from './career/runtime.js';
 import './career/extensions.js';
 import { addHarvest, addLost, addProductSold, addStat, buildSummary, createStats, noteRentPaid, noteSeasonHarvest } from './stats.js';
 import { createEmitter } from './events.js';
+import { allOptions, autoPauseAfterDawn, checkOptions, setOption as setGameOption } from './options.js';
 import { borrow, canBorrow, initialNeighbourLoan, loanAmount, maxMissing, repay, repaymentFrom, willLend } from './neighbour.js';
+import {
+  addSurpriseIncome, advanceSky, applyGrowthCare, checkSurprises, completeSurprises, dawnSurprise, enableSurprises, expireEffects,
+  expireForage, fogForage, giantAt, grantWish, growthSnapshot, hedgehogActive, newSurprisesState, noteSown,
+  plotSurpriseInfo, recordQuality, rollQuality, skyGrowthFactor, specialInfo, surprisesQuery, takeForage, tryGiant, validateGiants,
+  newWish, applySurprise, GIANT,
+} from './surprises.js';
 
 export const STATE_VERSION = 2;
 
@@ -165,7 +172,7 @@ const V1_MAX_LEVEL = 8;
  *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine) ; difficulty : 'detente' (défaut)
  *   ou 'classique' (nombres de la v3, test de parité) — voir src/data/difficulty.js
  */
-export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY } = {}) {
+export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY, surprises } = {}) {
   if (!isDifficulty(difficulty)) throw new Error(`Difficulté inconnue : ${difficulty}`);
   const level = levelFor(levelId, difficulty);
   if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
@@ -196,6 +203,11 @@ export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficu
     difficulty: level.difficulty,
     neighbourLoan: initialNeighbourLoan(level),
   };
+  // (lot 2) Surprises : actives par défaut en Détente, jamais par défaut en Classique (parité des niveaux 1 à 8).
+  // Désactivées sur demande (surprises: false) : null, gardé tel quel à la reprise (sinon une partie Détente
+  // d'avant le lot 2 les reçoit, voir migrateState).
+  if (surprises ?? difficulty !== 'classique') enableSurprises(state);
+  else if (surprises === false) state.surprises = null;
   for (const idx of level.startTrees || []) setTree(state, state.plots[idx], 'apple', true);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);
@@ -240,6 +252,11 @@ export function migrateState(saved) {
   // Modes de difficulté : une partie sauvegardée avant leur existence garde ses règles (classique).
   if (s.difficulty === undefined) s.difficulty = LEGACY_DIFFICULTY;
   if (s.neighbourLoan === undefined) s.neighbourLoan = null;
+  // (lot 2) Surprises : une partie Détente d'avant le lot 2 les reçoit à la reprise (Classique : jamais).
+  if (s.surprises === undefined && s.difficulty === 'detente' && s.rng && typeof s.rng === 'object') {
+    s.surprises = newSurprisesState();
+    completeSurprises(s);
+  } else if (s.surprises) completeSurprises(s);
   return s;
 }
 
@@ -269,6 +286,8 @@ function checkState(s, level) {
   const obj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
   if (!['playing', 'bankrupt', 'victory'].includes(s.status)) return 'statut';
   if (!SPEEDS.includes(s.speed)) return 'vitesse';
+  const opt = checkOptions(s);
+  if (opt) return opt;
   if (!num(s.money) || !num(s.startMoney)) return 'argent';
   const t = s.time;
   if (!t || typeof t !== 'object') return 'calendrier';
@@ -333,6 +352,9 @@ function checkState(s, level) {
     if (!obj(l) || !int(l.loans, 0, 99)) return 'prêt du voisin';
     if (!['debt', 'borrowed', 'repaid', 'forgiven'].every((k) => num(l[k]) && l[k] >= 0)) return 'prêt du voisin';
   } else if (s.neighbourLoan !== null) return 'prêt du voisin';
+  // Surprises (lot 2).
+  const sp = checkSurprises(s);
+  if (sp) return sp;
   return null;
 }
 
@@ -504,6 +526,54 @@ function wrap(state) {
     }
   }
 
+  // ── Lot 2 : surprises de l'aube (niveaux ; la carrière a les siennes dans runtime.js) ─────
+  /** Début : météo spéciale (aujourd'hui = prévision d'hier), effets passés, champignons fanés, géants. */
+  function surprisesDawnStart() {
+    const events = [];
+    const tomorrowSi = tomorrowSeasonIndex(state, level) ?? state.time.seasonIndex;
+    const sky = advanceSky(state, SEASONS[tomorrowSi]);
+    expireEffects(state);
+    expireForage(state);
+    validateGiants(state);
+    const g = tryGiant(state, level);
+    if (g) events.push(['giant', giantEvent(g)]);
+    if (sky.today) events.push(['specialWeather', specialInfo(sky.today)]);
+    return { events, sky };
+  }
+
+  /** Fin (après la pluie et le marché) : surprise, brouillard, vœu. */
+  function surprisesDawnEnd(lot2) {
+    const { events, sky } = lot2;
+    const earn = (amount) => {
+      if (!(amount > 0)) return;
+      state.money += amount; // l'aube émet un seul moneyChanged
+      addSurpriseIncome(state, amount);
+    };
+    const surprise = dawnSurprise(state, { level, crops, earn });
+    if (surprise) {
+      events.push(['surprise', surprise]);
+      if (surprise.kind === 'ring') events.push(['forage', { kind: 'ring', plots: [surprise.plotIndex], text: surprise.text }]);
+    }
+    if (sky.today === 'fog') {
+      const f = fogForage(state, level, crops);
+      if (f) events.push(['forage', { kind: 'mushroom', plots: f.plots, value: f.value, text: 'Des champignons ont poussé dans le brouillard : touchez-les pour les cueillir.' }]);
+    }
+    if (sky.yesterday === 'shootingstar' && !state.surprises.wish) {
+      const w = newWish(state);
+      events.push(['wish', { ...w, text: 'Cette nuit, vous avez vu une étoile filante : faites un vœu !' }]);
+    }
+  }
+
+  function giantEvent(g) {
+    const crop = getCrop(g.cropId);
+    return { anchor: g.anchor, plots: [...g.plots], cropId: g.cropId, cropName: crop.name, value: giantValue(g.anchor) };
+  }
+
+  /** Valeur d'un géant (récolté maintenant) : 6 × la valeur d'une parcelle. */
+  function giantValue(anchor) {
+    return Math.round(harvestValue(state, level, state.plots[anchor]) * GIANT.valueFactor);
+  }
+
   // ── Aube ─────────────────────────────────────────────────────────────────────────────
   function dawn() {
     if (rt) return rt.dawn();
@@ -513,7 +583,10 @@ function wrap(state) {
     const extraIncomes = []; // remboursement du gel, produits vendus (avant les revenus quotidiens)
 
     // 1. Pousse (veille), arbres compris, puis remise à zéro de l'arrosage.
+    // (lot 2) soins de chaque culture et pousse en plus d'une météo spéciale (pluie chaude, arc-en-ciel).
+    const snap = growthSnapshot(state, level, prevWeather);
     growPlots(state, prevSeason, prevWeather, level);
+    if (snap) applyGrowthCare(state, snap, skyGrowthFactor(state.surprises.sky.today));
 
     // 2. Nouveau jour, nouvelle saison, gel.
     const newSeason = advanceDay(state, level);
@@ -538,9 +611,11 @@ function wrap(state) {
     state.weather.today = state.weather.tomorrow;
     state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? state.time.seasonIndex);
     const today = state.weather.today;
+    // (lot 2) Météo spéciale du jour et de demain, effets passés, géants.
+    const lot2 = state.surprises ? surprisesDawnStart() : null;
 
-    // 4. Maladie.
-    if (isRainy(today) && level.modifiers.rotChance > 0) {
+    // 4. Maladie (lot 2 : jamais tant que le hérisson garde le potager).
+    if (isRainy(today) && level.modifiers.rotChance > 0 && !hedgehogActive(state)) {
       const rotten = applyRot(state, level.modifiers.rotChance, stream(state.rng, 'rot'));
       addLost(state, 'rot', rotten.length);
       for (const r of rotten) push('rot', r);
@@ -551,6 +626,9 @@ function wrap(state) {
 
     // 6. Marché.
     updateMarket(state, level, crops);
+
+    // (lot 2) Surprise de l'aube, champignons du brouillard, vœu de l'étoile filante.
+    if (lot2) surprisesDawnEnd(lot2);
 
     // 7. Arrosage automatique.
     const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level), today, level);
@@ -607,8 +685,9 @@ function wrap(state) {
       milkToDairy: milk.milkToDairy,
     };
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
-    push('weather', { today, tomorrow: state.weather.tomorrow });
+    push('weather', lot2 ? { today, tomorrow: state.weather.tomorrow, special: { ...state.surprises.sky } } : { today, tomorrow: state.weather.tomorrow });
     push('dawn', dawnInfo);
+    if (lot2) for (const [type, payload] of lot2.events) push(type, payload);
     if (neighbourPayment > 0) {
       push('loanRepayment', { amount: neighbourPayment, remaining: state.neighbourLoan.debt, source: 'product' });
       if (neighbourDone) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: 'product' });
@@ -630,6 +709,8 @@ function wrap(state) {
       state.time.elapsed -= DAY_SECONDS;
       endOfDay();
       if (playing()) dawn();
+      // Option « pause chaque matin » : le nouveau jour commence en pause, sans enchaîner les suivants.
+      if (playing() && autoPauseAfterDawn(state, push, seasonId(state))) state.time.elapsed = 0;
       flush();
     }
     flush();
@@ -650,6 +731,40 @@ function wrap(state) {
     return null;
   }
 
+  /** (lot 2) Cueillette des champignons d'une parcelle vide (niveaux). */
+  function pickForage(plotIndex) {
+    const f = takeForage(state, plotIndex);
+    if (!f) return fail('Rien à cueillir ici.');
+    addSurpriseIncome(state, f.value);
+    changeMoney(f.value);
+    push('foragePicked', { plotIndex, kind: f.kind, amount: f.value });
+    return { ok: true, amount: f.value, forage: f.kind, plotIndex };
+  }
+
+  /** (lot 2) Récolte d'un légume géant (niveaux) : 6 × la valeur d'une parcelle, les 4 parcelles vidées. */
+  function harvestGiant(plotIndex) {
+    const g = giantAt(state, plotIndex);
+    const cropId = g.cropId;
+    const amount = giantValue(g.anchor);
+    const contestBefore = contestSnapshot(state, level);
+    for (const k of g.plots) {
+      const q = state.plots[k];
+      q.lastHarvested = cropId;
+      clearPlot(q);
+      addHarvest(state, cropId);
+    }
+    addStat(state, 'harvestIncome', amount);
+    noteSeasonHarvest(state);
+    changeMoney(amount);
+    const neighbourPart = repaymentFrom(state, level, amount);
+    const giant = { anchor: g.anchor, plots: [...g.plots], cropId };
+    push('harvested', { plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
+    push('giantHarvested', { ...giant, cropName: getCrop(cropId).name, amount, by: 'player' });
+    repayNeighbour(neighbourPart, 'harvest');
+    pushContestChanges(contestBefore);
+    return { ok: true, amount, cropId, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) };
+  }
+
   const actions = {
     plant: act((plotIndex, cropId) => {
       if (rt) return rt.plant(plotIndex, cropId, { by: 'player' });
@@ -658,6 +773,7 @@ function wrap(state) {
       const p = state.plots[plotIndex];
       if (!p.unlocked) return fail('Cette parcelle n\'est pas encore ouverte.');
       if (p.cropId) return fail('Cette parcelle est déjà plantée.');
+      if (p.forage) return fail('Cueillez d\'abord les champignons.');
       const crop = getCrop(cropId);
       if (!crop || !crops.includes(crop)) return fail('Culture inconnue.');
       const sid = seasonId(state);
@@ -674,6 +790,7 @@ function wrap(state) {
         p.fatigued = wouldFatigue(level, p, crop.id);
         p.watered = weatherWaters(state.weather.today); // il pleut : la graine est arrosée d'office
         p.insured = insured;
+        noteSown(state, plotIndex);
       }
       addStat(state, 'seedsSpent', cost);
       addStat(state, 'cropsPlanted', 1);
@@ -708,7 +825,9 @@ function wrap(state) {
       if (!playing()) return fail(ENDED);
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
+      if (!p.cropId && p.forage && state.surprises) return pickForage(plotIndex);
       if (!p.cropId) return fail('Rien à récolter ici.');
+      if (p.giant !== undefined && state.surprises) return harvestGiant(plotIndex);
       const tree = isTreePlot(p);
       if (!isMature(p)) {
         if (tree) return fail(treeNotReadyReason(p));
@@ -719,9 +838,14 @@ function wrap(state) {
       const raw = harvestValue(state, level, p);
       const yf = yieldFactor(state, level, p);
       const fatigue = p.fatigued;
+      // (lot 2) Qualité : belle × 1,5, dorée × 2 (toujours à la main dans les niveaux) ; la prime est payée
+      // tout de suite, même si la récolte part à l'atelier.
+      const q = state.surprises ? rollQuality(state, p, true) : null;
+      const qualityBonus = q ? Math.round(raw * (q.multiplier - 1)) : 0;
+      if (q) recordQuality(state, cropId, q.quality);
       const contestBefore = contestSnapshot(state, level);
       const processed = tryProcessHarvest(state, cropId, raw, yf);
-      const amount = processed ? 0 : raw;
+      const amount = (processed ? 0 : raw) + qualityBonus;
       if (tree) {
         p.fruit = 0;
       } else {
@@ -734,11 +858,12 @@ function wrap(state) {
       changeMoney(amount);
       // Prêt du voisin : sa part de la vente (champ loanRepayment seulement quand il y en a une).
       const neighbourPart = repaymentFrom(state, level, amount);
-      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
+      const qf = q ? { quality: q.quality, qualityBonus, qualityMultiplier: q.multiplier } : {};
+      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed, ...qf, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
       if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
       repayNeighbour(neighbourPart, 'harvest');
       pushContestChanges(contestBefore);
-      return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed };
+      return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, ...qf, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed, ...qf };
     }),
 
     removeTree: act((plotIndex) => {
@@ -818,14 +943,78 @@ function wrap(state) {
       return { ok: true, amount: paid, remaining: loan.debt };
     }),
 
+    /** (lot 2) Vœu de l'étoile filante : un des 3 vœux proposés (query.surprises().wish.options). */
+    makeWish: act((boonId) => {
+      if (!playing()) return fail(ENDED);
+      if (!state.surprises) return fail('Pas de vœu à faire.');
+      const res = grantWish(state, boonId, {
+        earn: (amount) => {
+          if (rt) rt.api.earn('other', amount);
+          else {
+            addSurpriseIncome(state, amount);
+            changeMoney(amount);
+          }
+        },
+      });
+      if (!res.ok) return res;
+      const { ok, ...info } = res;
+      push('wishGranted', info);
+      return res;
+    }),
+
+    /**
+     * (lot 2) Débogage et tests (__debug) : lance une surprise de l'aube tout de suite ('fairy', 'chest', 'ring',
+     * 'fox', 'hedgehog', 'owl'), si elle est possible aujourd'hui. → { ok, surprise } ; événement surprise.
+     */
+    triggerSurprise: act((id) => {
+      if (!playing()) return fail(ENDED);
+      if (!state.surprises) return fail('Surprises désactivées.');
+      const earn = (amount) => {
+        if (rt) rt.api.earn('other', amount);
+        else {
+          addSurpriseIncome(state, amount);
+          changeMoney(amount);
+        }
+      };
+      const surprise = applySurprise(state, { level, crops, earn }, id);
+      if (!surprise) return fail('Impossible aujourd\'hui.');
+      push('surprise', surprise);
+      if (surprise.kind === 'ring') push('forage', { kind: 'ring', plots: [surprise.plotIndex], text: surprise.text });
+      return { ok: true, surprise };
+    }),
+
     setSpeed: act((speed) => {
       if (!SPEEDS.includes(speed)) return fail('Vitesse invalide.');
       state.speed = speed;
       return { ok: true, speed };
     }),
+
+    /** Option de partie gérée par le cœur (src/core/options.js), ex. setOption('autoPauseDawn', true). */
+    setOption: act((name, value) => setGameOption(state, name, value)),
+
+    /**
+     * « Tout ramasser » : ramasse tous les abris (carrière). Partie de niveau : rien à ramasser (sans effet).
+     * → { ok, total, count, byShelter: [{ buildingId, amount }], amount (= total) } ; ok: false + reason si rien.
+     */
+    collectAll: act(() => {
+      if (rt && typeof actions.career?.collectAll === 'function') return actions.career.collectAll();
+      return { ok: false, reason: 'Rien à ramasser pour l\'instant.', total: 0, amount: 0, count: 0, byShelter: [] };
+    }),
   };
 
   // ── Requêtes ─────────────────────────────────────────────────────────────────────────
+  /** (lot 2) Valeur d'un géant récolté à la main maintenant (carrière : prime « à la main » comprise). */
+  function giantValueOf(anchor) {
+    return rt ? rt.giantValue(anchor) : giantValue(anchor);
+  }
+
+  /** (lot 2) Météo spéciale d'aujourd'hui et de demain (carrière : l'arc-en-ciel est l'événement de carrière). */
+  function specialNow() {
+    const sky = { ...state.surprises.sky };
+    if (rt && !sky.today && state.career?.events?.active?.kind === 'rainbow') sky.today = 'rainbow';
+    return sky;
+  }
+
   function plotDaysLeft(p) {
     const crop = getCrop(p.cropId);
     if (!crop || isMature(p)) return 0;
@@ -922,6 +1111,7 @@ function wrap(state) {
       let action = null;
       if (playing() && !(career && p.env === null)) {
         if (!p.unlocked) action = unlockCost === null ? null : 'unlock';
+        else if (!crop && p.forage && state.surprises) action = 'harvest'; // (lot 2) champignons à cueillir
         else if (!crop) action = 'plant';
         else if (mature) action = 'harvest';
         else if (!p.watered && needsWater) action = 'water';
@@ -951,13 +1141,14 @@ function wrap(state) {
         mature,
         fatigue: p.fatigued,
         willFreeze: !!crop && !isTree && !mature && !frostFree(p) && freezes(crop, daysLeft),
-        harvestValue: mature ? harvestValue(state, level, p) : null,
+        harvestValue: mature ? (p.giant !== undefined && state.surprises ? giantValueOf(p.giant) : harvestValue(state, level, p)) : null,
         action,
         kind: crop ? (isTree ? 'tree' : 'crop') : null,
         tree,
         needsWater,
         processTarget: crop ? processTargetOf(crop.id, yieldFactor(state, level, p)) : null,
       };
+      if (state.surprises) Object.assign(out, plotSurpriseInfo(state, plotIndex, p.giant !== undefined ? giantValueOf(p.giant) : null));
       return rt ? Object.assign(out, rt.plotExtras(plotIndex)) : out;
     },
 
@@ -1122,7 +1313,15 @@ function wrap(state) {
     },
 
     forecast() {
-      return { today: state.weather.today, tomorrow: state.weather.tomorrow, afterTomorrow: afterTomorrow() };
+      const f = { today: state.weather.today, tomorrow: state.weather.tomorrow, afterTomorrow: afterTomorrow() };
+      if (state.surprises) f.special = specialNow();
+      return f;
+    },
+
+    /** (lot 2) Surprises de la partie (null : désactivées). Voir docs/ARCHITECTURE.md, « Lot 2 — contrats ». */
+    surprises() {
+      if (!state.surprises) return null;
+      return surprisesQuery(state, giantValueOf, { special: specialNow() });
     },
 
     finance() {
@@ -1289,9 +1488,17 @@ function wrap(state) {
     /** Carrière : recalcule le niveau après une modification directe de l'état (outils de débogage, tests). */
     ...(career ? { refreshLevel } : {}),
     difficulty: state.difficulty,
+    /** (lot 2) Surprises actives (Détente et carrière par défaut ; Classique : non). */
+    get surprises() {
+      return !!state.surprises;
+    },
     update,
     on: emitter.on,
     serialize: () => JSON.parse(JSON.stringify(state)),
+    /** Règle une option de partie (src/core/options.js) → { ok, name, value } | { ok: false, reason }. */
+    setOption: (name, value) => actions.setOption(name, value),
+    /** Options de partie (copie, défauts compris), ex. { autoPauseDawn: false }. */
+    options: () => allOptions(state),
     actions,
     query,
   };
