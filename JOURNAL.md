@@ -25,6 +25,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-01 | `backup/avant-carriere-v2-2026-10-01` | Avant les retours sur la Carrière (quêtes trop fréquentes et trop courtes, agrandissement sur les côtés, mini-carte, fenêtres des bâtiments), commit `f6b7e19` |
 | 2026-10-01 | `backup/carriere-v2-2026-10-01` | Carrière v2 terminée (quêtes plus douces, carte 2D, mini-carte, descriptions, commandes des ateliers), commit `071747e` ; pull request n° 8 |
 | 2026-10-02 | `backup/avant-lot1-confort-2026-10-02` | Avant les 4 lots issus de l'analyse comparative (confort & accessibilité, toucher & surprises, variété, collection & enjeux), commit `1a2edad` |
+| 2026-10-02 | `backup/lot1-confort-2026-10-02` | Lot 1 confort & accessibilité terminé, commit `fa61ca6` ; pull request n° 9 |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
