@@ -5,7 +5,7 @@
 import { SEASONS } from '../../data/balance.js';
 import { DIFFICULTY_CAREER, seasonScale } from '../../data/career/career.js';
 import { BUILDINGS_BY_ID, FARM_ITEMS } from '../../data/career/buildings.js';
-import { careerAnimals, careerFlag, providedSum } from './registry.js';
+import { careerAnimals, careerFlag, providedFactor, providedSum } from './registry.js';
 
 export const FARM_ITEMS_BY_ID = Object.fromEntries(FARM_ITEMS.map((i) => [i.id, i]));
 
@@ -27,8 +27,11 @@ export function seasonChargeDetail(state) {
   const d = careerDifficulty(state);
   const lots = state.career.lotsBought;
   const scale = seasonScale(state.career.seasonLength);
-  const amount = Math.round((d.seasonCharge.base + d.seasonCharge.perLot * lots) * scale);
-  return { amount, base: d.seasonCharge.base, perLot: d.seasonCharge.perLot, lots, scale };
+  let amount = Math.round((d.seasonCharge.base + d.seasonCharge.perLot * lots) * scale);
+  // (lot 3) Carte « La ristourne de la coopérative » : prochaines charges × 0,8 (fournisseur seasonChargeFactor).
+  const factor = providedFactor('seasonChargeFactor', state);
+  if (factor !== 1) amount = Math.round(amount * factor);
+  return { amount, base: d.seasonCharge.base, perLot: d.seasonCharge.perLot, lots, scale, ...(factor !== 1 ? { reduced: true, factor } : {}) };
 }
 
 export function careerSeasonCharge(state) {

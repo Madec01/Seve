@@ -490,6 +490,37 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
 - **Équilibre visé** : revenu du joueur tranquille +6 à +10 % (niveaux), ≤ +8 % (carrière), victoires inchangées ; seuils d'étoiles Détente à recalculer avec la règle du § 13.3 (attendu : +20 à +30 %).
 - **Points ouverts** : interrupteur « Variété » en Classique, commandes de produits animaux, succès liés au lot (avec l'album du lot 4).
 
+### 2026-10-02 — Lot 3 « Variété » : sprites (paquet ART)
+
+- **Planche `assets/sprites/lot3.png`** (16 × 15 tuiles, 136 sprites) générée par **`assets/sprites/generate-lot3.py`** (même méthode que le lot 2, dont il réutilise la palette et les outils, ainsi que le gabarit des personnages de `generate-career.py`) ; bloc `// <lot3:auto>` d'`src/render/atlas.js` (ajouté à `SPRITES` par `Object.assign` dans le bloc, plus `crop.pea|melon|leek.0` = graines semées) et `SHEETS.lot3`.
+- **Contenu** : tous les noms du tableau des sprites du contrat — tableau du village et 3 feuilles, charrette à l'âne (2 images), roulotte (fermée / étal ouvert), Basile (debout, en marche, portrait), petits pois / melon / poireau (4 étapes, icône, fané, icône dorée, sachet, sac, cagette, géant), `crate.apple`, 12 portraits de villageois, 9 visiteurs de thème, 7 icônes d'onglets, 16 cartes, 12 défis, 4 médailles, 10 objets du colporteur, 9 icônes et 9 stands de thème, 3 décors trouvés.
+- **Vérification** : planches de contrôle ×6 (`--contact`) et `tools/atlas-preview.html?lot3=1` (nouvelle case « lot 3 seulement », réglages `?scale=` et `?bg=`) rendus sous Playwright à ×4 et ×2 en 360 px ; corrigés en cours de route : gousses de petits pois invisibles, poireaux « en fourche », roues en « biscuits », stands dont les marchandises disparaissaient dans le contour, lunettes opaques, robe couleur peau, bouche des jumeaux, fer à cheval à l'envers, étiquette « % » illisible.
+- **Crédits** : ligne `lot3.png` dans `CREDITS.md` (création originale, CC0 comme `lot2.png`).
+
+### 2026-10-02 — Lot 3 « Variété » : rendu et interface (paquet UI/RENDER)
+
+- **Nouveaux fichiers** : `src/ui/variety.js` (feuilles, pages de fin de saison, sections, « À faire », messages,
+  récompenses, conseils), `src/render/variety-actors.js` (scène : panneau du village et ses feuilles, charrette et
+  caisses, roulotte de Basile, visiteur du thème, stand de la fête, poule voyageuse ; repères purs `varietySpots`),
+  `css/variety.css` (ajoutée à `CSS_FILES` ; nom du contrat, à la place du `lot3.css` évoqué), `tests/lot3-render.test.js`.
+- **Branché** : `main.js` (app.variety, événements, planche `lot3` facultative au démarrage, `__debug.variety` /
+  `__debug.lot3`), `scene.js` (acteurs triés par profondeur, hitTest tolérant après les parcelles, `varietySpots()`),
+  `gestures.js`, `dialogs.js` (fin de saison en pages : charrette + médailles → cadeau → défis, « Plus tard » ; victoire ;
+  postes « Surprises » et « Le village » des bilans), `panel.js` (section « Le village » du Bilan), Carnet › Agenda,
+  pastilles Bilan / Carnet, bilan annuel (« L'an prochain : … »), `todo.js` (lignes et résumé du matin, notes du matin
+  sans doublon), `field.js` (badges « Rare · N graines », « Offert », « Commande » ; « À la récolte : → Lili (3 / 5) »),
+  `hud.js` (« −20 % » sur le fermage réduit), `decor.js` (où trouver les 3 décors), `atlas.js` (`DECOR_SPRITES`).
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement) : tableau (garder, pas pour moi, relance),
+  charrette, colporteur (achat avec confirmation), cadeau, défis, commande remplie par de vraies récoltes, fin de saison
+  en 3 pages, carrière (tableau, Agenda, thème, fenêtre courte de fin de saison), une année de niveau 2 Détente et une
+  année de carrière ; Classique : rien du lot ; cibles ≥ 48 px, textes ≥ 14 px, aucun débordement, aucune erreur de
+  console. Captures : `scratchpad/screens/lot3-ui-*.png`.
+- **Corrigé en route** : le soir de fin de saison et l'aube suivante arrivent dans la même mise à jour → la page des
+  défis prend ceux de la nouvelle saison si `next` est déjà consommé, les médailles du bilan sont gardées au jugement,
+  les messages « charrette arrivée / repartie » ne recouvrent plus la fenêtre de fin de saison (niveaux).
+- **Idées** : montrer la charrette depuis la feuille (bouton « Voir sur la route ») car elle est sous la maison en
+  portrait ; messages groupés quand plusieurs nouveautés tombent le même matin.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).

@@ -339,6 +339,10 @@ export function createPanel(app) {
       );
     }
 
+    // (Lot 3) Le village : cadeau en attente, tableau, charrette, défis, colporteur, effets en cours.
+    const village = app.variety?.statsSection?.(game);
+    if (village) statsBody.append(village);
+
     const contest = contestSection();
     if (contest) statsBody.append(contest);
 
@@ -527,7 +531,7 @@ export function createPanel(app) {
 
   function onEvent(ev) {
     // Toute modification d'argent ou de saison peut changer l'état des boutons et le bilan.
-    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'contestProgress', 'contestAwarded', 'treeRemoved', 'neighbourLoan', 'loanRepayment', 'loanRepaid'].includes(ev.type)) refresh();
+    if (['moneyChanged', 'purchased', 'dawn', 'seasonStart', 'harvested', 'planted', 'watered', 'plotUnlocked', 'frost', 'rot', 'billPaid', 'bankrupt', 'victory', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'contestProgress', 'contestAwarded', 'treeRemoved', 'neighbourLoan', 'loanRepayment', 'loanRepaid', 'ordersRenewed', 'orderProgress', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'cardEnded', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought'].includes(ev.type)) refresh();
   }
 
   return {

@@ -422,7 +422,7 @@ export function createCareerUI(app) {
         badges.journal = true;
       }
     }
-    tb.setBadge('journal', badges.journal);
+    tb.setBadge('journal', badges.journal || !!app.variety?.pendingChoice?.(game));
   }
 
   // ── Toucher dans la scène ─────────────────────────────────────────────────────

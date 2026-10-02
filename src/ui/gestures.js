@@ -123,12 +123,14 @@ export function createSceneInput(canvas, app) {
     app.audio.play('page', { volume: 0.7 });
     if (hit.type === 'plot') app.field.openPlotInfo(hit.index);
     else if (hit.type === 'investment') app.field.openInvestmentInfo(hit.id);
-    else app.careerUI?.onHit?.(hit, { long: true });
+    else if (!app.variety?.onHit?.(hit)) app.careerUI?.onHit?.(hit, { long: true });
   }
 
   /** Cibles propres à la carrière (terrains, abris, employés, corbeaux…) : src/ui/career/index.js. */
   function tapOther(hit) {
     if (!hit || hit.type === 'plot' || hit.type === 'investment') return false;
+    // (Lot 3) Tableau du village, charrette du marché, roulotte de Basile (les deux modes).
+    if (app.variety?.onHit?.(hit)) return true;
     return !!app.careerUI?.onHit?.(hit);
   }
 

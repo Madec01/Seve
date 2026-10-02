@@ -124,6 +124,7 @@ export function createCareerWindows(app, { getGame, openJournal }) {
         el('div.sum-lines', el('h3.sum-title', 'Dépenses'), sp.length ? sp.map(([k, v]) => el('div.sum-line', el('span', SPENT_LABELS[k] || k), el('b.neg', loss(v)))) : el('p.stats-empty', 'Aucune.'), el('div.sum-total', el('div.sum-line', el('span', 'Total'), el('b.neg', loss(r.spent || 0))))),
       ),
       r.joseph?.questsDone ? el('p.stats-note.c-year-joseph', `Quêtes de Joseph réussies : ${r.joseph.questsDone}${r.questEcus ? ` · ${plural(r.questEcus, 'écu')} déjà gagnés` : ''} · amitié ${r.joseph.hearts || 0} ♥`) : null,
+      app.variety?.yearLines?.(r) || null,
       el('p.stats-note', `${plural(r.harvests || 0, 'récolte')} cette année${r.lotsBought ? ` · ${plural(r.lotsBought, 'terrain')} à vous` : ''}${r.debt ? ` · dette envers Joseph : ${fmt(r.debt)}` : ''}.`),
       n
         ? el(

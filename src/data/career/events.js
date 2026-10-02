@@ -102,7 +102,9 @@ export const TRUFFLE_CHANCE_HINT = 0.3;
 // carrière, jamais un jour de fête, jamais deux fois le même d'affilée, un seul actif à la fois.
 // Rythme « tranquille » (retours de joueurs, 2026-09-30) : 0,3 → 0,15 par jour ; avec les quêtes de Joseph (au plus
 // une toutes les deux saisons), ≈ 1 sollicitation par semaine de jeu (simulation, docs/CARRIERE.md § 13.5).
-export const RANDOM_EVENT_RULES = { chance: 0.15, graceDays: 3 };
+// (lot 3) Avec la variété (tableau du village et colporteur à la place du visiteur acheteur et du marchand ambulant,
+// 28 points de poids sur 78) : chanceWithVariety, pour que les autres événements gardent leur fréquence (≈ 0,7/semaine).
+export const RANDOM_EVENT_RULES = { chance: 0.15, graceDays: 3, chanceWithVariety: 0.1 };
 
 //   weight : poids du tirage ; name, icon, text : pour le message (toast) et l'Agenda
 export const RANDOM_EVENTS = [

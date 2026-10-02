@@ -103,7 +103,11 @@ function stateOf(app, item, placed) {
 
 /** (lot 2) Où se trouve un décor « trouvé à la ferme ». */
 function foundHint(item) {
-  return item.id === 'statue.small' ? 'en défrichant un terrain (carrière)' : 'au petit matin, sous une vieille souche';
+  if (item.id === 'statue.small') return 'en défrichant un terrain (carrière)';
+  // (lot 3) Étal de Basile le colporteur ; cadeau de la journaliste (année du boom touristique, carrière).
+  if (item.id === 'lantern.peddler' || item.id === 'weathervane.rooster') return 'à l\'étal de Basile le colporteur';
+  if (item.id === 'sign.magazine') return 'grâce à la journaliste de « Campagne & Jardins » (carrière)';
+  return 'au petit matin, sous une vieille souche';
 }
 
 /**

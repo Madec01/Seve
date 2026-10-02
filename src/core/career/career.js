@@ -12,6 +12,7 @@ import { COSMETICS_BY_ID, DECOR_SLOTS_BY_ID, DEFAULT_FARM_NAME } from '../../dat
 import { CAREER_VERSION, DEFAULT_FARMER_GENDER, DEFAULT_SEASON_LENGTH, DIFFICULTY_CAREER, FARMER_GENDERS, SEASON_LENGTHS, START } from '../../data/career/career.js';
 import { createRngState, hashSeed } from '../rng.js';
 import { enableSurprises } from '../surprises.js';
+import { enableVariety } from '../variety.js';
 import { createStats } from '../stats.js';
 import { drawWeather } from '../weather.js';
 import { tomorrowSeasonIndex } from '../calendar.js';
@@ -48,7 +49,7 @@ export function careerOptions({ difficulty = 'detente', farmName, farmerGender =
  *   'fermiere'), outfit (id de tenue ; l'interface ne propose que les tenues débloquées), seasonLength (7 | 10 | 14),
  *   cosmetics: { decor } (décor posé dans la progression : copie de départ de state.career.cosmetics.decor) }
  */
-export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, ...rest } = {}) {
+export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, variety = true, ...rest } = {}) {
   const o = careerOptions(rest);
   const d = DIFFICULTY_CAREER[o.difficulty];
   const rng = createRngState(seed);
@@ -98,6 +99,9 @@ export function createCareer({ seed = Date.now(), cosmetics = null, surprises = 
   // (lot 2) Surprises : actives par défaut (null = désactivées, gardé tel quel à la reprise).
   if (surprises) enableSurprises(state);
   else state.surprises = null;
+  // (lot 3) Variété : active par défaut (null = désactivée, gardé tel quel à la reprise) ; parties { board, … }.
+  if (variety) enableVariety(state, variety);
+  else state.variety = null;
   placeBuilding(state, 'house', 'home', null, 1, 0);
   placeBuilding(state, 'coop', 'yard', 0, 1, 0);
   for (const ext of careerExtensions()) if (typeof ext.init === 'function') ext.init(state);
@@ -106,7 +110,7 @@ export function createCareer({ seed = Date.now(), cosmetics = null, surprises = 
   const level = careerLevel(state);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);
-  return wrapState(state);
+  return wrapState(state, { fresh: true });
 }
 
 /**

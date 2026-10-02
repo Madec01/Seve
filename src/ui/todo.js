@@ -198,6 +198,9 @@ export function createTodo(app) {
       }
     }
 
+    // (Lot 3) Tableau du village, charrette, colporteur, cadeau et défis de la saison (src/ui/variety.js).
+    for (const it of safe(() => app.variety?.todoItems?.(game), []) || []) add(it);
+
     if (career) {
       // Terrain à acheter (si l'argent suffit en gardant les charges de saison).
       const next = cq(game, 'nextLot', null);
@@ -443,7 +446,7 @@ export function createTodo(app) {
       const plotsHit = ev.plots || [];
       if (plotsHit.length && !app.sheets.isOpen() && !app.dialogs.isOpen()) requestAnimationFrame(() => focusPlots(plotsHit));
       lastTick = 0;
-    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought'].includes(ev.type)) {
+    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought'].includes(ev.type)) {
       lastTick = 0;
     }
   }
@@ -485,7 +488,7 @@ export function createTodo(app) {
 
   /** (Lot 2) Ligne ajoutée au prochain résumé du matin (surprise de l'aube, météo rare, légume géant). */
   function morningNote(text) {
-    if (!text) return;
+    if (!text || morning.notes.includes(text)) return;
     morning.notes.push(text);
     if (morning.notes.length > 4) morning.notes.shift();
   }

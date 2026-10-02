@@ -25,9 +25,11 @@
 //       tick(api, from, to),                                 // pendant la journée : (from, to] en secondes (elapsed)
 //       evening(api, { seasonId, lastDayOfSeason, lastDayOfYear }),  // début de la fin de journée (avant les charges)
 //       yearEnd(api, { year, report }),                      // fin d'année, avant l'événement yearEnd (peut compléter report)
-//       harvest(api, { plotIndex, cropId, amount, by }) → null | { divert: true, label? },
+//       harvest(api, { plotIndex, cropId, amount, by }) → null | { divert: true, label?, sell?, claimed?, after? },
 //                                                            // avant la vente d'une récolte : { divert } = la récolte est
-//                                                            //   mise de côté (commande, quête) : rien n'est payé
+//                                                            //   mise de côté (commande, quête) : rien n'est payé ;
+//                                                            //   (lot 3) sell: true → payée tout de suite comme une vente
+//                                                            //   (ni atelier ni grenier) ; after() appelé après `harvested`
 //     },
 //     providers: {                               // valeurs lues par le cœur (sommées ou multipliées)
 //       effects(state, key) → number,            // 'priceBonus' | 'growthBonus' | 'chargeReduction' (somme)
@@ -38,6 +40,7 @@
 //       lotPrice(state, lot) → null | { price, label },  // prix spécial du terrain à vendre (« verger de Joseph »)
 //       objective(state, objective) → null | number,     // progression d'un objectif de rang (sinon CORE-A la calcule)
 //       unlocks(rank) → [{ kind, id, name }],    // déblocages affichés pour un rang
+//       seasonChargeFactor(state) → number,      // (lot 3) multiplicateur des charges de saison (ristourne) — produit
 //     },
 //     actions(api) → { name: (...args) => result },   // ajoutées à game.actions.career
 //     queries(api) → { name: (...args) => value },    // ajoutées à game.query.career
@@ -48,7 +51,7 @@
 import { DEFAULT_ANIMALS } from '../../data/career/buildings.js';
 
 const HOOK_NAMES = ['seasonStart', 'dawnEvents', 'water', 'afterProcessing', 'incomes', 'charges', 'dawn', 'tick', 'evening', 'yearEnd', 'harvest'];
-const PROVIDER_NAMES = ['effects', 'extraPlaces', 'priceFactor', 'seedFactor', 'patrimony', 'lotPrice', 'objective', 'unlocks'];
+const PROVIDER_NAMES = ['effects', 'extraPlaces', 'priceFactor', 'seedFactor', 'patrimony', 'lotPrice', 'objective', 'unlocks', 'seasonChargeFactor'];
 
 const extensions = new Map();
 // Listes dérivées des extensions (animaux…) : recalculées seulement quand les extensions changent.

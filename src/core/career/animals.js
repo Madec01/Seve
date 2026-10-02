@@ -22,6 +22,8 @@ import { aboutFields } from '../../data/career/descriptions.js';
 import { registerCareerExtension } from './registry.js';
 import { animalCount, shelterCapacity } from './buildings.js';
 import { absDay, addWorkStat, ensureWork, keeperBonus } from './crew.js';
+import { hayFactor } from '../variety-effects.js';
+import { noteVariety } from '../variety.js';
 
 /** Animal de carrière logé dans un abri. */
 export function animalOfShelter(shelterId) {
@@ -41,7 +43,9 @@ function dailyValue(state, shelterId, seasonId, units = null) {
   if (!a || !b || !a.collect) return 0;
   const n = units ?? (state.investments[a.id] || 0);
   const per = a.truffles ? a.truffles.value * a.truffles.chance : a.income[seasonId] || 0;
-  return n * per * (1 + keeperBonus(state, b.lotId));
+  // (lot 3) Carte « Du foin parfumé » : production des abris + 15 % (pas les truffes).
+  const hay = state.variety && !a.truffles ? hayFactor(state) : 1;
+  return n * per * (1 + keeperBonus(state, b.lotId)) * hay;
 }
 
 /**
@@ -54,7 +58,8 @@ export function shelterCap(state, shelterId, seasonId) {
   const n = state.investments[a.id] || 0;
   const b = state.career.buildings[shelterId];
   const per = a.truffles ? a.truffles.value : Math.max(...Object.values(a.income), a.income[seasonId] || 0);
-  return Math.round(COLLECT.capDays * n * per * (1 + keeperBonus(state, b.lotId)));
+  const hay = state.variety && !a.truffles ? hayFactor(state) : 1;
+  return Math.round(COLLECT.capDays * n * per * (1 + keeperBonus(state, b.lotId)) * hay);
 }
 
 /** Ajoute de la production à un abri, dans la limite du plafond. Renvoie { added, lost }. */
@@ -94,6 +99,8 @@ export function collectShelter(api, buildingId, by = 'player', extra = {}) {
   b.lastCollected = absDay(state);
   api.earn('animals', amount);
   addWorkStat(state, 'collected', amount, by);
+  // (lot 3) Défi « La tournée des abris » : ramassages faits par le joueur.
+  if (by === 'player' && state.variety) noteVariety(state, 'collect', 1);
   api.push('collected', { buildingId, amount, by, animalId: def.animal, product: animalOfShelter(buildingId)?.product || null, ...extra });
   return { ok: true, amount };
 }

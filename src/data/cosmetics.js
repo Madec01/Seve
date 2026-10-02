@@ -24,6 +24,10 @@ export const COSMETICS = [
   // (lot 2) Décors trouvés à la ferme (surprise de l'aube, trouvaille au défrichage) : ne s'achètent pas.
   { id: 'owl.carved', name: 'Chouette sculptée', category: 'small', price: 0, found: true },
   { id: 'statue.small', name: 'Petite statue', category: 'small', price: 0, found: true },
+  // (lot 3) Décors du colporteur Basile et du visiteur de l'année touristique (carrière) : ne s'achètent pas.
+  { id: 'lantern.peddler', name: 'Lanterne du colporteur', category: 'small', price: 0, found: true },
+  { id: 'weathervane.rooster', name: 'Girouette au coq', category: 'small', price: 0, found: true },
+  { id: 'sign.magazine', name: 'Vu dans le magazine', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   // Allées

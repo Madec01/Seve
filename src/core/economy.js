@@ -6,6 +6,7 @@ import { BASE_DAILY_CHARGE, SEASONS } from '../data/balance.js';
 import { INVESTMENTS, getInvestment } from '../data/investments.js';
 import { perkValue } from './perks.js';
 import { careerEffectTotal, careerSeasonCharge } from './career/effects.js';
+import { hayFactor, varietyGrowthBonus } from './variety-effects.js';
 
 /**
  * Données d'un investissement pour ce niveau : celles de la carrière (level.investmentsById) si le
@@ -53,8 +54,11 @@ export function effectTotal(state, effectKey) {
 
 /** Bonus de vitesse de pousse (ruches + « Main verte »). Aucun effet en hiver. */
 export function growthBonus(state, seasonIndex) {
-  if (SEASONS[seasonIndex] === 'winter') return 0;
-  return effectTotal(state, 'growthBonus') + perkValue(state, 'growthBonus');
+  // (lot 3) Carte « Sac d'engrais » : + 0,1 toute la saison, hiver compris (0 sans la variété : parité).
+  const extra = state.variety ? varietyGrowthBonus(state) : 0;
+  if (SEASONS[seasonIndex] === 'winter') return extra;
+  const base = effectTotal(state, 'growthBonus') + perkValue(state, 'growthBonus');
+  return extra ? base + extra : base;
 }
 
 /** Bonus sur le prix de vente (étal + « Réputation »). */
@@ -85,6 +89,11 @@ export function dawnIncomes(state, level, seasonIndex, weatherId, lastDayOfSeaso
     const units = inv.kind === 'upgrade' ? 1 : n;
     let amount = (inv.income[season] || 0) * units;
     if (weatherId && inv.effects.noIncomeOn?.includes(weatherId)) amount = 0;
+    // (lot 3) Carte « Du foin parfumé » : revenus quotidiens des animaux × 1,15 (pas la tonte).
+    if (amount > 0 && inv.category === 'animal' && state.variety) {
+      const f = hayFactor(state);
+      if (f !== 1) amount = Math.round(amount * f);
+    }
     if (amount > 0) incomes.push({ source: inv.id, amount, owned: n, kind: 'daily' });
     if (lastDayOfSeason && inv.effects.shearing && inv.effects.shearingSeasons.includes(season)) {
       incomes.push({ source: inv.id, amount: inv.effects.shearing * units, owned: n, kind: 'shearing' });
@@ -146,7 +155,10 @@ export function nextLoanDay(level, day, totalDays) {
  */
 export function rentFor(level, seasonIndex, state = null) {
   if (state && state.mode === 'career') return careerSeasonCharge(state);
-  const rent = level.rents[seasonIndex];
+  let rent = level.rents[seasonIndex];
+  // (lot 3) Carte « Le geste du propriétaire » : prochain fermage × 0,8 (une fois).
+  const landlord = state?.variety?.cards?.pending?.rentFactor ?? 1;
+  if (landlord !== 1) rent = Math.round(rent * landlord);
   if (!state || seasonIndex !== 0) return rent;
   const factor = perkValue(state, 'springRentFactor');
   return factor === 1 ? rent : Math.round(rent * factor);

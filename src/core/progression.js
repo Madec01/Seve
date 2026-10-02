@@ -7,7 +7,8 @@
 //   levels: { [id]: { stars, bestMoney, completed, played } },
 //   perks: { [perkId]: rank }, perksEnabled: true,
 //   achievements: { [id]: { at } },
-//   lifetime: { harvests, cropsHarvested: { [cropId]: n }, productsSold: { [productId]: n }, yearsWon, yearsLost, rentsPaid },
+//   lifetime: { harvests, cropsHarvested: { [cropId]: n }, productsSold: { [productId]: n }, yearsWon, yearsLost, rentsPaid,
+//               variety: { orders, cartsFull, medals: { bronze, silver, gold }, rare: { [cropId]: n } } },   (lot 3)
 //   ecus: 0,
 //   cosmetics: { farmName, outfit, path, fence, decor: { [slotId]: itemId }, owned: [itemId] },
 //   hintsSeen: [hintId],
@@ -47,7 +48,26 @@ export function defaultCareerProgress() {
 }
 
 function defaultLifetime() {
-  return { harvests: 0, cropsHarvested: {}, productsSold: {}, yearsWon: 0, yearsLost: 0, rentsPaid: 0 };
+  return { harvests: 0, cropsHarvested: {}, productsSold: {}, yearsWon: 0, yearsLost: 0, rentsPaid: 0, variety: defaultLifetimeVariety() };
+}
+
+/** (lot 3) Cumuls de la variété (album du lot 4) : commandes livrées, charrettes pleines, médailles, graines rares récoltées. */
+function defaultLifetimeVariety() {
+  return { orders: 0, cartsFull: 0, medals: { bronze: 0, silver: 0, gold: 0 }, rare: {} };
+}
+
+/** Ajoute les compteurs de la variété d'une partie (summary.variety) ou d'une année de carrière (report.variety). */
+function addLifetimeVariety(l, v) {
+  if (!v || typeof v !== 'object') return;
+  if (!isObj(l.variety)) l.variety = defaultLifetimeVariety();
+  const lv = l.variety;
+  lv.orders += nonNegInt(v.ordersDone);
+  lv.cartsFull += nonNegInt(v.cartsFull);
+  for (const m of ['bronze', 'silver', 'gold']) lv.medals[m] += nonNegInt(v.medals?.[m]);
+  for (const [id, n] of Object.entries(v.rareHarvested || {})) {
+    if (!getCrop(id) || !(n > 0)) continue;
+    lv.rare[id] = (lv.rare[id] || 0) + nonNegInt(n);
+  }
 }
 
 /** Progression vide (première partie). */
@@ -120,7 +140,17 @@ export function normalizeProgress(raw) {
       yearsWon: nonNegInt(l.yearsWon),
       yearsLost: nonNegInt(l.yearsLost),
       rentsPaid: nonNegInt(l.rentsPaid),
+      variety: defaultLifetimeVariety(),
     };
+    if (isObj(l.variety)) {
+      const v = l.variety;
+      p.lifetime.variety = {
+        orders: nonNegInt(v.orders),
+        cartsFull: nonNegInt(v.cartsFull),
+        medals: { bronze: nonNegInt(v.medals?.bronze), silver: nonNegInt(v.medals?.silver), gold: nonNegInt(v.medals?.gold) },
+        rare: countMap(v.rare, (id) => !!getCrop(id)),
+      };
+    }
   }
   p.ecus = nonNegInt(raw.ecus);
   // Cosmétiques
@@ -535,6 +565,7 @@ export function recordRunEnd(p, run, now = Date.now()) {
       l.productsSold[id] = (l.productsSold[id] || 0) + n;
     }
     l.rentsPaid += nonNegInt(summary.rentsPaid);
+    addLifetimeVariety(l, summary.variety);
   }
   if (outcome === 'victory') progress.lifetime.yearsWon += 1;
   if (outcome === 'bankrupt') progress.lifetime.yearsLost += 1;
@@ -611,6 +642,7 @@ export function recordCareerYear(p, { year, rank, net, report = null, career = n
       if (!getProduct(id) || !(n > 0)) continue;
       l.productsSold[id] = (l.productsSold[id] || 0) + n;
     }
+    addLifetimeVariety(l, report.variety);
   }
   const ecus = ecusForCareerYear({ rank, net, houseLevel: report?.houseLevel ?? career?.houseLevel ?? 1 });
   progress.ecus += ecus;

@@ -36,9 +36,9 @@ test('légume géant : union des 4 parcelles voisines, sinon la parcelle de l\'a
   assert.equal(giantRect({ plotRect: () => null }, [0, 1, 2, 3], 0), null);
 });
 
-test('décors trouvés à la ferme (owl.carved, statue.small) : un sprite dans la ferme et la boutique', () => {
+test('décors trouvés à la ferme (owl.carved, statue.small ; lot 3 : colporteur, magazine) : un sprite dans la ferme et la boutique', () => {
   const found = COSMETICS.filter((c) => c.found);
-  assert.deepEqual(found.map((c) => c.id).sort(), ['owl.carved', 'statue.small']);
+  assert.deepEqual(found.map((c) => c.id).sort(), ['lantern.peddler', 'owl.carved', 'sign.magazine', 'statue.small', 'weathervane.rooster']);
   assert.equal(decorSprite('owl.carved'), 'owl.carved');
   assert.equal(decorSprite('statue.small'), 'find.statue');
   for (const c of found) assert.ok(SPRITES[decorSprite(c.id)], `${c.id} : sprite connu de l'atlas`);

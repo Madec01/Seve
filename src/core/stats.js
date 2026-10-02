@@ -1,5 +1,7 @@
 // Statistiques de l'année et de la saison en cours, pour les écrans de bilan.
 
+import { varietySummary } from './variety.js';
+
 export function createStats() {
   return {
     harvestIncome: 0, // ventes des récoltes
@@ -24,6 +26,8 @@ export function createStats() {
     bestSeasonHarvestIncome: 0, // meilleures ventes de récoltes d'une saison (année) / de la saison
     // (lot 2) surpriseIncome : argent des surprises (coffres, champignons, vœux) — ajouté seulement quand il y en a
     // (addSurpriseIncome de src/core/surprises.js), pour que le bilan du mode Classique reste identique.
+    // (lot 3) varietyIncome (primes du tableau et de la charrette, cartes, médailles) et varietySpent (colporteur) :
+    // idem, créés seulement quand il y en a (src/core/game.js, addVarietyStat).
   };
 }
 
@@ -74,6 +78,7 @@ export function buildSummary(state, seasonId, extra = {}) {
   const year = copy(state.stats.year);
   const net = (s) =>
     s.harvestIncome + s.investmentIncome + s.productIncome + s.rawSales + s.frostRefund + s.contestPrize + (s.surpriseIncome || 0)
+    + (s.varietyIncome || 0) - (s.varietySpent || 0)
     - s.charges - s.waterSpent - s.loanPaid - s.rentsPaid - s.seedsSpent - s.investmentsSpent - s.plotsSpent;
   const season = copy(state.stats.season);
   // Mode détente : prêt du voisin (absent du résumé en mode classique). Le bilan de l'année en tient
@@ -91,6 +96,8 @@ export function buildSummary(state, seasonId, extra = {}) {
     startMoney: state.startMoney,
     money: state.money,
     investments: { ...state.investments },
+    // (lot 3) Variété : primes, cartes, médailles, colporteur (absent quand elle est désactivée).
+    ...(state.variety ? { variety: varietySummary(state) } : {}),
     ...extra,
   };
 }

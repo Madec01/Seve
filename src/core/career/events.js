@@ -28,6 +28,9 @@ import { isMature } from '../farm.js';
 import { stockUsed } from './storage.js';
 import { cheerStaff } from './staff.js';
 import { foxActive } from '../surprises.js';
+import { themeFestivalToday } from '../variety-effects.js';
+import { acceptThemeVisitor, themeCalendar, themeEventWeight, themeFishFactor, themeOfferInfo, themeTouristPass } from './themes.js';
+import { MERCHANT } from '../../data/variety.js';
 
 // ── Dates ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -351,6 +354,8 @@ function eventPossible(api, id, { seasonId, weather }) {
   const c = state.career;
   switch (id) {
     case 'visitor':
+      // (lot 3) Remplacé par le tableau du village quand il est actif (poids 0).
+      if (state.variety?.parts?.board) return false;
       // Une seule commande à la fois (et une quête de Joseph au plus : § 8.3).
       return !c.events.offers.some((o) => o.kind === 'visitor') && visitorCrops(api).length > 0;
     case 'tourists':
@@ -365,6 +370,8 @@ function eventPossible(api, id, { seasonId, weather }) {
     case 'dew':
       return DEW.seasons.includes(seasonId) && !DEW.notOn.includes(weather) && fieldCrops(state).some((i) => !isMature(state.plots[i]) && !state.plots[i].watered);
     case 'merchant':
+      // (lot 3) Remplacé par Basile le colporteur, à date fixe (poids 0).
+      if (state.variety?.parts?.merchant) return false;
       return c.rank >= 2 && merchantItems(api).length > 0;
     case 'lostPet':
       return !!nextPet(state);
@@ -422,7 +429,8 @@ function startEvent(api, id, ctx) {
     }
     case 'tourists': {
       const a = attractiveness(state);
-      active.data = { perPass: TOURISTS.perPass * (1 + a), passes: TOURISTS.passes.length, done: 0, attractiveness: a };
+      // (lot 3) Boom touristique : + 50 % par passage.
+      active.data = { perPass: Math.round(TOURISTS.perPass * (1 + a) * themeTouristPass(state)), passes: TOURISTS.passes.length, done: 0, attractiveness: a };
       break;
     }
     case 'crows': {
@@ -625,6 +633,7 @@ function takeFromStock(state, cropId, n) {
 
 /** Offre pour l'interface (petite feuille : titre, texte de 2 lignes, boutons). */
 export function offerInfo(state, offer) {
+  if (offer.kind === 'themeVisitor') return themeOfferInfo(state, offer);
   const d = offer.data;
   const today = dayIndex(state);
   const base = { id: offer.id, kind: offer.kind, accepted: offer.accepted, daysLeft: Math.max(0, offer.endDay - today), endDay: offer.endDay, data: JSON.parse(JSON.stringify(d)) };
@@ -686,6 +695,20 @@ function acceptOffer(api, offerId, arg) {
   const offer = findOffer(state, offerId);
   if (!offer) return api.fail('Cette offre n\'existe plus.');
   const d = offer.data;
+  if (offer.kind === 'themeVisitor') {
+    // (lot 3) Visiteur unique de l'année à thème : son cadeau, gratuit.
+    const inv = getCareerInvestment('beehive');
+    const res = acceptThemeVisitor(api, offer, {
+      canGiveHive: () => !!inv && (inv.rank ?? 1) <= state.career.rank && count(state, 'beehive') < itemMax(state, inv),
+      giveHive: () => {
+        state.investments.beehive = count(state, 'beehive') + 1;
+        api.refreshLevel();
+      },
+    });
+    if (!res.ok) return res;
+    removeOffer(api, offer, 'accepted', { gift: res.gift, themeId: d.themeId });
+    return { ok: true, offerId: offer.id, kind: offer.kind, gift: res.gift };
+  }
   if (offer.kind === 'visitor') {
     if (offer.accepted) return api.fail('Commande déjà acceptée.');
     offer.accepted = true;
@@ -782,7 +805,8 @@ function fish(api) {
   if (e.fishedDay === today) return api.fail('Vous avez déjà pêché aujourd\'hui : revenez demain !');
   const rng = api.rng('events');
   const f = pickWeighted(rng, FISH, (x) => x.weight);
-  const amount = rng.int(f.min, f.max);
+  // (lot 3) Canne de Firmin (année des grenouilles) : poissons + 50 %.
+  const amount = Math.round(rng.int(f.min, f.max) * themeFishFactor(state));
   e.fishedDay = today;
   e.year.fish += 1;
   e.year.fishIncome += amount;
@@ -836,13 +860,15 @@ function dawnEvents(api, { seasonId, weather }) {
     o.reminded = [...(o.reminded || []), daysLeft];
     api.push('offerReminder', { offerId: o.id, kind: o.kind, daysLeft, data: offerInfo(state, o), text: `${capital(o.data.name)} attend encore ${o.data.n - o.delivered} ${cropPlural(o.data.cropId, o.data.n - o.delivered)} : dernier jour demain.` });
   }
-  // Tirage du jour.
-  if (!e.active && !fest && today > RANDOM_EVENT_RULES.graceDays) {
+  // Tirage du jour. (lot 3) Avec la variété : 10 % (sans visiteur ni marchand, les autres gardent leur fréquence) ;
+  // pas le jour de la fête du thème ; poids des touristes et des corbeaux selon le thème (jamais plus de tirages).
+  const themeFest = state.variety ? themeFestivalToday(state) : null;
+  if (!e.active && !fest && !themeFest && today > RANDOM_EVENT_RULES.graceDays) {
     const rng = api.rng('events');
-    if (rng.chance(RANDOM_EVENT_RULES.chance)) {
+    if (rng.chance(state.variety ? RANDOM_EVENT_RULES.chanceWithVariety : RANDOM_EVENT_RULES.chance)) {
       const ctx = { seasonId, weather };
       const options = RANDOM_EVENTS.filter((d) => d.id !== e.lastKind && eventPossible(api, d.id, ctx));
-      const pick = pickWeighted(rng, options, (d) => d.weight);
+      const pick = pickWeighted(rng, options, (d) => d.weight * (state.variety ? themeEventWeight(state, d.id) : 1));
       if (pick) startEvent(api, pick.id, ctx);
     }
   }
@@ -907,7 +933,8 @@ function calendarInfo(state) {
   const L = state.career.seasonLength;
   const nowDay = (state.time.seasonIndex) * L + state.time.dayOfSeason;
   const done = ev(state).calendarDone || [];
-  return CALENDAR_EVENTS.map((f) => {
+  const extra = state.variety ? varietyCalendar(state, nowDay) : [];
+  return [...CALENDAR_EVENTS.map((f) => {
     const at = SEASONS.indexOf(f.seasonId) * L + f.day;
     const isToday = at === nowDay;
     const passed = at < nowDay;
@@ -916,7 +943,26 @@ function calendarInfo(state) {
       locked: f.rank > state.career.rank, today: isToday, done: done.includes(f.id) || passed,
       daysUntil: isToday ? 0 : passed ? at + 4 * L - nowDay : at - nowDay,
     };
-  }).sort((a, b) => a.daysUntil - b.daysUntil);
+  }), ...extra].sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+/** (lot 3) Fête de l'année à thème et passage de Basile le colporteur, pour l'Agenda. */
+function varietyCalendar(state, nowDay) {
+  const out = [];
+  for (const t of themeCalendar(state)) {
+    if (t.kind !== 'themeFestival') continue;
+    const th = state.career.theme;
+    out.push({ id: `theme.${th.id}`, kind: 'themeFestival', name: t.text.split(' : ')[0], text: t.text.split(' : ').slice(1).join(' : '), icon: `fair.theme.${th.id}`, seasonId: SEASONS[Math.floor((t.day - 1) / state.career.seasonLength)], day: ((t.day - 1) % state.career.seasonLength) + 1, rank: 1, locked: false, today: t.daysUntil === 0, done: false, daysUntil: t.daysUntil });
+  }
+  const m = state.variety.merchant;
+  if (m) {
+    const today = (state.time.year - 1) * 4 * state.career.seasonLength + state.time.day;
+    if (m.leaveDay >= today) {
+      const d = Math.max(0, m.arriveDay - today);
+      out.push({ id: 'merchant', kind: 'merchant', name: MERCHANT.name, text: 'Graines rares et petits trésors, deux jours.', icon: 'npc.merchant', seasonId: SEASONS[state.time.seasonIndex], day: state.time.dayOfSeason + d, rank: 1, locked: false, today: d === 0, done: false, daysUntil: d });
+    }
+  }
+  return out;
 }
 
 function activeInfo(state) {
@@ -975,7 +1021,8 @@ function check(state) {
   if (e.today !== null && !CALENDAR_EVENTS_BY_ID[e.today]) return 'fête du jour';
   if (e.active !== null && !(obj(e.active) && RANDOM_EVENTS_BY_ID[e.active.kind] && int(e.active.day) && int(e.active.endDay) && obj(e.active.data))) return 'événement en cours';
   for (const o of e.offers) {
-    if (!obj(o) || typeof o.id !== 'string' || !['visitor', 'merchant', 'pet'].includes(o.kind) || !int(o.endDay) || !int(o.delivered) || !obj(o.data)) return 'offre';
+    if (!obj(o) || typeof o.id !== 'string' || !['visitor', 'merchant', 'pet', 'themeVisitor'].includes(o.kind) || !int(o.endDay) || !int(o.delivered) || !obj(o.data)) return 'offre';
+    if (o.kind === 'themeVisitor' && typeof o.data.themeId !== 'string') return 'visiteur du thème';
     if (o.kind === 'visitor' && (!getCrop(o.data.cropId) || !int(o.data.n) || o.delivered > o.data.n)) return 'commande';
     if (o.kind === 'merchant' && !MERCHANT_ITEMS.some((m) => m.id === o.data.itemId)) return 'marchand';
     if (o.kind === 'pet' && !PETS.some((p) => p.id === o.data.petId)) return 'animal perdu';

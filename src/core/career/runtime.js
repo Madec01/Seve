@@ -37,7 +37,7 @@
 //      moneyChanged (un seul pour toute l'aube), rangs (rankUp), seasonWarning.
 
 import { DAY_SECONDS, EPSILON, SEASONS, WARNING_DAYS } from '../../data/balance.js';
-import { getCrop, isTreeCrop } from '../../data/crops.js';
+import { getCrop, isRareCrop, isTreeCrop } from '../../data/crops.js';
 import { CROW_PENALTY, HAND_BONUS, HARDSHIP, MAX_STAFF } from '../../data/career/career.js';
 import { BUILDINGS, BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { FARM_NAME_MAX } from '../../data/cosmetics.js';
@@ -64,6 +64,11 @@ import {
   advanceSky, applyGrowthCare, dawnSurprise, expireEffects, expireForage, fogForage, giantAt, growthSnapshot, newWish, noteSown,
   recordQuality, rollQuality, skyGrowthFactor, specialInfo, takeForage, tryGiant, validateGiants, giantOpenToHelpers, GIANT,
 } from '../surprises.js';
+import { careOf } from '../surprises.js';
+import { checkMedals, consumeSow, freeSowKind, noteHarvest, noteVariety, varietyWater } from '../variety.js';
+import { claimPreview, claimUnits } from '../requests.js';
+import { themeGiantValueFactor } from '../variety-effects.js';
+import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -164,7 +169,11 @@ export function createCareerRuntime(core) {
     if (p.forage && by === 'player') return fail('Cueillez d\'abord les champignons.');
     const crop = getCrop(cropId);
     if (!crop) return fail('Culture inconnue.');
-    if (!core.getCrops().includes(crop)) {
+    // (lot 3) Graine rare du colporteur : à la main seulement (jamais le semoir ni les jardiniers), une graine du sachet.
+    const rare = !!state.variety && isRareCrop(crop.id);
+    if (rare && by !== 'player') return fail('Les graines rares se sèment à la main.');
+    if (rare && freeSowKind(state, crop.id) !== 'rare') return fail('Plus de graines rares : le colporteur en vend.');
+    if (!rare && !core.getCrops().includes(crop)) {
       const r = cropRank(crop.id);
       return fail(r ? `${crop.name} : ${rankLabel(r)}` : 'Culture inconnue.');
     }
@@ -173,7 +182,9 @@ export function createCareerRuntime(core) {
     if (p.env !== 'orchard' && tree) return fail('Les arbres se plantent au verger.');
     const sid = seasonId(state);
     if (!inGreenhouse(p) && !crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
-    const cost = seedCost(crop);
+    // (lot 3) Semis offert (visiteur du thème) : à la main seulement, sans payer.
+    const freeSow = state.variety && by === 'player' && !tree ? freeSowKind(state, crop.id) : null;
+    const cost = freeSow ? 0 : seedCost(crop);
     if (state.money < cost) return fail(notEnough(cost - state.money));
     if (p.forage) {
       const f = takeForage(state, plotIndex);
@@ -193,8 +204,13 @@ export function createCareerRuntime(core) {
     }
     addStat(state, 'cropsPlanted', 1);
     spend('seeds', cost);
-    push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by });
-    return { ok: true, cost, fatigue: p.fatigued };
+    const sow = freeSow ? consumeSow(state, crop.id) : null;
+    push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by, ...(sow || {}) });
+    if (state.variety && !tree) {
+      noteVariety(state, 'sown', 1, crop.id);
+      checkMedals(careerVarietyHost(api));
+    }
+    return sow ? { ok: true, cost, fatigue: p.fatigued, ...sow } : { ok: true, cost, fatigue: p.fatigued };
   }
 
   function water(plotIndex, { by = 'player' } = {}) {
@@ -223,7 +239,9 @@ export function createCareerRuntime(core) {
   function giantValue(anchor) {
     const p = state.plots[anchor];
     if (!p || !p.cropId || !isMature(p)) return 0;
-    return Math.round(harvestAmount(p, 'player') * GIANT.valueFactor);
+    // (lot 3) Concours du plus gros légume (année des géants) : + 50 % ce jour-là.
+    const f = state.variety ? themeGiantValueFactor(state) : 1;
+    return Math.round(harvestAmount(p, 'player') * GIANT.valueFactor * f);
   }
 
   /** (lot 2) Cueillette des champignons (à la main seulement). */
@@ -269,13 +287,21 @@ export function createCareerRuntime(core) {
     changeMoney(amount);
     const part = repaymentFrom(state, L(), amount);
     const giant = { anchor: g.anchor, plots: [...g.plots], cropId };
+    // (lot 3) À la main, un géant compte pour 4 unités (commandes, puis charrette ; le reste est vendu normalement).
+    const preview = state.variety && by === 'player' ? claimPreview(state, cropId) : null;
     const res = {
       plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, by, handPicked: by === 'player', stored: false, crowPenalty: false,
-      quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(part > 0 ? { loanRepayment: part } : {}),
+      quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(preview ? { claimed: { kind: preview.kind, id: preview.id, label: preview.label } } : {}), ...(part > 0 ? { loanRepayment: part } : {}),
     };
     push('harvested', res);
     push('giantHarvested', { ...giant, cropName: getCrop(cropId).name, amount, by });
     repayJoseph(amount, 'harvest');
+    if (state.variety) {
+      const host = careerVarietyHost(api);
+      if (preview) claimUnits(host, { cropId, units: g.plots.length, by: 'player', plotIndex });
+      noteHarvest(state, { cropId, amount, units: g.plots.length });
+      checkMedals(host);
+    }
     const { plotIndex: _i, by: _b, ...out } = res;
     return { ok: true, ...out };
   }
@@ -310,13 +336,17 @@ export function createCareerRuntime(core) {
         break;
       }
     }
+    // (lot 3) { divert, sell } : commande du tableau ou caisse de la charrette — vendue tout de suite (prime « à la
+    // main » et qualité comprises), ni atelier ni grenier.
+    const sold = !!diverted && !!diverted.sell;
+    const careWatered = state.variety && !tree ? careOf(state, p).wateredEveryDay : false;
     const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, yf);
     let stored = false;
     if (!diverted && !processed && wouldStore(state, cropId)) {
       addStock(state, cropId);
       stored = true;
     }
-    const amount = (diverted || processed || stored ? 0 : value) + qualityBonus;
+    const amount = ((diverted && !sold) || processed || stored ? 0 : value) + qualityBonus;
     if (tree) p.fruit = 0;
     else {
       p.lastHarvested = cropId;
@@ -339,15 +369,22 @@ export function createCareerRuntime(core) {
     changeMoney(amount);
     const part = repaymentFrom(state, L(), amount);
     const qf = q ? { quality: q.quality, qualityBonus, qualityMultiplier: q.multiplier } : {};
+    const cf = diverted?.claimed ? { claimed: { ...diverted.claimed } } : {};
     push('harvested', {
       plotIndex, cropId, amount, fatigue, tree, processed, by, handPicked: by === 'player', stored, crowPenalty, ...qf,
       ...(diverted ? { diverted: diverted.label || true } : {}),
+      ...cf,
       ...(part > 0 ? { loanRepayment: part } : {}),
     });
     if (stored) push('stored', { cropId, n: 1, plotIndex });
     if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
     repayJoseph(amount, 'harvest');
-    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...(part > 0 ? { loanRepayment: part } : {}) };
+    if (diverted && typeof diverted.after === 'function') diverted.after();
+    if (state.variety) {
+      noteHarvest(state, { cropId, amount, quality: q ? q.quality : 'normal', care: careWatered, tree });
+      checkMedals(careerVarietyHost(api));
+    }
+    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...cf, ...(part > 0 ? { loanRepayment: part } : {}) };
   }
 
   function unlockPlot(plotIndex) {
@@ -458,7 +495,9 @@ export function createCareerRuntime(core) {
     }
     const rescued = state.money < -charge && rescueSale().length > 0;
     spend('seasonCharges', charge);
-    push('billPaid', { amount: charge, seasonId: sid, career: true, detail: { base: detail.base, perLot: detail.perLot, lots: detail.lots, scale: detail.scale }, summary: buildSummary(state, sid, { amount: charge }) });
+    // (lot 3) « La ristourne de la coopérative » : une fois.
+    if (detail.reduced && state.variety) state.variety.cards.pending.chargeFactor = 1;
+    push('billPaid', { amount: charge, seasonId: sid, career: true, ...(detail.reduced ? { reduced: true } : {}), detail: { base: detail.base, perLot: detail.perLot, lots: detail.lots, scale: detail.scale }, summary: buildSummary(state, sid, { amount: charge }) });
     if (state.money < 0) {
       const h = c().hardship || (c().hardship = { stage: 'overdraft', since: { year: state.time.year, day: state.time.day } });
       if (rescued) h.stage = 'rescueSold';
@@ -500,6 +539,8 @@ export function createCareerRuntime(core) {
       houseLevel: c().buildings.house?.level || 1,
       days: L().seasonLengths.reduce((a, b) => a + b, 0),
       debt: state.neighbourLoan ? state.neighbourLoan.debt : 0,
+      // (lot 3) Variété : compteurs de l'année, thème de l'an prochain (annoncé au bilan).
+      ...(state.variety ? { variety: careerVarietyYear(state), nextTheme: careerNextTheme(state) } : {}),
     };
   }
 
@@ -595,12 +636,13 @@ export function createCareerRuntime(core) {
     // (lot 2) Surprise de l'aube, champignons du brouillard, vœu de l'étoile filante.
     if (lot2) surprisesDawnEnd(level, lot2);
 
-    // 7. Arrosage des machines.
+    // 7. Arrosage des machines ; (lot 3) arrosoir magique et arrosoir de cuivre ensuite.
     const sprinkled = [];
     for (const fn of hooksOf('water')) {
       const r = fn(api, { weather: today });
       if (Array.isArray(r)) sprinkled.push(...r);
     }
+    const varietyWatered = state.variety ? varietyWater(careerVarietyHost(api), today) : null;
 
     // 8. Ateliers.
     let productSales = 0;
@@ -609,6 +651,7 @@ export function createCareerRuntime(core) {
       addProductSold(state, sale.productId, sale.amount);
       account('income', 'products', sale.amount);
       c().lifetime.productsSold += 1;
+      if (state.variety) noteVariety(state, 'products', 1);
       extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: state.investments[sale.buildingId] || 0, kind: 'processed', productId: sale.productId, key: 'products' });
       push('productSold', sale);
     }
@@ -673,6 +716,7 @@ export function createCareerRuntime(core) {
       sprinkled,
       net: incomeTotal - charges,
       milkToDairy: milk.milkToDairy,
+      ...(varietyWatered ? { varietyWatered } : {}),
     };
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
     push('weather', lot2 ? { today, tomorrow: state.weather.tomorrow, special: { ...state.surprises.sky } } : { today, tomorrow: state.weather.tomorrow });

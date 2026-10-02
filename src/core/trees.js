@@ -14,6 +14,7 @@
 import { EPSILON, SEASONS } from '../data/balance.js';
 import { getCrop, isTreeCrop } from '../data/crops.js';
 import { perkValue } from './perks.js';
+import { themeFruitFactor } from './variety-effects.js';
 
 /** true si la parcelle porte un arbre. */
 export function isTreePlot(plot) {
@@ -69,7 +70,9 @@ export function growTree(state, plot, season, rate) {
     return;
   }
   if (crop.fruitSeasons.includes(season) && !isFruitReady(plot)) {
-    plot.fruit = Math.min(crop.fruitDays, (plot.fruit || 0) + rate);
+    // (lot 3) Année des vergers (carrière) : les fruits mûrissent 20 % plus vite.
+    const f = state.variety ? themeFruitFactor(state) : 1;
+    plot.fruit = Math.min(crop.fruitDays, (plot.fruit || 0) + rate * f);
   }
 }
 

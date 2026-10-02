@@ -770,6 +770,9 @@ export function createDialogs(layer, app) {
     if (s.productIncome || s.rawSales) lines.push(moneyLine('Produits transformés', gain((s.productIncome || 0) + (s.rawSales || 0)), 'pos'));
     if (s.contestPrize) lines.push(moneyLine('Prix du concours', gain(s.contestPrize), 'pos'));
     if (s.frostRefund) lines.push(moneyLine('Assurance gel', gain(s.frostRefund), 'pos'));
+    // (Lots 2 et 3) Surprises de l'aube ; le village (primes des commandes et de la charrette, cadeaux, médailles).
+    if (s.surpriseIncome) lines.push(moneyLine('Surprises', gain(s.surpriseIncome), 'pos'));
+    if (s.varietyIncome) lines.push(moneyLine('Le village (primes, cadeaux)', s.varietyIncome >= 0 ? gain(s.varietyIncome) : loss(-s.varietyIncome), s.varietyIncome >= 0 ? 'pos' : 'neg'));
     lines.push(moneyLine('Charges quotidiennes', loss(s.charges), 'neg'));
     if (s.waterSpent) lines.push(moneyLine('Arrosage', loss(s.waterSpent), 'neg'));
     if (s.loanPaid) lines.push(moneyLine('Prêt', loss(s.loanPaid), 'neg'));
@@ -878,16 +881,33 @@ export function createDialogs(layer, app) {
         : debt > 0
           ? el('p.next-warn.is-loan', sprite('farmer', 'sprite--sm'), `Vous devez encore ${plural(debt, 'pièce')} à Joseph : tant que ce n'est pas réglé, il ne pourra pas vous dépanner.`)
           : null,
-      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold)), nextBlock),
+      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold), app.variety?.seasonSummary?.(ev) || null), nextBlock),
     );
+    // (Lot 3) Pages suivantes : « Un cadeau pour la saison » (2 cartes), puis « Les défis de … » (3 défis).
+    // Chaque page a « Plus tard » : le choix attend (pastille sur l'onglet Bilan).
+    const pages = app.variety?.seasonPages?.(ev) || [];
+    let idx = 0;
+    const onClose = (reason) => {
+      if (reason !== 'replace') extra.onClose?.(reason);
+    };
+    const nextPage = () => {
+      if (idx >= pages.length) {
+        closeTop();
+        return;
+      }
+      const p = pages[idx++];
+      const pageNode = frame({ title: p.title, ribbon: 'ribbon', cls: 'dialog--season.dialog--variety', body: p.body(nextPage), actions: p.actions(nextPage) });
+      open(pageNode, { id: 'season-end', pauses: true, replace: true, sound: false, onClose });
+      app.audio.play('page', { volume: 0.7 });
+    };
     const node = frame({
       title: season(ev.seasonId, 'end'),
       ribbon: 'ribbon',
       cls: 'dialog--season',
       body,
-      actions: [btn([`Continuer`, icon('play', 'sm')], () => closeTop(), 'btn--red', { 'data-autofocus': '', id: 'season-continue' })],
+      actions: [btn([`Continuer`, icon('play', 'sm')], () => nextPage(), 'btn--red', { 'data-autofocus': '', id: 'season-continue' })],
     });
-    return open(node, { id: 'season-end', pauses: true, onClose: extra.onClose });
+    return open(node, { id: 'season-end', pauses: true, onClose });
   }
 
   // ── Prêt du voisin (mode détente) ─────────────────────────────────────────────
@@ -995,7 +1015,7 @@ export function createDialogs(layer, app) {
         : `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
       el('p.end-missing', `Il manquait ${plural(missing, 'pièce')}.`),
       why ? el('p.end-why', sprite('farmer', 'sprite--xs'), why) : null,
-      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
+      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold), app.variety?.seasonSummary?.(ev) || null),
       el('p.end-tip', icon('info', 'sm'), tip),
       rewardsBlock(record),
     );

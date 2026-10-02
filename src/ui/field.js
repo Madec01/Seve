@@ -101,6 +101,8 @@ export function createField(app) {
         warnings.push(el(`span.warn-chip.${c.marketMultiplier > 1 ? 'is-up' : 'is-down'}`, `Cours ×${dec(c.marketMultiplier)}`));
       }
       if (!c.canAfford) warnings.push(el('span.warn-chip.is-frost', `Il manque ${plural(c.seedCost - game.state.money, 'pièce')}`));
+      // (Lot 3) Graines rares (« Rare · 4 graines »), semis offerts, culture demandée au tableau ou à la charrette.
+      warnings.unshift(...(app.variety?.seedChips?.(c) || []));
       return el(
         `button.seed-row${c.canAfford ? '' : '.is-disabled'}${c.willFreeze ? '.will-freeze' : ''}`,
         {
@@ -392,6 +394,7 @@ export function createField(app) {
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
       qualityRows(rows, p, sheet);
       careerRows(rows, p);
+      claimRow(rows, p);
       processRow(rows, p, sheet);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
@@ -406,6 +409,7 @@ export function createField(app) {
             : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? ((game.level.dryHeatwaveGrowth ?? 0) > 0 ? 'Pas arrosée : pousse à peine (canicule) !' : 'Pas arrosée : ne poussera pas (canicule) !') : `Pas arrosée : pousse ${waterEffect(game.level).slower}`),
       );
       qualityRows(rows, p, sheet);
+      claimRow(rows, p);
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
       if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
       if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
@@ -427,6 +431,12 @@ export function createField(app) {
     if (!c) return;
     const care = (ok, text) => el(`span.care${ok ? '.is-ok' : ''}`, `${ok ? '✓' : '·'} ${text}`);
     rows.push(el('div.tip-care', care(c.wateredEveryDay, 'arrosée chaque jour'), care(c.bees, 'ruche'), care(c.rotation, 'sol reposé')));
+  }
+
+  /** (Lot 3) « À la récolte : → Lili (3 / 5) » : la récolte à la main part à une commande ou à la charrette. */
+  function claimRow(rows, p) {
+    const n = app.variety?.plotRows?.(p);
+    if (n) rows.push(n);
   }
 
   /** Carrière : cueillie à la main (+10 %), grenier, cours du jour, corbeau (docs/CARRIERE.md § 3). */
@@ -505,7 +515,7 @@ export function createField(app) {
     const p = g.query.plot(c.index);
     if (c.kind === 'seeds') {
       const free = g.query.plots().filter((q) => q.action === 'plant').length;
-      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd])]);
+      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd, x.rare, x.seedsLeft, x.free, x.requested])]);
     }
     if (c.kind === 'unlock') {
       const can = g.state.money >= (p.unlockCost ?? Infinity);
@@ -546,7 +556,7 @@ export function createField(app) {
       close(false);
       return;
     }
-    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved'].includes(ev.type) && !refreshQueued) {
+    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'ordersRenewed', 'orderDone', 'orderRemoved', 'cartArrived', 'cartDeparted', 'merchantBought', 'cardPicked'].includes(ev.type) && !refreshQueued) {
       // Une aube émet plusieurs événements : une seule reconstruction par image.
       refreshQueued = true;
       requestAnimationFrame(() => {

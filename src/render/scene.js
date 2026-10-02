@@ -101,6 +101,11 @@
 // dorée, arc-en-ciel, étoiles filantes), légère secousse de la vue à la récolte d'un géant (effects.cameraNudge,
 // jamais en mouvements réduits). scene.lot2Stats() : mesures.
 //
+// Lot 3 « Variété » (variety-actors.js) : tableau du village et ses feuilles, charrette du marché et ses caisses,
+// roulotte de Basile, visiteur du thème, poule voyageuse ; triés par profondeur avec la scène, jamais sans
+// state.variety. hitTest + { type: 'villageBoard' | 'cart' | 'merchant' | 'themeVisitor' } ; scene.varietySpots(),
+// scene.varietyStats().
+//
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import {
@@ -114,6 +119,7 @@ import { buildSeasonSheets } from './assets.js';
 import { createLayout, tileHash } from './layout.js';
 import { createEffects, canDraw, giantRect } from './effects.js';
 import { createLot2Actors } from './lot2-actors.js';
+import { createVarietyActors } from './variety-actors.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -187,6 +193,25 @@ export function createScene(canvas, images, level, opts = {}) {
   const effects = opts.effects || createEffects(images);
   const lot2 = createLot2Actors(effects); // (lot 2) surprises de l'aube, trouvailles
   lot2.setImages(images);
+  // (Lot 3) Tableau du village, charrette du marché, roulotte de Basile, visiteur du thème, poule voyageuse.
+  const variety = createVarietyActors(effects);
+  variety.setImages(images);
+  /** Objet du lot 3 dans la liste triée par profondeur (sprite de l'atlas, ou repli dessiné : opts.img). */
+  const pushVariety = (name, x, y, sortY, opts = {}) => {
+    if (opts.img) {
+      const e = entry();
+      e.img = opts.img;
+      e.name = '';
+      e.set = null;
+      e.x = x;
+      e.y = y;
+      e.sortY = sortY;
+      if (opts.alpha !== undefined) e.alpha = opts.alpha;
+      if (opts.flipX) e.flipX = true;
+      return e;
+    }
+    return pushSprite(name, x, y, sortY, images, opts);
+  };
   const nudgeOut = { x: 0, y: 0 };
   const minZoom = Math.max(1, opts.minZoom || MIN_ZOOM);
 
@@ -850,7 +875,14 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     if (careerMode) return hitTestCareer(w.x, w.y, hitOpts);
     const owned = lastGame ? lastGame.state.investments : undefined;
-    if (hitOpts && hitOpts.touch) return layout.hitTestNear(w.x, w.y, owned, (TOUCH_SLOP_CSS * dpr) / zoom);
+    // (Lot 3) Panneau, charrette, roulotte : touchés en plein d'abord ; la tolérance du doigt ne passe qu'après
+    // les parcelles et les bâtiments (un toucher près du champ reste pour la parcelle).
+    const vHit = variety.hitTest(w.x, w.y, 0);
+    if (vHit) return vHit;
+    if (hitOpts && hitOpts.touch) {
+      const slop = (TOUCH_SLOP_CSS * dpr) / zoom;
+      return layout.hitTestNear(w.x, w.y, owned, slop) || variety.hitTest(w.x, w.y, slop);
+    }
     return layout.hitTest(w.x, w.y, owned);
   }
 
@@ -863,6 +895,8 @@ export function createScene(canvas, images, level, opts = {}) {
     const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
     const a = actors.hitTest(wx, wy, slop);
     if (a) return a;
+    const vHit = variety.hitTest(wx, wy, 0); // (lot 3) panneau, charrette, roulotte, visiteur du thème
+    if (vHit) return vHit;
     const bs = lastGame?.state?.career?.buildings || {};
     for (const [id, s0] of Object.entries(layout.slots)) {
       if (!s0.animal || !(bs[id]?.pending > 0)) continue;
@@ -870,7 +904,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
       if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
     }
-    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop);
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? variety.hitTest(wx, wy, slop) : null);
   }
 
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
@@ -2578,7 +2612,15 @@ export function createScene(canvas, images, level, opts = {}) {
     const vx1 = -ox + viewW + 8;
     for (const e of drawList) {
       if (e.img) {
-        c.drawImage(e.img, e.x, e.y);
+        if (e.alpha !== 1) c.globalAlpha = Math.max(0, Math.min(1, e.alpha));
+        if (e.flipX) {
+          c.save();
+          c.translate(e.x + e.img.width, e.y);
+          c.scale(-1, 1);
+          c.drawImage(e.img, 0, 0);
+          c.restore();
+        } else c.drawImage(e.img, e.x, e.y);
+        if (e.alpha !== 1) c.globalAlpha = 1;
         continue;
       }
       if (cull) {
@@ -3325,6 +3367,7 @@ export function createScene(canvas, images, level, opts = {}) {
       resetTracking();
       effects.clear();
       lot2.clear();
+      variety.clear();
     }
 
     const cal = game.query.calendar();
@@ -3338,6 +3381,7 @@ export function createScene(canvas, images, level, opts = {}) {
     syncOwned(game);
     syncPlots(game, raining);
     lot2.sync(game, layout, { day: game.state.time?.day || 0, dayProgress });
+    variety.sync(game, layout, { time });
     initialized = true;
 
     // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
@@ -3361,6 +3405,7 @@ export function createScene(canvas, images, level, opts = {}) {
     fxState.view.h = viewH;
     effects.update(dt, fxState);
     lot2.update(dt);
+    variety.update(dt);
 
     // Tampon de vue
     const c = vctx;
@@ -3372,6 +3417,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawPlots(sheetsEnv, raining, season);
     effects.drawGround(c, images);
     collectDrawables(owned, season, sheetsEnv, weather, dayProgress);
+    variety.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3435,6 +3481,7 @@ export function createScene(canvas, images, level, opts = {}) {
       resetTracking();
       effects.clear();
       lot2.clear();
+      variety.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -3469,6 +3516,7 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.shift(0, dy);
       actors.shift(dy);
       lot2.shift(0, dy);
+      variety.shift(0, dy);
     }
     computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
     if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
@@ -3571,6 +3619,7 @@ export function createScene(canvas, images, level, opts = {}) {
         break;
     }
     actors.onEvent(type, payload, L);
+    variety.onEvent(type, payload, L);
     effects.onEvent(type, payload, L);
   }
 
@@ -3619,6 +3668,7 @@ export function createScene(canvas, images, level, opts = {}) {
     syncPlots(game, raining);
     actors.sync(game, layout, time);
     lot2.sync(game, layout, { day: careerDay(game), dayProgress, career: true });
+    variety.sync(game, layout, { time });
     initialized = true;
     flushDeferred();
 
@@ -3641,6 +3691,7 @@ export function createScene(canvas, images, level, opts = {}) {
     fxState.view.h = viewH;
     effects.update(dt, fxState);
     lot2.update(dt);
+    variety.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -3655,6 +3706,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawGround(c, images);
     drawClearing(season, sheetsEnv);
     collectCareer(owned, season, sheetsEnv);
+    variety.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3690,6 +3742,7 @@ export function createScene(canvas, images, level, opts = {}) {
     resetTracking();
     effects.clear();
     lot2.clear();
+    variety.clear();
     userScrolled = false;
     stopFling();
     scrollAnim = null;
@@ -3722,6 +3775,7 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.setReducedMotion?.(reducedMotion);
       actors.setReducedMotion?.(reducedMotion);
       lot2.setReducedMotion(reducedMotion);
+      variety.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -3761,6 +3815,7 @@ export function createScene(canvas, images, level, opts = {}) {
         }
       }
       if (LOT2_EVENTS.has(type)) lot2.onEvent(type, payload || {}, layout);
+      variety.onEvent(type, payload || {}, layout);
       effects.onEvent(type, payload, layout);
     },
     setLevel,
@@ -3826,6 +3881,13 @@ export function createScene(canvas, images, level, opts = {}) {
       return actors;
     },
     /** (Lot 2) Surprises en cours (mesures, débogage). */
+    /** (Lot 3) Repères du tableau, de la charrette et de la roulotte (px du monde), ou null. */
+    varietySpots() {
+      return variety.spots();
+    },
+    varietyStats() {
+      return variety.stats();
+    },
     lot2Stats() {
       return { ...lot2.stats(), effects: effects.stats() };
     },

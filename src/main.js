@@ -66,6 +66,7 @@ import { openGuide } from './ui/guide.js';
 import { speedCycle } from './ui/a11y.js';
 import { createJuice } from './ui/juice.js';
 import { createLot2 } from './ui/lot2.js';
+import { createVariety } from './ui/variety.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -133,6 +134,9 @@ app.openGuide = (opts = {}) => openGuide(app, opts);
 // surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
 app.juice = createJuice(app);
 app.lot2 = createLot2(app);
+// Lot 3 « Variété » : tableau du village, cadeau et défis de la saison, charrette du marché, Basile le colporteur,
+// années à thème de la carrière (src/ui/variety.js ; rien n'apparaît sans state.variety, donc jamais en Classique).
+app.variety = createVariety(app);
 
 applyDisplaySettings();
 
@@ -815,7 +819,7 @@ function updateHoverTip() {
     app.tooltip.hide('scene');
     return;
   }
-  const content = app.decor.active ? app.decor.hoverText(h) : h.type === 'plot' ? app.field.plotTip(h.index) : app.field.investmentTip(h.id);
+  const content = app.decor.active ? app.decor.hoverText(h) : h.type === 'plot' ? app.field.plotTip(h.index) : h.type === 'investment' ? app.field.investmentTip(h.id) : null;
   if (content) app.tooltip.showAtPoint(content, hover.x, hover.y, 'scene');
   else app.tooltip.hide('scene');
 }
@@ -829,6 +833,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
+    else if (['villageBoard', 'cart', 'merchant'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -942,6 +947,11 @@ function onGameEvent(ev, game) {
     app.hud.onEvent(ev);
     app.juice.onEvent(ev, game);
     app.lot2.onEvent(ev, game);
+    try {
+      app.variety.onEvent(ev, game);
+    } catch (err) {
+      console.warn('Variété (événement) :', err);
+    }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
@@ -1486,6 +1496,7 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.todo.reset(game);
   app.juice.reset();
   app.lot2.reset(game);
+  app.variety.reset(game);
   app.inMenu = false;
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
@@ -1630,6 +1641,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.todo.reset(null);
   app.juice.reset();
   app.lot2.reset(null);
+  app.variety.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1850,12 +1862,40 @@ function frame(t) {
   app.hud.frame(dt);
   app.juice.frame(dt);
   app.lot2.frame();
+  app.variety.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
 }
 
 // ── Chargement ────────────────────────────────────────────────────────────────────
+/**
+ * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
+ * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
+ */
+const OPTIONAL_SHEETS = new Set(['lot3']);
+async function loadSheets() {
+  const required = {};
+  const optional = [];
+  for (const [k, v] of Object.entries(SHEETS)) {
+    if (OPTIONAL_SHEETS.has(k)) optional.push([k, v]);
+    else required[k] = v;
+  }
+  const [imgs, ...extra] = await Promise.all([
+    loadImages(required),
+    ...optional.map(([k, v]) =>
+      loadImage(v, 1)
+        .then((img) => [k, img])
+        .catch(() => {
+          console.info(`Planche ${k} absente : dessins de repli.`);
+          return [k, null];
+        }),
+    ),
+  ]);
+  for (const [k, img] of extra) if (img) imgs[k] = img;
+  return imgs;
+}
+
 async function boot() {
   const loading = $('#loading');
   const fill = $('.loading-fill', loading);
@@ -1919,7 +1959,7 @@ async function boot() {
   try {
     let uiDone = 0;
     const tasks = [
-      loadImages(SHEETS).then((imgs) => {
+      loadSheets().then((imgs) => {
         parts.images = 1;
         paint();
         return imgs;
@@ -2281,6 +2321,89 @@ if (DEBUG) {
       },
       stats: () => ({ juice: app.juice.stats(), scene: app.scene?.lot2Stats?.(), voices: audio.synthVoices }),
     },
+    /**
+     * (Lot 3) Aides de vérification de la variété : chaque situation passe par l'action de débogage du cœur
+     * (actions.triggerVariety : 'board' | 'cart' | 'merchant' | 'cards' | 'challenges' | 'theme') ou par les actions
+     * publiques (récolte à la main pour remplir une commande). Alias : __debug.lot3.
+     */
+    variety: (() => {
+      const V = {
+        on: () => !!app.game?.state.variety,
+        /** Requête complète (query.variety()). */
+        state: () => (app.game?.state.variety ? app.game.query.variety?.() ?? null : null),
+        /** actions.triggerVariety(kind, arg) puis fenêtres en attente. */
+        trigger(kind, arg) {
+          const g = app.game;
+          if (!g) return { ok: false, reason: 'pas de partie' };
+          const fn = g.actions.triggerVariety;
+          if (typeof fn !== 'function') return { ok: false, reason: 'triggerVariety indisponible' };
+          const res = fn(kind, arg);
+          processPending();
+          return res;
+        },
+        board: (arg) => V.trigger('board', arg),
+        cart: (arg) => V.trigger('cart', arg),
+        merchant: (arg) => V.trigger('merchant', arg),
+        cards: (arg) => V.trigger('cards', arg),
+        challenges: (arg) => V.trigger('challenges', arg),
+        theme: (id) => V.trigger('theme', id),
+        /** Médaille n (1..3) du défi id : le cœur seul sait compter ; essaie triggerVariety('medal'). */
+        medal: (id, n = 1) => V.trigger('medal', { challengeId: id, medal: n }),
+        /** Remplit la commande de la place `slot` par de vraies récoltes à la main (parcelles rendues mûres). */
+        fill(slot = 0, units = null) {
+          const g = app.game;
+          const o = g?.query.orders?.()?.slots?.[slot];
+          if (!o || o.empty) return { ok: false, reason: 'place vide' };
+          let done = 0;
+          for (const line of o.lines || []) {
+            let left = units ?? (line.left ?? line.n - (line.got || 0));
+            const crop = getCrop(line.cropId);
+            const plots = g.state.plots.map((p, i) => ({ p, i })).filter(({ p }) => p && p.unlocked !== false && p.env !== null && !p.giant && (!p.cropId || getCrop(p.cropId)?.kind !== 'tree'));
+            for (const { p, i } of plots) {
+              if (left <= 0) break;
+              p.cropId = line.cropId;
+              p.growth = crop?.growDays ?? 3;
+              p.watered = true;
+              delete p.forage;
+              const res = app.harvest(i);
+              if (res?.ok) {
+                left -= res.giant ? 4 : 1;
+                done += 1;
+              }
+            }
+          }
+          processPending();
+          return { ok: done > 0, harvested: done, order: g.query.orders?.()?.slots?.[slot] };
+        },
+        /** Ouvre une feuille : 'board' | 'cart' | 'merchant' | 'cards' | 'challenges' | 'theme'. */
+        open(kind = 'board') {
+          const f = { board: 'openBoard', cart: 'openCart', merchant: 'openMerchant', cards: 'openCards', challenges: 'openChallenges', theme: 'openTheme' }[kind];
+          return f ? app.variety[f]() : false;
+        },
+        /** Avance jusqu'au soir du dernier jour de la saison (la fenêtre de fin de saison s'ouvre). */
+        seasonEnd() {
+          const g = app.game;
+          if (!g) return 0;
+          const s0 = g.state.time.seasonIndex;
+          const y0 = g.state.time.year;
+          let n = 0;
+          while (g.state.status === 'playing' && g.state.time.seasonIndex === s0 && g.state.time.year === y0 && !app.dialogs.isOpen() && n < 40) {
+            if (!window.__debug.skipDays(1)) break;
+            n += 1;
+          }
+          return n;
+        },
+        /** Point (px de la page) d'une cible de la scène : 'board' | 'cart' | 'merchant'. */
+        point(kind = 'board') {
+          const v = app.scene?.varietySpots?.();
+          const r = v ? (kind === 'merchant' ? v.merchant : kind === 'cart' ? v.cart : v.board) : null;
+          return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+        },
+        ui: () => app.variety.debugState(),
+        stats: () => app.scene?.varietyStats?.() || null,
+      };
+      return V;
+    })(),
     /** Centre du panneau d'un terrain (px de la page), si le rendu le connaît. */
     lotPoint(id) {
       const l = app.scene?.layout?.lots?.find?.((x) => x.id === id);
@@ -2291,6 +2414,8 @@ if (DEBUG) {
     },
   };
 }
+
+if (DEBUG) window.__debug.lot3 = window.__debug.variety;
 
 // Application installable : service worker (hors ligne, mises à jour), invitation à installer.
 // (`?nosw` dans l'adresse : sans service worker, pour le débogage.)

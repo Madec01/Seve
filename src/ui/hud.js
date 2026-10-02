@@ -78,10 +78,12 @@ export function createHud(root, app) {
   // Symbole (✓ / ! / ✗, dessiné en CSS) et mot d'état : la couleur n'est jamais seule à parler.
   const billGlyph = el('span.bill-glyph', { 'aria-hidden': 'true' });
   const billWord = el('span.bill-word', '');
+  // (Lot 3) Carte « Le geste du propriétaire » : prochain fermage −20 % (query.finance().nextBill.reduced).
+  const billCut = el('small.bill-cut', { hidden: true, 'aria-hidden': 'true' }, '−20 %');
   const bill = el(
     'button.hud-cell.hud-bill.has-tip',
     { type: 'button', id: 'hud-bill', 'data-tip-side': 'bottom', 'aria-label': 'Prochain fermage', onclick: () => openInfo('bill') },
-    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount, billGlyph),
+    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount, billCut, billGlyph),
     el('span.hud-line.hud-small.bill-line', billWord, billDays),
   );
   bill._tip = () => billTip();
@@ -283,6 +285,7 @@ export function createHud(root, app) {
       el('div', p.daysLeft === 0 ? `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} ce soir.` : `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
       row('Argent actuel', fmt(p.money)),
     ];
+    if (p.reduced) nodes.splice(1, 0, el('div.tip-ok', career ? 'Ristourne de la coopérative : −20 %.' : 'Le geste du propriétaire : −20 %.'));
     if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
     if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
     if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
@@ -384,7 +387,7 @@ export function createHud(root, app) {
         loanBlocked = `Joseph peut avancer au plus ${fmt(nl.maxMissing)} pièces ; il en manquerait ${fmt(missing)}.`;
       }
     }
-    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell, surchargePct: nl ? Math.round((nl.surcharge || 0) * 100) : 0 };
+    return { amount: bill.amount, reduced: !!bill.reduced, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell, surchargePct: nl ? Math.round((nl.surcharge || 0) * 100) : 0 };
   }
 
   // ── Mises à jour ──────────────────────────────────────────────────────────────
@@ -418,6 +421,7 @@ export function createHud(root, app) {
     const p = projection();
     const status = game.state.status;
     setText(billAmount, fmt(p.amount));
+    billCut.hidden = !(p.reduced && status === 'playing');
     if (status === 'victory') setText(billDays, 'payé : année finie !');
     else if (status === 'bankrupt') setText(billDays, career ? 'impayées' : 'impayé');
     else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `${p.daysLeft} j`); // après le mot d'état : « couvert · 6 j »
@@ -426,7 +430,7 @@ export function createHud(root, app) {
     billGlyph.dataset.glyph = look.glyph;
     setText(billWord, status === 'playing' ? look.word : '');
     bill.dataset.state = state;
-    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces, ${status === 'playing' ? (p.daysLeft === 0 ? 'ce soir' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`) : billDays.textContent}. Prévision : ${look.say}.`);
+    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces${p.reduced ? ' (réduit de 20 %)' : ''}, ${status === 'playing' ? (p.daysLeft === 0 ? 'ce soir' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`) : billDays.textContent}. Prévision : ${look.say}.`);
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn' || state === 'loan');
     bill.classList.toggle('is-loan', state === 'loan');

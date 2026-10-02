@@ -18,6 +18,7 @@ import { perkValue } from './perks.js';
 import { BUILDINGS_BY_ID } from '../data/career/buildings.js';
 import { providedSum } from './career/registry.js';
 import { careerProductFactor } from './career/market.js';
+import { recipeFactor } from './variety-effects.js';
 
 /** Ateliers (investissements avec l'effet `processing`), dans l'ordre des données. */
 export const PROCESSING_IDS = INVESTMENTS.filter((i) => i.effects.processing).map((i) => i.id);
@@ -56,7 +57,9 @@ export function productSaleValue(state, place) {
   if (state.mode === 'career') {
     return Math.round(product.value * (1 + priceBonus(state)) * place.yieldFactor * careerProductFactor(state, product.id));
   }
-  return Math.round(product.value * (1 + perkValue(state, 'productBonus')) * (1 + priceBonus(state)) * place.yieldFactor);
+  const value = product.value * (1 + perkValue(state, 'productBonus')) * (1 + priceBonus(state)) * place.yieldFactor;
+  // (lot 3) Carte « La recette de saison » : produits × 1,15 (jamais en Classique : pas de state.variety).
+  return Math.round(state.variety ? value * recipeFactor(state) : value);
 }
 
 /** Prix de vente d'un produit fabriqué maintenant (rendement donné). */

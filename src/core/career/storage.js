@@ -50,6 +50,8 @@ function sellUnits(api, cropId, n) {
   state.career.stock[cropId] = have - count;
   if (state.career.stock[cropId] === 0) delete state.career.stock[cropId];
   api.earn('stock', amount);
+  // (lot 3) Défi « Bon marché » : ventes de récoltes (grenier compris).
+  if (state.variety?.season) state.variety.season.sales += amount;
   return { amount, count };
 }
 

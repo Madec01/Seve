@@ -21,6 +21,7 @@ import { buildingLevelData } from './career/effects.js';
 import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
 import { SKY } from '../data/surprises.js';
+import { posterFactor } from './variety-effects.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -63,6 +64,8 @@ export function plotUnlockCost(state, level) {
     return START_FIELD.plotCost.base + START_FIELD.plotCost.step * state.plotsBought;
   }
   if (unlockedCount(state) >= level.maxPlots) return null;
+  // (lot 3) Carte « Coup de main au défrichage » : la prochaine parcelle achetée est gratuite.
+  if (state.variety?.cards?.pending?.freePlot) return 0;
   const pc = level.plotCost || PLOT_COST;
   return Math.max(0, pc.base + pc.step * state.plotsBought - perkValue(state, 'plotDiscount'));
 }
@@ -242,7 +245,9 @@ export function currentUnitPrice(state, crop) {
  */
 export function rawUnitPrice(state, level, crop) {
   if (state.mode === 'career') return careerCropPrice(state, level, crop);
-  const price = currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  let price = currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  // (lot 3) carte « Une affiche au marché » : récoltes × 1,05 (jamais en Classique : pas de state.variety).
+  if (state.variety) price *= posterFactor(state);
   // (lot 2) heure dorée : récoltes × 1,2 ce jour-là (jamais en Classique : pas de state.surprises).
   return state.surprises?.sky?.today === 'goldenhour' ? price * SKY.goldenPrice : price;
 }

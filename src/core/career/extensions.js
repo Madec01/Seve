@@ -13,5 +13,6 @@ import './machines.js';
 import './staff.js';
 import './work.js';
 import './surprises.js';
+import './variety.js';
 
 export {};

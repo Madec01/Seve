@@ -2452,3 +2452,68 @@ par le chef de projet : `node --test tests/` (parité comprise), `node tools/sim
 `node tools/simulate-career.js --compare-variety`, `node tools/build.js`, vérification au doigt (Pixel 7, 360 × 740 :
 cibles ≥ 48 px, textes ≥ 14 px, aucun débordement ; une année de niveau Détente et une année de carrière avec tableau,
 charrette, cadeau, défis, colporteur et thème), `JOURNAL.md`, sauvegarde `backup/…` avant et après le lot.
+
+## Lot 3 — rendu et interface (UI/RENDER, 2026-10-02)
+
+Code contre le contrat ci-dessus (« Lot 3 — contrats »). Tout est gardé par `state.variety` : en Classique (clé
+absente) rien n'est dessiné, aucune ligne « À faire », aucune section, aucun badge. Un sprite du lot 3 absent → repli
+dessiné (canvas) ou icône de la planche de l'interface (`spriteAny`). Mouvements réduits respectés partout.
+Styles : **`css/variety.css`** (ajoutée à `CSS_FILES`). Tests : `tests/lot3-render.test.js`.
+
+```
+src/ui/variety.js          createVariety(app) → app.variety : onEvent, frame, reset, openBoard, openCart, openMerchant,
+                           openCards, openChallenges, openTheme, onHit(hit), seasonPages(ev), seasonSummary(ev),
+                           todoItems(game), statsSection(game), agendaSections(ui), yearLines(report), pendingChoice(game),
+                           plotRows(plot), seedChips(crop), enabled(game), debugState()
+src/render/variety-actors.js  varietySpots(layout) (pur) ; createVarietyActors(effects) : sync, onEvent, update,
+                           collect(push) (objets triés par profondeur avec la scène), hitTest(wx, wy, slop), clear, shift
+src/render/scene.js        acteurs du lot 3 dans les deux modes ; layout.variety posé à la première synchronisation ;
+                           hitTest + { type: 'villageBoard' | 'cart' | 'merchant' | 'themeVisitor', offerId } ;
+                           scene.varietySpots(), scene.varietyStats() ; images de repli (entrée e.img : alpha, miroir)
+src/main.js                app.variety ; onGameEvent → app.variety.onEvent ; planche « lot3 » facultative au chargement
+                           (OPTIONAL_SHEETS : le jeu démarre sans elle) ; __debug.variety (alias __debug.lot3)
+```
+
+- **Scène** : panneau du village (2 × 2 tuiles) au bord du chemin sous le portail du champ (portrait et paysage : à
+  droite du portail, sinon à gauche ; la ligne du haut peut chevaucher la clôture ; jamais sur une parcelle, un chemin,
+  un bâtiment ni un emplacement de décor — vérifié pour les 12 niveaux et la carrière) ; carrière : bande de la maison,
+  à droite du chemin du champ de départ. 0 à 3 feuilles (`board.note`, `.kept`, `.done` le jour de la livraison, d'après
+  `query.orders()` et `slot.delivered`), petit saut de la feuille sur `orderProgress` / `orderDone` (+ étincelles,
+  « +N »). Charrette garée sur la route à droite (l'âne regarde à droite : elle arrive par la gauche en ~2 s, repart à
+  droite), caisses devant elle (`crate.empty`, `crate.<culture>` quand pleine, étincelles sur `crateFull`). Roulotte de
+  Basile sur la route à gauche (`merchant.wagon.1` auvent ouvert une fois garée), Basile debout à côté. Visiteur unique
+  du thème (carrière) près du panneau tant que son offre est ouverte (toucher → sa fiche) ; stand `fair.theme.<id>` le
+  jour de la fête du thème ; poule voyageuse (carte `hen`, sprite `animal.chicken`) dans la cour ; gouttes sur les
+  parcelles arrosées par l'arrosoir (`dawn.varietyWatered`). Textes flottants « → Lili » / « → charrette » au-dessus
+  de la parcelle récoltée. Mouvements réduits : fondus, aucun trajet, la poule ne marche pas. Toucher : en plein d'abord,
+  la tolérance du doigt (≥ 48 px) seulement après les parcelles et les bâtiments.
+- **Feuilles** (pause pendant la lecture, contenus « vivants » reconstruits seulement si la requête a changé) :
+  « Le tableau du village » (3 cartes ≥ 96 px : portrait 48 px, prénom et métier, phrase, lignes « 2 / 5 carottes » avec
+  barre lue, prime « +19 », « Garder » (punaise, `aria-pressed`), « ✕ » 48 × 48 lu « Pas pour moi », « Livrer depuis le
+  grenier (3) » en carrière ; carte « merci » d'une commande livrée ; « ↻ Autres demandes (gratuit) » / « … : demain ») ;
+  « La charrette du marché » (une rangée par caisse, « Charger (2) » en carrière, primes au départ) ; « Basile le
+  colporteur » (tuiles ≥ 72 px, confirmation au-delà de la moitié de l'argent, « Vendu ») ; « Un cadeau pour la saison »
+  (2 grandes cartes, effets en cours) ; « Les défis de … » (cartes ≥ 72 px, 3 pastilles de médaille, « Garder ») ;
+  thème de l'année (carrière).
+- **Fin de saison** : niveaux — `dialogs.seasonEnd` affiche la ligne de la charrette et les médailles de la saison,
+  puis enchaîne (fenêtre remplacée, `replace`) les pages `app.variety.seasonPages()` : « Un cadeau pour la saison » puis
+  « Les défis de … », chacune avec « Plus tard » (le choix attend : pastille sur l'onglet Bilan, ligne « À faire »
+  discrète). Victoire : même résumé. Carrière (pas de fenêtre de fin de saison) : fenêtre courte « Fin de … » ouverte par
+  `app.variety.frame()` après `cardsOffered` / `challengesOffered`, quand aucune autre fenêtre n'est ouverte.
+- **Ailleurs** : section « Le village » en tête du Bilan (niveaux) et de l'Agenda du Carnet (carrière) : thème,
+  cadeau en attente, tableau, charrette, défis, colporteur, effets en cours, graines rares ; « À faire maintenant » :
+  la commande la plus avancée (« Lili attend 2 carottes »), livraison / chargement depuis le grenier, charrette,
+  Basile (veille et jours de passage), cadeau et défis à choisir (priorités basses : jamais de relance insistante) ;
+  résumé du matin : nouvelles commandes, charrette arrivée, Basile (veille, arrivée), arrosoir ; feuille des graines :
+  « Rare · 4 graines », « Offert », « Commande » ; fiche de parcelle : « À la récolte : → Lili (3 / 5) » ; barre du
+  haut : « −20 % » sur le fermage réduit (`nextBill.reduced`) ; bilans : postes « Surprises » et « Le village ».
+  Bilan annuel de la carrière : compteurs du village et « L'an prochain : … ! ».
+- **Récompenses** : `cartDeparted.ecus`, `challengeMedal.ecus` → `progression.careerEcus` ; `merchantBought.cosmeticId`,
+  `cardPicked.gift`, `offerResolved.gift` (thème) → `unlockCosmetic` (ou `ecusIfOwned`). `DECOR_SPRITES` : les trois
+  décors du lot ; `decor.js` dit où les trouver.
+- **Sons** (synth existant) : `chime` commande livrée, `fanfare` charrette pleine et médaille d'or, `pop` caisse pleine,
+  `reveal` carte gardée, `magic` Basile ; bruit de papier (`page`) quand une récolte part à une commande.
+- **Débogage** (`?debug=1`) : `__debug.variety` (= `__debug.lot3`) `.{ on(), state(), trigger(kind, arg), board(), cart(),
+  merchant(), cards(), challenges(), theme(id), medal(id, n), fill(slot), open(kind), seasonEnd(), point(kind), ui(),
+  stats() }` — `trigger` et ses raccourcis passent par `actions.triggerVariety` du cœur ; `fill(slot)` remplit une
+  commande par de vraies récoltes à la main.

@@ -63,7 +63,7 @@
 
 import { DAY_SECONDS, DEFAULT_SPEED, EPSILON, SEASONS, SPEEDS, WARNING_DAYS, WEATHER_TYPES } from '../data/balance.js';
 import { getInvestment } from '../data/investments.js';
-import { getCrop, isTreeCrop } from '../data/crops.js';
+import { getCrop, isRareCrop, isTreeCrop } from '../data/crops.js';
 import { getLevel, yearLength } from '../data/levels.js';
 import { DEFAULT_DIFFICULTY, LEGACY_DIFFICULTY, getDifficulty, isDifficulty, levelFor } from '../data/difficulty.js';
 import { getPerk, perkMaxRank } from '../data/perks.js';
@@ -158,8 +158,21 @@ import {
   addSurpriseIncome, advanceSky, applyGrowthCare, checkSurprises, completeSurprises, dawnSurprise, enableSurprises, expireEffects,
   expireForage, fogForage, giantAt, grantWish, growthSnapshot, hedgehogActive, newSurprisesState, noteSown,
   plotSurpriseInfo, recordQuality, rollQuality, skyGrowthFactor, specialInfo, surprisesQuery, takeForage, tryGiant, validateGiants,
-  newWish, applySurprise, GIANT,
+  newWish, applySurprise, GIANT, careOf,
 } from './surprises.js';
+import {
+  varietyDawnMerchant, varietyRestartChallenges,
+  buyFromMerchant, cardsQuery, challengesQuery, checkMedals, checkVariety, completeVariety, consumeSow, declineOrder, enableVariety,
+  freeSowKind, judgeChallenges, keepChallenge, keepOrder, merchantEvening, merchantQuery, migrateToVariety, noteHarvest, noteVariety,
+  offerCards, offerChallenges, ordersQuery, pickCard, plotClaim, rarePlantRows, requestedCrops, rerollOrders, varietyCartEvening,
+  varietyDawn, varietyQuery, varietyStart, varietySummary, varietyWater,
+} from './variety.js';
+import { cartInfo, claimPreview, claimUnits, renewBoard, drawCart } from './requests.js';
+import { cardActive, hasVarietyAlmanac, seedFairFactor, vAbsDay } from './variety-effects.js';
+import { careerVarietyHost, triggerCareerVariety, careerDeliverOrder, careerLoadCart } from './career/variety.js';
+import { CARD_VALUES } from '../data/variety.js';
+import { getInvestment as investmentData } from '../data/investments.js';
+import { hasRoom } from './processing.js';
 
 export const STATE_VERSION = 2;
 
@@ -172,7 +185,7 @@ const V1_MAX_LEVEL = 8;
  *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine) ; difficulty : 'detente' (défaut)
  *   ou 'classique' (nombres de la v3, test de parité) — voir src/data/difficulty.js
  */
-export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY, surprises } = {}) {
+export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY, surprises, variety } = {}) {
   if (!isDifficulty(difficulty)) throw new Error(`Difficulté inconnue : ${difficulty}`);
   const level = levelFor(levelId, difficulty);
   if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
@@ -208,11 +221,16 @@ export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficu
   // d'avant le lot 2 les reçoit, voir migrateState).
   if (surprises ?? difficulty !== 'classique') enableSurprises(state);
   else if (surprises === false) state.surprises = null;
+  // (lot 3) Variété : active par défaut en Détente ; en Classique, la clé est ABSENTE (parité des niveaux 1 à 8).
+  // variety: false → null (gardé tel quel à la reprise) ; true ou { board, cards, cart, challenges, merchant }.
+  const varietyOpt = variety ?? (difficulty !== 'classique' ? true : undefined);
+  if (varietyOpt === false) state.variety = null;
+  else if (varietyOpt) enableVariety(state, varietyOpt);
   for (const idx of level.startTrees || []) setTree(state, state.plots[idx], 'apple', true);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);
   state.market = initialMarket(state, level, crops);
-  return wrap(state);
+  return wrap(state, { fresh: true });
 }
 
 /**
@@ -257,6 +275,10 @@ export function migrateState(saved) {
     s.surprises = newSurprisesState();
     completeSurprises(s);
   } else if (s.surprises) completeSurprises(s);
+  // (lot 3) Variété : une partie Détente d'avant le lot 3 la reçoit à la reprise (Classique : jamais).
+  if (s.variety === undefined && s.difficulty === 'detente' && s.rng && typeof s.rng === 'object' && s.time && typeof s.time === 'object') {
+    migrateToVariety(s);
+  } else if (s.variety) completeVariety(s);
   return s;
 }
 
@@ -355,6 +377,9 @@ function checkState(s, level) {
   // Surprises (lot 2).
   const sp = checkSurprises(s);
   if (sp) return sp;
+  // Variété (lot 3).
+  const vp = checkVariety(s);
+  if (vp) return vp;
   return null;
 }
 
@@ -362,11 +387,11 @@ function checkState(s, level) {
  * Enveloppe un état (nouvelle partie ou sauvegarde vérifiée) : update, actions, requêtes, événements.
  * Exportée pour src/core/career/career.js (createCareer / loadCareer) ; ne pas appeler ailleurs.
  */
-export function wrapState(state) {
-  return wrap(state);
+export function wrapState(state, opts) {
+  return wrap(state, opts);
 }
 
-function wrap(state) {
+function wrap(state, { fresh = false } = {}) {
   const career = state.mode === 'career';
   // Carrière : le « niveau » change avec la ferme (rang, achats) — refreshLevel().
   let level = career ? careerLevel(state) : levelFor(state.levelId, state.difficulty);
@@ -439,7 +464,8 @@ function wrap(state) {
   /** Prix d'une graine dans cette partie (« Graines sélectionnées », « Arboriste »). */
   function seedCostOf(crop) {
     if (isTreeCrop(crop)) return treeSeedCost(state, crop);
-    const factor = perkValue(state, 'seedFactor');
+    // (lot 3) « Foire aux graines » : × 0,5 les 3 premiers jours de la saison (niveaux ; carrière : seedFactor).
+    const factor = perkValue(state, 'seedFactor') * (state.variety && !career ? seedFairFactor(state) : 1);
     return factor === 1 ? crop.seedCost : Math.max(1, Math.round(crop.seedCost * factor));
   }
 
@@ -476,6 +502,144 @@ function wrap(state) {
     }
   }
 
+  // ── Lot 3 : variété (niveaux ; la carrière passe par src/core/career/variety.js) ─────────────
+  let inDawn = false; // pendant l'aube : l'argent s'ajoute sans moneyChanged (un seul pour toute l'aube)
+
+  /** Poste du bilan des niveaux (créé seulement quand il y en a : le bilan du mode Classique reste identique). */
+  function addVarietyStat(key, amount) {
+    for (const st of [state.stats.year, state.stats.season]) st[key] = (st[key] || 0) + amount;
+  }
+
+  /** Argent du lot (primes, cartes, médailles) ; une prime de commande ou de charrette est une vente (part du voisin). */
+  function earnVariety(key, amount) {
+    if (!(amount > 0)) return;
+    addVarietyStat('varietyIncome', amount);
+    if (inDawn) state.money += amount;
+    else changeMoney(amount);
+    if (key !== 'orders' && key !== 'cart') return;
+    const part = repaymentFrom(state, level, amount);
+    if (!(part > 0)) return;
+    if (inDawn) {
+      const done = repay(state, part);
+      state.money -= part;
+      push('loanRepayment', { amount: part, remaining: state.neighbourLoan.debt, source: key });
+      if (done) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: key });
+    } else repayNeighbour(part, key);
+  }
+
+  function spendVariety(key, amount) {
+    if (!(amount > 0)) return;
+    addVarietyStat('varietySpent', amount);
+    changeMoney(-amount);
+  }
+
+  /** Peut-on poser `n` unités de cet investissement (cadeau, achat d'occasion) ? → null | raison */
+  function canGiveLevel(id, n = 1) {
+    const inv = levelInvestments(level).find((i) => i.id === id);
+    if (!inv) return id === 'beehive' ? 'Pas de ruche dans ce niveau.' : id === 'chickenCoop' ? 'Pas de poulailler dans ce niveau.' : 'Impossible ici.';
+    if (owned(state, id) + n > maxOf(inv)) return id === 'beehive' ? 'Plus de place pour une ruche.' : 'Le poulailler est plein.';
+    return null;
+  }
+
+  const vhost = {
+    mode: 'levels',
+    state,
+    get level() {
+      return level;
+    },
+    get crops() {
+      return crops;
+    },
+    push,
+    fail,
+    earn: earnVariety,
+    spend: spendVariety,
+    rateFor: (plot, tree = false) => (tree ? 1 + growthBonus(state, state.time.seasonIndex) : wateredRate(state, state.time.seasonIndex)),
+    canGive: canGiveLevel,
+    giveInvestment(id, n = 1, price = 0) {
+      const bad = canGiveLevel(id, n);
+      if (bad) return fail(bad);
+      if (price > 0 && state.money < price) return fail(notEnoughMoney(price - state.money));
+      if (price > 0) spendVariety('merchant', price);
+      state.investments[id] = owned(state, id) + n;
+      push('purchased', { investmentId: id, owned: state.investments[id], cost: price, gift: price === 0, used: price > 0 });
+      return { ok: true };
+    },
+    nextCost(id) {
+      const inv = levelInvestments(level).find((i) => i.id === id);
+      return inv ? nextCost(state, inv) : null;
+    },
+    clearingPossible: () => plotUnlockCost(state, level) !== null && !state.variety?.cards?.pending?.freePlot,
+    refreshLevel: null,
+  };
+
+  /** Hôte de la variété pour la partie : niveaux (vhost) ou carrière (extension). */
+  const varietyHost = () => (rt ? careerVarietyHost(rt.api) : vhost);
+
+  /** Une action du lot 3 (les deux modes) : variété active, partie en cours ; carrière : rangs et niveau ensuite. */
+  function varietyAction(fn) {
+    return (...args) => {
+      if (!playing()) return fail(ENDED);
+      if (!state.variety) return fail('Variété désactivée.');
+      const res = fn(varietyHost(), ...args);
+      if (rt && res && res.ok) {
+        rt.api.refreshLevel();
+        rt.api.checkRanks();
+      }
+      return res;
+    };
+  }
+
+  /** Débogage (lot 3) : lance une partie de la variété tout de suite. */
+  function triggerVariety(host, kind, arg) {
+    const v = state.variety;
+    switch (kind) {
+      case 'board': {
+        if (!v.parts.board) return fail('Pas de tableau du village.');
+        v.board.startDay = Math.min(v.board.startDay, vAbsDay(state));
+        for (let k = 0; k < v.board.slots.length; k++) if (v.board.slots[k] && !v.board.slots[k].kept) v.board.slots[k] = null;
+        const r = renewBoard(host);
+        push('ordersRenewed', { reason: 'dawn', slots: ordersQuery(host).slots.map((o) => (o.empty ? null : o)), added: r.added + r.replaced });
+        return { ok: true, added: r.added + r.replaced };
+      }
+      case 'cart': {
+        if (!v.parts.cart) return fail('Pas de charrette.');
+        v.cart = drawCart(host);
+        if (!v.cart) return fail('Aucune culture faisable.');
+        const info = cartInfo(host);
+        push('cartArrived', { cart: info, text: 'La charrette du marché est arrivée : remplissez ses caisses avant le dernier soir de la saison.' });
+        return { ok: true, cart: info };
+      }
+      case 'merchant': {
+        if (!v.parts.merchant) return fail('Pas de colporteur.');
+        const today = vAbsDay(state);
+        v.merchant = { season: state.mode === 'career' ? (state.time.year - 1) * 4 + state.time.seasonIndex : state.time.seasonIndex, soonDay: today - 1, arriveDay: today, leaveDay: today + 1, announced: true, stall: [] };
+        const ev = varietyDawnMerchant(host);
+        return ev ? { ok: true, merchant: merchantQuery(host) } : fail('Impossible aujourd\'hui.');
+      }
+      case 'cards': {
+        const ev = offerCards(host);
+        if (!ev) return fail('Impossible aujourd\'hui.');
+        // Pour le débogage : la carte vaut pour la saison en cours.
+        v.cards.offer.season = state.mode === 'career' ? (state.time.year - 1) * 4 + state.time.seasonIndex : state.time.seasonIndex;
+        const info = cardsQuery(host).offer;
+        push('cardsOffered', info);
+        return { ok: true, offer: info };
+      }
+      case 'challenges': {
+        if (!v.parts.challenges) return fail('Pas de défis.');
+        v.challenges.next = null;
+        v.challenges.season = null;
+        const ev = varietyRestartChallenges(host);
+        return ev ? { ok: true, challenges: challengesQuery(host) } : fail('Impossible aujourd\'hui.');
+      }
+      case 'theme':
+        return rt ? triggerCareerVariety(host, 'theme', arg) : fail('Les thèmes sont propres à la carrière.');
+      default:
+        return fail('Inconnu.');
+    }
+  }
+
   // ── Fin de journée : concours, filets de sécurité, fermage ──────────────────────────
   function endOfDay() {
     if (rt) return rt.endOfDay();
@@ -487,7 +651,13 @@ function wrap(state) {
       }
       push('contestAwarded', award);
     }
+    // (lot 3) Basile repart le soir de son dernier jour ; la charrette part le dernier soir, avant le fermage.
+    if (state.variety) merchantEvening(vhost);
     if (!isLastDayOfSeason(state, level)) return;
+    if (state.variety) {
+      const departed = varietyCartEvening(vhost);
+      if (departed) push('cartDeparted', departed);
+    }
     const sid = seasonId(state);
     const rent = rentFor(level, state.time.seasonIndex, state);
     if (isLastSeason(state)) sellAllRaw('yearEnd');
@@ -512,7 +682,20 @@ function wrap(state) {
     addStat(state, 'rentsPaid', rent);
     changeMoney(-rent);
     noteRentPaid(state);
-    push('billPaid', { amount: rent, seasonId: sid, summary: buildSummary(state, sid, { amount: rent }) });
+    const reduced = !!state.variety && state.variety.cards.pending.rentFactor !== 1;
+    if (reduced) state.variety.cards.pending.rentFactor = 1; // « Le geste du propriétaire » : une fois
+    push('billPaid', { amount: rent, seasonId: sid, ...(reduced ? { reduced: true } : {}), summary: buildSummary(state, sid, { amount: rent }) });
+    // (lot 3) Défis jugés ; puis (sauf l'hiver) le cadeau de la saison et les défis de la saison suivante.
+    if (state.variety) {
+      const judged = judgeChallenges(vhost);
+      if (judged) push('challengesJudged', judged);
+      if (!isLastSeason(state)) {
+        const cards = offerCards(vhost);
+        if (cards) push('cardsOffered', cards);
+        const next = offerChallenges(vhost);
+        if (next) push('challengesOffered', next);
+      }
+    }
     if (isLastSeason(state)) {
       // Fin de l'année : le voisin reprend ce qui lui est encore dû, dans la limite de l'argent qui
       // reste ; il efface le reste (l'argent final n'est jamais négatif à cause de lui).
@@ -630,9 +813,15 @@ function wrap(state) {
     // (lot 2) Surprise de l'aube, champignons du brouillard, vœu de l'étoile filante.
     if (lot2) surprisesDawnEnd(lot2);
 
+    // (lot 3) Variété : cartes échues, nouvelle saison (défis, charrette), colporteur, tableau.
+    inDawn = true;
+    const lot3 = state.variety ? varietyDawn(vhost, { newSeason }) : null;
+
     // 7. Arrosage automatique.
     const sprinkled = sprinklerWater(state, sprinklerCapacity(state, level), today, level);
     const waterCost = sprinkled.length * level.modifiers.waterCost;
+    // (lot 3) Arrosoir magique (carte) et arrosoir de cuivre (colporteur), après l'arrosage automatique.
+    const varietyWatered = state.variety ? varietyWater(vhost, today) : null;
 
     // 8. Ateliers : les produits prêts sont vendus.
     const contestBefore = contestSnapshot(state, level);
@@ -642,6 +831,7 @@ function wrap(state) {
       addProductSold(state, sale.productId, sale.amount);
       extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: owned(state, sale.buildingId), kind: 'processed', productId: sale.productId });
       push('productSold', sale);
+      if (state.variety) noteVariety(state, 'products', 1);
     }
 
     // 9. Revenus ; le lait part à la fromagerie.
@@ -649,6 +839,16 @@ function wrap(state) {
     const milk = fillMilk(state, level, incomes, sid);
     for (const st of milk.started) push('processingStarted', st);
     const investmentTotal = incomes.reduce((s, i) => s + i.amount, 0);
+    if (state.variety) {
+      // (lot 3) Défi « Basse-cour heureuse » : revenus des animaux ; carte « Une poule voyageuse » : +4 chaque matin.
+      for (const inc of incomes) if (investmentData(inc.source)?.category === 'animal') noteVariety(state, 'animals', inc.amount);
+      if (cardActive(state, 'hen')) {
+        const hen = CARD_VALUES.hen.coins;
+        extraIncomes.push({ source: 'cardHen', amount: hen, owned: 1, kind: 'card' });
+        addVarietyStat('varietyIncome', hen);
+        state.variety.stats.cardIncome += hen;
+      }
+    }
     const allIncomes = [...extraIncomes, ...incomes];
     const incomeTotal = allIncomes.reduce((s, i) => s + i.amount, 0);
 
@@ -670,6 +870,10 @@ function wrap(state) {
     state.money += incomeTotal - charges;
     let neighbourDone = false;
     if (neighbourPayment > 0) neighbourDone = repay(state, neighbourPayment);
+    // (lot 3) Médailles des défis (produits vendus, animaux) : pièces versées pendant l'aube.
+    const lot3Medals = [];
+    if (state.variety) checkMedals({ ...vhost, push: (t, p) => lot3Medals.push([t, p]) });
+    inDawn = false;
 
     // 12. Événements.
     pushContestChanges(contestBefore);
@@ -683,11 +887,13 @@ function wrap(state) {
       sprinkled,
       net: incomeTotal - charges,
       milkToDairy: milk.milkToDairy,
+      ...(varietyWatered ? { varietyWatered } : {}),
     };
     state.lastDawn = JSON.parse(JSON.stringify(dawnInfo));
     push('weather', lot2 ? { today, tomorrow: state.weather.tomorrow, special: { ...state.surprises.sky } } : { today, tomorrow: state.weather.tomorrow });
     push('dawn', dawnInfo);
     if (lot2) for (const [type, payload] of lot2.events) push(type, payload);
+    if (lot3) for (const [type, payload] of [...lot3, ...lot3Medals]) push(type, payload);
     if (neighbourPayment > 0) {
       push('loanRepayment', { amount: neighbourPayment, remaining: state.neighbourLoan.debt, source: 'product' });
       if (neighbourDone) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: 'product' });
@@ -758,9 +964,17 @@ function wrap(state) {
     changeMoney(amount);
     const neighbourPart = repaymentFrom(state, level, amount);
     const giant = { anchor: g.anchor, plots: [...g.plots], cropId };
-    push('harvested', { plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
+    // (lot 3) Un géant compte pour 4 unités (commandes, puis charrette ; le reste est vendu normalement).
+    const preview = state.variety ? claimPreview(state, cropId) : null;
+    const cf = preview ? { claimed: { kind: preview.kind, id: preview.id, label: preview.label } } : {};
+    push('harvested', { plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...cf, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
     push('giantHarvested', { ...giant, cropName: getCrop(cropId).name, amount, by: 'player' });
     repayNeighbour(neighbourPart, 'harvest');
+    if (state.variety) {
+      if (preview) claimUnits(vhost, { cropId, units: g.plots.length, by: 'player', plotIndex });
+      noteHarvest(state, { cropId, amount, units: g.plots.length });
+      checkMedals(vhost);
+    }
     pushContestChanges(contestBefore);
     return { ok: true, amount, cropId, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) };
   }
@@ -775,16 +989,20 @@ function wrap(state) {
       if (p.cropId) return fail('Cette parcelle est déjà plantée.');
       if (p.forage) return fail('Cueillez d\'abord les champignons.');
       const crop = getCrop(cropId);
-      if (!crop || !crops.includes(crop)) return fail('Culture inconnue.');
+      // (lot 3) Graine rare (sachet du colporteur) ou semis offert : sans payer, une graine en moins.
+      const rare = !!crop && !!state.variety && isRareCrop(crop.id);
+      if (rare && freeSowKind(state, crop.id) !== 'rare') return fail('Plus de graines rares : le colporteur en vend.');
+      if (!crop || (!crops.includes(crop) && !rare)) return fail('Culture inconnue.');
       const sid = seasonId(state);
       if (!crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
-      const cost = seedCostOf(crop);
+      const freeSow = state.variety && !isTreeCrop(crop) ? freeSowKind(state, crop.id) : null;
+      const cost = freeSow ? 0 : seedCostOf(crop);
       if (state.money < cost) return fail(notEnoughMoney(cost - state.money));
       if (isTreeCrop(crop)) {
         setTree(state, p, crop.id);
       } else {
         // « Assurance gel » : assurée si elle a le temps de mûrir avant le gel (pas de semis malgré l'avertissement).
-        const insured = !!perkValue(state, 'frostRefund') && !freezes(crop, Math.ceil(crop.growDays / wateredRate(state, state.time.seasonIndex) - EPSILON));
+        const insured = !freeSow && !!perkValue(state, 'frostRefund') && !freezes(crop, Math.ceil(crop.growDays / wateredRate(state, state.time.seasonIndex) - EPSILON));
         p.cropId = crop.id;
         p.growth = 0;
         p.fatigued = wouldFatigue(level, p, crop.id);
@@ -795,8 +1013,13 @@ function wrap(state) {
       addStat(state, 'seedsSpent', cost);
       addStat(state, 'cropsPlanted', 1);
       changeMoney(-cost);
-      push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered });
-      return { ok: true, cost, fatigue: p.fatigued };
+      const sow = freeSow ? consumeSow(state, crop.id) : null;
+      push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, ...(sow || {}) });
+      if (state.variety && !isTreeCrop(crop)) {
+        noteVariety(state, 'sown', 1, crop.id);
+        checkMedals(vhost);
+      }
+      return sow ? { ok: true, cost, fatigue: p.fatigued, ...sow } : { ok: true, cost, fatigue: p.fatigued };
     }),
 
     water: act((plotIndex) => {
@@ -844,7 +1067,13 @@ function wrap(state) {
       const qualityBonus = q ? Math.round(raw * (q.multiplier - 1)) : 0;
       if (q) recordQuality(state, cropId, q.quality);
       const contestBefore = contestSnapshot(state, level);
-      const processed = tryProcessHarvest(state, cropId, raw, yf);
+      // (lot 3) Commande du tableau ou caisse de la charrette : la récolte y est comptée et vendue tout de suite (pas
+      // d'atelier) — sauf si un atelier allumé avec une place libre la transforme (l'atelier passe d'abord, § 16.2.4).
+      const preview = state.variety ? claimPreview(state, cropId) : null;
+      const workshopFirst = !!preview && !!targetFor(state, cropId) && hasRoom(state, targetFor(state, cropId).buildingId);
+      const claim = preview && !workshopFirst ? preview : null;
+      const wateredAll = state.variety && !tree ? careOf(state, p).wateredEveryDay : false;
+      const processed = claim ? null : tryProcessHarvest(state, cropId, raw, yf);
       const amount = (processed ? 0 : raw) + qualityBonus;
       if (tree) {
         p.fruit = 0;
@@ -859,11 +1088,17 @@ function wrap(state) {
       // Prêt du voisin : sa part de la vente (champ loanRepayment seulement quand il y en a une).
       const neighbourPart = repaymentFrom(state, level, amount);
       const qf = q ? { quality: q.quality, qualityBonus, qualityMultiplier: q.multiplier } : {};
-      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed, ...qf, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
+      const cf = claim ? { claimed: { kind: claim.kind, id: claim.id, label: claim.label } } : {};
+      push('harvested', { plotIndex, cropId, amount, fatigue, tree, processed, ...qf, ...cf, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) });
       if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
       repayNeighbour(neighbourPart, 'harvest');
+      if (state.variety) {
+        if (claim) claimUnits(vhost, { cropId, units: 1, by: 'player', plotIndex });
+        noteHarvest(state, { cropId, amount, quality: q ? q.quality : 'normal', care: wateredAll, tree });
+        checkMedals(vhost);
+      }
       pushContestChanges(contestBefore);
-      return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, ...qf, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed, ...qf };
+      return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, ...qf, ...cf, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed, ...qf, ...cf };
     }),
 
     removeTree: act((plotIndex) => {
@@ -886,6 +1121,8 @@ function wrap(state) {
       const cost = plotUnlockCost(state, level);
       if (cost === null) return fail('Le champ ne peut plus s\'agrandir.');
       if (state.money < cost) return fail(notEnoughMoney(cost - state.money));
+      // (lot 3) « Coup de main au défrichage » : la parcelle était gratuite (une fois).
+      if (state.variety?.cards?.pending?.freePlot) state.variety.cards.pending.freePlot = false;
       p.unlocked = true;
       state.plotsBought += 1;
       addStat(state, 'plotsSpent', cost);
@@ -982,6 +1219,29 @@ function wrap(state) {
       if (surprise.kind === 'ring') push('forage', { kind: 'ring', plots: [surprise.plotIndex], text: surprise.text });
       return { ok: true, surprise };
     }),
+
+    // ── (lot 3) Variété : tableau, charrette, cadeau, défis, colporteur (les deux modes) ──
+    /** Garde (punaise) ou libère une commande du tableau. → { ok, order } */
+    keepOrder: act(varietyAction((host, orderId, keep = true) => keepOrder(host, orderId, keep))),
+    /** « Pas pour moi » : la commande part, sans pénalité (prime des unités déjà données). → { ok, premium } */
+    declineOrder: act(varietyAction((host, orderId) => declineOrder(host, orderId))),
+    /** « Autres demandes » : une fois par jour, remplace les commandes non gardées et pas commencées. → { ok, replaced } */
+    rerollOrders: act(varietyAction((host) => rerollOrders(host))),
+    /** Carrière : livre une commande depuis le grenier. → { ok, delivered, done, amount, premium? } */
+    deliverOrder: act(varietyAction((host, orderId) => (rt ? careerDeliverOrder(host, orderId) : fail('Les commandes se remplissent quand vous récoltez.')))),
+    /** Carrière : charge une caisse de la charrette depuis le grenier. → { ok, loaded, full, amount } */
+    loadCart: act(varietyAction((host, crateIndex) => (rt ? careerLoadCart(host, crateIndex) : fail('Les caisses se remplissent quand vous récoltez.')))),
+    /** Cadeau de la saison : garde une des deux cartes. → { ok, card, amount?, gift? } */
+    pickCard: act(varietyAction((host, cardId) => pickCard(host, cardId))),
+    /** Défis de la saison : garde (2 au plus) ou libère un défi. → { ok, kept } */
+    keepChallenge: act(varietyAction((host, challengeId, keep = true) => keepChallenge(host, challengeId, keep))),
+    /** Basile le colporteur : achète un objet de l'étal. → { ok, item, cost, cosmeticId?, ecusIfOwned?, heirloom? } */
+    buyFromMerchant: act(varietyAction((host, itemId, arg) => buyFromMerchant(host, itemId, arg))),
+    /**
+     * Débogage et tests : 'cart' (nouvelle charrette), 'merchant' (Basile arrive tout de suite), 'cards' (deux cartes),
+     * 'challenges' (défis tirés à nouveau), 'board' (tableau rempli), 'theme' (carrière : thème `arg` tout de suite).
+     */
+    triggerVariety: act(varietyAction((host, kind, arg) => triggerVariety(host, kind, arg))),
 
     setSpeed: act((speed) => {
       if (!SPEEDS.includes(speed)) return fail('Vitesse invalide.');
@@ -1149,6 +1409,8 @@ function wrap(state) {
         processTarget: crop ? processTargetOf(crop.id, yieldFactor(state, level, p)) : null,
       };
       if (state.surprises) Object.assign(out, plotSurpriseInfo(state, plotIndex, p.giant !== undefined ? giantValueOf(p.giant) : null));
+      // (lot 3) Où partirait une récolte à la main de cette parcelle (« → Lili (3 / 5) »).
+      if (state.variety) out.claim = varietyClaimOf(p);
       return rt ? Object.assign(out, rt.plotExtras(plotIndex)) : out;
     },
 
@@ -1217,8 +1479,10 @@ function wrap(state) {
             tree: treeData,
             noWater: !tree && !needsWaterToday(c, 'sunny', level),
             sowAll: !tree,
+            ...(state.variety ? varietyPlantFields(c) : {}),
           };
-        });
+        })
+        .concat(state.variety ? rarePlantableRows(plot, rate) : []);
     },
 
     investments() {
@@ -1314,6 +1578,7 @@ function wrap(state) {
 
     forecast() {
       const f = { today: state.weather.today, tomorrow: state.weather.tomorrow, afterTomorrow: afterTomorrow() };
+      if (state.variety && f.afterTomorrow === null && hasVarietyAlmanac(state)) f.afterTomorrow = afterTomorrow(true);
       if (state.surprises) f.special = specialNow();
       return f;
     },
@@ -1338,7 +1603,7 @@ function wrap(state) {
         dailyIncome,
         dailyCharges: charges,
         net: dailyIncome - charges,
-        nextBill: { amount: rentFor(level, si, state), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si] },
+        nextBill: { amount: rentFor(level, si, state), daysLeft: daysLeftInSeason(state, level), seasonId: SEASONS[si], ...(billReduced() ? { reduced: true } : {}) },
         loan: loan && !career
           ? {
               payment: loan.payment,
@@ -1375,6 +1640,26 @@ function wrap(state) {
       return buildSummary(state, seasonId(state));
     },
 
+    // ── (lot 3) Variété : null quand elle est désactivée (Classique). Voir docs/ARCHITECTURE.md, « Lot 3 — contrats ». ──
+    variety() {
+      return state.variety ? varietyQuery(varietyHost()) : null;
+    },
+    orders() {
+      return state.variety ? ordersQuery(varietyHost()) : null;
+    },
+    cart() {
+      return state.variety?.parts.cart ? cartInfo(varietyHost()) : null;
+    },
+    cards() {
+      return state.variety ? cardsQuery(varietyHost()) : null;
+    },
+    challenges() {
+      return state.variety ? challengesQuery(varietyHost()) : null;
+    },
+    merchant() {
+      return state.variety ? merchantQuery(varietyHost()) : null;
+    },
+
     /** Contexte des succès (src/core/progression.js : checkAchievements). */
     achievementContext() {
       if (rt) {
@@ -1392,6 +1677,7 @@ function wrap(state) {
           adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
           dailyCharges: rt.chargesInfo().dailyTotal,
           career: rt.achievementContext(),
+          ...(state.variety ? { variety: varietyAchievements() } : {}),
         };
       }
       return {
@@ -1407,9 +1693,74 @@ function wrap(state) {
         availableInvestments: levelInvestments(level).map((i) => i.id),
         adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
         dailyCharges: dailyCharges(state, level),
+        ...(state.variety ? { variety: varietyAchievements() } : {}),
       };
     },
   };
+
+  // ── (lot 3) Aides des requêtes ──
+  function varietyAchievements() {
+    const st = state.variety.stats;
+    return { ordersDone: st.ordersDone, cartsFull: st.cartsFull, medals: { ...st.medals }, rareHarvested: { ...st.rareHarvested } };
+  }
+
+  /** Claim d'une parcelle (l'atelier allumé avec une place libre passe d'abord). */
+  function varietyClaimOf(p) {
+    if (!p.cropId) return null;
+    const c = plotClaim(state, p);
+    if (!c) return null;
+    const t = targetFor(state, p.cropId);
+    if (t && hasRoom(state, t.buildingId)) return null;
+    return c;
+  }
+
+  /** Champs du lot 3 d'une ligne de query.plantableCrops : semis offerts, culture demandée. */
+  function varietyPlantFields(c) {
+    const out = {};
+    const free = state.variety.freeSows[c.id] || 0;
+    if (free > 0 && !isTreeCrop(c)) {
+      out.free = free;
+      out.canAfford = true;
+    }
+    if (requestedCrops(state).has(c.id)) out.requested = true;
+    return out;
+  }
+
+  /** Lignes des graines rares possédées (coût 0, « Rare · 4 graines »). */
+  function rarePlantableRows(plot, rate) {
+    if (career && plot && plot.env === 'orchard') return [];
+    return rarePlantRows(state, { rate, plot, freezes: (crop, d) => !(plot && frostFree(plot)) && freezes(crop, d) }).map(({ crop, seeds, daysToMature, willFreeze }) => {
+      const sellPrice = Math.round(rawUnitPrice(state, level, crop));
+      return {
+        id: crop.id,
+        name: crop.name,
+        seedCost: 0,
+        basePrice: crop.sellPrice,
+        marketMultiplier: marketMultiplier(state, crop.id),
+        sellPrice,
+        profit: sellPrice,
+        growDays: crop.growDays,
+        daysToMature,
+        frostHardy: crop.frostHardy,
+        fatigue: plot ? wouldFatigue(level, plot, crop.id) : false,
+        willFreeze,
+        canAfford: true,
+        kind: 'crop',
+        product: null,
+        tree: null,
+        noWater: !needsWaterToday(crop, 'sunny', level),
+        sowAll: true,
+        rare: true,
+        seedsLeft: seeds,
+      };
+    });
+  }
+
+  function billReduced() {
+    if (!state.variety) return false;
+    const p = state.variety.cards.pending;
+    return career ? p.chargeFactor !== 1 : p.rentFactor !== 1;
+  }
 
   /**
    * Prêt du voisin pour l'interface (null en mode classique) :
@@ -1441,11 +1792,12 @@ function wrap(state) {
   }
 
   /** Météo d'après-demain (« Almanach ») : lue sur une COPIE du flux météo, sans rien consommer. */
-  function afterTomorrow() {
-    if (!perkValue(state, 'forecastDays')) return null;
+  function afterTomorrow(variety = false) {
+    if (!variety && !perkValue(state, 'forecastDays')) return null;
     const total = yearLength(level);
     const target = state.time.day + 2;
-    if (target > total) return null;
+    if (target > total && !career) return null;
+    if (career) return careerAfterTomorrow();
     // L'aube de demain tirera la météo d'après-demain avec la saison du jour target.
     let acc = 0;
     let si = 0;
@@ -1453,6 +1805,16 @@ function wrap(state) {
       acc += level.seasonLengths[si];
       if (target <= acc) break;
     }
+    const copy = { weather: state.rng.weather };
+    return stream(copy, 'weather').weighted(level.weather[SEASONS[si]]);
+  }
+
+  /** (lot 3) Carrière : météo d'après-demain (almanach), lue sur une copie du flux météo. */
+  function careerAfterTomorrow() {
+    const L = state.career.seasonLength;
+    // Saison du jour target = aujourd'hui + 2 (les années s'enchaînent).
+    const dayOfYear = state.time.day + 2;
+    const si = Math.floor(((dayOfYear - 1) % (4 * L)) / L);
     const copy = { weather: state.rng.weather };
     return stream(copy, 'weather').weighted(level.weather[SEASONS[si]]);
   }
@@ -1475,6 +1837,12 @@ function wrap(state) {
     });
     actions.career = Object.fromEntries(Object.entries(rt.careerActions).map(([name, fn]) => [name, act(fn)]));
     query.career = rt.careerQueries;
+  }
+
+  // (lot 3) Nouvelle partie : 1re saison de la variété (tableau, charrette, défis, colporteur programmé).
+  if (fresh && state.variety && !state.variety.season) {
+    varietyStart(varietyHost());
+    queue.length = 0; // personne n'écoute encore : rien à annoncer
   }
 
   return {

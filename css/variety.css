@@ -1,0 +1,240 @@
+/* Lot 3 « Variété » : feuilles du tableau du village, de la charrette du marché, de Basile le colporteur, du cadeau
+   et des défis de la saison ; pages de la fenêtre de fin de saison ; sections du Bilan et du Carnet ; badges des
+   graines rares. Téléphone d'abord : cibles ≥ 48 px, textes ≥ 14 px (0,875 rem), portraits 48 px.
+   (Ajoutée à CSS_FILES de tools/build.js, donc au paquet et à dev.html.) */
+
+/* ─── Communs ─── */
+.sprite--portrait { --sk: 1.5; }
+@media (min-width: 2300px) and (min-height: 1250px) { .sprite--portrait { --sk: 2; } }
+.v-lead { margin: 0 0 10px; font-size: 0.9375rem; line-height: 1.35; color: var(--text-soft); }
+.v-name { font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+.v-say { margin: 0; font-size: 0.9375rem; font-style: italic; line-height: 1.3; color: var(--text); }
+.v-note { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.875rem; color: var(--warn); }
+.v-portrait {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 52px;
+  height: 52px;
+  background: var(--parch);
+  box-shadow: 0 0 0 var(--u) var(--wood-light), inset 0 calc(var(--u) * -2) 0 var(--parch-3);
+}
+.v-portrait .ico--fallback { transform: scale(1.4); }
+.v-check {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--green-dark);
+  box-shadow: 0 0 0 var(--u) var(--outline);
+  text-shadow: var(--text-outline);
+}
+
+/* Barre de progression */
+.v-bar {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 3rem;
+  height: calc(var(--u) * 5);
+  background: var(--parch-3);
+  box-shadow: 0 0 0 var(--u) var(--wood-dark);
+  overflow: hidden;
+}
+.v-bar-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(var(--green), var(--green-dark)); transition: width var(--t-med) var(--ease-out); }
+.v-bar.is-full .v-bar-fill { background: linear-gradient(var(--gold), var(--gold-2)); }
+
+/* ─── Tableau du village ─── */
+.v-orders { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.v-order {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 96px;
+  padding: 8px 8px 8px;
+  background: #fff8e8;
+  box-shadow: 0 0 0 var(--u) var(--parch-3), 0 calc(var(--u) * 2) 0 var(--u) rgba(63, 38, 49, 0.18);
+  position: relative;
+}
+.v-order::before {
+  /* punaise (rouge si la commande est gardée) */
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  background: var(--parch-3);
+  box-shadow: 0 0 0 var(--u) var(--outline);
+}
+.v-order.is-kept { background: #fff3dc; box-shadow: 0 0 0 var(--u) #e8b04d, 0 calc(var(--u) * 2) 0 var(--u) rgba(63, 38, 49, 0.18); }
+.v-order.is-kept::before { background: #e2443b; }
+.v-order.is-done { background: #ecf7e2; box-shadow: 0 0 0 var(--u) #a9d38c; }
+.v-order.is-done::before { background: var(--green-dark); }
+.v-order.is-empty { align-items: center; justify-content: center; background: transparent; box-shadow: 0 0 0 var(--u) var(--parch-3); border: var(--u) dashed var(--parch-3); }
+.v-order.is-empty::before { display: none; }
+.v-empty-text { margin: 0; font-size: 0.9375rem; color: var(--text-soft); text-align: center; }
+.v-order-head { display: flex; align-items: center; gap: 10px; }
+.v-who { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; line-height: 1.15; }
+.v-title { font-size: 0.875rem; color: var(--text-soft); }
+.v-premium { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; font-size: 1.125rem; color: var(--green-text); background: #e8f6dc; box-shadow: 0 0 0 var(--u) #a9d38c; white-space: nowrap; }
+.v-lines { display: flex; flex-direction: column; gap: 4px; }
+.v-line { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 0.9375rem; flex-wrap: wrap; }
+.v-line-ico { display: grid; place-items: center; width: 24px; }
+.v-line-text { white-space: nowrap; }
+.v-line .v-bar { flex: 1 1 4rem; }
+.v-line.is-done .v-line-text { color: var(--green-text); }
+.v-stock { flex-basis: 100%; padding-left: 32px; font-size: 0.875rem; color: var(--text-soft); }
+.v-order-actions { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.v-order-actions .v-deliver { flex: 1 1 100%; order: -1; white-space: normal; }
+.v-keep { flex: 1 1 auto; gap: 6px; }
+.v-keep .v-pin { width: 10px; height: 10px; background: var(--parch-3); box-shadow: 0 0 0 var(--u) var(--outline); }
+.v-keep.is-on { border-image-source: var(--img-btn-red); }
+.v-keep.is-on .v-pin { background: #ffd2c8; }
+.v-x { flex: none; width: 48px; padding: 0; }
+.v-reroll { gap: 8px; }
+.v-reroll-ico { font-size: 1.375rem; line-height: 1; }
+
+/* ─── Charrette ─── */
+.v-crates { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.v-crate { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 4px 8px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.v-crate.is-full { background: #fff3c9; box-shadow: 0 0 0 var(--u) #e8c25d; }
+.v-crate-ico { display: grid; place-items: center; width: 36px; flex: none; }
+.v-crate-main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; font-size: 0.9375rem; }
+.v-crate-prog { display: flex; align-items: center; gap: 8px; }
+.v-crate-num { font-weight: 700; white-space: nowrap; font-size: 0.9375rem; }
+.v-load { flex: none; }
+.v-cart-pay { display: flex; flex-direction: column; gap: 4px; padding: 8px; font-size: 0.9375rem; background: #fff8e8; box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.v-cart-pay > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.v-cart-pay b { color: var(--green-text); }
+
+/* ─── Colporteur ─── */
+.v-merchant-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.v-merchant-head > div { display: flex; flex-direction: column; gap: 2px; }
+.v-stall { display: flex; flex-direction: column; gap: 8px; }
+.v-item { display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 6px 8px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.v-item.is-sold { opacity: 0.7; filter: grayscale(0.5); }
+.v-item.is-off .v-item-main small:last-child { color: var(--text-soft); }
+.v-item-ico { display: grid; place-items: center; width: 40px; flex: none; }
+.v-item-main { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-width: 0; line-height: 1.2; }
+.v-item-main b { font-size: 1rem; }
+.v-item-main small { font-size: 0.875rem; color: var(--text-soft); }
+.v-unique { color: #8a4b08 !important; font-weight: 700; }
+.v-buy { flex: none; min-width: 84px; gap: 4px; }
+.v-sold { flex: none; padding: 6px 10px; font-weight: 700; color: var(--green-text); background: #e8f6dc; box-shadow: 0 0 0 var(--u) #a9d38c; transform: rotate(-4deg); }
+
+/* ─── Cadeau de la saison (cartes) ─── */
+.v-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 4px 0 12px; }
+@media (max-width: 359px) { .v-cards { grid-template-columns: 1fr; } }
+.v-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 160px;
+  padding: 12px 8px 10px;
+  border-style: solid;
+  border-width: calc(var(--u) * 4);
+  border-image: var(--img-parch-ornate) 8 fill / calc(var(--u) * 6) stretch;
+  background: none;
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  image-rendering: pixelated;
+  transition: transform var(--t-med) var(--ease-pop), filter var(--t-fast), opacity var(--t-med);
+}
+.v-card:active { transform: translateY(var(--u)) scale(0.98); }
+.v-card:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.v-card-ico { display: grid; place-items: center; min-height: 52px; }
+.v-card-name { font-size: 1.0625rem; line-height: 1.15; }
+.v-card-text { font-size: 0.9375rem; line-height: 1.25; }
+.v-card-kind { margin-top: auto; font-size: 0.875rem; color: var(--text-soft); }
+.v-cards.has-picked .v-card:not(.is-picked) { opacity: 0.35; filter: grayscale(0.7); transform: scale(0.94); }
+.v-card.is-picked { animation: v-card-pick 600ms var(--ease-pop) both; filter: drop-shadow(0 0 6px rgba(253, 220, 0, 0.9)); }
+@keyframes v-card-pick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.08) rotate(-2deg); }
+  100% { transform: scale(1.03); }
+}
+.reduced-motion .v-card.is-picked { animation: none !important; }
+.v-effects { display: flex; flex-direction: column; gap: 6px; }
+.v-effect { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 0.9375rem; flex-wrap: wrap; }
+.v-effect small { margin-left: auto; color: var(--text-soft); font-size: 0.875rem; }
+
+/* ─── Défis ─── */
+.v-challenges { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.v-challenge { display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 8px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
+.v-challenge.is-kept { background: #fff3dc; box-shadow: 0 0 0 var(--u) #e8b04d; }
+.v-ch-ico { display: grid; place-items: center; width: 40px; flex: none; align-self: flex-start; padding-top: 2px; }
+.v-ch-main { display: flex; flex-direction: column; gap: 4px; flex: 1 1 auto; min-width: 0; line-height: 1.2; }
+.v-ch-main > b { font-size: 1rem; }
+.v-ch-main > small { font-size: 0.875rem; color: var(--text-soft); }
+.v-ch-prog { display: flex; align-items: center; gap: 8px; }
+.v-ch-num { font-weight: 700; font-size: 0.9375rem; white-space: nowrap; }
+.v-medals { display: flex; gap: 10px; }
+.v-medals.is-inline { display: inline-flex; gap: 2px; vertical-align: middle; }
+.v-medal-slot { display: inline-flex; align-items: center; gap: 3px; font-size: 0.875rem; color: var(--text-soft); }
+.v-medal-slot small { font-size: 0.875rem; }
+.v-ch-keep { flex: none; min-width: 92px; align-self: center; }
+.v-ch-keep.is-on { border-image-source: var(--img-btn-red); }
+
+/* Médaille (repli dessiné quand le sprite medal.* manque) */
+.v-medal { display: inline-grid; place-items: center; width: 18px; height: 18px; line-height: 0; }
+.v-medal:not(.has-sprite)::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: var(--u) dashed var(--wood-light);
+  background: transparent;
+}
+.v-medal.is-got:not(.has-sprite)::before { border-style: solid; border-color: var(--outline); }
+.v-medal.is-bronze.is-got:not(.has-sprite)::before { background: #d08a4b; }
+.v-medal.is-silver.is-got:not(.has-sprite)::before { background: #d6dee6; }
+.v-medal.is-gold.is-got:not(.has-sprite)::before { background: var(--gold); }
+.v-medal.is-xs { width: 14px; height: 14px; }
+.v-medal.is-xs::before { width: 9px !important; height: 9px !important; }
+.v-medal:not(.is-got).has-sprite { opacity: 0.7; }
+
+/* ─── Thème de l'année (carrière) ─── */
+.v-theme { display: flex; flex-direction: column; gap: 6px; font-size: 0.9375rem; }
+.v-theme-head { display: flex; align-items: center; gap: 10px; }
+.v-theme-head > div { display: flex; flex-direction: column; line-height: 1.2; }
+.v-theme-head small { font-size: 0.875rem; color: var(--text-soft); }
+.v-theme-line { display: flex; align-items: center; gap: 8px; line-height: 1.25; }
+.v-dot { width: 6px; height: 6px; flex: none; background: var(--wood); box-shadow: 0 0 0 var(--px1) var(--outline); }
+.v-theme-next { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-weight: 700; color: #8a4b08; }
+.v-theme-next.is-big { font-size: 1.0625rem; justify-content: center; }
+
+/* ─── Fin de saison ─── */
+.v-season-sum { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; padding-top: 6px; border-top: var(--u) dashed var(--parch-3); }
+.v-sum-line { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; flex-wrap: wrap; }
+.v-sum-medals { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.9375rem; }
+.v-sum-medal { display: inline-flex; align-items: center; gap: 3px; }
+.v-sum-medal small { font-size: 0.875rem; }
+.dialog--variety .dialog-body { max-width: 34rem; }
+.v-page { display: flex; flex-direction: column; gap: 6px; }
+
+/* ─── Sections du Bilan / du Carnet ─── */
+.v-village { display: flex; flex-direction: column; }
+.v-sec .stats-title { display: flex; align-items: center; gap: 6px; }
+.v-sec.is-pending { background: #fff3dc; box-shadow: 0 0 0 var(--u) #e8b04d; padding: 6px 8px; }
+.v-open { margin-top: 6px; justify-content: space-between; text-align: left; }
+.v-chev { font-size: 1.375rem; line-height: 1; }
+.v-cal { display: flex; align-items: center; gap: 6px; }
+.v-sec .stats-label { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ─── Graines, parcelles ─── */
+.warn-chip.v-chip-rare { background: #f1e3ff; box-shadow: 0 0 0 var(--u) #c8a7ea; color: #5b2f86; font-weight: 700; }
+.warn-chip.v-chip-free { background: #e8f6dc; box-shadow: 0 0 0 var(--u) #a9d38c; color: var(--green-text); font-weight: 700; }
+.warn-chip.v-chip-order { background: #fff3dc; box-shadow: 0 0 0 var(--u) #e8b04d; color: #8a4b08; font-weight: 700; }
+.tip-note.v-claim { color: #8a4b08; font-weight: 700; }
+
+/* ─── Barre du haut : fermage réduit ─── */
+.bill-cut { margin-left: 3px; padding: 0 3px; font-size: 0.75rem; font-weight: 700; color: var(--green-text); background: #e8f6dc; box-shadow: 0 0 0 var(--px1) #a9d38c; }
+.bill-cut[hidden] { display: none; }
