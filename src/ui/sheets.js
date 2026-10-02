@@ -200,7 +200,11 @@ export function createSheets(layer, app) {
     document.body.dataset.sheet = opts.id;
     if (!replacing) app.audio.play('open', { volume: 0.7 });
     box.style.transform = '';
+    const opened = current;
     requestAnimationFrame(() => {
+      // Fermée (ou remplacée) entre-temps, par exemple par une fenêtre « Nouveau rang ! » : ne pas
+      // réafficher une feuille vide (bug [42] de l'analyse).
+      if (current !== opened) return;
       box.classList.add('is-visible');
       publishHeight();
     });

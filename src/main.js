@@ -63,6 +63,7 @@ import { careerMenuButtons, openNewFarm } from './ui/career/menu.js';
 import { createMessages } from './ui/messages.js';
 import { createTodo } from './ui/todo.js';
 import { openGuide } from './ui/guide.js';
+import { speedCycle } from './ui/a11y.js';
 
 const params = new URLSearchParams(location.search);
 const DEBUG = params.has('debug');
@@ -501,6 +502,7 @@ app.revealPlot = (index) => {
 function report(res) {
   if (res && !res.ok) {
     audio.play('error');
+    app.vibrate([30, 40, 30]); // motif « erreur », distinct du petit toucher (accessibilité)
     app.toasts.show({ kind: 'error', text: res.reason, log: false });
   }
   return res;
@@ -1113,6 +1115,7 @@ function reactMessages(ev, game) {
       break;
     }
     case 'seasonWarning': {
+      app.vibrate([15, 80, 15, 80, 15]); // motif « alerte » : la saison (et le fermage) arrive
       // Cultures fragiles qui seront encore au champ au premier matin d'hiver (mûres ou non).
       const freezing = ev.frost ? game.query.plots().filter((p) => p.cropId && !frostHardy(p.cropId) && (p.willFreeze || p.mature)).length : 0;
       app.toasts.banner({
@@ -1478,7 +1481,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.applyCosmetics();
   if (typeof app.scene?.focusField === 'function') app.scene.focusField();
 
-  if (!resumed) game.actions.setSpeed(1);
+  // Nouvelle partie : ×1, ou ×½ avec l'option « Vitesse lente » (src/ui/a11y.js : speedCycle).
+  if (!resumed) game.actions.setSpeed(speedCycle(settings)[0] || 1);
   else if (game.state.speed > 0) lastPlaySpeed = game.state.speed;
 
   const c = game.query.calendar();
@@ -1762,6 +1766,8 @@ function createAttractGame() {
       const g = loadCareer(saved.state);
       if (g.state.status === 'playing') {
         g.actions.setSpeed(1);
+        // Ferme de fond du menu : jamais de « pause chaque matin » (rien n'est enregistré).
+        if (typeof g.setOption === 'function' && g.options?.().autoPauseDawn) g.setOption('autoPauseDawn', false);
         g.__attract = true;
         return g;
       }

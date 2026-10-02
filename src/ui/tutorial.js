@@ -17,6 +17,13 @@ import { waterEffect } from './text.js';
 
 const NAME = 'Joseph, votre voisin';
 
+/** Où se trouve le bouton de vitesse (options « Vitesse et pause en bas » et « gaucher », src/ui/a11y.js). */
+function speedWhere() {
+  const root = document.documentElement.classList;
+  const docked = !!document.querySelector('#tabbar #hud-speed');
+  return `${docked ? 'en bas' : 'en haut'} à ${root.contains('left-handed') ? 'gauche' : 'droite'}`;
+}
+
 export function createTutorial(layer, app) {
   let game = null;
   let index = -1;
@@ -98,12 +105,12 @@ export function createTutorial(layer, app) {
     },
     {
       id: 'speed',
-      hint: () => `${tap()} le bouton de vitesse (en haut à droite).`,
+      hint: () => `${tap()} le bouton de vitesse (${speedWhere()}).`,
       title: 'Le temps passe',
       text: () =>
         app.isTouch
-          ? 'Une journée dure 20 secondes. Touchez le bouton de vitesse en haut à droite pour passer à ×2, puis ×4, puis pause. Appui long : pause.'
-          : 'Une journée dure 20 secondes. Cliquez sur le bouton de vitesse en haut à droite (×2, ×4, pause), ou touches 1, 2, 3 et Espace.',
+          ? `À ×1, une journée dure 20 secondes. Touchez le bouton de vitesse ${speedWhere()} pour passer à ×2, puis ×4, puis pause. Appui long : pause.`
+          : `À ×1, une journée dure 20 secondes. Cliquez sur le bouton de vitesse ${speedWhere()} (×2, ×4, pause), ou touches 1, 2, 3 et Espace.`,
       target: () => ({ type: 'ui', selector: '#hud-speed' }),
       advanceSpeed: (s) => s >= 2,
       advance: (ev) => ev.type === 'dawn',
