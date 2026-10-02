@@ -2045,3 +2045,410 @@ src/ui/todo.js         morningNote(text) : ligne en tête du prochain résumé d
   disent le gain réel (déjà possédé → « +5 écus à la place ») ; résumé du matin : gain de la surprise.
 - **Mesures** (Pixel 7 émulé) : glissé de 12–24 parcelles à 60 i/s (médiane 16,7 ms, 95e centile 16,8 ms), aucune
   erreur de console ; carrière : glissé, surprises et 10 jours sans erreur.
+
+## Lot 3 — contrats (CORE · ART · UI/RENDER, conception 2026-10-02)
+
+Tableau du village (C1), cadeau de fin de saison (C2), charrette du marché (C3), défis de saison (C4), années à thème
+de la carrière (C5), jour du colporteur et graines rares (C7). Règles chiffrées : `docs/GAME_DESIGN.md` § 16. Ce qui
+suit fixe les **noms, formes et comportements** que les trois paquets se promettent ; tout est **ajouté** (rien du
+contrat existant n'est retiré ni renommé). Tant que CORE n'a pas livré, UI/RENDER simulent les requêtes avec des objets
+factices de la même forme ; tant qu'ART n'a pas livré, RENDER/UI dessinent un repli (`canDraw`, comme au lot 2).
+
+### Règles communes
+
+- **Parité Classique** : `createGame` en Classique sans option `variety` ne crée **ni** `state.variety` (clé absente,
+  pas `null`), **ni** flux aléatoire, **ni** événement, **ni** champ de requête nouveau (`plantableCrops`, `plot`,
+  `forecast`, `summary` identiques) : `tests/parity.test.js` et `tools/capture-parity.js` inchangés et verts. Toute règle
+  du lot est gardée par `state.variety` (et par `state.variety.parts.<partie>`).
+- **Aléatoire** : deux flux **nouveaux**, créés seulement quand la variété est active : `state.rng.orders`
+  (`hashSeed(seed, 'orders')` : commandes du tableau et relances) et `state.rng.variety` (`hashSeed(seed, 'variety')` :
+  charrette, cartes, défis, étal du colporteur, thèmes, averses de l'année des grenouilles). Météo, marché, maladie,
+  `career`, `staff`, `events`, `quality`, `surprise`, `sky` tirent **le même nombre** de nombres qu'avant à chaque étape
+  (les seuils de certains tirages changent avec un thème ou une carte, jamais le nombre de tirages).
+- **Pur** : `src/data/variety.js`, `src/data/career/themes.js`, `src/core/requests.js`, `src/core/variety.js`,
+  `src/core/career/{variety,themes}.js` n'importent ni DOM ni horloge.
+- **Jour absolu** : `absDay(state)` de `src/core/surprises.js` (niveaux : `time.day` ; carrière : `(année − 1) × 4 ×
+  durée + jour`). **Saison absolue** : `seasonAbs(state)` = `(année − 1) × 4 + seasonIndex` (niveaux : `seasonIndex`).
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (texte français). Textes des données en français.
+
+### Fichiers
+
+```
+src/data/variety.js          (nouveau, pur) VARIETY_VERSION, VARIETY_PARTS, BOARD, ORDER_RATES, ORDER_SIZES, ORDER_TWO_LINES,
+                             FEASIBLE_WEIGHTS, CLIENTS (12), CART, CARDS (16), CHALLENGES (12), MEDALS, MERCHANT,
+                             MERCHANT_ITEMS, VARIETY_HINTS, textes
+src/data/career/themes.js    (nouveau, pur) THEME_RULES, THEMES (9) : vedette, effets, fête, visiteur, rang, textes
+src/data/crops.js            + RARE_CROPS (pea, melon, leek ; champ rare: true), isRareCrop(id) ; getCrop(id) les trouve aussi.
+                             ⚠ CROPS, BASE_CROPS et l'ordre des cultures NE CHANGENT PAS (le marché de carrière, les
+                             trouvailles et « Herbier complet » parcourent CROPS : y ajouter une culture changerait leurs tirages)
+src/data/cosmetics.js        + 'lantern.peddler', 'weathervane.rooster', 'sign.magazine' (category 'small', price 0, found: true)
+src/core/requests.js         (nouveau, partagé niveaux / carrière) générateur « faisable cette saison », tableau, charrette,
+                             récoltes comptées, livraison depuis le grenier
+src/core/variety.js          (nouveau, partagé) état, activation, migration, vérification ; étapes de l'aube et du soir ;
+                             cartes, défis, colporteur, graines rares ; effets (varietyEffect) ; requêtes
+src/core/career/variety.js   (nouveau) extension de carrière id 'variety' (points d'accroche, fournisseurs, actions de grenier)
+src/core/career/themes.js    (nouveau) années à thème : tirage, effets (themeFactor), fête, visiteur
+src/core/career/extensions.js  + import './variety.js';
+tests/requests.test.js, tests/variety.test.js, tests/variety-career.test.js, tests/variety-migration.test.js  (nouveaux)
+assets/sprites/generate-lot3.py → assets/sprites/lot3.png + bloc « // <lot3:auto> » d'atlas.js  (ART)
+src/ui/variety.js, css/variety.css  (UI ; css/variety.css ajoutée à CSS_FILES de tools/build.js)
+src/render/variety-actors.js  (RENDER : charrette, roulotte, colporteur, visiteur du thème, poule voyageuse)
+```
+
+### Activation et options
+
+```js
+createGame({ levelId, seed, perks, difficulty, surprises, variety })
+//   variety : undefined → activée si difficulty !== 'classique' (clé ABSENTE en Classique)
+//             true → toutes les parties ; false → state.variety = null (gardé tel quel à la reprise)
+//             { board, cards, cart, challenges, merchant } → seulement les parties à true (absentes = true)
+createCareer({ …, surprises, variety })   // défaut true ; même forme ; partie en plus : themes
+game.variety            // booléen (accesseur, comme game.surprises)
+```
+
+`VARIETY_PARTS = ['board', 'cards', 'cart', 'challenges', 'merchant', 'themes']` (`themes` : carrière seulement).
+
+### État (`state.variety`, `null` ou absent quand c'est désactivé)
+
+```js
+state.variety = {
+  v: 1,
+  parts: { board: true, cards: true, cart: true, challenges: true, merchant: true, themes: true },
+  nextId: 1,                                   // identifiants 'o7' (commandes), 'c3' (charrettes)
+  board: {
+    slots: [order | null, order | null, order | null],
+    startDay: 1,                               // jour absolu du premier remplissage (niveau 1 : 5)
+    rerollDay: 0,                              // jour absolu de la dernière relance (une par jour)
+    yesterday: [cropId],                       // cultures demandées hier (poids × 0,5)
+  },
+  // order = { id, clientId, day /* jour absolu d'affichage */, lines: [{ cropId, n, got }], rate /* 1.2..1.6 */,
+  //           kept: false, base: 0 /* Σ valeur de base des unités comptées */, fromStock: 0 }
+  cart: null | { id, season /* saison absolue */, crates: [{ cropId, n, got }], base: 0, departDay, horse: false },
+  cards: {
+    offer: null | { season /* saison où l'effet s'applique */, options: [cardId, cardId] },
+    active: [{ id, season, until /* jour absolu inclus */, data? }],   // cartes « saison » en cours ou à venir
+    last: null | [cardId, cardId],
+    pending: { freePlot: false, clearingHalf: false, rentFactor: 1, chargeFactor: 1, cartFactor: 1 },   // cartes « prochaine fois »
+  },
+  challenges: {
+    season: null | seasonAbs,                  // saison des défis proposés
+    options: [challengeId × 3], kept: [challengeId],   // 2 au plus
+    targets: { [challengeId]: [bronze, silver, gold] },
+    medals: { [challengeId]: 0 | 1 | 2 | 3 },
+    next: null | { season, options, targets }, // défis proposés le soir pour la saison suivante
+    last: null | [challengeId × 3],
+  },
+  season: { abs, harvests: 0, sales: 0, harvested: {}, sown: {}, care: 0, quality: 0, orders: 0, crates: 0,
+            products: 0, apples: 0, animals: 0, collect: 0 },   // compteurs de la saison en cours (défis)
+  merchant: null | { season, soonDay, arriveDay, leaveDay, announced: false, stall: [{ itemId, price, sold: false, data? }] },
+  rare: { pea: 0, melon: 0, leek: 0 },         // graines rares restantes (semis gratuits)
+  freeSows: { [cropId]: n },                   // semis offerts d'une culture ordinaire (visiteurs de thème)
+  owned: { copperCan: false, almanac: false, horseshoe: false },
+  stats: { ordersDone: 0, ordersPremium: 0, ordersByClient: {}, carts: 0, cartsFull: 0, cratesFull: 0, cartPremium: 0,
+           cardsPicked: {}, cardIncome: 0, medals: { bronze: 0, silver: 0, gold: 0 }, medalCoins: 0, medalEcus: 0,
+           merchantSpent: 0, merchantBought: {}, rareSown: {}, rareHarvested: {} },   // pour l'album (lot 4)
+}
+// Carrière seulement (extension 'variety', partie themes) :
+state.career.theme = { year /* année du thème en cours */, id: null | themeId, next: null | themeId, bag: [themeId],
+  festivalDone: false, visitor: null | { offerId, done: false }, history: [{ year, id }] }
+// Parcelles : aucun champ nouveau. Plantation d'une graine rare : p.cropId = 'pea' | 'melon' | 'leek' (getCrop les connaît).
+```
+
+`checkVariety(state) → null | 'problème'` (appelé par `checkState` des niveaux et par `check` de l'extension) : version,
+identifiants connus (clients, cultures, cartes, défis, objets, thèmes), `0 ≤ got ≤ n`, 3 places, 2 défis gardés au plus,
+jours entiers ≥ 0, `rare`/`freeSows` entiers ≥ 0.
+
+### Déroulé (niveaux : `src/core/game.js` ; carrière : extension + `runtime.js`)
+
+**Aube** (niveaux), après l'étape 6 (marché) et la fin des surprises du lot 2 (`surprisesDawnEnd`) :
+`varietyDawn(state, ctx) → events` :
+1. effets des cartes échus (`until < aujourd'hui`) retirés (`cardEnded`) ;
+2. nouvelle saison : `season` remis à zéro ; défis : `next` devient la saison courante (sinon tirage, 1re saison) ;
+   **charrette** (`cartArrived`) ; commandes gardées devenues impossibles retirées (`orderRemoved { reason: 'withdrawn' }`,
+   prime des unités données) ;
+3. **colporteur** : veille → `merchantSoon` ; jour d'arrivée → étal tiré, `merchantArrived` ;
+4. **tableau** : à partir de `board.startDay`, commandes non gardées et pas commencées remplacées, places vides remplies
+   (`ordersRenewed { reason: 'dawn' }`).
+Étape 7 : après l'arrosage automatique, `varietyWater(state, level, today) → [plotIndex]` (arrosoir magique : 4 ;
+arrosoir de cuivre : 3 ; parcelles semées, non mûres, non arrosées, qui en ont besoin aujourd'hui, les moins avancées
+d'abord) → `dawn.varietyWatered`. Étape 9 : revenu `{ source: 'cardHen', amount: 4, owned: 1, kind: 'card' }` (carte
+`hen`) ; revenus quotidiens des animaux × 1,15 (carte `hay`, arrondi, pas la tonte). Les événements du lot sont émis
+après `dawn` (après ceux du lot 2).
+
+**Soir** (niveaux), dans `endOfDay` :
+- jour de départ du colporteur : `merchantLeft` (étal vidé) ;
+- dernier jour de la saison, **avant** la vente en l'état et le fermage : **départ de la charrette** (prime payée,
+  `cartDeparted`) ;
+- fermage : montant × `cards.pending.rentFactor` (0,8 avec la carte `landlord`, puis remis à 1) — `rentFor` le lit,
+  `query.finance().nextBill.amount` aussi ;
+- après `billPaid` (pas de faillite) : défis jugés (`challengesJudged`) ; si ce n'est pas la dernière saison :
+  `cardsOffered` puis `challengesOffered` (saison suivante) ; dernière saison : `challengesJudged` avant `victory`.
+
+**Pendant la journée** : récolte (ci-dessous), plantation (graines rares, semis offerts), compteurs des défis (`season`)
+mis à jour par les actions et l'aube ; médaille atteinte → `challengeMedal` tout de suite (pièces versées par le cœur,
+écus par l'interface).
+
+**Carrière** (extension `variety`, ordre d'enregistrement après `events`, `quests`, `surprises`) :
+`seasonStart` (étape 2 de l'aube) → points 1 et 2 ci-dessus, fête et visiteur du thème du jour ; `dawnEvents` → points 3
+et 4, averse de l'année des grenouilles ; `water` → arrosoirs (6 / 4 parcelles) ; `incomes` → `hay` (+15 % de la
+production des abris, poste `animals`), thème des abeilles (+50 % des ruches) et du tourisme (+25 % chambre d'hôte) ;
+`harvest` → récolte comptée (ci-dessous) ; `evening` → départ du colporteur, et le **dernier jour de la saison** : départ
+de la charrette, défis jugés, `cardsOffered` et `challengesOffered` (avant les charges de saison) ; `yearEnd` → tirage du
+thème suivant (`themeAnnounced`), `report.variety` ; nouveau `seasonStart` du printemps → `themeStarted`.
+
+### Récolte comptée (commandes, charrette)
+
+`claimHarvest(state, level, { plotIndex, cropId, units = 1, by }) → null | { kind: 'order' | 'cart', id, label, … }` :
+seulement si `by === 'player'` (niveaux : toujours) ; ordre (1) quête de Joseph (carrière, son point d'accroche, inchangé)
+→ (2) commandes du tableau (la plus avancée, puis la plus ancienne) → (3) caisse de la charrette. Un géant compte pour
+4 unités (réparties dans cet ordre, le reste est vendu normalement).
+
+- **Niveaux** (`game.js`, action `harvest`) : après le tirage de qualité, avant `tryProcessHarvest` : si la récolte est
+  comptée, elle n'est **pas** transformée ; `amount = raw + qualityBonus` (payée tout de suite) ; `harvested.claimed = {
+  kind, id, label }` ; puis `orderProgress` / `cartProgress` (et `orderDone`, `crateFull`).
+- **Carrière** : le point d'accroche `harvest` peut renvoyer **`{ divert: true, sell: true, label }`** (nouveau champ
+  `sell`) : `runtime.js` saute alors l'atelier et le grenier **et paie** la valeur (prime « à la main » et qualité
+  comprises) comme une vente ; sans `sell`, comportement d'avant (rien payé : visiteurs, quêtes). `harvested.diverted`
+  = label (« → Lili ») et `harvested.claimed`.
+- Valeur de base d'une unité (prime) : `baseUnitValue(state, level, cropId)` = `round2(sellPrice × level.cropPriceFactor ×
+  modifiers.rawPriceFactor)` (sans étal, cours, fête, « à la main », qualité). `order.base += …` à chaque unité ; prime à
+  la livraison = `round(base × (rate − 1))` ; charrette : `round(base × 0,10)` (+ `round(base × 0,10)` et 2 écus si tout
+  est plein ; × 2 avec `horse`).
+- Argent du lot (niveaux) : statistique `varietyIncome` (année et saison, créée seulement quand il y en a ; comptée dans
+  `summary.net`) ; `summary.variety = { orderPremium, cartPremium, cardIncome, medalCoins, merchantSpent, ordersDone,
+  cratesFull, medals }`. Carrière : postes du bilan `orders`, `cart`, `cards`, `medals` (revenus) et `merchant` (dépenses ;
+  achats d'animaux et de ruches comptés aussi au patrimoine comme d'habitude).
+
+### Actions (`game.actions.*`, les deux modes)
+
+```js
+keepOrder(orderId, keep = true)      → { ok, order: orderInfo }
+    // refus : 'Commande inconnue.' ; keep = false sur une commande commencée : 'Une commande commencée reste gardée.'
+declineOrder(orderId)                → { ok, premium }        // orderRemoved { reason: 'declined', premium } ; prime des unités données
+rerollOrders()                       → { ok, replaced }       // ordersRenewed { reason: 'reroll' }
+    // refus : 'Une seule relance par jour : revenez demain.' ; 'Toutes les commandes sont gardées.'
+deliverOrder(orderId)                → { ok, delivered, done, amount, premium? }   // CARRIÈRE : depuis le grenier
+    // niveaux : 'Les commandes se remplissent quand vous récoltez.' ; 'Rien au grenier pour cette commande.'
+loadCart(crateIndex)                 → { ok, loaded, full, amount }               // CARRIÈRE : depuis le grenier
+pickCard(cardId)                     → { ok, card: cardInfo, amount?, gift? }     // cardPicked
+    // refus : 'Pas de cadeau à choisir.' ; 'Cette carte n'est pas proposée.' ; carte devenue impossible (plus de place
+    // pour la ruche…) : 'Plus possible : choisissez l'autre carte.'
+keepChallenge(challengeId, keep = true) → { ok, kept: [ids] }
+    // refus : 'Défi inconnu.' ; 'Deux défis au plus.' ; keep = false : 'Ce défi a déjà une médaille.'
+buyFromMerchant(itemId, arg?)        → { ok, item, cost, cosmeticId?, ecusIfOwned?, heirloom? }   // merchantBought
+    // arg : carrière, engrais → lotId (sinon le champ le plus semé) ; refus : 'Le colporteur n'est pas là.' ;
+    // 'Déjà vendu.' ; notEnoughMoney(n) ; 'Le poulailler est plein.' ; 'Plus de place pour une ruche.'
+triggerVariety(kind, arg?)           → { ok, … }   // DÉBOGAGE / tests : 'cart' | 'merchant' | 'cards' | 'challenges' | 'board' | 'theme'
+// Modifiées :
+plant(i, cropId)   // graine rare : il faut rare[cropId] > 0 (sinon 'Plus de graines rares : le colporteur en vend.'),
+                   // coût 0, rare[cropId]−1 ; semis offert (freeSows) : coût 0 ; planted + { rare?, free?, seedsLeft }
+harvest(i)         // + claimed (voir plus haut)
+// Carrière : setPlan(lotId, seasonId, cropId rare) → 'Les graines rares se sèment à la main.' ; semoir et jardiniers
+// ne sèment jamais une graine rare ni un semis offert. acceptOffer(offerId) accepte aussi le visiteur du thème
+// (offer.kind = 'themeVisitor') : cadeau appliqué, offerResolved { outcome: 'accepted', gift }.
+```
+
+### Requêtes
+
+```js
+query.variety() → null | { enabled: true, parts, board: query.orders(), cart: query.cart(), cards: query.cards(),
+  challenges: query.challenges(), merchant: query.merchant(), rare: [{ cropId, name, seeds, sowable }],
+  owned, effects: [{ id, name, icon, text, until, daysLeft }], stats,
+  calendar: [{ kind: 'merchant' | 'cartDeparture' | 'themeFestival' | 'themeVisitor', day, daysUntil, text }] }
+query.orders() → { slots: [orderInfo | { empty: true, text }], canReroll, rerollReason, startsIn /* jours avant le début, niveau 1 */ }
+  orderInfo = { id, clientId, clientName, clientTitle, portrait /* 'portrait.client.<id>' */, text, thanks,
+    lines: [{ cropId, cropName, icon /* 'crop.<id>.icon' */, n, got, left, inStock /* carrière */ }],
+    rate, ratePct, premium /* si complète */, premiumSoFar, kept, started, canDeliver, deliverCount, note }
+query.cart() → null | { id, crates: [{ cropId, cropName, icon, n, got, full, inStock, canLoad }], departDay, daysLeft
+  /* 0 = ce soir */, departText /* « Part ce soir » / « Part le soir du 7ᵉ jour » */, premiumNow, premiumFull, ecusFull, horse }
+query.cards() → { offer: null | { season, seasonName, options: [cardInfo, cardInfo] }, active: [cardInfo + { until, daysLeft }] }
+  cardInfo = { id, name, icon /* 'icon.card.<id>' */, text, kind: 'now' | 'season' | 'next', value? }
+query.challenges() → null | { season, seasonName, options: [challengeInfo × 3], kept, canKeepMore,
+  next: null | { season, seasonName, options: [challengeInfo × 3] } }
+  challengeInfo = { id, name, icon /* 'icon.challenge.<id>' */, text, progress, targets: [b, s, g], medal: 0..3, kept,
+    locked /* a une médaille */, rewards: [{ medal, ecus, coins }] }
+query.merchant() → null | { here, soon, arriveDay, leaveDay, daysLeft, name: 'Basile le colporteur',
+  portrait: 'portrait.merchant', line, stall: [{ itemId, name, icon /* 'item.<id>' ou 'seedbag.<crop>' */, text, price,
+  sold, canBuy, reason, unique, cosmeticId? }] }
+query.plot(i)          // + claim: null | { kind: 'order' | 'cart' | 'quest', id, label: '→ Lili', got, n }
+query.plantableCrops() // + lignes des graines rares possédées : { …, rare: true, seedsLeft, seedCost: 0 } ;
+                       //   + free: n (semis offerts) ; + requested: true (culture demandée au tableau ou à la charrette)
+query.forecast()       // afterTomorrow aussi avec la carte almanac ou l'almanach du colporteur (même champ que le bonus)
+query.finance()        // nextBill.amount tient compte de la carte landlord ; nextBill.reduced: true
+query.summary()        // + variety (voir plus haut)
+query.achievementContext()   // + variety: { ordersDone, cartsFull, medals, rareHarvested }
+// Carrière :
+query.career.theme() → null | { year, id, name, icon /* 'icon.theme.<id>' */, text, star: { kind: 'crop' | 'product',
+  ids, names, factor: 1.25 }, effects: [texte], festival: { name, seasonId, day, daysUntil, done },
+  visitor: { name, portrait /* 'portrait.theme.<id>' */, seasonId, day, done, offerId }, next: null | { id, name } }
+query.career.events()  // calendar : + { kind: 'themeFestival' | 'merchant', … } ; offers : + kind 'themeVisitor'
+query.career.yearReport()  // + variety (compteurs de l'année) et nextTheme
+```
+
+### Événements (seulement quand c'est activé)
+
+| Type | Données | Pour |
+|---|---|---|
+| `ordersRenewed` | `{ reason: 'dawn' \| 'reroll' \| 'start', slots: [orderInfo \| null], added }` | feuilles du panneau, résumé du matin |
+| `orderProgress` | `{ orderId, clientName, cropId, got, n, label, plotIndex?, fromStock? }` | texte flottant « → Lili », bruit de papier |
+| `orderDone` | `{ orderId, clientId, clientName, thanks, premium, units }` | pièces vers le compteur, message du client, coche sur le panneau |
+| `orderRemoved` | `{ orderId, clientName, reason: 'declined' \| 'withdrawn', premium }` | message doux |
+| `cartArrived` | `{ cart: cartInfo, text }` | charrette qui arrive, message, conseil `variety.cart` |
+| `cartProgress` / `crateFull` | `{ crateIndex, cropId, got, n, plotIndex?, fromStock? }` / `{ crateIndex, cropId }` | caisse qui se remplit |
+| `cartDeparted` | `{ units, base, premium, allFull, ecus, crates: [{ cropId, n, got }], text }` | charrette qui s'en va, ligne de la fin de saison ; écus → progression |
+| `cardsOffered` | `{ season, seasonName, options: [cardInfo, cardInfo] }` | page « Un cadeau pour la saison » de la fin de saison |
+| `cardPicked` / `cardEnded` | `{ card, amount?, gift? }` / `{ id, name }` | son, animation ; message de fin d'effet discret |
+| `challengesOffered` | `{ season, seasonName, options: [challengeInfo × 3] }` | page « Les défis de … » |
+| `challengeMedal` | `{ challengeId, name, medal: 'bronze' \| 'silver' \| 'gold', ecus, coins }` | message doré, médaille ; écus → progression |
+| `challengesJudged` | `{ season, results: [{ challengeId, medal }] }` | fin de saison |
+| `merchantSoon` / `merchantArrived` / `merchantLeft` | `{ arriveDay, text }` / `{ merchant: merchantInfo, text }` / `{ sold }` | annonce, roulotte, toast « Voir » |
+| `merchantBought` | `{ itemId, name, price, cosmeticId?, ecusIfOwned?, heirloom? }` | décor → `unlockCosmetic` (sinon `ecusIfOwned` écus) |
+| `themeAnnounced` / `themeStarted` | `{ year, theme: themeInfo }` | bilan annuel (« L'an prochain… »), bandeau du printemps |
+| `festival` | + `theme: true` (fête de l'année à thème) | comme les autres fêtes |
+| `offer` / `offerResolved` | `kind: 'themeVisitor'` | visiteur unique du thème |
+| `harvested` | + `claimed: { kind, id, label }` | |
+| `planted` | + `rare`, `free`, `seedsLeft` | badge « Rare » |
+| `dawn` | + `varietyWatered: [index]` ; `incomes[]` : `source: 'cardHen'` | gouttes, texte flottant |
+
+### Migration et sauvegardes
+
+- **Niveaux** : `STATE_VERSION` reste 2. `migrateState` : `s.variety === undefined && s.difficulty === 'detente' &&
+  s.rng` → `newVarietyState()` + flux (`completeVariety`) ; le tableau se remplit à l'aube suivante (`board.startDay` =
+  jour suivant), pas de charrette ni de défis avant la saison suivante, cartes à la fin de la saison en cours. Classique :
+  rien. `s.variety` présent → `completeVariety` (champs ajoutés plus tard).
+- **Carrière** : extension `variety` — `init` (création) et `migrate` (chargement) : `state.variety` absent → activé (comme
+  les surprises) ; `state.career.theme = { year: année en cours, id: null, … }` (pas de thème pour l'année en cours) ;
+  offres `visitor` et `merchant` en cours gardées jusqu'à leur fin (le tirage ne les propose plus). `CAREER_VERSION` ne
+  change pas (champs ajoutés, vérifiés par `check`).
+- **Progression** (`progression.js`, `normalizeProgress`) : `progress.lifetime.variety = { orders: 0, cartsFull: 0,
+  medals: { bronze: 0, silver: 0, gold: 0 }, rare: {} }`, ajouté par `recordRunEnd` (depuis `summary.variety`) et
+  `recordCareerYear` (depuis `report.variety`) ; aucune autre clé, pas de changement de `schema`.
+- Tests : `tests/career-helpers.js` crée ses carrières avec `variety: false` par défaut (comme `surprises`) : les tests
+  existants de carrière restent valables tels quels ; `tests/variety-migration.test.js` vérifie les aller-retours, la
+  migration Détente / Classique / carrière et `checkVariety`.
+
+### Points d'accroche et fournisseurs de carrière (ajouts à `registry.js` / `runtime.js`, CORE)
+
+- Résultat du point d'accroche `harvest` : `{ divert: true, sell: true, label }` (voir « Récolte comptée »).
+- Nouveau fournisseur `seasonChargeFactor(state) → number` (produit) : charges de saison × 0,8 (carte `landlord` en
+  carrière, une fois).
+- Fournisseurs existants utilisés : `priceFactor` (vedette du thème × 1,25 ; carte `poster` récoltes × 1,05 ; carte
+  `recipe` produits × 1,15 ; fêtes du thème ; année des lumières : produits × 1,15 en hiver), `seedFactor` (carte
+  `seedFair` × 0,5 les 3 premiers jours ; thème des géants : citrouille × 0,8 ; thème du pain : blé × 0,8),
+  `effects('growthBonus')` (carte `fertilizer` + 0,1), `extraPlaces(state, 'dairy')` (+1 : visiteur du thème du fromage).
+- Lus directement (gardés par `state.variety` / `state.career.theme`) : `src/core/surprises.js` (chances de qualité × 2
+  avec `clover`, + 1 point / 0,3 point avec `horseshoe` ; chance des géants × 2 année des géants ; heure dorée × 0,5
+  année des grenouilles) ; `src/core/career/events.js` (avec `parts.board` : poids du visiteur 0 ; `parts.merchant` :
+  poids du marchand 0 ; tirage du jour `RANDOM_EVENT_RULES.chanceWithVariety = 0.10` ; thème du tourisme : touristes
+  poids × 2 et × 1,5 par passage ; grenouilles : corbeaux poids × 0,5 ; pêche × 1,5 avec la canne de Firmin) ;
+  `src/core/career/market.js` (année des grands marchés : bornes 0,7 – 1,45) ; `src/core/trees.js` (année des vergers :
+  fruits × 1,2 par aube, carrière seulement) ; `src/core/economy.js` (niveaux : `rentFor` × `rentFactor`, revenus des
+  animaux × 1,15, revenu de la poule voyageuse) ; `src/core/farm.js` (niveaux : récoltes × 1,05 avec `poster`, pousse
+  + 0,1 avec `fertilizer`, prix des graines × 0,5 avec `seedFair`, `plotUnlockCost` = 0 avec `clearing`) ;
+  `src/core/career/land.js` (aménagement suivant × 0,5 avec `clearing`) ; `src/core/career/buildings.js` / `animals.js`
+  (ruche ou poules offertes : mêmes règles de place que l'achat, sans le prix).
+
+### Simulation
+
+- `tools/simulate.js` : `--variety on | off | board,cards,cart,challenges,merchant` (défaut : selon le mode) et
+  `--compare-variety` (sans → avec, même graine ; colonnes : revenu, argent final, victoires, ★★★, et gain par partie :
+  tableau, cartes, charrette, médailles, colporteur). Robots humains (`casual`, `novice`) et `optimal` : comportements du
+  § 16.10 du game design, **par l'API publique** et avec leur propre tirage (jamais les flux du jeu) ; robots scriptés
+  de la parité (Classique) : inchangés. Les robots `careless` / `balanced` / `investor` en Détente : première carte,
+  deux premiers défis, n'achètent rien au colporteur.
+- `tools/simulate-career.js` : mêmes options (+ `themes`), `--compare-variety` (revenu par année, rang médian, Domaine,
+  sollicitations par semaine).
+- Après réglage : seuils d'étoiles Détente recalculés (`src/data/difficulty.js`, tableau du § 13.3 et note « Lot 3 »),
+  tableaux du § 16.10 remplis avec les résultats.
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- Disposition : `layout.variety = { board: rect, cart: rect, crates: [rect × 4], merchant: rect, merchantNpc: point }`
+  (portrait des niveaux : panneau au bord du chemin sous le portail du champ, charrette sur le chemin, roulotte près de
+  la maison ; paysage : mêmes repères autour de la maison et du chemin ; carrière : bande de la maison, près de la boîte
+  aux lettres et de la route). Absents si la variété est désactivée (rien dessiné en Classique).
+- `scene.hitTest` : + `{ type: 'villageBoard' }`, `{ type: 'cart' }`, `{ type: 'merchant' }` (cibles tolérantes ≥ 48 px).
+- Scène : panneau avec 0 à 3 feuilles (`board.note`, `board.note.kept` si gardée, `board.note.done` le jour d'une
+  livraison) lues dans `query.orders()` ; charrette présente tant que `state.variety.cart` existe, caisses devant elle
+  (`crate.empty` ou `crate.<cropId>` quand pleine) ; roulotte et Basile entre `arriveDay` et `leaveDay` ; animations sur
+  `cartArrived` (la charrette arrive par le chemin, ~2 s), `cartDeparted` (elle part), `merchantArrived` / `merchantLeft`
+  (la roulotte arrive / repart), `orderDone` (petite coche qui saute sur le panneau) ; poule voyageuse (carte `hen`, sprite
+  de poule existant) dans la cour ; décor de la fête du thème (`fair.theme.<id>` + guirlandes existantes) ; visiteur du
+  thème qui marche jusqu'au portail (`npc.visitor.*` existants) ; graines rares : `crop.<id>.0..4` et géants. Mouvements
+  réduits : apparitions en fondu, aucun trajet.
+- Nouvelle planche `lot3` dans `SHEETS` et `assets.js` ; `DECOR_SPRITES` : `lantern.peddler`, `weathervane.rooster`,
+  `sign.magazine`.
+
+**UI** (`src/ui/*`, `css/variety.css`, `src/main.js`) :
+- `src/ui/variety.js` : `createVariety(app) → app.variety = { onEvent, openBoard(), openCart(), openMerchant(),
+  openCards(), openChallenges(), seasonPages(ev), reset() }` ; feuilles « Le tableau du village », « La charrette du
+  marché », « Basile le colporteur », « Un cadeau pour la saison », « Les défis de … » (formes au § 16 du game design ;
+  cartes ≥ 72 px, boutons ≥ 48 px, textes ≥ 14 px, portraits 48 px).
+- Fenêtre de fin de saison (`dialogs.js`) en pages : Bilan (existant) + ligne de la charrette + médailles → « Un cadeau
+  pour la saison » (2 cartes) → « Les défis de … » (3 défis, garder 1 ou 2) ; « Plus tard » sur chaque page (pastilles
+  ensuite). Le soir du dernier jour, l'ordre des événements est `cartDeparted`, `billPaid`, `challengesJudged`,
+  `cardsOffered`, `challengesOffered` : la fenêtre se construit à partir de `billPaid` et des événements du même soir.
+- Bilan (niveaux, `panel.js`) et Carnet (carrière, Agenda) : sections Tableau, Charrette, Défis, Cadeau en attente,
+  Effets en cours, Colporteur (date), Thème de l'année (carrière).
+- Feuille des graines (`field.js`) : lignes des graines rares (« Rare · 4 graines », coût 0), badges « Commande » et
+  « Offert » ; fiche de parcelle : `claim` (« À la récolte : → Lili (3 / 5) »).
+- Ligne « À faire maintenant » et résumé du matin (`todo.js`) : commande la plus avancée, arrivée de la charrette,
+  colporteur (veille et jour), cadeau ou défis à choisir.
+- Barre du haut : après-demain (`forecast().afterTomorrow`) avec l'almanach ; fermage réduit (« −20 % »).
+- Récompenses : `cartDeparted.ecus`, `challengeMedal.ecus` → `app.progression.careerEcus(n)` (vaut pour les deux modes,
+  comme au lot 2) ; `merchantBought.cosmeticId` (et `offerResolved.gift.cosmeticId` du thème du tourisme) →
+  `unlockCosmetic` ou `ecusIfOwned`.
+- Conseils « première fois » (`hints.js`) : `variety.board`, `variety.cart`, `variety.cards`, `variety.challenges`,
+  `variety.merchant`, `variety.rare`, `career.theme` (textes dans `VARIETY_HINTS`).
+- Sons : `synth.js` existant (`chime` livraison, `fanfare` charrette pleine et or, `pop` caisse pleine, `reveal` cartes,
+  `magic` colporteur) ; aucun nouveau fichier son requis.
+- Débogage (`?debug=1`) : `__debug.variety.{ state(), board(), fill(slot), cart(), merchant(), cards(), challenges(),
+  theme(id), medal(id, n) }` (passent par `actions.triggerVariety` et les actions publiques).
+
+### Sprites (paquet ART : planche `assets/sprites/lot3.png`, `assets/sprites/generate-lot3.py`, bloc `// <lot3:auto>`)
+
+Même méthode que `generate-lot2.py` (palette Kenney, contour sombre 2 px, lumière en haut à gauche ; tuiles de 16 px).
+Tailles : **16 × 16** sauf mention **32 × 32** (2 × 2 tuiles).
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `board.village` | 32 × 32 | panneau d'affichage du village : deux poteaux, petit toit de bardeaux, planche claire |
+| `board.note`, `board.note.kept`, `board.note.done` | 16 × 16 | feuille de commande épinglée (à poser sur le panneau, 3 places) ; avec punaise rouge ; avec tampon vert « ✓ » |
+| `cart.market`, `cart.market.1` | 32 × 32 | charrette du marché à ridelles tirée par un âne gris, de profil ; 2e image (roues et pattes décalées) pour le trajet |
+| `crate.apple`, `crate.pea`, `crate.melon`, `crate.leek` | 16 × 16 | cagettes pleines manquantes (les autres `crate.<culture>` existent ; `crate.apple` seulement si absente) |
+| `merchant.wagon`, `merchant.wagon.1` | 32 × 32 | roulotte du colporteur (bois peint, auvent rayé rouge et crème, lanterne) ; 2e image : auvent ouvert avec l'étal |
+| `npc.merchant`, `npc.merchant.walk` | 16 × 16 | Basile : grand chapeau, gilet, sac à dos ; debout, en marche |
+| `crop.pea.1` … `crop.pea.4`, `crop.melon.1` … `.4`, `crop.leek.1` … `.4` | 16 × 16 | étapes de pousse (l'étape 0 = graines semées communes) : petits pois (rames et gousses), melon (feuilles rampantes, melon jaune-vert), poireau (fût blanc, feuilles bleu-vert) |
+| `crop.<id>.icon`, `crop.<id>.dead`, `crop.<id>.icon.gold`, `seedbag.<id>`, `sack.<id>` (id = pea, melon, leek) | 16 × 16 | icône de récolte, plant fané, icône dorée (lot 2), sachet de graines, grand sac |
+| `crop.pea.giant`, `crop.melon.giant`, `crop.leek.giant` | 32 × 32 | légumes géants (lot 2) |
+| `portrait.client.<id>` (rose, paulo, lili, garnier, chevalier, fabre, perrin, maire, odette, leon, morel, twins) | 32 × 32 | portraits des 12 clients (style `portrait.joseph`) : fleuriste à fleur au chapeau, boulanger enfariné, fillette à couettes et lapin, instituteur à lunettes, aubergiste au tablier, vieux pêcheur à casquette, musicienne au violon, maire à écharpe tricolore, grand-mère au chignon, facteur à casquette et sacoche, couturière au mètre ruban, jumeaux côte à côte |
+| `portrait.merchant` | 32 × 32 | Basile le colporteur, souriant, chapeau à plume |
+| `portrait.theme.<id>` (margot, anselme, journalist, gaspard, firmin, mathis, jeanne, wholesaler, northpeddler) | 32 × 32 | visiteurs uniques des thèmes : apicultrice voilée, fromager à béret, journaliste à appareil photo, jardinier à médaille, vieux pêcheur barbu, pépiniériste au plant, meunière enfarinée, grossiste à chapeau melon, colporteur du Nord en manteau de fourrure |
+| `icon.board`, `icon.cart`, `icon.cards`, `icon.challenge`, `icon.merchant`, `icon.theme`, `icon.rare` | 16 × 16 | icônes d'onglets et de sections (style de `assets/sprites/ui/icons.png`) |
+| `icon.card.<id>` (purse, seedFair, fertilizer, hen, watering, clover, poster, landlord, bees, crier, cartHorse, clearing, seedBag, recipe, hay, almanac) | 16 × 16 | bourse, sachets « −50 % », sac d'engrais, poule, arrosoir étoilé, trèfle, affiche, clé et pièce, essaim, crieur à cloche, fer et cheval, pelle et souche, sachet doré, livre de recettes, botte de foin, almanach |
+| `icon.challenge.<id>` (harvests, sales, variety, sowing, care, quality, orders, crates, products, apples, animals, collect) | 16 × 16 | panier, pièces, trois légumes, graine, goutte et cœur, étincelle, feuille épinglée, cagette, pot de confiture, panier de pommes, poule, œufs |
+| `medal.bronze`, `medal.silver`, `medal.gold`, `medal.empty` | 16 × 16 | médailles à ruban ; emplacement vide (contour pointillé) |
+| `item.<id>` (fertilizer, usedCoop, hens, usedHive, copperCan, almanac, horseshoe, lantern, weathervane, heirloom) | 16 × 16 | objets du colporteur (les sachets de graines utilisent `seedbag.<culture>`) |
+| `icon.theme.<id>` (bees, cheese, tourism, giants, frogs, orchard, bread, markets, lights) | 16 × 16 | abeille, meule, appareil photo, citrouille géante, grenouille, pomme, pain, balance, lampion |
+| `fair.theme.<id>` (mêmes id) | 16 × 16 | petit stand de la fête du thème (pots de miel, meules, lampions, etc.) posé près de la maison |
+| `lantern.peddler`, `weathervane.rooster`, `sign.magazine` | 16 × 16 | décors trouvés : lanterne de colporteur sur poteau, girouette au coq, panneau « Vu dans le magazine » |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `lot2.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/variety.js`, `src/data/career/themes.js`, `src/data/crops.js` (RARE_CROPS), `src/data/cosmetics.js` (3 décors), `src/data/difficulty.js` (seuils), `src/core/{requests,variety}.js`, `src/core/career/{variety,themes}.js`, `src/core/career/extensions.js` (1 ligne), modifications de `src/core/{game,economy,farm,surprises,trees,stats,progression}.js` et `src/core/career/{runtime,registry,events,market,machines,work,land,buildings,animals}.js`, `tools/simulate.js`, `tools/simulate-career.js`, `tests/*` (nouveaux et `career-helpers.js`) | état, actions, requêtes, événements ci-dessus ; simulation et réglage ; tableaux du § 16.10 et seuils du § 13.3 | rien (commence par un `createGame({ variety })` qui ne fait rien, parité verte, puis ajoute chaque partie) |
+| **ART** | `assets/sprites/generate-lot3.py`, `assets/sprites/lot3.png`, bloc `// <lot3:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau des sprites ; planche de contrôle ×6 | rien |
+| **UI/RENDER** | `src/ui/*` (nouveau `variety.js`), `css/variety.css`, `tools/build.js` (ligne `CSS_FILES` seulement), `src/main.js`, `src/index.template.html`, `src/render/*` (hors bloc `lot3:auto`), nouveau `src/render/variety-actors.js` | feuilles, pages de fin de saison, sections, scène, hit-test, animations, conseils, débogage ; vérification au doigt | CORE : API (factices de même forme en attendant) ; ART : sprites (repli `canDraw`) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `orderInfo`, `cartInfo`, `cardInfo`, `challengeInfo`,
+`merchantInfo`, `themeInfo` et l'ordre des événements du soir (figés ici ; tout écart est noté par CORE dans une section
+« Écarts » sous ce contrat) ; (2) **ART → RENDER/UI** : noms du tableau des sprites (aucun renommage sans prévenir) ;
+(3) **CORE ↔ ART** : identifiants des cultures rares, clients, cartes, défis, objets, thèmes (figés ici) ; (4) intégration
+par le chef de projet : `node --test tests/` (parité comprise), `node tools/simulate.js --compare-variety`,
+`node tools/simulate-career.js --compare-variety`, `node tools/build.js`, vérification au doigt (Pixel 7, 360 × 740 :
+cibles ≥ 48 px, textes ≥ 14 px, aucun débordement ; une année de niveau Détente et une année de carrière avec tableau,
+charrette, cadeau, défis, colporteur et thème), `JOURNAL.md`, sauvegarde `backup/…` avant et après le lot.

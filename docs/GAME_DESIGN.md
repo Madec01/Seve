@@ -4,6 +4,8 @@ Document de référence du gameplay. Les chiffres marqués *(équilibré)* ont �
 
 > **Mode Carrière (conception 2026-09-30)** : une ferme à soi qui dure et grandit d'année en année — voir **§ 14** et `docs/CARRIERE.md`. Le mode Niveaux décrit ici ne change pas.
 >
+> **Lot 3 « Variété » (conception 2026-10-02)** : tableau du village, cadeau de fin de saison, charrette du marché, défis de saison, années à thème, colporteur — voir **§ 16** (désactivé en Classique).
+>
 > **Deux modes de difficulté (2026-09-30)** : les chiffres des § 3 à § 12 sont ceux du mode **classique**. Les nouvelles parties se jouent par défaut en mode **détente** (charges, fermages, départ, prix des récoltes, pousse sans arrosage et prêt du voisin) : voir **§ 13**.
 
 ## 1. Intention
@@ -868,3 +870,425 @@ Le mode Classique ne change pas (pas de surprises, mêmes seuils, test de parit�
 Aucune faillite, rythme des rangs inchangé à un an près. Un premier réglage bloquait des champs tenus par les machines
 (géant jamais récolté, champignons jamais cueillis : revenu −3 %) : d'où le délai de 3 jours du géant et la cueillette
 par les salariés et machines qui sèment (§ 15.2).
+
+---
+
+# 16. Lot 3 — Variété (conception, 2026-10-02)
+
+Synthèse : `docs/analyse/0-SYNTHESE.md`, points C1, C2, C3, C4, C5 et C7 (feuille de route, lot 3 ; décision de
+l'utilisateur). Contrat de code : `docs/ARCHITECTURE.md`, « Lot 3 — contrats ». Nombres de référence (à régler par la
+simulation, la version qui fait foi vivra dans `src/data/variety.js`, `src/data/career/themes.js` et
+`src/data/crops.js` pour les graines rares).
+
+**But** : casser la routine « récolter, semer partout la culture au meilleur +X/jour, arroser » en donnant chaque jour
+une petite question différente au joueur (*quoi semer pour qui ? quel cadeau garder ? quel défi tenter ? que
+rapporter du colporteur ?*), dans les deux modes, sans ajouter de stress.
+
+## 16.0 Règles d'or du lot
+
+1. **Aucun stress** : aucune échéance qui fait perdre quelque chose, aucun refus pénalisé, rien n'est jamais perdu (ce qui
+   a été livré est toujours payé, au moins au prix normal), aucune série à entretenir, aucune nouvelle monnaie (pièces de
+   la partie et écus décoratifs seulement). Ce qui a une date (charrette, colporteur, fête) est **annoncé à l'avance** et
+   **revient** : le rater n'a pas d'importance.
+2. **Toujours faisable** : tout ce qui est demandé est produisible **cette saison** avec la ferme telle qu'elle est (un
+   seul générateur, § 16.1, sert au tableau, à la charrette et aux défis).
+3. **Le joueur au centre** : une commande ou une caisse se remplit par **une action du joueur** — sa récolte à la main,
+   ou (carrière) un toucher « Livrer / Charger depuis le grenier ». Salariés et machines peuvent remplir le grenier, mais
+   ne livrent jamais à sa place (principe F1 « aider sans remplacer »).
+4. **Téléphone d'abord** : tout passe par des feuilles du bas, des cartes pleine largeur, des boutons ≥ 48 px, des
+   textes ≥ 14 px et **peu de mots** (une phrase par client, une ligne par effet).
+5. **Mode Classique des niveaux strictement inchangé** (test de parité) : tout le lot y est **désactivé par défaut**,
+   comme les surprises du lot 2. **Détente** et **Carrière** : activé.
+6. **Équilibre** : le lot entier ajoute **au plus ~10 %** au revenu de l'année du joueur tranquille (§ 16.9), et les
+   seuils d'étoiles de la Détente sont recalculés selon la règle du § 13.3.
+
+## 16.1 Le générateur de demandes « faisables cette saison » (commun à C1, C3, C4)
+
+Une seule fonction décide de ce que le village peut demander. Une culture est **faisable** si elle est dans la liste
+des cultures de la partie (niveau : `level.crops` ; carrière : cultures du rang) — **jamais une graine rare** (§ 16.7) —
+et si au moins une de ces conditions est vraie :
+
+| Raison | Condition |
+|---|---|
+| `growing` | elle pousse déjà sur une parcelle (mûre ou non, pas sur une parcelle d'un géant) et ne gèlera pas avant d'être mûre |
+| `stock` | (carrière) il en reste au grenier |
+| `sowable` | elle se sème aujourd'hui, et ses jours de pousse (arrosée) tiennent dans l'**horizon** (ci-dessous) sans geler |
+| `tree` | arbre fruitier adulte possédé, en saison de fruits, et une récolte de fruits tient dans l'horizon (ou est déjà mûre) |
+
+Horizon : **tableau** = jours restants dans la saison, aujourd'hui compris, au moins 3 ; **charrette** = durée de la
+saison − 1 (tirée le 1er jour) ; **défis** : nombre de cultures distinctes faisables (sert à plafonner « Potager varié »
+et « Semeur curieux »).
+
+**Exclusions** (si au moins une autre culture reste possible) : la culture de la quête de Joseph en cours (carrière : pas
+de concurrence pour les récoltes) ; une culture qu'un atelier **allumé** du joueur transforme (l'atelier passe avant,
+§ 16.2.4) ; une culture déjà demandée ailleurs sur le tableau ; pour le tableau, une culture déjà dans une caisse de la
+charrette en cours.
+
+**Poids** du tirage : 1 ; **× 3 si elle ne pousse pas encore** (tableau : on pousse à diversifier) ; × 2 culture vedette de
+l'année (carrière, § 16.6) ; × 2 culture préférée du client tiré (tableau) ; × 0,5 si elle était déjà demandée hier.
+
+Si aucune culture n'est faisable (dernier jour d'hiver sans rien qui pousse…), la place reste vide avec « Pas de demande
+aujourd'hui : revenez demain ! ».
+
+## 16.2 C1 — Le tableau du village
+
+Un **panneau en bois** près du portail de la ferme (niveaux : au bord du chemin, sous le champ ; carrière : bande de la
+maison, près de la boîte aux lettres) porte **3 commandes** de villageois. Il est toujours visible ; on le touche pour
+ouvrir sa feuille. C'est le remplaçant des « visiteurs acheteurs » de la carrière (§ 16.8).
+
+### 16.2.1 Une commande
+
+- Un **client** (§ 16.2.6), une phrase de lui, et **une ligne** : *N × une culture* (carrière, rang ≥ 3 : **30 %** des
+  commandes ont **deux lignes**, deux cultures différentes, comme un petit panier).
+- Une **prime** : `taux` tiré parmi **×1,2 (poids 4), ×1,3 (3), ×1,4 (2), ×1,5 (1)** (moyenne ×1,3) ; commande à deux
+  lignes : +0,1 (au plus ×1,5) ; carte « Le crieur du village » : +0,1 (au plus ×1,6).
+- **Taille** N (une ligne) selon le prix de vente de base de la culture :
+
+| Culture | Niveaux | Carrière |
+|---|---|---|
+| bon marché (vente < 20 : carotte, navet, blé, pomme de terre) | 3 à 5 | 3 à 5 + ⌊(rang − 1) / 2⌋ |
+| moyenne (20 à 39 : chou, tomate, tournesol, fraise, courgette, pomme) | 2 à 4 | 2 à 4 + ⌊(rang − 1) / 2⌋ |
+| chère (≥ 40 : maïs, citrouille) | 2 à 3 | 2 à 3 + ⌊(rang − 1) / 3⌋ |
+
+  Plafond : ⌊parcelles de champ ouvertes / 3⌋, au moins 2 ; fruits : au plus 2 paniers par arbre adulte. Ligne
+  secondaire d'une commande à deux lignes : taille de sa catégorie − 1 (au moins 2).
+
+### 16.2.2 Remplir et livrer
+
+- **À la récolte à la main** : une récolte d'une culture demandée part à la commande (texte flottant « → Lili », petit
+  bruit de papier). Elle est **payée tout de suite au prix normal** (comme si elle était vendue : étal, cours, prime
+  « à la main », qualité du lot 2 comprises) : on ne perd jamais de trésorerie à remplir une commande.
+- La **prime** est versée quand la commande est complète : `prime = arrondi(Σ valeur de base × (taux − 1))`, où la
+  valeur de base d'une unité = prix de vente de la culture × prix des récoltes du mode (× 1,25 en Détente) × baisse du
+  niveau 9 (× 0,75), **sans** étal, cours, fête, prime « à la main » ni qualité (la carte affiche la prime exacte :
+  « +16 »). Exemple Détente : 5 carottes à ×1,3 → 5 × 12,5 × 0,3 = **+19**.
+- Commande complète → **livrée** : le client remercie (sa phrase de merci), pluie de pièces de la prime vers le compteur,
+  coche verte sur la feuille du panneau, la place reste libre jusqu'à l'aube suivante.
+- **Carrière, grenier** : bouton « **Livrer depuis le grenier** » sur la commande (si le stock en a) : les unités sont
+  vendues au prix du jour du grenier et comptées ; même règle de prime. **Les récoltes des salariés et des machines ne
+  partent jamais à une commande** (elles vont au grenier ou à la vente, comme avant) : c'est le joueur qui livre.
+- **Ordre de priorité d'une récolte à la main** : (1) quête de Joseph acceptée (carrière, inchangé), (2) commandes du
+  tableau (la plus avancée d'abord, puis la plus ancienne), (3) charrette (§ 16.4), (4) atelier allumé avec une place libre,
+  (5) grenier (carrière, selon la mise en réserve), (6) vente. Une récolte comptée pour (2) ou (3) est vendue tout de suite
+  (elle ne va ni à l'atelier ni au grenier).
+- Les récoltes comptées restent des récoltes (statistiques, succès, objectifs de rang, comice, concours du niveau 12).
+
+### 16.2.3 Le rythme (sans échéance)
+
+- **À chaque aube**, les commandes **non gardées et pas commencées** sont remplacées par de nouvelles (« renouvelées à
+  l'aube »), et les places vides se remplissent (3 au plus).
+- **Garder** (punaise, bouton « Garder ») : une commande gardée ne part plus, **sans limite de temps**, jusqu'à ce qu'elle
+  soit livrée ou qu'on la retire. Une commande **commencée** (au moins une unité donnée) est gardée d'office. On peut
+  garder les 3. Utile quand on sème exprès pour elle.
+- **Autres demandes** (bouton ↻ en bas de la feuille) : **une fois par jour, gratuit** : remplace tout de suite toutes les
+  commandes non gardées et pas commencées.
+- **Pas pour moi** (✕ sur chaque commande) : la commande part, **sans aucune pénalité** ; si elle était commencée, le
+  client paie quand même la prime **des unités déjà données** (« Merci pour ces 2 carottes ! +7 »). La place se
+  remplit à l'aube suivante.
+- **Changement de saison** : une commande gardée qui n'est plus faisable (§ 16.1 : la culture ne se sème plus, rien ne
+  pousse, rien au grenier) est retirée gentiment ; commencée, le client paie la prime des unités données (« La saison
+  est passée : je prends ce que vous avez, merci ! »).
+- **Début** : niveaux 2 à 12 et carrière, dès le 1er jour ; **niveau 1 : à l'aube du 5ᵉ jour** (après les premiers gestes
+  du tutoriel), avec le conseil `variety.board`.
+
+### 16.2.4 Cas limites
+
+- Atelier : une culture qu'un atelier allumé transforme n'est pas proposée (si une autre culture est possible). Si
+  l'atelier est allumé **après**, la commande ne se remplit qu'avec les récoltes que l'atelier ne prend pas (atelier plein) ;
+  la fiche de la commande l'écrit (« L'atelier passe d'abord »).
+- Géant (lot 2) : un légume géant récolté compte pour **4 unités** de sa culture (le surplus, au-delà de ce qui manque,
+  va à la charrette puis à la vente) ; sa prime de géant reste payée.
+- Champignons, pommes de terre sans arrosage, serre (carrière) : rien de spécial (une récolte est une récolte).
+- Prêt de Joseph (Détente) : la prime est une vente comme une autre (sa part de remboursement s'applique).
+- Fin de partie (niveaux) : rien n'est dû ; le panneau disparaît avec la victoire.
+- Faillite (Classique avec la variété activée par option) : sans objet.
+
+### 16.2.5 Interface
+
+- Feuille « **Le tableau du village** » (haute) : 3 cartes pleine largeur (≥ 96 px) : portrait 48 px, prénom et métier,
+  phrase (≤ 45 caractères), ligne « [icône] 2 / 5 carottes », prime « +19 » (pièce), boutons « 📌 Garder » (bascule) et
+  « ✕ » (48 × 48, libellé lu « Pas pour moi »). Commande livrable depuis le grenier : « Livrer depuis le grenier (3) ».
+  En bas : « ↻ Autres demandes » (grisé « Demain » après usage). Place vide : « Nouvelle demande demain matin ».
+- Scène : 1 à 3 petites feuilles épinglées sur le panneau (punaise rouge si gardée), une coche quand une est livrée.
+- Ligne « À faire maintenant » (lot 1) : « Lili attend 2 carottes » (la commande la plus avancée) ; résumé du matin :
+  « 2 nouvelles commandes au tableau » ; fiche d'une parcelle mûre : « À la récolte : → Lili (3 / 5) ».
+- Feuille des graines : badge « Commande » sur les cultures demandées (gardées ou non).
+
+### 16.2.6 Les clients du village
+
+Douze villageois (portrait 32 × 32 chacun). Préférées : poids × 2 au tirage (§ 16.1).
+
+| id | Client | Préférées | Phrase de commande | Merci |
+|---|---|---|---|---|
+| `rose` | Mme Rose, la fleuriste | tournesol, fraise | « Pour égayer mes bouquets du dimanche. » | « Que c'est joli ! Merci ! » |
+| `paulo` | Paulo, le boulanger | blé, pomme, fraise | « Pour mes tartes de demain matin. » | « Ça sent déjà bon ! » |
+| `lili` | La petite Lili | carotte, navet | « C'est pour le goûter de mon lapin Caramel ! » | « Caramel te dit merci ! » |
+| `garnier` | M. Garnier, l'instituteur | pomme de terre, chou, navet | « Pour la cantine de l'école. » | « Les enfants vont se régaler. » |
+| `chevalier` | Mme Chevalier, l'aubergiste | tomate, citrouille, chou | « Pour la soupe du soir à l'auberge. » | « Mes clients en redemanderont ! » |
+| `fabre` | Le père Fabre, pêcheur | courgette, tomate, maïs | « Pour mon pique-nique au bord de l'étang. » | « Ça mord mieux le ventre plein. » |
+| `perrin` | Mlle Perrin, la musicienne | fraise, pomme | « Une petite douceur avant le concert. » | « Je jouerai un air pour vous ! » |
+| `maire` | M. le maire | maïs, citrouille, blé | « Pour le buffet de la mairie. » | « Au nom du village, merci ! » |
+| `odette` | Mamie Odette | fraise, pomme, chou | « Pour mes bocaux de l'hiver. » | « Passe goûter quand tu veux. » |
+| `leon` | Léon, le facteur | carotte, pomme, blé | « Ça me donnera des jambes pour ma tournée. » | « Je file, merci ! » |
+| `morel` | Mme Morel, la couturière | tournesol, navet | « Pour teindre mes laines, croyez-le ou non. » | « Mes pelotes seront superbes. » |
+| `twins` | Zoé et Bastien, les jumeaux | maïs, citrouille, carotte | « Pour notre cabane secrète (chut !). » | « Promis, on ne dira rien ! » |
+
+Client tiré : un client qui n'est pas déjà sur le tableau, au hasard (flux `orders`), puis sa culture (§ 16.1). Joseph
+n'est jamais sur le tableau (il a ses quêtes, § 16.8).
+
+## 16.3 C2 — Un cadeau pour la saison (choix d'une carte)
+
+À la **fin de chaque saison**, deux **cartes gratuites** sont proposées ; on en **garde une**. Cela transforme le bilan en
+décision et rend chaque partie d'un niveau différente.
+
+- **Quand** : niveaux, le soir du dernier jour du printemps, de l'été et de l'automne, **après le fermage payé** (3 par
+  année ; pas après l'hiver : c'est la victoire). Carrière : le soir du dernier jour de **chaque** saison (4 par an).
+- **Effet** : pour « la saison suivante » (de l'aube suivante au soir de son dernier jour), ou tout de suite pour les
+  cartes immédiates.
+- **Choix** : dans la fenêtre de fin de saison (page « Un cadeau pour la saison »), deux grandes cartes ; toucher une
+  carte = la garder (animation, son). Fermer sans choisir : le choix **attend** (pastille sur l'onglet Bilan / le Carnet,
+  section « Cadeau de la saison ») pendant toute la saison ; une carte « saison » choisie en retard ne dure que jusqu'à la
+  fin de cette saison. Pas choisie à la fin de saison suivante : elle est simplement remplacée par la nouvelle paire (sans
+  message).
+- **Tirage** (flux `variety`) : 2 cartes **différentes** parmi les cartes possibles (conditions), selon leur poids ;
+  jamais exactement la même paire que la fois précédente.
+
+| id | Carte | Effet (niveaux) | Carrière | Condition | Poids |
+|---|---|---|---|---|---|
+| `purse` | La bourse du village | **+20 pièces + 5 par saison déjà jouée**, tout de suite (25 / 30 / 35) | **+30 + 20 × rang** | — | 3 |
+| `seedFair` | Foire aux graines | Graines **à moitié prix** les **3 premiers jours** de la saison suivante | idem (semoir compris) | — | 3 |
+| `fertilizer` | Sac d'engrais | Pousse **+10 %** toute la saison suivante (cultures et arbres) | idem | — | 3 |
+| `hen` | Une poule voyageuse | **+4 pièces chaque matin** de la saison suivante (une poule se promène dans la cour) | **Deux poules offertes** (au poulailler) | carrière : 2 places libres au poulailler | 2 |
+| `watering` | L'arrosoir magique | Chaque matin de la saison suivante, **4** parcelles qui ont soif sont arrosées (gratuit, après l'arrosage automatique) | **6** parcelles | pas au niveau 8 (sans arrosage automatique) | 2 |
+| `clover` | Trèfle à quatre feuilles | Chances de récolte **belle et dorée × 2** toute la saison suivante (cumulable avec le vœu : × 4 au plus) | idem | surprises actives | 2 |
+| `poster` | Une affiche au marché | Récoltes vendues **+5 %** toute la saison suivante (pas les produits) | idem | — | 2 |
+| `landlord` | Le geste du propriétaire | **Prochain fermage −20 %** (arrondi) | **Ristourne de la coopérative** : prochaines charges de saison −20 % | — | 2 |
+| `bees` | Un essaim d'abeilles | **Une ruche offerte**, tout de suite | idem (une ruche posée) | la ruche est proposée, pas au maximum (carrière : rang et place) | 1 |
+| `crier` | Le crieur du village | Primes du tableau **+0,1** (× 1,3 → × 1,4) toute la saison suivante | idem | tableau actif | 2 |
+| `cartHorse` | Un cheval de renfort | **Prime de la prochaine charrette × 2** | idem | une charrette viendra la saison suivante | 2 |
+| `clearing` | Coup de main au défrichage | **Prochaine parcelle achetée gratuite** | **Prochain aménagement de terrain −50 %** | le champ peut encore s'agrandir (carrière : un terrain en friche ou à acheter) | 1 |
+| `seedBag` | Un sachet de graines rares | **4 graines rares** d'une culture rare de la saison suivante (§ 16.7), tout de suite | **8 graines** | — | 1 |
+| `recipe` | La recette de saison | Produits transformés **+15 %** toute la saison suivante | idem | un atelier possédé | 1 |
+| `hay` | Du foin parfumé | Revenus quotidiens des animaux **+15 %** toute la saison suivante (poules, vaches, chèvres ; pas la tonte) | production des abris +15 % | un animal possédé | 1 |
+| `almanac` | L'almanach du berger | Météo d'**après-demain** affichée jusqu'à la fin de la partie | jusqu'à la fin de l'année | ni bonus « Almanach » ni almanach du colporteur | 1 |
+
+Repères (niveau 1 Détente, joueur tranquille) : une carte vaut en moyenne **20 à 35 pièces** (bourse 25–35, foire ~20,
+engrais ~25, poule 28, affiche ~20, propriétaire 12–26, essaim ~60, défrichage ~40) — soit 3 cartes ≈ 2 à 3 % du revenu
+de l'année. Les cartes chères (essaim, défrichage) ont un poids de 1.
+
+## 16.4 C3 — La charrette du marché
+
+Une grosse commande **en caisses**, une fois par saison, qui pousse à **diversifier** le potager.
+
+- **Arrivée** : à l'aube du **1er jour** de chaque saison (niveaux : les 4 saisons ; **niveau 1 : à partir de l'été** ;
+  carrière : dès l'été de la 1re année, puis chaque saison, l'hiver seulement si une culture est faisable). Une charrette
+  tirée par un âne se gare au bord du chemin, avec ses caisses vides.
+- **Départ** : le **soir du dernier jour de la saison, avant le fermage** (carrière : avant les charges de saison) — sa
+  prime aide à payer. L'heure est connue dès l'arrivée (« Part le soir du 7ᵉ jour »), sans compte à rebours.
+- **Caisses** : **3** (niveau 4 et toute charrette d'hiver : **2** ; carrière : 3, **4 au rang ≥ 4**). Chaque caisse =
+  **une culture faisable sur la saison** (§ 16.1, cultures différentes si possible) × **N unités** :
+  - niveaux : N = arrondi(4 × parcelles ouvertes / 12 × durée de la saison / 7), entre 2 et 10 (niveau 1 : 4 ; niveau 4 :
+    2 ; hiver de 14 jours du niveau 5 : 8) ;
+  - carrière : N = arrondi((4 + 2 × (rang − 1)) × durée / 7), au plus la moitié des parcelles de champ ouvertes, au moins 2.
+- **Remplir** : les récoltes **à la main** d'une culture d'une caisse non pleine y vont automatiquement, après les
+  commandes du tableau (§ 16.2.2) : vendues tout de suite au prix normal, comptées dans la caisse (texte flottant
+  « → charrette »). Carrière : « **Charger depuis le grenier** » sur chaque caisse (toucher du joueur ; unités vendues au
+  prix du grenier). Jamais les récoltes des salariés ni des machines.
+- **Paiement au départ** (même incomplète) : **prime = 10 %** de la valeur de base des unités chargées ; **toutes les
+  caisses pleines** : **+10 %** de plus (20 % au total) **et 2 écus**. Carte « Un cheval de renfort » : prime × 2 (pas les
+  écus). Valeur de base : comme au § 16.2.2. Exemple niveau 1, été : 3 caisses de 4 (tomates, maïs, tournesols) = 12 unités,
+  valeur de base 47,5 × 4 + 62,5 × 4 + 40 × 4 = 600 → remplie à moitié (300 de valeur chargée) : +30 ; toute pleine : +120 et 2 écus.
+- **Rien chargé** : la charrette repart sans rien dire de plus qu'un message doux (« La charrette repart. À la saison
+  prochaine ! »).
+
+Interface : toucher la charrette (scène) ou sa ligne dans le Bilan / l'Agenda → feuille « **La charrette du marché** » :
+une rangée par caisse (icône de la culture 32 px, barre « 3 / 4 », coche si pleine ; carrière : bouton « Charger (2) »),
+puis « Prime au départ : +30 · tout plein : +120 et 2 écus ». Scène : les caisses se posent devant la charrette et se
+remplissent (sprite `crate.<culture>` quand pleine) ; au départ, la charrette s'en va sur le chemin (mouvements réduits :
+elle disparaît en fondu). Fenêtre de fin de saison : ligne « La charrette : +30 (2 caisses sur 3) ».
+
+## 16.5 C4 — Les défis de la saison
+
+Trois **défis** sont proposés pour chaque saison ; on en **garde 1 ou 2**. Chacun a trois paliers : **bronze, argent,
+or**. Rien ne se reporte d'une saison à l'autre (aucune série).
+
+- **Proposition** : pour la 1re saison, à la création de la partie (niveau 1 : pas de défi au printemps, première
+  proposition à la fin du printemps) ; ensuite, le soir du dernier jour de la saison précédente, dans la fenêtre de fin de
+  saison (page « Les défis de l'été »). Carrière : dès l'été de la 1re année, puis chaque saison.
+- **Choix** : toucher un défi = le garder (2 au plus) ; on peut changer d'avis à tout moment de la saison, tant que le
+  défi n'a pas encore de médaille. On peut aussi choisir plus tard (Bilan / Carnet, section « Défis de la saison ») : **la
+  progression compte depuis le 1er jour de la saison**, choisir tard ne coûte rien. Seuls les défis gardés donnent des
+  médailles.
+- **Médailles** : dès qu'un palier est atteint (pendant la saison), message doré « Médaille d'argent : Belle cueillette »
+  et récompense immédiate ; les paliers se cumulent.
+
+| Médaille | Niveaux | Carrière |
+|---|---|---|
+| bronze | **1 écu** | 1 écu |
+| argent | **2 écus + 10 pièces** | 2 écus + 10 × rang pièces |
+| or | **4 écus + 20 pièces** | 4 écus + 20 × rang pièces |
+
+  Au mieux, deux ors par saison : 14 écus et 60 pièces (niveaux). Les médailles sont comptées (album du lot 4).
+- **Tirage** (flux `variety`) : 3 défis **différents** parmi les possibles, selon leur poids, jamais exactement les mêmes
+  trois que la saison précédente.
+
+Cibles : `k` = (parcelles de champ ouvertes au début de la saison / 12) × (durée de la saison / 7), entre 0,5 et 4 ;
+toute cible arrondie, au moins 1.
+
+| id | Défi | Mesure (depuis le 1er jour de la saison) | Bronze / argent / or | Condition | Poids |
+|---|---|---|---|---|---|
+| `harvests` | Belle cueillette | récoltes (toutes) | 12 / 20 / 30 × k | — | 3 |
+| `sales` | Bon marché | pièces de ventes de récoltes (prime de qualité comprise) | 150 / 260 / 380 × k × prix des récoltes du mode | — | 3 |
+| `variety` | Potager varié | cultures différentes récoltées | 2 / 3 / 4 (or plafonné au nombre de cultures faisables) | ≥ 2 cultures faisables | 2 |
+| `sowing` | Semeur curieux | cultures différentes semées | 2 / 3 / 4 (idem) | ≥ 2 cultures semables | 2 |
+| `care` | Aux petits soins | récoltes « arrosée chaque jour où il le fallait » (soin du lot 2) | 3 / 6 / 10 × k | surprises actives | 2 |
+| `quality` | La main verte | récoltes belles ou dorées | 1 / 2 / 4 × max(1, k) | surprises actives | 1 |
+| `orders` | Ami du village | commandes du tableau livrées | 1 / 2 / 3 | tableau actif | 2 |
+| `crates` | La charrette pleine | caisses de la charrette remplies | 1 / 2 / 3 (au plus le nombre de caisses) | charrette cette saison | 2 |
+| `products` | Fait maison | produits transformés vendus | 2 / 4 / 6 (carrière : + rang) | un atelier possédé | 2 |
+| `apples` | Paniers du verger | paniers de fruits récoltés | 1 / 2 / 4 × max(1, arbres adultes / 2) | arbre adulte, saison de fruits | 1 |
+| `animals` | Basse-cour heureuse | pièces de revenus des animaux (niveaux) | 25 / 45 / 70 × durée / 7 | un animal qui rapporte | 1 |
+| `collect` | La tournée des abris | ramassages d'abris faits par le joueur (carrière) | 5 / 9 / 14 × durée / 7 | carrière, un abri | 2 |
+
+Interface : cartes de défi (≥ 72 px) avec icône, nom, phrase courte, trois pastilles de médaille et barre « 14 / 20 » ;
+une bande « Défis » dans le Bilan (niveaux) et l'Agenda (carrière). Fenêtre de fin de saison : médailles obtenues.
+
+## 16.6 C5 — Les années à thème (carrière)
+
+À partir de la **2e année**, chaque année de carrière a un **thème** : une **vedette** (culture, fruit ou produit, vendue
+**+25 %** toute l'année, et deux fois plus demandée par le tableau et la charrette), une **fête spéciale** (un jour du
+calendrier en plus) et un **visiteur unique** (une fois dans l'année, un cadeau). Chaque thème est **au moins à moitié
+positif** : trois avantages au moins, au plus une petite contrepartie, jamais une perte.
+
+- **Tirage** : au bilan de l'année (flux `variety`), parmi les thèmes **possibles** au rang de la ferme, sans répétition
+  tant que tous les thèmes possibles n'ont pas été vus (sac). Annoncé dans le bilan (« L'an prochain : l'année des
+  abeilles ! »), puis bandeau au 1er jour de printemps. 1re année : « l'année de l'installation », sans thème.
+- **Fête spéciale** : comme les fêtes du calendrier (bandeau la veille, décor, musique de fête), jamais le même jour
+  qu'une autre fête ni que le colporteur (jours 5 et 6).
+- **Visiteur unique** : il arrive le jour dit (petit personnage sur le chemin, offre dans le Carnet) et **attend la
+  réponse jusqu'à la fin de la saison** ; son cadeau est gratuit.
+
+| id | Thème | Rang | Vedette (+25 %) | Autres effets toute l'année | Fête spéciale | Visiteur unique (jour) → cadeau |
+|---|---|---|---|---|---|---|
+| `bees` | L'année des abeilles | 2 | tournesol | ruches : revenu **+50 %** | **Fête du miel** (été, j. 2) : ruches × 3 ce jour, récoltes +10 % | **Margot l'apicultrice** (printemps, j. 2) → une ruche posée (s'il y a la place), sinon 60 pièces |
+| `cheese` | L'année du fromage | 3 | fromages (vache et chèvre) | lait : la fromagerie a **+1 place** dès le visiteur | **Foire aux fromages** (automne, j. 7) : produits × 1,5 ce jour | **Anselme le fromager** (été, j. 2) → +1 place à la fromagerie pour l'année (sans fromagerie : 80 pièces) |
+| `tourism` | Le boom touristique | 2 | fraise | touristes : **2 fois plus souvent**, **+50 %** par passage ; chambre d'hôte +25 % | **Nuit des lampions** (été, j. 7) : chambre d'hôte × 2, touristes garantis (3 passages) | **Une journaliste de « Campagne & Jardins »** (printemps, j. 7) → 10 écus et le décor « Vu dans le magazine » |
+| `giants` | L'année des géants | 3 | citrouille | chance des légumes géants **× 2** (6 → 12 %) ; graines de citrouille −20 % | **Concours du plus gros légume** (automne, j. 4) : récoltes de citrouille × 1,5 ce jour, géants récoltés ce jour + 50 % | **Gaspard, jardinier champion** (été, j. 2) → 6 graines de citrouille offertes (semis gratuits) |
+| `frogs` | L'année des grenouilles | 1 | chou | les jours nuageux, **30 %** de chances d'une petite averse à l'aube (tout est arrosé) ; corbeaux 2 fois plus rares | **Bal des grenouilles** (printemps, j. 7) : tout est arrosé, récoltes +10 % | **Firmin le vieux pêcheur** (automne, j. 3) → une canne : poissons +50 % toute l'année (sans mare : 40 pièces) — *contrepartie : l'heure dorée (lot 2) est 2 fois plus rare* |
+| `orchard` | L'année des vergers | 2 | pomme | les fruits des arbres mûrissent **20 % plus vite** | **Fête de la pomme** (automne, j. 7) : paniers de fruits et jus × 1,5 ce jour | **Mathis le pépiniériste** (printemps, j. 7) → un pommier **adulte** planté sur une parcelle libre du verger (sinon 80 pièces) |
+| `bread` | L'année du pain | 1 | blé | farine et pain **+20 %** ; graines de blé −20 % | **Fête du pain** (été, j. 7) : blé × 1,25, produits du moulin × 1,5 ce jour | **Jeanne la meunière** (printemps, j. 2) → 10 semis de blé gratuits et 40 pièces |
+| `markets` | L'année des grands marchés | 2 | tomate | cours du marché **plus vifs** : × 0,7 à × 1,45 au lieu de × 0,8 à × 1,3 — *contrepartie : des jours bas plus bas* | **Grand marché** (printemps, j. 7) : toutes les ventes +20 % ce jour | **Un grossiste de la ville** (automne, j. 3) → rachète le grenier **+30 %** au cours du jour (une fois, quand on veut avant la fin de la saison) |
+| `lights` | L'année des lumières | 1 | navet | produits transformés vendus en hiver **+15 %** ; employés joyeux toute la semaine de la fête | **Fête des lumières** (hiver, j. 2) : produits × 1,3 ce jour, lampions | **Le colporteur du Nord** (hiver, j. 7) → 8 graines rares de poireau et 5 écus |
+
+Les effets « toute l'année » durent du 1er jour de printemps au soir du dernier jour d'hiver. La vedette compte pour les
+récoltes, le grenier et (si c'est un produit) les ventes de produits. Une ferme sans le bâtiment d'un effet (pas de
+ruche…) profite quand même de la vedette, de la fête et du visiteur.
+
+## 16.7 C7 — Le jour du colporteur
+
+**Basile le colporteur** passe à date fixe avec sa roulotte : on attend « le jour du colporteur ».
+
+- **Quand** : le **5e jour de chaque saison** (saison de moins de 6 jours : le jour 4), il reste **deux jours** (il repart
+  le soir du 6e jour). Annoncé la veille à l'aube (« Demain, Basile le colporteur passe à la ferme ») et visible dans le
+  calendrier. Niveaux : chaque saison, **sauf le printemps du niveau 1** ; carrière : chaque saison dès l'été de la 1re
+  année. Il remplace le marchand ambulant au hasard de la carrière (§ 16.8).
+- **L'étal** : tiré à l'arrivée (flux `variety`) : **toujours un sachet de graines rares** (s'il y en a une de saison) +
+  **2 autres objets** (carrière, rang ≥ 3 : 3), parmi ceux qui sont possibles ; chaque objet se vend **une fois** par
+  passage ; un objet unique déjà possédé n'est plus proposé.
+- On achète d'un toucher (prix en pièces, confirmation seulement au-delà de la moitié de l'argent).
+
+| id | Objet | Niveaux : prix · effet | Carrière : prix · effet | Condition | Poids |
+|---|---|---|---|---|---|
+| `seeds.pea` / `seeds.melon` / `seeds.leek` | Sachet de graines rares | **30 / 90 / 50** · 6 semis de petits pois / melon / poireau (graine comprise) | 60 / 180 / 100 · 12 semis | culture de saison | (toujours 1) |
+| `fertilizer` | Engrais du colporteur | **35** · tout le champ : +0,25 jour de pousse par aube pendant 3 aubes | **150** · un champ (règle de l'ancien marchand) | — | 3 |
+| `usedCoop` | Poulailler d'occasion | 70 % du prix du prochain poulailler · posé tout de suite | — (carrière : `hens`) | poulailler proposé, pas au max | 2 |
+| `hens` | Deux poules | — | **40** · deux poules au poulailler | carrière, 2 places | 2 |
+| `usedHive` | Ruche d'occasion | 70 % du prix de la prochaine ruche | **40** | ruche proposée, pas au max (carrière : place) | 2 |
+| `copperCan` | Arrosoir de cuivre (unique) | **60** · chaque matin, 3 parcelles qui ont soif sont arrosées, jusqu'à la fin de la partie | **300** · 4 parcelles, pour toujours | pas au niveau 8 | 2 |
+| `almanac` | Almanach de poche (unique) | **20** · météo d'après-demain jusqu'à la fin de la partie | **80** · pour toujours | pas de bonus « Almanach » | 1 |
+| `horseshoe` | Fer à cheval porte-bonheur (unique) | **45** · belle +1 point, dorée +0,3 point jusqu'à la fin de la partie | **250** · pour toujours | surprises actives | 1 |
+| `lantern` | Lanterne du colporteur (décor) | **30** · décor `lantern.peddler` débloqué (5 écus s'il est déjà à vous) | **60** | — | 1 |
+| `weathervane` | Girouette au coq (décor) | **40** · décor `weathervane.rooster` | **80** | — | 1 |
+| `heirloom` | Bocal de graines anciennes | — | **120** · une graine ancienne (`state.career.heirlooms`, pour « La Vallée vivante ») | carrière | 1 |
+
+### Les graines rares (trois cultures nouvelles)
+
+Elles n'existent **que** par le colporteur (et les cartes « Sachet de graines rares », le visiteur de l'année des
+lumières) : jamais dans les listes des niveaux, jamais dans les rangs de la carrière, jamais semées par le semoir ni les
+jardiniers (aider sans remplacer), jamais demandées par le tableau ni la charrette. Un semis consomme une graine du
+sachet, **sans payer** (le sachet comprend les graines).
+
+| Culture | id | Saisons | Pousse | Graine (repère) | Vente | Gel | Profit / jour (arrosée) |
+|---|---|---|---|---|---|---|---|
+| Petits pois | `pea` | printemps | 3 j | 5 | 17 | gèle | 4,0 (carotte 3,0) |
+| Melon | `melon` | été | 6 j | 15 | 64 | gèle | 8,2 (maïs 5,8) |
+| Poireau | `leek` | automne, hiver | 5 j | 8 | 27 | **résiste** | 3,8 (chou 3,0) |
+
+Rares mais pas écrasantes : un sachet de 6 semis rapporte 15 à 60 pièces de plus que la culture équivalente. Toutes les
+règles habituelles s'appliquent (qualité, géants, marché fou : cours × 1 fixe ; carrière : cours × 1, hors saison × 1,25).
+Pas de recette d'atelier. Elles ne comptent pas pour « Herbier complet » (liste inchangée) ; elles sont comptées pour
+l'album (lot 4). Feuille des graines : badge « Rare · 4 graines » ; « Semer partout » les utilise jusqu'au bout du sachet.
+
+Interface : toucher la roulotte → feuille « **Basile le colporteur** » : portrait, une phrase (« Des trésors de la route,
+pour aujourd'hui et demain ! »), 3 ou 4 tuiles (≥ 72 px : icône, nom, effet en une ligne, bouton prix), « Vendu » après
+l'achat. Toast à l'arrivée « Basile le colporteur est là (jusqu'à demain soir) » avec « Voir ».
+
+## 16.8 Articulation avec l'existant (fusions et remplacements)
+
+| Existant | Décision | Pourquoi |
+|---|---|---|
+| **Visiteur acheteur** (événement au hasard de la carrière, une commande à la fois, 5 jours, × 1,5) | **Remplacé** par le tableau du village quand la variété est active (son poids passe à 0 ; ses noms deviennent des clients du tableau). Une commande de visiteur déjà ouverte dans une sauvegarde se termine normalement. | Même idée en mieux : visible en permanence, au choix, sans échéance ; garder les deux ferait deux systèmes de commandes concurrents. |
+| **Marchand ambulant** (événement au hasard, rang ≥ 2, un objet pour la journée) | **Remplacé** par le colporteur à date fixe (poids 0) ; ses trois objets (engrais 150, deux poules 40, ruche 40) passent dans l'étal du colporteur avec les mêmes prix et effets. Offre en cours dans une sauvegarde : se termine normalement. | « Le jour du colporteur » crée l'attente sans la frustration d'un passage au hasard d'une journée. |
+| **Tirage des événements au hasard** (15 % par jour) | **10 %** quand la variété est active. | Sans visiteur ni marchand (28 points de poids sur 78), les autres événements (touristes, corbeaux, arc-en-ciel, rosée, animal perdu, cadeau de Joseph) gardent la même fréquence qu'avant (≈ 0,7 par semaine). Le flux `events` tire le même nombre de nombres à chaque aube. |
+| **Quêtes de Joseph** | **Gardées telles quelles** : une à la fois, longues, avec amitié (♥) et l'objectif du rang 4. Le tableau n'en demande jamais la culture ; la quête passe en premier pour les récoltes. | Joseph = un fil d'amitié rare et long ; le tableau = des petites demandes anonymes et quotidiennes. Différents par le rythme, la récompense et l'histoire : pas de doublon. |
+| **Comice** (carrière) et **concours du niveau 12** | Inchangés. Les récoltes livrées comptent toujours. | Objectifs d'année, différents des défis de saison. |
+| **Fêtes du calendrier** | Inchangées ; la fête de l'année à thème s'y ajoute, d'autres jours. | |
+| **Vœu « une bourse »** (lot 2) et carte « La bourse du village » | Les deux restent (rares tous les deux). | |
+| **Bonus permanent « Almanach »** | L'almanach du colporteur et la carte « Almanach du berger » ne sont pas proposés quand il est actif. | Pas d'objet inutile. |
+
+## 16.9 Activation, sauvegardes, cas limites
+
+- **Activation** : `createGame({ variety })` : défaut **activé en Détente, désactivé en Classique** ; `createCareer({
+  variety })` : défaut activé. On peut désactiver une partie de la variété pour les tests et la simulation (`variety: {
+  board, cards, cart, challenges, merchant, themes }`). Le mode Classique n'a aucun réglage d'interface pour l'activer
+  (point ouvert, § 16.11).
+- **Sauvegardes** : une partie Détente d'avant le lot 3 reçoit la variété à la reprise (tableau rempli à l'aube suivante,
+  charrette et défis à la saison suivante, cartes à la fin de la saison en cours) ; une partie Classique jamais ; une
+  carrière la reçoit à la reprise, **sans thème pour l'année en cours** (le premier thème au bilan suivant).
+- Tutoriel du niveau 1 : tableau à partir du 5e jour, charrette et colporteur à partir de l'été, défis à partir de l'été,
+  première carte à la fin du printemps ; un conseil « première fois » pour chaque nouveauté (`variety.board`,
+  `variety.cart`, `variety.cards`, `variety.challenges`, `variety.merchant`, `variety.rare`, `career.theme`).
+- Lecture : toute feuille du lot (tableau, charrette, colporteur, cadeau, défis) met le jeu en pause pendant la lecture
+  quand l'option « Pause pendant la lecture » est active (lot 1) ; aucune ne s'ouvre toute seule, sauf la fenêtre de fin de
+  saison (qui existe déjà).
+- Rien n'oblige à ouvrir ces feuilles : un joueur qui les ignore joue exactement comme avant, avec quelques primes en
+  plus (commandes et charrette remplies par hasard).
+
+## 16.10 Équilibre (cibles à vérifier par la simulation)
+
+Commandes : `node tools/simulate.js --compare-variety [--strategy casual]` et `node tools/simulate-career.js
+--compare-variety` (même graine, sans → avec ; surprises actives des deux côtés). Les robots apprennent la variété par
+l'API publique (§ ARCHITECTURE, « Lot 3 ») : le joueur tranquille regarde le tableau un jour sur deux, garde une commande
+sur deux quand il peut la semer, pondère son « semer partout » × 2 vers les cultures demandées, choisit une carte au hasard,
+garde 2 défis au hasard, achète un sachet de graines rares 40 % du temps s'il a la marge ; le débutant ne garde rien,
+prend la première carte, ignore les défis, achète au colporteur 20 % du temps ; l'appliqué choisit au mieux.
+
+| Mesure (Détente, 200 parties par niveau) | Cible |
+|---|---|
+| Revenu de l'année, joueur tranquille | **+6 à +10 %** (tableau +3 à 4 %, cartes +2 à 3 %, charrette +1,5 à 2 %, défis +1 %, colporteur ≈ +0,5 %) |
+| Débutant · appliqué | ≤ +6 % · ≤ +12 % |
+| Victoires | inchangées ou meilleures (cibles du § 13.6 tenues) |
+| Écus gagnés par année (défis + charrette) | ≈ 8 à 15 (avant : 25 à 45 par victoire) |
+| Seuils d'étoiles Détente | **recalculés** avec la variété active selon la règle du § 13.3 : ★★ ≈ argent final médian du joueur tranquille (45 à 55 % l'obtiennent), ★★★ ≈ ses 12 % meilleures parties ; niveau 2 : ★★★ reste rare pour le débutant (≈ 16 %). Attendu : argent final médian du joueur tranquille **+25 à +35 %** (le revenu en plus pèse beaucoup sur ce qui reste en fin d'année, comme au lot 2), donc des seuils relevés d'environ **20 à 30 %** ; les valeurs exactes remplacent celles de `src/data/difficulty.js` et du tableau du § 13.3. |
+| Classique | **identique** (pas de variété, test de parité) |
+| Carrière (60 carrières × 10 ans) | revenu du joueur tranquille **≤ +8 %** ; rang médian par année identique à un an près ; Domaine (médiane) à un an près ; aucune faillite en Détente ; sollicitations au hasard par semaine inchangées (≈ 1 avec les quêtes) |
+
+Leviers si une cible n'est pas tenue (dans cet ordre) : taux de prime du tableau (poids), part de la prime de la
+charrette (10 % / 10 %), valeurs des cartes, tailles des commandes. Jamais les chiffres des niveaux.
+
+## 16.11 Points ouverts
+
+- Un interrupteur « Variété » dans le choix du niveau pour la proposer aussi en Classique (désactivée par défaut) ?
+- Commandes de produits animaux (œufs, fromages) en carrière : laissées aux quêtes de Joseph et au comice pour l'instant.
+- Succès liés au lot (« 50 commandes livrées », « une charrette pleine », « 10 médailles d'or ») : à décider avec l'album
+  (lot 4), qui lira les compteurs `state.variety.stats` et `progress.lifetime.variety`.
