@@ -635,20 +635,22 @@ Pourquoi pas seulement « tout moins cher » : les coûts fixes (charges, fermag
 
 | # | Départ | Fermages (printemps → hiver) | ★★ / ★★★ | Réglage propre |
 |---|---|---|---|---|
-| 1 | 160 | 20 / 60 / 90 / 130 | 570 / 870 | tutoriel |
-| 2 | 180 | 20 / 60 / 80 / 120 | 290 / 540 | arrosage 1 pièce |
-| 3 | 160 | 20 / 50 / 100 / 170 | 310 / 620 | maladie 5 % |
-| 4 | 260 | 20 / 60 / 90 / 120 | 550 / 780 | 6 parcelles |
-| 5 | 160 | 20 / 80 / 140 / 500 | 450 / 840 | hiver de 14 jours |
-| 6 | 160 | 20 / 70 / 130 / 300 | 290 / 670 | marché fou |
-| 7 | 660 | 50 / 150 / 230 / 360 | 250 / 580 | crédit : **120** aux jours 4, 11, 18, 25 |
-| 8 | 160 | 20 / 80 / 130 / 240 | 410 / 660 | bio |
-| 9 | 360 | 20 / 60 / 120 / 260 | 290 / 490 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
-| 10 | 240 | 20 / 90 / 200 / 420 | 680 / 950 | pommiers sans ruche : demi-récolte |
-| 11 | 340 | 20 / 80 / 160 / 440 | 440 / 640 | montagne |
-| 12 | 310 | 20 / 100 / 190 / 480 | 420 / 660 | concours |
+| 1 | 160 | 20 / 60 / 90 / 130 | 560 / 830 | tutoriel |
+| 2 | 180 | 20 / 60 / 80 / 120 | 310 / 570 | arrosage 1 pièce |
+| 3 | 160 | 20 / 50 / 100 / 170 | 350 / 670 | maladie 5 % |
+| 4 | 260 | 20 / 60 / 90 / 120 | 530 / 750 | 6 parcelles |
+| 5 | 160 | 20 / 80 / 140 / 500 | 490 / 810 | hiver de 14 jours |
+| 6 | 160 | 20 / 70 / 130 / 300 | 340 / 680 | marché fou |
+| 7 | 660 | 50 / 150 / 230 / 360 | 220 / 610 | crédit : **120** aux jours 4, 11, 18, 25 |
+| 8 | 160 | 20 / 80 / 130 / 240 | 380 / 730 | bio |
+| 9 | 360 | 20 / 60 / 120 / 260 | 290 / 480 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
+| 10 | 240 | 20 / 90 / 200 / 420 | 670 / 900 | pommiers sans ruche : demi-récolte |
+| 11 | 340 | 20 / 80 / 160 / 440 | 390 / 620 | montagne |
+| 12 | 310 | 20 / 100 / 190 / 480 | 400 / 680 | concours |
 
 Seuils d'étoiles : ★★ ≈ argent final médian du joueur tranquille (la moitié l'obtient) ; ★★★ ≈ ses 12 % meilleures parties — un joueur appliqué (qui arrose tout, comme les robots) l'obtient à coup sûr.
+
+*(QA du lot 3, 2026-10-02 : paliers des défis strictement croissants (« Potager varié » et « Semeur curieux » non proposés quand trop peu de cultures sont faisables) et commande gardée d'office au semis : l'argent final médian du joueur tranquille bouge de quelques pour cent selon le niveau ; même règle, `node tools/simulate.js --stars` (200 parties par niveau) : ★★ ou mieux à 49–52 % des parties du joueur tranquille, ★★★ à 12–13 % ; au niveau 2, le débutant obtient ★★★ dans 11 % des parties. Anciens seuils (lot 3) : 570/870, 290/540, 310/620, 550/780, 450/840, 290/670, 250/580, 410/660, 290/490, 680/950, 440/640, 420/660.)*
 
 *(Lot 3, 2026-10-02 : seuils recalculés avec la variété active en Détente — tableau du village, cadeau de saison, charrette, défis, colporteur —, qui augmente le revenu de l'année du joueur tranquille d'environ 8,5 % et son argent final médian d'environ 55 % ; même règle, `node tools/simulate.js --stars` (200 parties par niveau) : chaque niveau donne ★★ ou mieux à 49–51 % des parties du joueur tranquille et ★★★ à 11–13 %. Au niveau 2, ★★★ = 540 (au lieu de 530) pour qu'il reste rare pour le débutant (≈ 16 %). Anciens seuils (lot 2) : 410/650, 180/470, 230/450, 420/590, 240/510, 180/470, 140/380, 260/530, 170/340, 570/780, 260/440, 290/560. Voir § 16.10.)*
 
@@ -918,8 +920,8 @@ et si au moins une de ces conditions est vraie :
 | `tree` | arbre fruitier adulte possédé, en saison de fruits, et une récolte de fruits tient dans l'horizon (ou est déjà mûre) |
 
 Horizon : **tableau** = jours restants dans la saison, aujourd'hui compris, au moins 3 ; **charrette** = durée de la
-saison − 1 (tirée le 1er jour) ; **défis** : nombre de cultures distinctes faisables (sert à plafonner « Potager varié »
-et « Semeur curieux »).
+saison − 1 (tirée le 1er jour) ; **défis** : durée de la saison — le nombre de cultures distinctes faisables plafonne
+« Potager varié » (cultures qu'on peut récolter) et « Semeur curieux » (cultures qui se sèment), § 16.5.
 
 **Exclusions** (si au moins une autre culture reste possible) : la culture de la quête de Joseph en cours (carrière : pas
 de concurrence pour les récoltes) ; une culture qu'un atelier **allumé** du joueur transforme (l'atelier passe avant,
@@ -982,6 +984,11 @@ ouvrir sa feuille. C'est le remplaçant des « visiteurs acheteurs » de la carr
 - **Garder** (punaise, bouton « Garder ») : une commande gardée ne part plus, **sans limite de temps**, jusqu'à ce qu'elle
   soit livrée ou qu'on la retire. Une commande **commencée** (au moins une unité donnée) est gardée d'office. On peut
   garder les 3. Utile quand on sème exprès pour elle.
+- **Gardée d'office au semis** *(QA, 2026-10-02)* : semer **à la main** la culture d'une commande non gardée la garde
+  aussitôt (on sème pour elle : elle ne doit pas disparaître à l'aube avant la récolte). Indice discret : étiquette
+  « Gardée : Lili » au-dessus de la parcelle, punaise rouge sur le panneau, mention « Gardée d'office : vous avez semé
+  pour elle. » dans la feuille. Le joueur peut ôter la punaise ou la refuser (✕), sans pénalité. Les semis des salariés,
+  des machines et de Joseph ne gardent rien.
 - **Autres demandes** (bouton ↻ en bas de la feuille) : **une fois par jour, gratuit** : remplace tout de suite toutes les
   commandes non gardées et pas commencées.
 - **Pas pour moi** (✕ sur chaque commande) : la commande part, **sans aucune pénalité** ; si elle était commencée, le
@@ -1127,8 +1134,8 @@ or**. Rien ne se reporte d'une saison à l'autre (aucune série).
 | Médaille | Niveaux | Carrière |
 |---|---|---|
 | bronze | **1 écu** | 1 écu |
-| argent | **2 écus + 10 pièces** | 2 écus + 10 × rang pièces |
-| or | **4 écus + 20 pièces** | 4 écus + 20 × rang pièces |
+| argent | **2 écus + 10 pièces** | 2 écus + 4 × rang pièces |
+| or | **4 écus + 20 pièces** | 4 écus + 8 × rang pièces |
 
   Au mieux, deux ors par saison : 14 écus et 60 pièces (niveaux). Les médailles sont comptées (album du lot 4).
 - **Tirage** (flux `variety`) : 3 défis **différents** parmi les possibles, selon leur poids, jamais exactement les mêmes
@@ -1137,16 +1144,28 @@ or**. Rien ne se reporte d'une saison à l'autre (aucune série).
 Cibles : `k` = (parcelles de champ ouvertes au début de la saison / 12) × (durée de la saison / 7), entre 0,5 et 4 ;
 toute cible arrondie, au moins 1.
 
+**Paliers toujours strictement croissants et atteignables** *(QA, 2026-10-02)* : avec peu de cultures faisables (niveau 2
+au printemps : 3), « Semeur curieux » et « Potager varié » avaient des paliers 3 / 3 / 3 et les trois médailles tombaient
+d'un coup au 2ᵉ jour. Règle, appliquée à tous les défis :
+1. un palier égal ou inférieur au précédent est relevé d'une unité (arrondis des petits champs) ;
+2. sous un **plafond** (cultures faisables récoltables pour « Potager varié », semables pour « Semeur curieux », nombre
+   de caisses pour « La charrette pleine »), l'or descend au plafond, puis chaque palier au plus le suivant − 1 ;
+3. si le bronze tombe alors sous son minimum (**2** pour les deux défis de cultures différentes — le 1er semis ne doit
+   pas suffire —, 1 sinon), **le défi n'est pas proposé** (un autre est tiré à sa place).
+
+Exemples : 4 cultures faisables → 2 / 3 / 4 ; 5 → 3 / 4 / 5 (semer) ; 3 ou moins → pas proposé ; charrette de 2 caisses
+(niveau 4, hiver) → « La charrette pleine » pas proposée (1 / 2 / 2 auparavant).
+
 | id | Défi | Mesure (depuis le 1er jour de la saison) | Bronze / argent / or | Condition | Poids |
 |---|---|---|---|---|---|
 | `harvests` | Belle cueillette | récoltes (toutes) | 12 / 20 / 30 × k | — | 3 |
 | `sales` | Bon marché | pièces de ventes de récoltes (prime de qualité comprise) | 150 / 260 / 380 × k × prix des récoltes du mode | — | 3 |
-| `variety` | Potager varié | cultures différentes récoltées | 2 / 3 / 4 (or plafonné au nombre de cultures faisables) | ≥ 2 cultures faisables | 2 |
-| `sowing` | Semeur curieux | cultures différentes semées | 2 / 3 / 4 (idem) | ≥ 2 cultures semables | 2 |
+| `variety` | Potager varié | cultures différentes récoltées | 3 / 4 / 6 (sous le plafond : règle ci-dessus) | ≥ 4 cultures faisables récoltables | 2 |
+| `sowing` | Semeur curieux | cultures différentes semées | 4 / 5 / 6 (idem) | ≥ 4 cultures semables | 2 |
 | `care` | Aux petits soins | récoltes « arrosée chaque jour où il le fallait » (soin du lot 2) | 3 / 6 / 10 × k | surprises actives | 2 |
 | `quality` | La main verte | récoltes belles ou dorées | 1 / 2 / 4 × max(1, k) | surprises actives | 1 |
 | `orders` | Ami du village | commandes du tableau livrées | 1 / 2 / 3 | tableau actif | 2 |
-| `crates` | La charrette pleine | caisses de la charrette remplies | 1 / 2 / 3 (au plus le nombre de caisses) | charrette cette saison | 2 |
+| `crates` | La charrette pleine | caisses de la charrette remplies | 1 / 2 / 3 | charrette d'au moins 3 caisses cette saison | 2 |
 | `products` | Fait maison | produits transformés vendus | 2 / 4 / 6 (carrière : + rang) | un atelier possédé | 2 |
 | `apples` | Paniers du verger | paniers de fruits récoltés | 1 / 2 / 4 × max(1, arbres adultes / 2) | arbre adulte, saison de fruits | 1 |
 | `animals` | Basse-cour heureuse | pièces de revenus des animaux (niveaux) | 25 / 45 / 70 × durée / 7 | un animal qui rapporte | 1 |
@@ -1300,7 +1319,7 @@ charrette (10 % / 10 %), valeurs des cartes, tailles des commandes. Jamais les c
 | Cartes (niveaux) | bourse 20 + 5 × saison ; engrais + 10 % ; poule 4 ; arrosoir 4 ; affiche + 5 % ; recette, foin + 15 % ; sachet 4 graines | **bourse 12 + 4 × saison ; engrais + 8 % ; poule 3 ; arrosoir 3 ; affiche + 4 % ; recette, foin + 10 % ; sachet 3 graines** |
 | Cartes (carrière) | bourse 30 + 20 × rang ; arrosoir 6 ; défrichage − 50 % ; sachet 8 | **bourse 20 + 10 × rang ; arrosoir 4 ; défrichage − 25 % ; sachet 6** |
 | Défis : cibles (bronze / argent / or) | cueillette 12/20/30 × k ; ventes 150/260/380 × k × prix ; potager 2/3/4 ; semeur 2/3/4 ; soins 3/6/10 × k ; main verte 1/2/4 ; ami du village 1/2/3 ; fait maison 2/4/6 ; verger 1/2/4 ; basse-cour 25/45/70 ; abris 5/9/14 | **20/36/54 × k ; 300/520/760 × k × prix ; 3/4/6 ; 4/5/6 ; 6/12/20 × k ; 1/3/5 ; 2/3/5 ; 3/6/9 ; 2/4/6 ; 45/80/120 ; 6/11/17** |
-| Médailles (carrière) | argent 10 × rang, or 20 × rang pièces | **argent 5 × rang, or 10 × rang** (écus inchangés ; niveaux inchangés) |
+| Médailles (carrière) | argent 10 × rang, or 20 × rang pièces | **argent 4 × rang, or 8 × rang** (5 / 10 avant la QA du 2026-10-02 : la commande gardée d'office au semis portait la carrière à + 8,1 %) (écus inchangés ; niveaux inchangés) |
 | Graines rares (carrière) | 12 semis par sachet | **8 semis** (mêmes prix) |
 | Année des grenouilles | averse 30 % des jours nuageux | **15 %** |
 
@@ -1310,22 +1329,23 @@ charrette (10 % / 10 %), valeurs des cartes, tailles des commandes. Jamais les c
 
 | # | casual : revenu (écart) | victoires | novice : revenu (écart) | victoires | casual, gain par partie : tableau · cartes · charrette · médailles · colporteur (dépense) · écus |
 |---|---|---|---|---|---|
-| 1 | 1889 → 2054 (+8,7 %) | 100 → 100 % | 1139 → 1218 (+6,9 %) | 99 → 98 % | 56 · 12 · 12 · 23 · 42 · 8 |
-| 2 | 1913 → 2115 (+10,6 %) | 99 → 100 % | 1154 → 1201 (+4,1 %) | 100 → 99 % | 57 · 10 · 15 · 27 · 45 · 9 |
-| 3 | 1991 → 2169 (+8,9 %) | 100 → 99 % | 1148 → 1231 (+7,2 %) | 98 → 99 % | 58 · 12 · 15 · 32 · 53 · 10 |
-| 4 | 1598 → 1750 (+9,5 %) | 100 → 100 % | 1055 → 1118 (+6,0 %) | 100 → 100 % | 33 · 10 · 4 · 22 · 55 · 7 |
-| 5 | 2657 → 3022 (+13,7 %) | 98 → 100 % | 1472 → 1581 (+7,4 %) | 95 → 95 % | 79 · 13 · 20 · 36 · 44 · 11 |
-| 6 | 2070 → 2241 (+8,3 %) | 97 → 99 % | 1152 → 1240 (+7,6 %) | 90 → 95 % | 58 · 9 · 15 · 29 · 51 · 10 |
-| 7 | 2438 → 2646 (+8,5 %) | 95 → 99 % | 1296 → 1370 (+5,7 %) | 94 → 96 % | 61 · 11 · 15 · 34 · 61 · 11 |
-| 8 | 2153 → 2343 (+8,8 %) | 100 → 99 % | 1116 → 1212 (+8,6 %) | 93 → 95 % | 57 · 12 · 15 · 28 · 51 · 9 |
-| 9 | 1603 → 1710 (+6,7 %) | 98 → 100 % | 863 → 939 (+8,8 %) | 100 → 100 % | 35 · 8 · 10 · 18 · 47 · 7 |
-| 10 | 2168 → 2289 (+5,6 %) | 100 → 100 % | 1330 → 1370 (+3,0 %) | 100 → 100 % | 33 · 10 · 9 · 22 · 69 · 8 |
-| 11 | 1910 → 2061 (+7,9 %) | 100 → 100 % | 1228 → 1272 (+3,6 %) | 100 → 100 % | 43 · 11 · 8 · 30 · 58 · 9 |
-| 12 | 2348 → 2469 (+5,2 %) | 100 → 100 % | 1469 → 1550 (+5,5 %) | 100 → 100 % | 44 · 11 · 12 · 22 · 57 · 8 |
+| 1 | 1889 → 2048 (+8,4 %) | 100 → 100 % | 1139 → 1218 (+6,9 %) | 99 → 98 % | 60 · 13 · 11 · 20 · 43 · 7 |
+| 2 | 1913 → 2127 (+11,2 %) | 99 → 100 % | 1154 → 1206 (+4,5 %) | 100 → 99 % | 61 · 11 · 15 · 19 · 47 · 8 |
+| 3 | 1991 → 2170 (+9,0 %) | 100 → 100 % | 1148 → 1235 (+7,6 %) | 98 → 99 % | 59 · 11 · 14 · 26 · 49 · 9 |
+| 4 | 1598 → 1738 (+8,8 %) | 100 → 100 % | 1055 → 1119 (+6,1 %) | 100 → 100 % | 35 · 10 · 4 · 21 · 52 · 7 |
+| 5 | 2657 → 3037 (+14,3 %) | 98 → 99 % | 1472 → 1590 (+8,0 %) | 95 → 96 % | 81 · 11 · 20 · 29 · 47 · 10 |
+| 6 | 2070 → 2274 (+9,9 %) | 97 → 98 % | 1152 → 1242 (+7,8 %) | 90 → 95 % | 61 · 10 · 15 · 24 · 50 · 9 |
+| 7 | 2438 → 2599 (+6,6 %) | 95 → 97 % | 1296 → 1373 (+5,9 %) | 94 → 96 % | 62 · 10 · 16 · 25 · 51 · 9 |
+| 8 | 2153 → 2327 (+8,1 %) | 100 → 100 % | 1116 → 1217 (+9,1 %) | 93 → 95 % | 57 · 11 · 14 · 23 · 54 · 8 |
+| 9 | 1603 → 1704 (+6,3 %) | 98 → 100 % | 863 → 939 (+8,8 %) | 100 → 100 % | 36 · 10 · 9 · 13 · 56 · 6 |
+| 10 | 2168 → 2284 (+5,4 %) | 100 → 100 % | 1330 → 1371 (+3,1 %) | 100 → 100 % | 35 · 10 · 8 · 12 · 70 · 6 |
+| 11 | 1910 → 2044 (+7,0 %) | 100 → 100 % | 1228 → 1274 (+3,7 %) | 100 → 100 % | 47 · 9 · 7 · 24 · 54 · 9 |
+| 12 | 2348 → 2449 (+4,3 %) | 100 → 100 % | 1469 → 1550 (+5,5 %) | 100 → 100 % | 49 · 10 · 11 · 14 · 55 · 6 |
 
-- **Revenu de l'année, moyenne des 12 niveaux** : casual **+8,5 %** (cible + 6 à + 10 %), novice **+6,2 %** (cible ≤ + 6 %,
-  tenue à l'arrondi), optimal **+7,6 %** (≤ + 12 %) ; careless + 9,0 %, balanced + 8,2 %, investor + 8,1 %, idle 0 %
-  (toujours 100 % de faillites). Le niveau 5 (hiver de 14 jours) donne le plus (+ 13,7 %) : le tableau y travaille tout
+- **Revenu de l'année, moyenne des 12 niveaux** *(après la QA du 2026-10-02 : paliers des défis, commande gardée d'office)* :
+  casual **+8,3 %** (cible + 6 à + 10 % ; + 8,5 % avant), novice **+6,4 %** (cible ≤ + 6 % ; + 6,2 % avant : il ne garde
+  jamais à la main, la garde d'office au semis l'aide un peu), optimal **+7,8 %** (≤ + 12 %) ; careless + 9,7 %, balanced
+  + 8,8 %, investor + 8,1 %, idle 0 % (toujours 100 % de faillites). Le niveau 5 (hiver de 14 jours) donne le plus (+ 14,3 %) : le tableau y travaille tout
   l'hiver.
 - **Victoires** : inchangées ou meilleures à ± 1 point (bruit) ; toutes les cibles du § 13.6 restent tenues.
 - **Argent final médian du joueur tranquille** : **+ 56 %** en moyenne (plus que les + 25 à + 35 % attendus : le revenu en
@@ -1338,19 +1358,23 @@ charrette (10 % / 10 %), valeurs des cartes, tailles des commandes. Jamais les c
 
 | Joueur | Revenu (moyenne des 10 ans) | Rang médian par année | Domaine (médiane) | Faillites | Sollicitations / semaine (événements au hasard) |
 |---|---|---|---|---|---|
-| casual | **+ 7,6 %** (cible ≤ + 8 %) | identique (2 2 3 4 4 5 5 6 6 6) | an 8 → an 8 | 0 % | 1,03 → 0,67 (0,88 → 0,56) |
-| novice | + 13,6 % | identique, an 10 : 5 → 6 | jamais → an 10 | 0 % | 1,01 → 0,61 |
-| optimal | + 3,1 % | identique | an 6 → an 6 | 0 % | 0,81 → 0,43 |
-| automator | + 3,0 % | identique | an 6 → an 6 | 0 % | 0,96 → 0,63 |
-| idle | + 6,6 % | identique (2) | jamais | 0 % | 1,11 → 0,57 |
+| casual | **+ 7,8 %** (cible ≤ + 8 %) | identique (2 2 3 4 4 5 5 6 6 6) | an 8 → an 8 | 0 % | 1,03 → 0,67 (0,88 → 0,57) |
+| novice | + 14,5 % | identique, an 10 : 5 → 6 | jamais → an 10 | 0 % | 1,01 → 0,61 |
+| optimal | + 2,9 % | identique | an 6 → an 6 | 0 % | 0,81 → 0,42 |
+| automator | + 2,9 % | identique | an 6 → an 6 | 0 % | 0,96 → 0,64 |
+| idle | + 8,4 % | identique (2) | jamais | 0 % | 1,11 → 0,58 |
+
+*(Après la QA du 2026-10-02. Avec la commande gardée d'office et les nouveaux paliers, la carrière du joueur tranquille
+montait à + 8,1 % : médailles de carrière ramenées de 5 / 10 à **4 / 8 × rang** pièces → + 7,8 %. Avant la QA : casual
++ 7,6 %, novice + 13,6 %, optimal + 3,1 %, automator + 3,0 %, idle + 6,6 %.)*
 
 - Les événements au hasard **autres** que le visiteur et le marchand gardent leur fréquence (≈ 0,56 par semaine avant
   comme après) ; les « sollicitations » baissent parce que le visiteur acheteur et le marchand ambulant sont remplacés par
   le tableau (toujours là, sans échéance) et le colporteur (à date fixe).
 - Le débutant gagne le plus en pourcentage (thèmes : vedette, averses ; cadeaux) sans changer son rythme de rangs ; aucune
   cible de carrière ne porte sur lui.
-- Gains moyens par carrière (casual, 10 ans) : tableau 818, cadeaux 246, charrette 388, médailles 1 491 pièces et 171 écus,
-  colporteur − 1 797 (graines rares, objets).
+- Gains moyens par carrière (casual, 10 ans) : tableau 853, cadeaux 282, charrette 378, médailles 1 160 pièces et 168 écus,
+  colporteur − 1 641 (graines rares, objets).
 
 ## 16.11 Points ouverts
 

@@ -12,7 +12,7 @@
 //   setImages(images), setReducedMotion(on)
 //   sync(game, layout, { time })   état durable (state.variety, requêtes lues au plus 4 fois par seconde)
 //   onEvent(type, payload, layout) cartArrived, cartDeparted, cartProgress, crateFull, merchantArrived, merchantLeft,
-//                                  orderProgress, orderDone, offer (visiteur du thème), dawn (arrosoir), harvested
+//                                  orderProgress, orderKept, orderDone, offer (visiteur du thème), dawn (arrosoir), harvested
 //   update(dt)
 //   collect(push)                  objets triés par profondeur avec le reste de la scène :
 //                                  push(name | null, x, y, sortY, { img, flipX, alpha })
@@ -132,8 +132,10 @@ export function varietySpots(layout) {
   // Cour devant la maison (poule voyageuse) ; visiteur et stand de fête près du panneau.
   const h = layout.house || layout.home?.house;
   const henArea = h ? { x: h.x * T, y: (h.y + h.h) * T + 2, w: Math.max(3, h.w + 2) * T, h: T - 2 } : { x: ess.x + T, y: roadPx - 2 * T, w: 4 * T, h: T };
-  const visitor = { x: board.x + board.w + 4, y: board.y + board.h - 15 };
-  const fair = { x: board.x - T - 2, y: board.y + T };
+  // Le visiteur attend à GAUCHE du panneau : à droite, il tombait sous la mini-carte de la carrière (en bas à
+  // droite de l'écran) tant qu'on ne faisait pas défiler (QA du lot 3) ; le stand de fête se pousse un peu plus loin.
+  const visitor = { x: board.x - T - 4, y: board.y + board.h - 15 };
+  const fair = { x: board.x - 3 * T, y: board.y + T };
   return { board, cart, crates, merchant, merchantNpc, wagon, henArea, visitor, fair, roadY };
 }
 
@@ -463,6 +465,15 @@ export function createVarietyActors(effects) {
           effects.sparkle?.(r, 10, 'gold', 0.1);
           if (!reduced) effects.ring?.(r.x + 8, r.y + 12, 3, 12, '#fff3b0', 0.45, 0.05, 0.45, 1);
         }
+        infoT = -1;
+        break;
+      }
+      case 'orderKept': {
+        // Semis de la culture d'une commande : gardée d'office (punaise rouge sur le panneau, petite étiquette).
+        const i = info.slots.findIndex((x) => x && x.id === p.orderId);
+        if (i >= 0) hops[i] = Math.max(hops[i], 0.6);
+        const at = plotTop(layout, p.plotIndex);
+        if (at && p.clientName) effects.floatText?.(at.x, at.y - 6, `Gardée : ${p.clientName}`, '#fff1d2', { icon: false, life: 1.6, delay: 0.15 });
         infoT = -1;
         break;
       }

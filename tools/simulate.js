@@ -659,7 +659,7 @@ export const HUMAN_PROFILES = {
     cropBias: 'cheapFast',
     // (lot 3) Variété
     boardLook: 0.5, // regarde le tableau un jour sur deux
-    keepOrder: 0.5, // garde une commande sur deux quand il peut la semer
+    keepOrder: 0.25, // garde à la main une commande sur quatre qu'il peut semer (QA du lot 3 : semer sa culture la garde d'office)
     requestBias: 2, // « semer partout » : × 2 vers les cultures demandées
     cardPick: 'random',
     challengePick: 'random',

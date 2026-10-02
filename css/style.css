@@ -890,8 +890,8 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
   border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
   image-rendering: pixelated;
   font-size: 0.9375rem;
-  /* Les messages ne captent pas les touchers (la scène et les onglets dessous restent
-     utilisables), sauf ceux qui proposent une action (« Nouvelle version… Recharger »). */
+  /* Les messages ne captent jamais les touchers (la scène et les onglets dessous restent
+     utilisables) ; seul le bouton d'un message qui propose une action (.toast-go) se touche. */
   pointer-events: none;
   filter: drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35));
   animation: toast-in 280ms var(--ease-pop);
@@ -900,7 +900,14 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
 .toast--warn,
 .toast--frost,
 .toast--rot { border-image-source: var(--img-btn-slate); color: var(--parch); text-shadow: 0 var(--px1) 0 var(--slate-dark); }
-.toast.is-action { pointer-events: auto; cursor: pointer; border-image-source: var(--img-btn-red); color: var(--parch); text-shadow: 0 var(--px1) 0 var(--red-dark); }
+/* Message qui propose une action : seul son bouton (« Voir », « Recharger »…) se touche ; le reste du message
+   laisse passer le doigt vers la scène (QA du lot 3 : au début d'une saison de carrière, les messages couvraient
+   la bande de la maison et captaient les touchers). */
+.toast-go { flex: none; align-self: center; min-width: 64px; min-height: 48px; margin-left: auto; padding: 0 10px; pointer-events: auto; }
+/* Pastille « +2 messages » : les messages effacés faute de place (au plus 2 à la fois) ; ouvre l'historique. */
+.toast-more { min-height: 48px; min-width: 96px; gap: 6px; padding: 0 12px; pointer-events: auto; font-size: 0.9375rem; animation: toast-in 280ms var(--ease-pop); }
+.toast-more[hidden] { display: none; }
+.toast-more-n { font-size: 1rem; }
 .toast-body { display: flex; flex-direction: column; line-height: 1.2; }
 .toast-title { font-size: 1rem; }
 .toast.is-leaving { animation: toast-out 240ms ease forwards; }
@@ -2813,8 +2820,7 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 .toast--error,
 .toast--warn,
 .toast--frost,
-.toast--rot,
-.toast.is-action { text-shadow: var(--text-outline); }
+.toast--rot { text-shadow: var(--text-outline); }
 
 /* ─── Grandes tailles de texte sur téléphone (130 et 150 %) ───────────────────────────────
    La barre du haut garde ses quatre cases sur 360 px : les chiffres grandissent un peu moins

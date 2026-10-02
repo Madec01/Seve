@@ -163,7 +163,7 @@ import {
 import {
   varietyDawnMerchant, varietyRestartChallenges,
   buyFromMerchant, cardsQuery, challengesQuery, checkMedals, checkVariety, completeVariety, consumeSow, declineOrder, enableVariety,
-  freeSowKind, judgeChallenges, keepChallenge, keepOrder, merchantEvening, merchantQuery, migrateToVariety, noteHarvest, noteVariety,
+  autoKeepOrders, freeSowKind, judgeChallenges, keepChallenge, keepOrder, merchantEvening, merchantQuery, migrateToVariety, noteHarvest, noteVariety,
   offerCards, offerChallenges, ordersQuery, pickCard, plotClaim, rarePlantRows, requestedCrops, rerollOrders, varietyCartEvening,
   varietyDawn, varietyQuery, varietyStart, varietySummary, varietyWater,
 } from './variety.js';
@@ -1045,6 +1045,7 @@ function wrap(state, { fresh = false } = {}) {
       push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, ...(sow || {}) });
       if (state.variety && !isTreeCrop(crop)) {
         noteVariety(state, 'sown', 1, crop.id);
+        autoKeepOrders(vhost, crop.id, plotIndex);
         checkMedals(vhost);
       }
       return sow ? { ok: true, cost, fatigue: p.fatigued, ...sow } : { ok: true, cost, fatigue: p.fatigued };

@@ -143,7 +143,7 @@ export function createLot2(app) {
       onClose: (reason) => {
         if (!done && reason !== 'replace') {
           // Plus tard : le vœu reste à faire aujourd'hui ; un message permet d'y revenir.
-          app.toasts.show({ kind: 'info', sprite: specialIcon('shootingstar'), key: 'wish-later', title: 'Votre vœu attend', text: 'Touchez ici pour faire votre vœu.', onClick: () => openWish(game), duration: 6000 });
+          app.toasts.show({ kind: 'info', sprite: specialIcon('shootingstar'), key: 'wish-later', title: 'Votre vœu attend', text: 'Faites-le quand vous voulez.', onClick: () => openWish(game), duration: 6000 });
         }
       },
     });

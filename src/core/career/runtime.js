@@ -65,7 +65,7 @@ import {
   recordQuality, rollQuality, skyGrowthFactor, specialInfo, takeForage, tryGiant, validateGiants, giantOpenToHelpers, GIANT,
 } from '../surprises.js';
 import { careOf } from '../surprises.js';
-import { checkMedals, consumeSow, freeSowKind, noteHarvest, noteVariety, varietyWater } from '../variety.js';
+import { autoKeepOrders, checkMedals, consumeSow, freeSowKind, noteHarvest, noteVariety, varietyWater } from '../variety.js';
 import { claimPreview, claimUnits } from '../requests.js';
 import { themeGiantValueFactor } from '../variety-effects.js';
 import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety-host.js';
@@ -208,6 +208,7 @@ export function createCareerRuntime(core) {
     push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by, ...(sow || {}) });
     if (state.variety && !tree) {
       noteVariety(state, 'sown', 1, crop.id);
+      if (by === 'player') autoKeepOrders(careerVarietyHost(api), crop.id, plotIndex);
       checkMedals(careerVarietyHost(api));
     }
     return sow ? { ok: true, cost, fatigue: p.fatigued, ...sow } : { ok: true, cost, fatigue: p.fatigued };

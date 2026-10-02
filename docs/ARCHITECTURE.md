@@ -169,7 +169,7 @@ Mise en page : la scène (`#stage`, canvas) occupe **tout l'écran** ; par-dessu
 - **Grand écran en paysage** (largeur ≥ 900 px et plus large que haut) : `body.layout-wide` ; les onglets sont déplacés dans la barre du haut, les feuilles « Acheter » / « Bilan » (et les fiches) se rangent à droite sans fond (`insets.right` transmis à la scène) ; souris : survol = infobulle, clic = action, molette = défilement ; clavier : Espace, 1/2/3, B (acheter), N (bilan), F (ferme), M (son), Échap, 1..9 dans les graines.
 - **Feuilles du bas** (`sheets.js`) : une seule à la fois (`app.sheets.open({ id, title, icon, content, kind: 'panel'|'popup', tall })`), fermeture par ✕, glissement vers le bas (poignée, en-tête, ou contenu déjà en haut), toucher sur le fond (ce toucher ne fait rien d'autre), Échap. Les fiches de parcelle / bâtiment / barre du haut ne sont reconstruites que si leur contenu change (un toucher en cours ne tombe jamais sur un bouton remplacé). **La parcelle touchée reste visible** : `main.js` passe la hauteur de la feuille à `scene.setOverlay(px)` (la scène peut alors défiler au-delà du bas du monde, dans la forêt) puis appelle `scene.focusPlot(i, { animate: true })` (défilement animé) ; à la fermeture (`setOverlay(0)`), la vue revient en douceur là où elle était. Une feuille « popup » laisse toujours ~150 px de scène au-dessus d'elle. Le tutoriel fait de même pour la parcelle entourée.
 - **Champ en portrait** (`layout-portrait.js`, `placeVisualCells`) : les index des parcelles sont ceux du cœur ; seule leur case à l'écran change. Les parcelles ouvertes au départ forment un bloc compact centré (4 × 3 au niveau 1, dans l'ordre de lecture du cœur), les parcelles à acheter l'entourent : herbe plus sombre, pointillés clairs, et une pièce (« à vendre ») sur celles qui touchent le potager ouvert.
-- **Messages** (`toasts.js`) : au-dessus des onglets et de la feuille ouverte, jamais sur la barre du haut ; ils ne captent pas les touchers (sauf ceux qui proposent une action, ex. « Nouvelle version… »). Le **bandeau** (titre du niveau, saison, avertissements) se pose sous la barre du haut, en dessous d'elle et des feuilles (z-index), et s'efface dès qu'une bulle ou un rappel du tutoriel s'affiche en haut (`toasts.hideBanner()`).
+- **Messages** (`toasts.js`) : au-dessus des onglets et de la feuille ouverte, jamais sur la barre du haut ; ils ne captent **jamais** les touchers : un message qui propose une action (`onClick`) porte un bouton « Voir » (`actionLabel` : « Répondre », « Recharger »…), seul élément touchable. **Au plus deux messages à la fois** (`MAX_VISIBLE`) : les plus anciens (d'abord ceux qui ne proposent rien d'important) s'effacent et restent dans l'historique ; une pastille « +N messages » (`#toast-more`, ≥ 48 px) ouvre la feuille « Messages » (`toasts.setMoreHandler(fn)`, branché par `main.js` ; mesures : `toasts.stats()`). *(QA du lot 3, 2026-10-02 : au début d'une saison de carrière, quatre messages couvraient la bande de la maison et captaient le toucher.)* Le **bandeau** (titre du niveau, saison, avertissements) se pose sous la barre du haut, en dessous d'elle et des feuilles (z-index), et s'efface dès qu'une bulle ou un rappel du tutoriel s'affiche en haut (`toasts.hideBanner()`).
 - **Fenêtres** (`dialogs.js`) : en portrait, hautes feuilles qui montent du bas (ruban de titre, ✕ à sa droite, boutons pleine largeur en bas, défilement interne) ; fermables aussi par glissement et par un toucher sur le fond sombre ; centrées sur grand écran.
 - **Politique des gestes** (`gestures.js`) : toucher bref sur une parcelle = action immédiate selon son état (vide → graines ; semée non arrosée → arroser ; mûre → récolter ; friche → ouvrir ; déjà arrosée → fiche) ; toucher un bâtiment → sa fiche ; appui long (450 ms) → fiche de la parcelle ou du bâtiment ; glisser en partant d'une parcelle → arroser / récolter en série (le trajet est échantillonné) ; glisser ailleurs → `scene.scrollBy` puis `scene.fling` (élan) ; deuxième doigt → geste annulé. Cible tolérante : `scene.hitTest(x, y, { touch: true })`. Le bandeau de saison ne capte pas les touchers.
 - **Règles tactiles** : cibles ≥ 48 × 48 px, texte ≥ 14 px (12 px pour les mentions secondaires), argent 20 px, `touch-action: manipulation` partout (none sur le canvas), pas de sélection ni de menu contextuel, `overscroll-behavior: none`, `user-scalable=no`, retour `:active`, vibration courte optionnelle (`app.vibrate`, option « Vibrer au toucher »).
@@ -2224,6 +2224,8 @@ seulement si `by === 'player'` (niveaux : toujours) ; ordre (1) quête de Joseph
 ```js
 keepOrder(orderId, keep = true)      → { ok, order: orderInfo }
     // refus : 'Commande inconnue.' ; keep = false sur une commande commencée : 'Une commande commencée reste gardée.'
+    // (QA du lot 3) semer À LA MAIN la culture d'une commande non gardée la garde d'office (orderKept { auto: true },
+    // champ d'état facultatif `order.autoKept = true`, `orderInfo.autoKept`) ; keepOrder(id, false) l'efface.
 declineOrder(orderId)                → { ok, premium }        // orderRemoved { reason: 'declined', premium } ; prime des unités données
 rerollOrders()                       → { ok, replaced }       // ordersRenewed { reason: 'reroll' }
     // refus : 'Une seule relance par jour : revenez demain.' ; 'Toutes les commandes sont gardées.'
@@ -2291,6 +2293,7 @@ query.career.yearReport()  // + variety (compteurs de l'année) et nextTheme
 |---|---|---|
 | `ordersRenewed` | `{ reason: 'dawn' \| 'reroll' \| 'start', slots: [orderInfo \| null], added }` | feuilles du panneau, résumé du matin |
 | `orderProgress` | `{ orderId, clientName, cropId, got, n, label, plotIndex?, fromStock? }` | texte flottant « → Lili », bruit de papier |
+| `orderKept` | `{ orderId, clientId, clientName, cropId, auto: true, plotIndex? }` | *(QA du lot 3)* gardée d'office au semis de sa culture : étiquette « Gardée : Lili » sur la parcelle, punaise rouge, mention dans la feuille |
 | `orderDone` | `{ orderId, clientId, clientName, thanks, premium, units }` | pièces vers le compteur, message du client, coche sur le panneau |
 | `orderRemoved` | `{ orderId, clientName, reason: 'declined' \| 'withdrawn', premium }` | message doux |
 | `cartArrived` | `{ cart: cartInfo, text }` | charrette qui arrive, message, conseil `variety.cart` |
@@ -2503,7 +2506,7 @@ n'est retiré, seulement des champs **ajoutés**).
   ⌊parcelles / 2⌋ ; charrette 5 % + 5 % ; cartes : bourse 12 + 4 × saison (carrière 20 + 10 × rang), engrais + 8 %, poule
   3 pièces, arrosoir magique 3 parcelles (carrière 4), affiche + 4 %, recette et foin + 10 %, sachet 3 graines (carrière 6),
   défrichage de carrière − 25 % (`CARD_VALUES.clearing.careerFactor` ; le champ d'état garde son nom `clearingHalf`) ;
-  défis plus exigeants (voir `CHALLENGES`) ; médailles de carrière `careerCoins` 5 / 10 × rang (`MEDALS`) ; sachets de
+  défis plus exigeants (voir `CHALLENGES`) ; médailles de carrière `careerCoins` 4 / 8 × rang (`MEDALS`) ; sachets de
   graines rares de carrière : 8 semis ; averse de l'année des grenouilles : 15 %. Seuils d'étoiles Détente recalculés
   (`src/data/difficulty.js`, § 13.3).
 - **Simulation** : `tools/simulate.js --variety …`, `--compare-variety`, `--stars` (seuils suggérés) ; les décisions des
@@ -2574,6 +2577,19 @@ src/main.js                app.variety ; onGameEvent → app.variety.onEvent ; p
   merchant(), cards(), challenges(), theme(id), medal(id, n), fill(slot), open(kind), seasonEnd(), point(kind), ui(),
   stats() }` — `trigger` et ses raccourcis passent par `actions.triggerVariety` du cœur ; `fill(slot)` remplit une
   commande par de vraies récoltes à la main.
+
+### Corrections après la QA (2026-10-02)
+
+- **Défis** (`src/core/variety.js`) : `challengePossible` = condition du défi **et** `challengeTargets(...) !== null` ;
+  `challengeTargets` rend des paliers strictement croissants, ou `null` quand un plafond (`challengeCap` : cultures
+  récoltables / semables de la saison, nombre de caisses) les écraserait ; `minTarget` (données) : bronze minimal
+  (2 pour « Potager varié » et « Semeur curieux »). Règle : game design § 16.5.
+- **Gardée d'office** : `autoKeepOrders(host, cropId, plotIndex)` appelé par `plant` (niveaux) et `runtime.plant`
+  (carrière, `by === 'player'` seulement) ; événement `orderKept`.
+- **Messages** : deux au plus, pastille « +N », boutons d'action seuls touchables (voir « Messages (`toasts.js`) »).
+- **Visiteur du thème** : `varietySpots().visitor` à **gauche** du panneau (le stand de fête recule d'une tuile) ; ligne
+  « À faire » « Un visiteur vous attend : … » qui amène la vue sur lui (`scene.focusWorld`) et l'entoure ;
+  `app.worldPageRect(r)` (main.js).
 
 ### Intégration CORE ↔ UI/RENDER (2026-10-02)
 

@@ -151,8 +151,10 @@ export const CARD_VALUES = {
  * Défis : trois proposés par saison, on en garde 1 ou 2 ; trois paliers (bronze, argent, or) cumulés.
  *   targets : bronze / argent / or ; scale : 'k' (× k), 'kMin1' (× max(1, k)), 'days' (× durée / 7), 'trees'
  *   (× max(1, arbres adultes / 2)), 'price' (× k × prix des récoltes du mode), null (fixe) ; capFeasible : or
- *   plafonné au nombre de cultures faisables / semables ; capCrates : au plus le nombre de caisses ; perRank :
- *   carrière + rang ; mode : 'levels' | 'career' (sinon les deux).
+ *   plafonné au nombre de cultures faisables (récoltables / semables) ; capCrates : au plus le nombre de caisses ;
+ *   perRank : carrière + rang ; minTarget : bronze minimal (défaut 1) ; mode : 'levels' | 'career' (sinon les deux).
+ * Les paliers sont toujours STRICTEMENT croissants ; sous un plafond, l'or descend au plafond et chaque palier au plus
+ * le suivant − 1 ; si le bronze tombe alors sous minTarget, le défi n'est pas proposé (§ 16.5 du game design).
  * k = (parcelles de champ ouvertes au début de la saison / 12) × (durée de la saison / 7), entre kMin et kMax.
  */
 export const CHALLENGE_RULES = { kMin: 0.5, kMax: 4, keepMax: 2, offered: 3 };
@@ -160,8 +162,8 @@ export const CHALLENGE_RULES = { kMin: 0.5, kMax: 4, keepMax: 2, offered: 3 };
 export const CHALLENGES = [
   { id: 'harvests', name: 'Belle cueillette', text: 'Récolter {n} fois.', targets: [20, 36, 54], scale: 'k', weight: 3 },
   { id: 'sales', name: 'Bon marché', text: 'Vendre pour {n} pièces de récoltes.', targets: [300, 520, 760], scale: 'price', weight: 3 },
-  { id: 'variety', name: 'Potager varié', text: 'Récolter {n} cultures différentes.', targets: [3, 4, 6], scale: null, capFeasible: true, weight: 2 },
-  { id: 'sowing', name: 'Semeur curieux', text: 'Semer {n} cultures différentes.', targets: [4, 5, 6], scale: null, capFeasible: true, weight: 2 },
+  { id: 'variety', name: 'Potager varié', text: 'Récolter {n} cultures différentes.', targets: [3, 4, 6], scale: null, capFeasible: true, minTarget: 2, weight: 2 },
+  { id: 'sowing', name: 'Semeur curieux', text: 'Semer {n} cultures différentes.', targets: [4, 5, 6], scale: null, capFeasible: true, minTarget: 2, weight: 2 },
   { id: 'care', name: 'Aux petits soins', text: 'Récolter {n} culture{s} arrosée{s} chaque jour.', targets: [6, 12, 20], scale: 'k', weight: 2 },
   { id: 'quality', name: 'La main verte', text: 'Récolter {n} belle{s} ou dorée{s}.', targets: [1, 3, 5], scale: 'kMin1', weight: 1 },
   { id: 'orders', name: 'Ami du village', text: 'Livrer {n} commande{s} du tableau.', targets: [2, 3, 5], scale: null, weight: 2 },
@@ -176,8 +178,8 @@ export const CHALLENGES_BY_ID = Object.fromEntries(CHALLENGES.map((c) => [c.id, 
 /** Récompenses des médailles (paliers cumulés) : écus (versés par l'interface) et pièces (carrière : careerCoins × rang). */
 export const MEDALS = [
   { id: 'bronze', name: 'Médaille de bronze', ecus: 1, coins: 0, careerCoins: 0 },
-  { id: 'silver', name: 'Médaille d\'argent', ecus: 2, coins: 10, careerCoins: 5 },
-  { id: 'gold', name: 'Médaille d\'or', ecus: 4, coins: 20, careerCoins: 10 },
+  { id: 'silver', name: 'Médaille d\'argent', ecus: 2, coins: 10, careerCoins: 4 },
+  { id: 'gold', name: 'Médaille d\'or', ecus: 4, coins: 20, careerCoins: 8 },
 ];
 
 // ── C7 — Le jour du colporteur ─────────────────────────────────────────────────────────────────

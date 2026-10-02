@@ -30,6 +30,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-02 | `backup/avant-lot2-2026-10-02` | Copie supplémentaire de l'état de la pull request n° 9 (lot 1) avant les commits du lot 2, commit `9076e6a` |
 | 2026-10-02 | `backup/lot2-surprises-2026-10-02` | Lot 2 toucher & surprises terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9 |
 | 2026-10-02 | `backup/avant-lot3-variete-2026-10-02` | Avant le lot 3 (variété : commandes du village, cadeau de saison, charrette, défis, années à thème, colporteur), commit `154a4fa` |
+| 2026-10-02 | `backup/lot3-variete-2026-10-02` | Lot 3 variété terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9. La branche `backup/wip-lot3-2026-10-02` a servi de sauvegarde intermédiaire |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -608,6 +609,43 @@ Les trois agents du lot 1 ont été interrompus par un redémarrage avant leurs 
 - **Chiffres** inchangés : niveaux casual + 8,5 % (novice + 6,2 %, optimal + 7,6 %), carrière casual + 7,6 %, parité
   400 / 400. `node --test tests/` : 481 verts.
 
+### 2026-10-02 — Lot 3 « Variété » : corrections après la QA au doigt (défis, commande gardée d'office, messages du matin)
+
+*(Repris après l'arrêt par erreur d'un premier agent : ses modifications non commitées ont été relues et gardées, puis
+terminées.)*
+
+- **Défis plafonnés** (`src/core/variety.js`, `src/data/variety.js`) : `challengeTargets` rend des paliers **strictement
+  croissants** ; sous un plafond (`challengeCap` : cultures faisables récoltables pour « Potager varié », semables pour
+  « Semeur curieux », caisses pour « La charrette pleine »), l'or descend au plafond puis chaque palier au plus le suivant
+  − 1 ; si le bronze tombe sous `minTarget` (2 pour les deux défis de cultures), le défi **n'est pas proposé**. Exemples :
+  4 cultures → 2 / 3 / 4 ; niveau 2 au printemps (3 cultures) → ni « Potager varié » ni « Semeur curieux » ; niveau 4
+  (charrette de 2 caisses) → pas de « Charrette pleine ». Game design § 16.5 ; test sur 5 niveaux × 6 graines.
+- **Commande gardée d'office** : semer **à la main** la culture d'une commande non gardée la garde (`autoKeepOrders`,
+  appelé par `plant` des niveaux et par `runtime.plant` de la carrière si `by === 'player'` ; événement `orderKept
+  { auto: true }`, champ `order.autoKept`, `orderInfo.autoKept`). Indice discret : étiquette « Gardée : Lili » au-dessus
+  de la parcelle, petit bruit, punaise rouge, mention « Gardée d'office : vous avez semé pour elle. » dans la feuille ;
+  ôter la punaise ou « Pas pour moi » restent possibles sans pénalité. Joueur simulé « casual » : garde à la main une
+  commande sur quatre (au lieu d'une sur deux). Tests niveaux, carrière (salariés : rien), sauvegarde.
+- **Début de saison en carrière sur téléphone** (`src/ui/toasts.js`, `css/style.css`) : **deux messages au plus** à la
+  fois (les plus anciens et les moins importants s'effacent, ils restent dans l'historique), pastille « +N messages »
+  (≥ 48 px) qui ouvre la feuille « Messages » ; les messages ne captent **plus jamais** le toucher : un message qui
+  propose une action porte un bouton « Voir » (« Répondre », « Recharger »), seul touchable ; textes « Touchez pour… »
+  retirés. **Visiteur du thème** à gauche du panneau du village (le stand de fête recule), plus sous la mini-carte ;
+  ligne « À faire » « Un visiteur vous attend : … » qui amène la vue sur lui et l'entoure (`scene.focusWorld`,
+  `app.worldPageRect`).
+- **Équilibrage** : niveaux casual **+ 8,3 %** (+ 8,5 % avant ; novice + 6,4 %, optimal + 7,8 %), victoires inchangées ;
+  carrière casual + 8,1 % avec ces changements → médailles de carrière ramenées de 5 / 10 à **4 / 8 × rang** pièces :
+  **+ 7,8 %** (novice + 14,5 %, optimal + 2,9 %, rangs et Domaine identiques, aucune faillite). Seuils d'étoiles Détente
+  recalculés (règle du § 13.3, `--stars`) : anciens 570/870, 290/540, 310/620, 550/780, 450/840, 290/670, 250/580,
+  410/660, 290/490, 680/950, 440/640, 420/660 → nouveaux 560/830, 310/570, 350/670, 530/750, 490/810, 340/680, 220/610,
+  380/730, 290/480, 670/900, 390/620, 400/680. Parité Classique exacte (400 parties).
+- **QA au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : début d'automne de l'an 1 en
+  carrière → 2 messages visibles, 4 dans l'historique, pastille 146 × 48 px qui ouvre « Messages » ; un toucher sur le
+  corps d'un message arrive au canvas ; bouton « Voir » 71 × 48 px, 16 px ; visiteur du thème hors mini-carte, ligne
+  « À faire » qui le ramène dans la vue puis toucher → sa fiche ; commande semée au doigt (feuille des graines) →
+  gardée d'office, mention dans la feuille. Aucune erreur de console, cibles ≥ 48 px, textes ≥ 14 px. Captures
+  `lot3-fix-*.png`.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -759,6 +797,6 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-02 | Lot 3 : `themeShower` et `purchased.gift/used` sans effet à l'écran ; `__debug.variety.medal` sans chemin dans le cœur | Corrigé (UI, cœur + test) |
 | 2026-10-02 | Lot 3 : défis « Remplir 1 caisses », « Récolter 1 belles ou dorées » | Corrigé (test) |
 | 2026-10-02 | Lot 3 : cartes de défi et objets de Basile illisibles à 150 % sur 360 px ; précision du visiteur en 13,3 px | Corrigé (`variety.css`) |
-| 2026-10-02 | Lot 3 : « Semeur curieux » / « Potager varié » quand il y a peu de cultures faisables (niveau 2 au printemps : 3) : paliers plafonnés à 3 / 3 / 3, les trois médailles tombent d'un coup dès le 2ᵉ jour | Ouvert (équilibrage : exclure le défi si le plafond écrase les paliers ; change les tirages, donc la simulation) |
-| 2026-10-02 | Lot 3 : une commande non gardée pour laquelle on a semé est remplacée à l'aube suivante si rien n'est encore livré (il faut penser à la punaise) | Ouvert (idée : garder d'office une commande dont on sème la culture ; à simuler) |
-| 2026-10-02 | Lot 3, carrière (Pixel 7) : début de saison très chargé en messages (comice, Joseph, charrette, abri plein) qui couvrent la bande de la maison et captent le toucher ; visiteur du thème sous la mini-carte tant qu'on ne fait pas défiler | Ouvert (regrouper les messages du matin ; repère du visiteur) |
+| 2026-10-02 | Lot 3 : « Semeur curieux » / « Potager varié » quand il y a peu de cultures faisables (niveau 2 au printemps : 3) : paliers plafonnés à 3 / 3 / 3, les trois médailles tombent d'un coup dès le 2ᵉ jour | Corrigé (paliers strictement croissants sous le plafond, défi non proposé si le bronze tomberait sous 2 ; même règle pour « La charrette pleine » à 2 caisses ; game design § 16.5, test) |
+| 2026-10-02 | Lot 3 : une commande non gardée pour laquelle on a semé est remplacée à l'aube suivante si rien n'est encore livré (il faut penser à la punaise) | Corrigé (semer à la main sa culture la garde d'office : `orderKept { auto }`, étiquette « Gardée : Lili », mention dans la feuille ; refusable ; tests niveaux + carrière) |
+| 2026-10-02 | Lot 3, carrière (Pixel 7) : début de saison très chargé en messages (comice, Joseph, charrette, abri plein) qui couvrent la bande de la maison et captent le toucher ; visiteur du thème sous la mini-carte tant qu'on ne fait pas défiler | Corrigé (2 messages au plus + pastille « +N messages » vers l'historique ; seuls les boutons « Voir » se touchent ; visiteur à gauche du panneau, ligne « À faire » qui amène la vue sur lui) |
