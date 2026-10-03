@@ -174,6 +174,7 @@ export function createProgress(app, storage) {
         app.vibrate?.([10, 40, 10]);
         const node = app.toasts.show({
           kind: 'achievement',
+          digest: 'succès|succès',
           sprite: achievementIcon(id, true, 'sprite--md', r?.stars || 0),
           title: `Succès : ${def?.name || id}`,
           text: rewardText(r) || 'Débloqué !',

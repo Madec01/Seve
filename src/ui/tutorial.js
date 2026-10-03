@@ -14,6 +14,7 @@ import { append, clear, el, fmt, placeNear, setText } from './dom.js';
 import { icon } from './icons.js';
 import { joseph } from './career/util.js';
 import { waterEffect } from './text.js';
+import { REAL_DAY_SECONDS } from '../data/balance.js';
 
 const NAME = 'Joseph, votre voisin';
 
@@ -111,8 +112,8 @@ export function createTutorial(layer, app) {
       title: 'Le temps passe',
       text: () =>
         app.isTouch
-          ? `À ×1, une journée dure 20 secondes. Touchez le bouton de vitesse ${speedWhere()} pour passer à ×2, puis ×4, puis pause. Appui long : pause.`
-          : `À ×1, une journée dure 20 secondes. Cliquez sur le bouton de vitesse ${speedWhere()} (×2, ×4, pause), ou touches 1, 2, 3 et Espace.`,
+          ? `À ×1, une journée dure ${REAL_DAY_SECONDS} secondes. Touchez le bouton de vitesse ${speedWhere()} pour passer à ×2, puis ×4, puis pause. Appui long : pause.`
+          : `À ×1, une journée dure ${REAL_DAY_SECONDS} secondes. Cliquez sur le bouton de vitesse ${speedWhere()} (×2, ×4, pause), ou touches 1, 2, 3 et Espace.`,
       target: () => ({ type: 'ui', selector: '#hud-speed' }),
       advanceSpeed: (s) => s >= 2,
       advance: (ev) => ev.type === 'dawn',
@@ -228,7 +229,7 @@ export function createTutorial(layer, app) {
     if (!s) return finish();
     app.saveTutorial({ done: false, step: index });
     if (s.skipIf && s.skipIf()) {
-      if (s.skipToast) app.toasts.show({ kind: 'info', icon: 'rain', text: s.skipToast });
+      if (s.skipToast) app.toasts.show({ prio: 'important', kind: 'info', icon: 'rain', text: s.skipToast });
       return go(index + 1);
     }
     s.enter?.();

@@ -35,6 +35,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/lot4-collection-2026-10-03` | Lot 4 collection & enjeux doux terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 (avec le lot 3) |
 | 2026-10-03 | `backup/avant-vallee-vivante-2026-10-03` | Avant « La Vallée vivante » (grand projet de carrière), après les 4 lots |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
+| 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -830,6 +831,32 @@ Sauvegarde avant : `backup/avant-qa-lot4-2026-10-03` (branche + tag locaux, comm
   épouvantail fleuri posé. Aucune erreur console ; cibles ≥ 48 px et textes ≥ 14 px partout (la rangée des étals de la
   foire et des onglets de l'album défile à l'horizontale, comme prévu).
 
+### 2026-10-03 — Vallée vivante : conception
+
+- **Conception écrite avant le code** (aucun fichier de `src/` ni de `tests/` modifié, rien de commité ; documents
+  seulement, donc pas de nouvelle sauvegarde : `backup/avant-vallee-vivante-2026-10-03` est déjà notée) :
+  **`docs/VALLEE.md`** (nouveau : vision, boucle, récit, contenu chiffré, écrans du téléphone, lots, équilibrage, risques,
+  points à trancher), `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V1 » (fichiers, état
+  `state.career.valley`, actions, requêtes, événements, flux `valley`, emplacements, migration, planche `valley1.png`,
+  découpage CORE · ART · UI/RENDER, aperçu de V2 à V4), `docs/GAME_DESIGN.md` § 18 (résumé).
+- **Vision** : la vallée s'est tue ; Joseph apporte au rang 2 la boîte en fer de sa mère (sa 1ʳᵉ veillée). Le joueur
+  **sauve 12 variétés anciennes** (bocaux à ouvrir, planches d'essai, 2 graines par récolte **à la main**, fixées après
+  6 récoltes à la main, 7 traits en picto + mot) et **fait revenir 12 habitants** (8 aménagements nature sur des
+  emplacements prédéfinis + jachère fleurie ; recettes d'habitat lisibles ; la bête venue **attend qu'on la touche** pour
+  s'installer ; services doux sur des leviers existants). Les signes de vie font avancer **6 étapes** (lisière qui fleurit,
+  oiseaux, cueillette des haies, pollinisation, sol vivant, « Le tilleul de la vallée »), chacune avec un chapitre de Joseph.
+- **Pas Stardew** : aucun panier « une de chaque », aucun bâtiment public réparé ; tout naît de façons de cultiver
+  (sélection paysanne, haies, jachères) et de gestes réservés au joueur.
+- **Lots** : V1 « La boîte en fer » (structurant) ; V2 « Le troc et les croisements » (Grainothèque à 5 niveaux,
+  troc avec les 12 villageois, 11 variétés croisées au nom de la ferme) ; V3 « Le ruisseau » (vue de la vallée en
+  portrait, 6 lieux à restaurer par chantier + condition de vie + temps, terres sauvages après les 16 terrains : ≈ 370 000
+  pièces de puits) ; V4 « Les cigognes » (légendes dont le melon de la mère de Joseph, visiteurs rarissimes, paysage et sons).
+- **Équilibre visé** : V1 + 1 à + 5 % de revenu (tranquille), toute la Vallée ≤ + 8 % ; rangs et Domaine à un an près ;
+  ferme laissée seule ≤ + 3 % ; ≥ 1 nouveauté par saison ; argent en caisse à l'an 14 divisé par deux au V3 (repère mesuré :
+  165 000 pièces inutilisées à l'an 14 aujourd'hui). Niveaux strictement inchangés (seules deux pages d'album se voient).
+- **À trancher par l'utilisateur** : `docs/VALLEE.md` § 15 (contenu du V1, observation obligatoire, dépenses au
+  patrimoine, équipe et variétés fixées, chantiers du V3, longueur de la traîne, terres sauvages, page des habitants du V2).
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -995,3 +1022,100 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Lot 4 : la prime à la main d'une récolte partie au grenier ou à l'atelier était payée sans pièce qui vole vers le compteur | Corrigé (`juice.js`) |
 | 2026-10-03 | Lot 4, carrière : la fenêtre courte de fin de saison du lot 3 s'ouvre à l'image suivante (différée) : si l'on enchaîne plusieurs jours sans image (outil de débogage), elle s'ouvre plus tard par-dessus une feuille | Sans effet en jeu réel (une image par 16 ms) ; noté |
 | 2026-10-03 | Lot 4 : à 150 % sur 360 px, le titre « L'album de la ferme » touche le ✕ de la fenêtre ; barre du haut de carrière : la case du fermage recouvre en partie l'icône météo quand le texte est long (« couvert · ce soir ! ») | À voir (titres de fenêtres et barre du haut, hors lot 4) |
+
+### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
+
+Retour de l'utilisateur : « J'aimerais pouvoir zoomer et dézoomer dans le jeu. » Seule la **ferme** (le canevas)
+grossit ; l'interface ne bouge pas. Distinct de la taille du texte (100–150 %) et de la loupe de page du navigateur
+(option renommée « Loupe de l'interface », avec un renvoi vers le zoom de la ferme).
+
+- **Gestes** (`src/ui/gestures.js`) : pincer à deux doigts zoome autour du point entre les doigts, qui suit les doigts
+  (zoomer et se déplacer à la fois), fluide (zoom fractionnaire, plus proche voisin) puis la vue se pose sur le **zoom
+  entier** le plus proche au lever (pixel art net) ; le geste d'un doigt en cours est annulé (aucune action) ; **double
+  toucher dans le vide** = zoom par défaut (pas de conflit : un toucher sur une cible agit toujours) ; Ctrl + molette
+  (et pincement du pavé tactile) au PC. Zoomé, la ferme défile dans les deux sens, aussi en Niveaux ; un glissé parti
+  d'une parcelle fait toujours la série (arroser / récolter) en Niveaux.
+- **Boutons** (`src/ui/zoom.js`, nouveau) : « + », « − » (et « 1:1 » quand le zoom a changé), cibles de 48 px,
+  colonne à droite au-dessus de la ligne « À faire » (à gauche pour gaucher), à gauche de la mini-carte en carrière
+  (sans toucher son bouton « Cacher ») ; cachés sous une feuille (sauf grand écran : décalés à gauche du panneau), une
+  fenêtre, une bulle du tutoriel ou d'un conseil, au menu ; grisés aux bornes.
+- **Caméra** (`src/render/scene.js`, `src/render/camera-zoom.js` pur, nouveau) : bornes de « toute la ferme visible »
+  (≥ 40 % du défaut en Niveaux, 50 % en Carrière) à ×2,5 environ (Pixel 7 : zoom 2 à 12, défaut 5) ; défilement
+  borné au monde ; zoom par défaut : rendu inchangé. Zoomé en Niveaux, la vue passe en mode fenêtré comme en
+  carrière ; la couche fixe couvre le monde pour tout zoom permis (`staticRegion`) et n'est plus redessinée qu'à un
+  changement de géométrie : aucun recalcul pendant un pincement (60 i/s mesurées). Touchers exacts à tout zoom
+  (`hitTest` passe par `screenToWorld`) ; mini-carte, textes flottants, pièces vers le compteur, nom du panneau,
+  anneaux de la ligne « À faire » suivent (ils lisent `worldToScreen` / `viewRect`).
+- **Mouvement réduit** : aucune animation de zoom (pose immédiate). **Préférence** locale par mode
+  (`une-annee-a-la-ferme.zoom` = `{ levels, career }`, rapport au défaut), appliquée à chaque nouvelle partie ;
+  zoom par défaut au menu.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, CDP `Input.dispatchTouchEvent` à deux doigts) : pincer /
+  écarter, boutons, double toucher, semer (9 parcelles touchées = 9 bonnes fiches à ×1,6), récolter une rangée en
+  glissant, ouvrir la maison en carrière à ×1,6, mini-carte (cadre de la vue, toucher → déplacement), bords du monde
+  dézoomé, mouvement réduit, préférence après rechargement, PC (Ctrl + molette, clic), aucune erreur console, aucun
+  chevauchement des boutons. Captures `zoom-*.png`. Tests : `tests/zoom.test.js` (bornes, crans, pincement,
+  écran ↔ monde, préférence, couverture de la couche fixe).
+- Idée : un zoom avant automatique doux sur la parcelle visée par le tutoriel quand le joueur a beaucoup dézoomé.
+
+### 2026-10-03 — Rythme posé, personnages au pas, messages moins nombreux (retours joueur sur téléphone)
+
+Sauvegarde : `backup/rythme-messages-2026-10-03` (branche + tag locaux, commit `f170bf5`).
+
+**Bugs signalés par l'utilisateur** (téléphone, surtout en carrière) :
+1. « Les notifs prennent beaucoup de place, et même en ×1 les jours passent trop vite, ou du moins on reçoit beaucoup
+   de notifs quand même. »
+2. « En ×1 les personnages semblent accélérés, comme déjà en ×4. »
+
+**Diagnostic chiffré** (Playwright, Pixel 7, toucher, `?debug=1&nosw`, joueur actif simulé, une saison de 7 jours à ×1
+en carrière — 2 jardiniers, poulailler, 2ᵉ champ — et au niveau 2 Détente) :
+- Jour : 20 s à ×1 (×½ 40 s, ×2 10 s, ×4 5 s), niveaux comme carrière.
+- Messages : carrière **4 par jour** en moyenne (28 en 7 jours, 9 le jour du changement de saison), niveau Détente
+  2,9 par jour ; ≈ 63 px de haut chacun, 2 à l'écran ; surtout des infos (cases d'album, succès, ramassages,
+  commandes, charrette, colporteur, résumé du matin, charges payées).
+- Personnages, causes trouvées :
+  - employés placés d'après l'horloge du jeu (64 px monde par **seconde de jeu**) : 122 px CSS/s à ×1 (pointes à
+    275), 260 à ×4 (pointes à 1 300) ;
+  - **cadence des pas liée à l'image** (`walkD += … + 0,6` à chaque image) : ≈ 27 bascules de pose par seconde à ×1,
+    54 à ×4 (naturel : 4 à 6) — c'est l'impression « déjà en ×4 » ;
+  - fermier à 44 px/s, **×3 sur les longs trajets en carrière** : 250 px CSS/s ;
+  - en carrière, le fermier **courait après chaque geste de l'équipe** (la scène prenait les récoltes des employés
+    pour des gestes du joueur) : il traversait la ferme en continu.
+
+**Corrections** :
+- **Rythme** : `REAL_DAY_SECONDS` = 36 (`src/data/balance.js`) : la boucle de `main.js` fait avancer le cœur de
+  dt × 20/36. Mesuré : ×½ 71,5 s · ×1 36,1 s · ×2 18 s · ×4 9 s. Règles par jour inchangées (`DAY_SECONDS` = 20
+  secondes de jeu) : tests, simulateurs et `capture-parity --check` (400 parties identiques) verts. Textes du guide et
+  du tutoriel.
+- **Personnages** : employés qui marchent vers leur cible au pas en temps réel (22 px monde/s, ×1,4 au plus quand
+  l'heure presse, ×1,25 à ×2 et ×1,5 à ×4), raccourci doux (fondu) quand le retard dépasse 64 px ; pas liés à la
+  distance (une bascule tous les 6 px) ; fermier à 30 px/s avec raccourci doux au-delà de 150 px, qui ne suit plus que
+  les gestes du joueur ; visiteurs 26 px/s, Joseph 24 px/s ; roues des machines plafonnées en temps réel. Mouvement
+  réduit : employés posés à leur tâche, fermier tout de suite à destination.
+- **Messages** : tri important / info (`priorityOf`), réglage « Messages à l'écran » : Tous · **Importants** (défaut) ·
+  Aucun (options et feuille Messages) ; les infos vont à l'historique et au résumé du matin, regroupées (« Hier aussi :
+  12 récoltes de l'équipe (+46), 3 produits vendus, 1 naissance. ») ; répétitions « Titre ×N » dans l'historique ;
+  messages compacts (une ligne pour une info, deux au plus pour un important, 44–47 px, 14 px de texte) ; info 3 s,
+  important 5 s. Le résumé du matin s'affiche en mode « Tous » ou quand le jeu attend en pause.
+
+**Avant / après** (mêmes scénarios, au doigt) :
+
+| Mesure | Avant | Après |
+|---|---|---|
+| Durée d'un jour à ×½ / ×1 / ×2 / ×4 | 40 / 20 / 10 / 5 s | 71,5 / 36,1 / 18 / 9 s |
+| Messages affichés par jour, carrière (saison à ×1) | 4 (28 en 7 jours) | 0,3 (2 : un chaton perdu, une demande de Joseph) |
+| Messages affichés par jour, niveau Détente | 2,9 (20) | 0,14 (1 : « Votre cadeau attend ») |
+| Messages visibles à la fois (max) | 2 | 1 |
+| Hauteur d'un message | ≈ 63 px | 44 px (info), 47 px (important), 55 px (avec bouton « Voir ») |
+| Employés à ×1 (médiane) | 122 px CSS/s, ≈ 27 pas/s | 42 px CSS/s, ≈ 3,6 pas/s |
+| Employés à ×4 (médiane) | 260 px CSS/s (pointes 1 300), ≈ 54 pas/s | 88 px CSS/s, ≈ 7 pas/s, un fondu toutes les 2 s |
+| Fermier (niveau) / (carrière, long trajet) | 84 / 250 px CSS/s | 57 px CSS/s, raccourci doux au-delà de 150 px |
+| Animaux | 28 px CSS/s | 28 px CSS/s (inchangé) |
+
+Vérifié au doigt : options (bouton « Tous » 116 × 56 px, réglage enregistré), feuille Messages, mode « Aucun »
+(seuls les refus), résumé du matin regroupé, mouvement réduit, Pixel 7 et 360 × 740, page publiée ; cibles ≥ 48 px,
+textes ≥ 14 px, aucune erreur console. Captures `screens/pace-*.png`. Tests : `tests/pace-messages.test.js`.
+
+- Idée : une petite pastille discrète sur la cloche pour les nouvelles du jour (sans compteur), si les joueurs ne
+  pensent pas à ouvrir l'historique.
+- Remarque : les messages (pleine largeur) passent devant les boutons + / − du zoom posés à droite (ils ne captent pas
+  le toucher) ; à revoir avec le placement du zoom.

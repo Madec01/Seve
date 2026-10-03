@@ -8,6 +8,8 @@
 //   reset(game),               nouvelle partie (ou reprise) : oublie l'argent de la veille, les anneaux…
 //   showResume(game),          fenêtre « Où en étais-je ? » (reprise depuis le menu)
 //   morningToggle(),           interrupteur « Résumé du matin » (feuille Messages)
+//   digest(entry),             message non affiché (réglage « Messages », toasts.setDigest) : compté pour le résumé du
+//                              matin (« Hier aussi : 12 récoltes de l'équipe (+46), 3 produits vendus »)
 //   ring(rects), focusPlots(indexes)
 // }
 //
@@ -54,8 +56,38 @@ export function createTodo(app) {
   let lastCollectKey = '';
   let lastH = -1;
   const morning = { prevMoney: null, pending: null, lastShownAt: -Infinity, notes: [] };
-
-  app.messages?.onChange(() => paintBell());
+  // (2026-10-03) Nouvelles de la journée qui ne se sont pas affichées (réglage « Messages ») et travail de l'équipe :
+  // regroupées dans le prochain résumé du matin.
+  const quiet = { groups: new Map(), other: 0, team: { n: 0, amount: 0 } };
+  const resetQuiet = () => {
+    quiet.groups.clear();
+    quiet.other = 0;
+    quiet.team.n = 0;
+    quiet.team.amount = 0;
+  };
+  function digest(e) {
+    if (!e) return;
+    if (e.digest && typeof e.digest === 'string') {
+      const g = quiet.groups.get(e.digest) || { n: 0 };
+      g.n += Math.max(1, Math.round(e.n || 1));
+      quiet.groups.set(e.digest, g);
+    } else quiet.other += 1;
+  }
+  /** « Hier aussi : 12 récoltes de l'équipe (+46), 3 produits vendus, 1 naissance. 2 autres nouvelles dans les messages. » */
+  function quietText(q) {
+    const parts = [];
+    if (q.team.n > 0) parts.push(`${plural(q.team.n, 'récolte', 'récoltes')} de l'équipe${q.team.amount > 0 ? ` (+${fmt(Math.round(q.team.amount))})` : ''}`);
+    const groups = [...q.groups.entries()].sort((a, b) => b[1].n - a[1].n);
+    const room = Math.max(0, 3 - parts.length);
+    for (const [label, g] of groups.slice(0, room)) {
+      const [one, many] = label.split('|');
+      parts.push(`${g.n} ${g.n > 1 ? many || one : one}`);
+    }
+    const more = Math.max(0, groups.length - room) + q.other;
+    const head = parts.length ? `Hier aussi : ${parts.join(', ')}.` : '';
+    const tail = more ? `${plural(more, 'autre nouvelle', 'autres nouvelles')} dans les messages.` : '';
+    return [head, tail].filter(Boolean).join(' ');
+  }
 
   // ── Ce qu'il y a à faire ─────────────────────────────────────────────────────
   function safe(fn, fallback) {
@@ -333,7 +365,7 @@ export function createTodo(app) {
     clearTimeout(ringTimer);
     ringTimer = setTimeout(() => ring([]), 1900);
     if (kind && visible && list.length > 1 && app.isTouch) {
-      app.toasts.show({ kind: 'info', icon: kind === 'water' ? 'water' : 'harvest', key: 'todo-swipe', text: kind === 'water' ? 'Glissez le doigt sur les parcelles entourées pour toutes les arroser.' : 'Glissez le doigt sur les parcelles entourées pour tout récolter.', duration: 3200, log: false });
+      app.toasts.show({ prio: 'important', kind: 'info', icon: kind === 'water' ? 'water' : 'harvest', key: 'todo-swipe', text: kind === 'water' ? 'Glissez le doigt sur les parcelles entourées pour toutes les arroser.' : 'Glissez le doigt sur les parcelles entourées pour tout récolter.', duration: 3200, log: false });
     }
   }
   let ringTimer = null;
@@ -464,18 +496,23 @@ export function createTodo(app) {
 
   // ── Résumé du matin (E5) ──────────────────────────────────────────────────────
   function onEvent(ev, game) {
+    if (ev.type === 'harvested' && ev.by && ev.by !== 'player') {
+      quiet.team.n += 1;
+      quiet.team.amount += Math.max(0, Number(ev.amount) || 0);
+    }
     if (ev.type === 'dawn') {
       const money = game.state.money;
       if (morning.prevMoney !== null && game.state.status === 'playing') {
         const delta = Math.round(money - morning.prevMoney);
-        morning.pending = { delta, game, at: performance.now(), weather: ev.weather || game.state.weather?.today };
+        morning.pending = { delta, game, at: performance.now(), weather: ev.weather || game.state.weather?.today, quiet: quietText(quiet) };
       }
+      resetQuiet();
       morning.prevMoney = money;
       lastTick = 0;
     } else if (ev.type === 'autoPaused') {
       // Option « pause chaque matin » (cœur : src/core/options.js) : le résumé du matin le dit.
       if (morning.pending) morning.pending.paused = true;
-      else app.toasts.show({ kind: 'info', icon: 'pause', key: 'auto-pause', title: 'Pause du matin', text: 'Touchez le bouton de vitesse pour lancer la journée.', duration: 4200 });
+      else app.toasts.show({ prio: 'important', kind: 'info', icon: 'pause', key: 'auto-pause', title: 'Pause du matin', text: 'Touchez le bouton de vitesse pour lancer la journée.', duration: 4200 });
     } else if (ev.type === 'crow' && game.mode === 'career') {
       // La parcelle visée par les corbeaux peut être hors de l'écran : la vue y va (sans fiche ni fenêtre ouverte).
       const plotsHit = ev.plots || [];
@@ -492,6 +529,7 @@ export function createTodo(app) {
     const yesterday = d > 0 ? `Hier : +${fmt(d)} pièces.` : d < 0 ? `Hier : ${fmt(d)} pièces.` : 'Hier : ni gain ni perte.';
     // (Lot 2) Surprises de la nuit, météo rare, légume géant : en tête du programme du jour.
     if (morning.notes.length) parts.push(morning.notes.splice(0).slice(0, 2).join(' '));
+    if (p.quiet) parts.push(p.quiet);
     const list = safe(() => items(p.game), []).filter((x) => !['goal', 'rank'].includes(x.id)).slice(0, 3);
     if (list.length) parts.push(`Aujourd'hui : ${list.map((x) => x.short).join(', ')}.`);
     else parts.push('Aujourd\'hui : rien d\'urgent, profitez !');
@@ -512,10 +550,13 @@ export function createTodo(app) {
     const title = c ? `Bonjour ! ${p.game.mode === 'career' ? `${season(c.seasonId)}, jour ${c.dayOfSeason}` : `Jour ${c.day}`}` : 'Bonjour !';
     const text = `${morningText(p)}${p.paused ? ' Le jeu attend : touchez la vitesse pour lancer la journée.' : ''}`;
     const now = performance.now();
-    // À ×4, une journée dure 5 s : au plus un résumé toutes les 25 s à l'écran (tous restent dans les messages).
-    if ((prefs.morning || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.tutorial?.active) {
+    // À ×4, une journée dure 9 s : au plus un résumé toutes les 25 s à l'écran (tous restent dans les messages).
+    // (2026-10-03) Réglage « Messages » : le résumé s'affiche en « Tous » (interrupteur « Résumé du matin ») ; en
+    // « Importants » (par défaut) et « Aucun », il attend derrière la cloche — sauf quand le jeu est en pause et attend.
+    const mode = app.toasts.mode || 'important';
+    if (((prefs.morning && mode === 'all') || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.tutorial?.active) {
       morning.lastShownAt = now;
-      app.toasts.show({ kind: 'info', icon: p.paused ? 'pause' : ['sunny', 'cloudy', 'rain', 'storm', 'heatwave', 'snow'].includes(p.weather) ? p.weather : 'sunny', key: 'morning', title, text, duration: p.paused ? 7000 : 5200 });
+      app.toasts.show({ prio: p.paused ? 'important' : 'info', kind: 'info', icon: p.paused ? 'pause' : ['sunny', 'cloudy', 'rain', 'storm', 'heatwave', 'snow'].includes(p.weather) ? p.weather : 'sunny', key: 'morning', title, text, duration: p.paused ? 7000 : 5200 });
     } else {
       app.messages?.add({ kind: 'info', title, text });
     }
@@ -546,7 +587,7 @@ export function createTodo(app) {
         },
       },
       el('span.checkbox'),
-      el('span.opt-label', 'Résumé du matin (un petit message chaque matin)'),
+      el('span.opt-label', 'Résumé du matin à l\'écran (avec « Messages à l\'écran : Tous » ; sinon, il attend ici)'),
     );
     return btn;
   }
@@ -616,6 +657,7 @@ export function createTodo(app) {
     morning.prevMoney = game ? game.state.money : null;
     morning.pending = null;
     morning.notes.length = 0;
+    resetQuiet();
     current = null;
     lastKey = '';
     lastCollectKey = '';
@@ -634,6 +676,7 @@ export function createTodo(app) {
     showResume,
     morningToggle,
     morningNote,
+    digest,
     ring,
     focusPlots,
     collectAll,

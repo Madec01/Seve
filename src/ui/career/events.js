@@ -170,13 +170,13 @@ export function askJosephBlock(ui) {
       { type: 'button', id: 'c-ask-joseph', 'aria-disabled': ask.canAsk ? 'false' : 'true', onclick: () => {
         if (!ask.canAsk) {
           app.audio.play('error');
-          if (ask.reason) app.toasts.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), text: ask.reason, duration: 3200 });
+          if (ask.reason) app.toasts.show({ prio: 'important', kind: 'info', sprite: joseph('content', 'sprite--sm'), text: ask.reason, duration: 3200 });
           return;
         }
         const res = ui.act('askQuest');
         if (!res?.ok) return;
         app.audio.play(res.quest ? 'confirm' : 'click', { volume: 0.7 });
-        app.toasts.show({ kind: 'info', sprite: joseph(res.quest ? 'happy' : 'content', 'sprite--sm'), key: 'c-ask', text: `« ${res.line || (res.quest ? 'Justement, j\'y pensais…' : 'Rien pour l\'instant, merci !')} » — Joseph`, duration: 4200 });
+        app.toasts.show({ prio: 'important', kind: 'info', sprite: joseph(res.quest ? 'happy' : 'content', 'sprite--sm'), key: 'c-ask', text: `« ${res.line || (res.quest ? 'Justement, j\'y pensais…' : 'Rien pour l\'instant, merci !')} » — Joseph`, duration: 4200 });
         if (res.quest && app.sheets.current !== 'c-quest') ui.open.quest();
       } },
       joseph('content', 'sprite--sm'),

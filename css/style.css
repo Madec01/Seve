@@ -2880,3 +2880,67 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
   html[data-text-scale='130'] .dialog.is-closable .dialog-title,
   html[data-text-scale='150'] .dialog.is-closable .dialog-title { font-size: min(1.125rem, 17px); }
 }
+
+/* ─── Zoom de la scène : boutons + / − (src/ui/zoom.js) ──────────────────────────
+   À droite (à gauche pour gaucher), au-dessus de la ligne « À faire » et des onglets ; en carrière, à
+   gauche de la mini-carte. Cibles de 48 px, pastille de 40 px, discrète (un peu transparente au repos). */
+.zoom-controls {
+  position: fixed;
+  z-index: 18; /* comme la mini-carte : sous la barre du haut, les onglets, les feuilles et les messages */
+  right: calc(var(--safe-r) + 6px);
+  bottom: calc(var(--inset-bottom) + var(--todo-h, 0px) + 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.zoom-controls[hidden] { display: none; }
+.zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 10px + 96px + 24px + 4px); } /* + bouton « Cacher » qui déborde de 24 px */
+.zoom-controls[data-minimap='collapsed'] { right: calc(var(--safe-r) + 10px + 52px + 6px); }
+html.left-handed .zoom-controls,
+html.left-handed .zoom-controls[data-minimap] { right: auto; left: calc(var(--safe-l) + 6px); }
+body.layout-wide .zoom-controls { bottom: 12px; }
+body.layout-wide.has-sheet .zoom-controls { right: calc(var(--panel-w) + 12px); }
+@media (max-height: 699px), (max-width: 369px) {
+  .zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 8px + 84px + 24px + 4px); }
+}
+.zoom-btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.zoom-btn[hidden] { display: none; }
+.zoom-face {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--parch);
+  box-shadow: 0 0 0 var(--u) var(--outline), 0 var(--u) 0 var(--u) var(--outline), 0 3px 6px rgba(0, 0, 0, 0.25);
+  opacity: 0.88;
+  transition: transform var(--t-fast) ease, opacity var(--t-fast) ease;
+}
+.zoom-btn:active .zoom-face { transform: translateY(var(--u)); filter: brightness(0.92); opacity: 1; }
+.zoom-btn:focus-visible .zoom-face { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: 1px; opacity: 1; }
+.zoom-btn[aria-disabled='true'] .zoom-face { opacity: 0.45; }
+.zoom-reset .zoom-face { width: 40px; height: 30px; }
+.zoom-reset-text { font-size: 0.8125rem; font-weight: 700; line-height: 1; color: var(--text); }
+/* Glyphes « + » et « − » : barres pleines, nettes à toute taille de texte. */
+.zoom-glyph { position: relative; display: block; width: 18px; height: 18px; }
+.zoom-glyph::before,
+.zoom-glyph::after { content: ''; position: absolute; background: var(--outline); }
+.zoom-glyph::before { left: 0; right: 0; top: 7px; height: 4px; }
+.zoom-glyph--plus::after { top: 0; bottom: 0; left: 7px; width: 4px; }
+.zoom-glyph--minus::after { display: none; }
+html.high-contrast .zoom-face { opacity: 1; background: #fff; box-shadow: 0 0 0 2px #000, 0 2px 0 2px #000; }
+html.reduced-motion .zoom-face { transition: none; }

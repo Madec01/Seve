@@ -22,6 +22,14 @@
 //     parcelle sans action ou sur un bâtiment → fiche ; molette ou glisser dans le vide = défiler ;
 //     survol = infobulle. Carrière : Maj + molette (ou molette horizontale du pavé tactile) = défiler
 //     de côté.
+// Zoom de la scène (src/render/camera-zoom.js) :
+//   - pincer à deux doigts : zoomer / dézoomer autour du point entre les doigts (qui suit les doigts : on
+//     peut déplacer la vue en même temps) ; la vue se pose sur un zoom entier au lever (net, pixel art) ;
+//     le geste en cours d'un doigt (toucher, appui long, défilement) est annulé, jamais d'action ;
+//   - double toucher dans le vide (sans cible) : retour au zoom par défaut (s'il a changé) ;
+//   - souris / pavé tactile : Ctrl + molette (ou pincement du pavé) = un cran de zoom au pointeur.
+//   Zoomé, la scène défile dans les deux sens (aussi en Niveaux) ; les cibles restent exactes
+//   (scene.hitTest convertit écran → monde au zoom courant).
 // La cible est cherchée avec une tolérance pour le doigt (scene.hitTest(x, y, { touch: true })).
 // Mode décoration (src/ui/decor.js, aussi sur la ferme de démonstration du menu) : seuls les
 // emplacements, le panneau et le fermier réagissent (toucher ou clic → app.decor.onHit) ; glisser
@@ -31,24 +39,34 @@ const LONG_PRESS_MS = 450;
 const TOUCH_SLOP = 10; // px avant de considérer qu'on glisse
 const MOUSE_SLOP = 5;
 const AXIS_LOCK = 0.42; // tan(≈ 23°) : en deçà, le glissé reste sur l'axe principal
+const DOUBLE_TAP_MS = 320;
+const DOUBLE_TAP_PX = 36;
+const WHEEL_ZOOM_MS = 110; // un cran de zoom au plus toutes les 110 ms (Ctrl + molette)
 
 export function createSceneInput(canvas, app) {
   let g = null; // geste en cours
   let inertia = null; // { v (px/ms), last }
+  const touches = new Map(); // doigts posés sur la scène : pointerId → { x, y } (px CSS du canvas)
+  let pinch = null; // { a, b (pointerId), z0, d0, wx, wy, x, y } pincement en cours
+  let lastEmptyTap = null; // { t, x, y } dernier toucher bref dans le vide (double toucher)
+  let wheelZoomT = 0;
 
   const scene = () => app.scene;
   const decorOn = () => !!app.decor?.active;
   /** La scène réagit-elle aux gestes ? (partie en cours, ou mode décoration) */
   const live = () => decorOn() || (!!app.game && !app.inMenu);
   const DECOR_TYPES = ['decorSlot', 'sign', 'farmer'];
-  /** Carte 2D (carrière) : la scène défile aussi de côté. */
-  const twoD = () => !!scene()?.careerMode;
+  /** Carrière (grande ferme) : règles propres pour les séries. */
+  const career = () => !!scene()?.careerMode;
+  /** Carte 2D (carrière), ou ferme zoomée plus large que l'écran : la scène défile aussi de côté. */
+  const twoD = () => career() || (scene()?.maxScroll?.()?.x || 0) > 0;
+  const canZoom = () => typeof scene()?.zoomGestureTo === 'function';
   const canScroll = () => {
     const s = scene();
     if (typeof s?.scrollBy !== 'function') return false;
     const m = s.maxScroll?.();
     if (m === undefined || m === null) return true;
-    return twoD() ? (m.x || 0) > 0 || Number(m) > 0 : Number(m) > 0;
+    return (m.x || 0) > 0 || Number(m) > 0;
   };
 
   function local(e) {
@@ -198,12 +216,64 @@ export function createSceneInput(canvas, app) {
   }
 
   // ── Pointeur ────────────────────────────────────────────────────────────────
-  canvas.addEventListener('pointerdown', (e) => {
-    if (!e.isPrimary) {
-      // Deuxième doigt : on annule le geste en cours (pas de pincement dans le jeu).
-      cancel();
+  // ── Pincement (deux doigts) ─────────────────────────────────────────────────
+  function pinchPoints() {
+    const pa = touches.get(pinch.a);
+    const pb = touches.get(pinch.b);
+    if (!pa || !pb) return null;
+    return { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2, d: Math.hypot(pa.x - pb.x, pa.y - pb.y) };
+  }
+
+  function startPinch() {
+    const ids = [...touches.keys()].slice(-2);
+    if (g?.mode === 'field') app.juice?.swipeEnd();
+    cancel();
+    lastEmptyTap = null;
+    if (!canZoom() || !live()) return;
+    const s = scene();
+    const info = s.beginZoomGesture();
+    pinch = { a: ids[0], b: ids[1], z0: info.zoom, d0: 1, wx: 0, wy: 0, x: 0, y: 0 };
+    const m = pinchPoints();
+    if (!m) {
+      pinch = null;
+      s.endZoomGesture?.();
       return;
     }
+    const w = s.screenToWorld(m.x, m.y);
+    Object.assign(pinch, { d0: Math.max(8, m.d), wx: w.x, wy: w.y, x: m.x, y: m.y });
+  }
+
+  function movePinch() {
+    const m = pinchPoints();
+    if (!m || !scene()) return;
+    pinch.x = m.x;
+    pinch.y = m.y;
+    scene().zoomGestureTo(pinch.z0, pinch.d0, Math.max(8, m.d), m.x, m.y, pinch.wx, pinch.wy);
+  }
+
+  function endPinch(cancelled = false) {
+    const cur = pinch;
+    pinch = null;
+    if (!cur) return;
+    scene()?.endZoomGesture?.({ x: cur.x, y: cur.y, animate: !cancelled });
+    app.zoomUI?.changed?.();
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') touches.set(e.pointerId, local(e));
+    if (!e.isPrimary || touches.size >= 2) {
+      // Deuxième doigt : le geste d'un doigt est annulé, on pince (zoom de la scène).
+      if (e.pointerType === 'touch' && touches.size >= 2 && !pinch) {
+        try {
+          canvas.setPointerCapture(e.pointerId);
+        } catch {
+          /* rien */
+        }
+        startPinch();
+      } else if (!pinch) cancel();
+      return;
+    }
+    if (pinch) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     stopInertia();
     if (!live()) return;
@@ -265,6 +335,11 @@ export function createSceneInput(canvas, app) {
   });
 
   canvas.addEventListener('pointermove', (e) => {
+    if (touches.has(e.pointerId)) touches.set(e.pointerId, local(e));
+    if (pinch) {
+      if (e.pointerId === pinch.a || e.pointerId === pinch.b) movePinch();
+      return;
+    }
     if (!live()) return;
     const p = local(e);
     if (!g || e.pointerId !== g.id) {
@@ -279,8 +354,8 @@ export function createSceneInput(canvas, app) {
       scene()?.setHover(null);
       // Carrière (grande ferme, carte 2D) : un glissé qui part d'une parcelle sans rien à arroser ni à récolter
       // fait défiler la vue (sinon on ne pourrait pas bouger en partant du champ). Niveaux : inchangé.
-      const act = g.hit?.type === 'plot' && twoD() ? app.game?.query.plot(g.hit.index)?.action : null;
-      const seriesOk = g.hit?.type === 'plot' && (!twoD() || act === 'water' || act === 'harvest');
+      const act = g.hit?.type === 'plot' && career() ? app.game?.query.plot(g.hit.index)?.action : null;
+      const seriesOk = g.hit?.type === 'plot' && (!career() || act === 'water' || act === 'harvest');
       const shelterOk = g.hit?.type === 'shelter' && shelterHasGoods(g.hit.buildingId);
       if (shelterOk && !g.decor) {
         g.mode = 'field';
@@ -329,7 +404,26 @@ export function createSceneInput(canvas, app) {
     if (e.pointerType === 'mouse') app.onSceneHover?.(hitAt(p.x, p.y, false), e);
   });
 
+  /** Double toucher dans le vide : retour au zoom par défaut. Renvoie vrai s'il a servi. */
+  function emptyTap(x, y) {
+    const now = performance.now();
+    const prev = lastEmptyTap;
+    lastEmptyTap = { t: now, x, y };
+    if (!prev || now - prev.t > DOUBLE_TAP_MS || Math.hypot(x - prev.x, y - prev.y) > DOUBLE_TAP_PX) return false;
+    lastEmptyTap = null;
+    const s = scene();
+    if (!s?.zoomInfo || s.zoomInfo().isDefault) return false;
+    s.setZoom(null, { x, y });
+    app.vibrate?.(8);
+    app.zoomUI?.changed?.();
+    return true;
+  }
+
   function finish(e, cancelled = false) {
+    if (e && touches.has(e.pointerId)) {
+      touches.delete(e.pointerId);
+      if (pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)) endPinch(cancelled);
+    }
     if (!g || (e && e.pointerId !== g.id)) return;
     const cur = g;
     g = null;
@@ -342,6 +436,8 @@ export function createSceneInput(canvas, app) {
       else if (cur.mode === 'scroll' && performance.now() - cur.lastT < 80) startInertia(cur.v, cur.vx);
       return;
     }
+    if (cur.touch && !cur.mode && !cur.long && !cur.hit) emptyTap(cur.x0, cur.y0);
+    else lastEmptyTap = null;
     if (cur.touch && !cur.mode && !cur.long && cur.hit) {
       if (cur.hit.type === 'plot') tapPlot(cur.hit.index);
       else if (cur.hit.type === 'investment') tapInvestment(cur.hit.id);
@@ -362,6 +458,17 @@ export function createSceneInput(canvas, app) {
   canvas.addEventListener(
     'wheel',
     (e) => {
+      if (live() && e.ctrlKey && canZoom()) {
+        // Ctrl + molette, ou pincement du pavé tactile (le navigateur l'envoie ainsi) : zoom au pointeur.
+        e.preventDefault();
+        const now = performance.now();
+        if (now - wheelZoomT < WHEEL_ZOOM_MS || !e.deltaY) return;
+        wheelZoomT = now;
+        const p = local(e);
+        scene().setZoom(e.deltaY < 0 ? 'in' : 'out', { x: p.x, y: p.y });
+        app.zoomUI?.changed?.();
+        return;
+      }
       if (!live() || !canScroll()) return;
       e.preventDefault();
       stopInertia();
@@ -377,6 +484,7 @@ export function createSceneInput(canvas, app) {
   );
 
   function cancel() {
+    if (pinch) endPinch(true);
     if (g) clearTimeout(g.timer);
     g = null;
     stopInertia();

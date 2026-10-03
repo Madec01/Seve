@@ -1,10 +1,22 @@
 // Constantes globales d'équilibrage — données pures, aucune logique d'état.
 // Les valeurs finales sont réglées avec la simulation (tools/simulate.js).
 
-/** Durée d'un jour en secondes, à la vitesse ×1. */
+/**
+ * Durée d'un jour en « secondes de jeu » (horloge du cœur : state.time.elapsed va de 0 à DAY_SECONDS). Toutes les
+ * règles (heures de travail des employés, passages des machines, sauvegardes, simulateurs) comptent dans cette unité.
+ */
 export const DAY_SECONDS = 20;
 
-/** Vitesses autorisées (0 = pause, 0.5 = vitesse douce ×½ : un jour dure 40 s). */
+/**
+ * Rythme en temps réel (2026-10-03, retour joueur sur téléphone : « même en ×1 les jours passent trop vite ») : à ×1,
+ * un jour dure REAL_DAY_SECONDS secondes réelles (avant : 20 s). La boucle de l'interface (src/main.js) fait avancer le
+ * cœur de dt × GAME_SECONDS_PER_REAL_SECOND secondes de jeu par seconde réelle ; les règles par jour ne changent pas.
+ * ×½ : 72 s · ×1 : 36 s · ×2 : 18 s · ×4 : 9 s.
+ */
+export const REAL_DAY_SECONDS = 36;
+export const GAME_SECONDS_PER_REAL_SECOND = DAY_SECONDS / REAL_DAY_SECONDS;
+
+/** Vitesses autorisées (0 = pause, 0.5 = vitesse douce ×½ : un jour dure 2 × REAL_DAY_SECONDS = 72 s). */
 export const SPEEDS = [0, 0.5, 1, 2, 4];
 
 /** Options de partie gérées par le cœur (game.setOption) et leur valeur par défaut. */

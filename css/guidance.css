@@ -195,3 +195,23 @@ html.reduced-motion .todo-ring { animation: none; }
 .resume-list li > img { flex: none; margin-top: 2px; }
 .resume-todo { padding: 8px 10px; background: var(--parch-2); box-shadow: 0 0 0 var(--u) var(--parch-3); }
 html.left-handed .todo { flex-direction: row-reverse; }
+
+/* ─── Messages compacts (2026-10-03, retour joueur : « les notifs prennent beaucoup de place ») ──────────────
+   Une ligne pour une info (titre · texte, coupé par « … » ; le texte entier reste dans l'historique et pour les lecteurs
+   d'écran), deux lignes au plus pour un message important ou qui propose une action. ≈ 40 px de haut au lieu de 63. */
+.toast { min-height: 40px; gap: 6px; padding: 0 8px 0 2px; border-width: calc(var(--u) * 3); font-size: 0.875rem; }
+.toast > .icon, .toast > .sprite { width: 24px; height: 24px; }
+.toast .toast-body { display: block; flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; line-height: 1.25; }
+.toast .toast-title { display: inline; font-size: 0.875rem; }
+.toast .toast-title::after { content: ' · '; font-weight: 400; }
+.toast .toast-text { display: inline; }
+.toast[data-prio="important"] .toast-body,
+.toast[data-prio="always"] .toast-body,
+.toast.is-action .toast-body { display: -webkit-box; white-space: normal; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.toast > .sprite, .toast > .icon { flex: none; object-fit: contain; }
+
+/* Réglage « Messages à l'écran » (options et feuille Messages) : trois boutons d'une ligne. */
+.seg.seg--3 { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 0; background: none; box-shadow: none; }
+.msg-mode .opt-label { display: flex; flex-direction: column; gap: 2px; }
+.msg-mode .opt-sub { font-size: 0.875rem; line-height: 1.25; color: var(--text-soft); }
+.msg-sheet .msg-mode { margin-top: 10px; }

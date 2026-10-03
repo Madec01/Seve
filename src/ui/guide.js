@@ -10,6 +10,7 @@
 import { el } from './dom.js';
 import { icon } from './icons.js';
 import { HINTS } from './hints.js';
+import { REAL_DAY_SECONDS } from '../data/balance.js';
 
 /** Mots de la ferme expliqués simplement. mode : 'levels' | 'career' | 'both'. */
 export const GLOSSARY = [
@@ -60,7 +61,7 @@ export const GUIDE_SECTIONS = [
     icon: 'calendar',
     mode: 'both',
     lines: [
-      'Une journée dure 20 secondes à la vitesse normale.',
+      `Une journée dure ${REAL_DAY_SECONDS} secondes à la vitesse normale (×1).`,
       'Le bouton de vitesse change la vitesse ; un appui long met en pause.',
       'Le temps ne passe que quand vous jouez. Quand vous quittez, la ferme attend.',
       'La partie est sauvegardée chaque matin et quand vous quittez.',

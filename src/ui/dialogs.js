@@ -319,7 +319,7 @@ export function createDialogs(layer, app) {
       vibration: () => ('vibrate' in navigator ? optToggle('vibration', 'Vibrations', (v) => { setA11y({ vibration: v }); if (v) app.vibrate(20); }, { sub: 'Petite vibration au toucher et aux alertes.' }) : null),
       controlsBottom: () => optToggle('controlsBottom', 'Vitesse et pause en bas', (v) => setA11y({ controlsBottom: v }), { sub: 'Le bouton de vitesse passe dans la barre du bas, sous le pouce.' }),
       leftHanded: () => optToggle('leftHanded', 'Disposition pour gaucher', (v) => setA11y({ leftHanded: v }), { sub: 'Le bouton de vitesse passe à gauche.' }),
-      pinchZoom: () => optToggle('pinchZoom', 'Zoom à deux doigts', (v) => setA11y({ pinchZoom: v }), { sub: 'Agrandir l\'écran en écartant deux doigts sur les barres et les fiches.' }),
+      pinchZoom: () => optToggle('pinchZoom', 'Loupe de l\'interface', (v) => setA11y({ pinchZoom: v }), { sub: 'Agrandir toute la page en écartant deux doigts sur les barres et les fiches. (Pour la ferme seule : pincez la ferme, ou boutons + et −.)' }),
     };
     const keys = welcome ? ['readableFont', 'pauseOnSheet', 'slowSpeed', 'reducedMotion', 'controlsBottom'] : Object.keys(t);
     return keys.map((k) => t[k]());
@@ -572,6 +572,8 @@ export function createDialogs(layer, app) {
       slider('sfxVolume', 'Sons'),
       slider('ambienceVolume', 'Ambiance'),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
+      el('h3.opt-section', { id: 'opt-msg' }, 'Messages'),
+      app.messages?.modePicker?.() || null,
       el('h3.opt-section', { id: 'opt-a11y' }, 'Accessibilité'),
       textSizePicker(),
       ...a11yToggles(),

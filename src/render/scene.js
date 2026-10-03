@@ -48,6 +48,19 @@
 //   scene.focusRect(r, opts?)           (v3) défile pour voir le rectangle r (px du monde) au-dessus de la feuille
 //   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
+//   Zoom du joueur (camera-zoom.js ; pincement et double toucher : src/ui/gestures.js, boutons : src/ui/zoom.js) :
+//   scene.setZoom(z, opts?)             z = nombre (entier le plus proche, borné) | null (défaut) | 'in' | 'out' ;
+//                                       opts { x, y (px CSS : ce point ne bouge pas ; défaut : centre de la vue),
+//                                       animate (true ; jamais en mouvements réduits) } → zoom visé
+//   scene.beginZoomGesture()            début d'un pincement → { zoom, min, max, base }
+//   scene.zoomGestureTo(z0, d0, d, x, y, wx, wy)  zoom z0 × d / d0 (fractionnaire, élastique aux bornes), le point
+//                                       du monde (wx, wy) sous le point d'écran (x, y) px CSS
+//   scene.endZoomGesture(opts?)         la vue se pose sur le zoom entier le plus proche (animé sauf opts.animate
+//                                       false ou mouvements réduits)
+//   scene.zoomInfo()                    { zoom, base, min, max, isDefault, ratio, gesture, animating, canIn, canOut }
+//   scene.setZoomRatio(r)               préférence enregistrée (rapport au défaut, null = défaut), sans animation
+//   Zoomé, la vue défile dans les deux sens (aussi en Niveaux), bornée au monde ; en Niveaux la vue passe alors
+//   en mode fenêtré (couche fixe sur tout le monde, indépendante du zoom) ; zoom par défaut : rendu inchangé.
 //
 // Mode Carrière (game.state.mode === 'career', détecté à chaque image) : disposition en colonne
 // (layout-career.js) qui grandit vers le haut, reconstruite quand les terrains, les bâtiments ou les
@@ -129,6 +142,7 @@ import { createEffects, canDraw, giantRect } from './effects.js';
 import { createLot2Actors } from './lot2-actors.js';
 import { createVarietyActors } from './variety-actors.js';
 import { createCozyActors } from './cozy-actors.js';
+import { zoomBounds, snapZoom, stepZoom, clampZoom, pinchZoom, staticRegion, zoomRatio, zoomFromRatio } from './camera-zoom.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -137,7 +151,12 @@ const MAX_TILE_CSS = 40; // portrait : une tuile ne dépasse pas ~40 px CSS (tab
 const TOUCH_SLOP_CSS = 8; // tolérance du toucher autour des parcelles
 const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7, goat: 11 };
 const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5, goat: 7 };
-const FARMER_SPEED = 44;
+// Pas du fermier en px monde par seconde RÉELLE (2026-10-03 : 44, et ×3 sur les longs trajets en carrière, le
+// faisait courir à 250 px CSS/s) ; au-delà de FARMER_JUMP px, raccourci doux (farmerShortcut).
+const FARMER_SPEED = 30;
+const FARMER_JUMP = 150;
+const FARMER_LAND = 26;
+const FARMER_FADE = 0.22;
 const POP_TIME = 0.55;
 const ANIMAL_KINDS = ['chicken', 'sheep', 'cow', 'goat'];
 const PROCESSING_IDS = ['jamWorkshop', 'dairy', 'mill'];
@@ -287,6 +306,15 @@ export function createScene(canvas, images, level, opts = {}) {
   let scrollAnim = null; // { from, to, t, dur } défilement animé (px réels, secondes)
   let scrollBeforeOverlay = null; // défilement d'avant l'ouverture de la feuille (px réels)
   const SCROLL_ANIM = 0.32;
+  // Zoom du joueur (camera-zoom.js) : null = zoom par défaut ; fractionnaire seulement pendant un geste.
+  let userZ = null;
+  let userZBase = 0; // zoom par défaut au moment du choix (l'écran change : on garde le rapport)
+  let zoomBase = 2; // zoom par défaut courant
+  let zoomB = { min: 1, max: 4, base: 2 };
+  let zoomGesture = false; // pincement en cours
+  let zoomAnim = null; // { from, to, t, dur, sx, sy, wx, wy } (px réels / monde)
+  let staticGeo = ''; // géométrie de la couche fixe (redessinée seulement si elle change)
+  const ZOOM_ANIM = 0.2;
 
   // Lot 1 « confort » : mouvements réduits (setReducedMotion) et repères des parcelles (setPlotHints).
   let reducedMotion = false;
@@ -328,8 +356,10 @@ export function createScene(canvas, images, level, opts = {}) {
 
   // Fermier
   const farmer = {
-    x: 0, y: 0, path: [], facing: 1, where: 'home', idle: 0, tool: null, toolT: 0, walkT: 0,
+    x: 0, y: 0, path: [], facing: 1, where: 'home', idle: 0, tool: null, toolT: 0, walkT: 0, alpha: 1, jump: null,
   };
+  /** Parcelles touchées par un employé, une machine ou un aide depuis la dernière synchronisation (onEvent). */
+  const helperTouched = new Set();
 
   // Liste de dessin triée par profondeur (réutilisée)
   const entries = [];
@@ -433,37 +463,57 @@ export function createScene(canvas, images, level, opts = {}) {
     band.w = Math.max(1, devW - band.x - Math.round(insets.right * dpr));
     band.h = Math.max(1, devH - band.y - Math.round(insets.bottom * dpr));
     const ess = layout.essential;
+    let zBase;
     if (careerMode && mode !== 'portrait') {
       // Ordinateur : la même colonne, centrée, zoom par la hauteur (≈ 22 tuiles visibles).
       const byWidth = Math.floor(band.w / ess.w);
       const byHeight = Math.max(minZoom, Math.floor(band.h / (CAREER_VISIBLE_ROWS * TILE)));
-      zoom = Math.max(1, Math.min(byWidth, byHeight));
+      zBase = Math.max(1, Math.min(byWidth, byHeight));
     } else if (mode === 'portrait') {
       const byWidth = Math.floor(band.w / ess.w);
       // Le champ entier doit tenir en hauteur dans la bande (cas extrêmes : écran très bas).
       const byField = Math.floor(band.h / (layout.fieldRect.h + TILE));
       const cap = Math.max(1, Math.floor((MAX_TILE_CSS * dpr) / TILE));
-      zoom = Math.max(1, Math.min(byWidth, byField, cap));
+      zBase = Math.max(1, Math.min(byWidth, byField, cap));
     } else {
-      zoom = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
+      zBase = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
     }
+    // Zoom du joueur (pincement, boutons + / −) : bornes autour du zoom par défaut ; entier hors geste.
+    const W0 = layout.x0 ?? 0;
+    const W1 = layout.x1 ?? layout.width;
+    zoomB = zoomBounds({ base: zBase, bandW: band.w, bandH: band.h, worldW: W1 - W0, worldH: layout.height, career: careerMode });
+    if (userZ !== null && userZBase && userZBase !== zBase && !zoomGesture && !zoomAnim) userZ = Math.round((userZ * zBase) / userZBase);
+    if (userZ !== null) userZBase = zBase;
+    if (userZ !== null && !zoomGesture && !zoomAnim && snapZoom(userZ, zoomB) === zBase) userZ = null;
+    zoomBase = zBase;
+    zoom = userZ === null ? zBase : zoomGesture || zoomAnim ? userZ : snapZoom(userZ, zoomB);
+    // Vue limitée à l'écran et couche fixe sur tout le monde : toujours en carrière ; en Niveaux dès que le
+    // joueur a zoomé (la couche fixe ne dépend plus du zoom : rien à reconstruire pendant un pincement).
+    windowed = careerMode || userZ !== null || zoomGesture;
     // Horizontal : partie essentielle centrée dans la bande. (Carrière 2D) le centre de la vue va du
     // centre de la colonne la plus à gauche à celui de la plus à droite (défilement horizontal).
     xLo = ess.x + ess.w / 2;
-    maxScrollXDev = 0;
+    let xHi = xLo;
+    const hw = band.w / 2 / zoom;
     if (careerMode && layout.grid) {
       const G = layout.grid;
       const colW = CAREER_COL_TILES * TILE;
-      const hw = band.w / 2 / zoom;
-      const W0 = layout.x0 ?? 0;
-      const W1 = layout.x1 ?? layout.width;
       const mid = (W0 + W1) / 2;
       let lo = Math.max(G.cMin * colW + xLo, Math.min(W0 + hw, mid));
       let hi = Math.min(G.cMax * colW + xLo, Math.max(W1 - hw, mid));
       if (lo > hi) lo = hi = mid;
       xLo = lo;
-      maxScrollXDev = Math.max(0, Math.round((hi - lo) * zoom));
+      xHi = hi;
     }
+    if (userZ !== null) {
+      // Zoomé : tout le monde (bords compris) se visite de côté, sans jamais sortir de la ferme.
+      let lo2 = W0 + hw;
+      let hi2 = W1 - hw;
+      if (lo2 > hi2) lo2 = hi2 = (W0 + W1) / 2;
+      xLo = Math.min(xLo, lo2);
+      xHi = Math.max(xHi, hi2);
+    }
+    maxScrollXDev = Math.max(0, Math.round((xHi - xLo) * zoom));
     baseX = Math.round(band.x + band.w / 2 - xLo * zoom);
     // Vertical : monde centré s'il tient, sinon défilement (0 = haut du monde en haut de la bande).
     const worldDevH = layout.height * zoom;
@@ -472,7 +522,7 @@ export function createScene(canvas, images, level, opts = {}) {
       maxScrollDev = 0;
     } else {
       baseY = band.y;
-      maxScrollDev = worldDevH - band.h;
+      maxScrollDev = Math.round(worldDevH - band.h);
     }
     // Tampon : couvre tout le canvas, pour tout défilement possible.
     bufX0 = Math.floor(-baseX / zoom) - 1;
@@ -480,33 +530,46 @@ export function createScene(canvas, images, level, opts = {}) {
     let w = Math.ceil(devW / zoom) + 3;
     // + une hauteur d'écran : défilement au-delà du bas du monde quand une feuille est ouverte.
     let h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
-    // (Carrière) Fenêtré : la vue ne couvre que l'écran ; la couche fixe garde tout le monde.
-    const sh = h;
-    const sw = Math.ceil((devW + maxScrollXDev) / zoom) + 3;
+    let sw = w;
+    let sh = h;
     if (windowed) {
-      sBufY0 = bufY0;
-      sBufX0 = bufX0;
-      h = Math.ceil(devH / zoom) + 3;
+      // Fenêtré : la vue ne couvre que l'écran (taille par le zoom entier inférieur : pas de réallocation à
+      // chaque image d'un pincement) ; la couche fixe couvre le monde pour tout zoom permis (staticRegion).
+      const zs = Math.max(1, Math.floor(zoom + 1e-6));
+      const reg = staticRegion({ worldX0: W0, worldX1: W1, worldH: layout.height, minZoom: zoomB.min, devW, devH, bandCx: band.x + band.w / 2 });
+      sBufX0 = reg.x0;
+      sBufY0 = reg.y0;
+      sw = reg.w;
+      sh = reg.h;
+      w = Math.ceil(devW / zs) + 3;
+      h = Math.ceil(devH / zs) + 3;
     }
     ox = -bufX0;
     oy = -bufY0;
-    const wantStaticH = windowed ? sh : h;
-    const wantStaticW = windowed ? sw : w;
-    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h || staticLayer.height !== wantStaticH || staticLayer.width !== wantStaticW) {
+    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h) {
       viewW = w;
       viewH = h;
-      staticH = wantStaticH;
-      staticW = wantStaticW;
       view.width = viewW;
       view.height = viewH;
-      staticLayer.width = staticW;
-      staticLayer.height = staticH;
       scratch.width = viewW;
       scratch.height = viewH;
       vctx = noSmooth(view.getContext('2d'));
+    }
+    if (staticLayer.height !== sh || staticLayer.width !== sw) {
+      staticH = sh;
+      staticW = sw;
+      staticLayer.width = staticW;
+      staticLayer.height = staticH;
       sctx = noSmooth(staticLayer.getContext('2d'));
     }
-    staticKey = -1;
+    staticW = sw;
+    staticH = sh;
+    // La couche fixe n'est redessinée que si sa géométrie change (taille, origine, mode).
+    const geo = windowed ? `w|${sBufX0}|${sBufY0}|${staticW}|${staticH}` : `n|${ox}|${oy}|${viewW}|${viewH}`;
+    if (geo !== staticGeo) {
+      staticGeo = geo;
+      staticKey = -1;
+    }
     if (!userScrolled) focusFieldDev();
     else {
       if (keepY !== null && keepY !== undefined) setScrollDev(baseY + keepY * zoom - (band.y + band.h / 2));
@@ -529,7 +592,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function applyScroll() {
     if (windowed) {
       // La vue suit le défilement : son coin haut-gauche est le premier pixel du monde visible.
-      bufY0 = Math.max(sBufY0, Math.floor((scrollDev - baseY) / zoom) - 1);
+      bufY0 = Math.max(sBufY0, Math.min(sBufY0 + Math.max(0, staticH - viewH), Math.floor((scrollDev - baseY) / zoom) - 1));
       bufX0 = Math.max(sBufX0, Math.min(sBufX0 + Math.max(0, staticW - viewW), Math.floor((scrollXDev - baseX) / zoom) - 1));
       oy = -bufY0;
       ox = -bufX0;
@@ -1093,13 +1156,18 @@ export function createScene(canvas, images, level, opts = {}) {
   function buildStatic(season, owned) {
     const sheets = seasonSheets[season];
     const c = sctx;
+    // Fenêtré (zoom du joueur) : la couche fixe couvre tout le monde, à son origine propre (sBufX0, sBufY0).
+    const SOX = windowed ? -sBufX0 : ox;
+    const SOY = windowed ? -sBufY0 : oy;
+    const SW = windowed ? staticW : viewW;
+    const SH = windowed ? staticH : viewH;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, viewW, viewH);
-    c.translate(ox, oy);
-    const tx0 = Math.floor(-ox / TILE) - 1;
-    const ty0 = Math.floor(-oy / TILE) - 1;
-    const tx1 = Math.ceil((viewW - ox) / TILE) + 1;
-    const ty1 = Math.ceil((viewH - oy) / TILE) + 1;
+    c.clearRect(0, 0, SW, SH);
+    c.translate(SOX, SOY);
+    const tx0 = Math.floor(-SOX / TILE) - 1;
+    const ty0 = Math.floor(-SOY / TILE) - 1;
+    const tx1 = Math.ceil((SW - SOX) / TILE) + 1;
+    const ty1 = Math.ceil((SH - SOY) / TILE) + 1;
     const fr = flowerRate(season);
 
     // 1. Herbe
@@ -1521,7 +1589,10 @@ export function createScene(canvas, images, level, opts = {}) {
       prevForage[i] = p.forage || null;
     }
     // Une action du joueur touche une ou deux parcelles ; au-delà, c'est l'aube (pluie, arroseurs).
-    if (changed >= 1 && changed <= 2) farmerGoTo(lastIdx, lastTool);
+    // (2026-10-03) … mais pas celle d'un employé, d'une machine ou d'un aide : en carrière, le fermier courait après
+    // chaque geste de l'équipe (en continu, à 250 px CSS/s).
+    if (changed >= 1 && changed <= 2 && !helperTouched.has(lastIdx)) farmerGoTo(lastIdx, lastTool);
+    helperTouched.clear();
     if (!initialized) {
       // Étal : cagettes des cultures les plus récoltées jusqu'ici.
       const harvested = game.state.stats?.year?.cropsHarvested || {};
@@ -1589,6 +1660,78 @@ export function createScene(canvas, images, level, opts = {}) {
     for (const p of route) farmer.path.push(p);
   }
 
+  /** Longueur restante du trajet du fermier (px monde). */
+  function farmerPathLeft() {
+    let d = 0;
+    let px = farmer.x;
+    let py = farmer.y;
+    for (const p of farmer.path) {
+      d += Math.hypot(p.x - px, p.y - py);
+      px = p.x;
+      py = p.y;
+    }
+    return d;
+  }
+
+  /**
+   * Raccourci doux du fermier : trajet plus long que FARMER_JUMP → fondu (FARMER_FADE s), réapparition à FARMER_LAND px
+   * du but, fondu d'entrée en marchant. Mouvements réduits : saut direct au dernier point. true : l'image est consommée.
+   */
+  function farmerShortcut(dt) {
+    const last = farmer.path[farmer.path.length - 1];
+    if (reducedMotion) {
+      // Au but tout de suite (son outil compris), sans trajet.
+      farmer.path.length = 0;
+      farmer.x = last.x;
+      farmer.y = last.y;
+      farmer.alpha = 1;
+      farmer.jump = null;
+      if (last.tool) {
+        farmer.tool = last.tool;
+        farmer.toolT = 1.1;
+        farmer.facing = last.facing || 1;
+      }
+      farmer.where = inField(farmer.x, farmer.y) ? 'field' : 'home';
+      farmer.idle = 0;
+      return true;
+    }
+    if (!farmer.jump) {
+      if (farmerPathLeft() <= FARMER_JUMP) return false;
+      farmer.jump = { t: 0, done: false };
+    }
+    const j = farmer.jump;
+    j.t += dt;
+    if (!j.done) {
+      farmer.alpha = Math.max(0, 1 - j.t / FARMER_FADE);
+      if (j.t < FARMER_FADE) return false; // il s'efface en marchant
+      // Réapparaît le long du chemin, à FARMER_LAND px du but.
+      let left = farmerPathLeft();
+      while (farmer.path.length > 1) {
+        const p = farmer.path[0];
+        const seg = Math.hypot(p.x - farmer.x, p.y - farmer.y);
+        if (left - seg < FARMER_LAND) break;
+        left -= seg;
+        farmer.x = p.x;
+        farmer.y = p.y;
+        farmer.path.shift();
+      }
+      const p = farmer.path[0];
+      const seg = Math.hypot(p.x - farmer.x, p.y - farmer.y);
+      const cut = Math.max(0, left - FARMER_LAND);
+      if (seg > 0 && cut > 0) {
+        const k = Math.min(1, cut / seg);
+        farmer.x += (p.x - farmer.x) * k;
+        farmer.y += (p.y - farmer.y) * k;
+      }
+      j.done = true;
+      j.t = 0;
+      return true;
+    }
+    farmer.alpha = Math.min(1, j.t / FARMER_FADE);
+    if (farmer.alpha >= 1) farmer.jump = null;
+    return false;
+  }
+
   function updateFarmer(dt) {
     if (farmer.tool) {
       farmer.toolT -= dt;
@@ -1598,15 +1741,21 @@ export function createScene(canvas, images, level, opts = {}) {
     const next = farmer.path[0];
     if (!next) {
       farmer.walkT = 0;
+      farmer.alpha = 1;
+      farmer.jump = null;
       farmer.idle += dt;
       if (farmer.where === 'field' && farmer.idle > 14) farmerGoHome();
       return;
     }
+    // Rythme (2026-10-03) : pas tranquille en temps réel ; un long trajet (maison ↔ champ lointain) se fait par un
+    // « raccourci doux » (fondu, réapparition près du but) au lieu d'une course à travers la ferme. Mouvements
+    // réduits : le fermier est tout de suite à destination.
+    if (farmerShortcut(dt)) return;
     const dx = next.x - farmer.x;
     const dy = next.y - farmer.y;
     const d = Math.hypot(dx, dy);
-    // Il presse le pas sur les longs trajets (maison ↔ champ).
-    const step = FARMER_SPEED * (farmer.path.length > 2 ? (careerMode ? 3 : 1.7) : 1) * dt;
+    // Il allonge un peu le pas sur les longs trajets (maison ↔ champ).
+    const step = FARMER_SPEED * (farmer.path.length > 2 ? 1.25 : 1) * dt;
     farmer.walkT += dt;
     if (Math.abs(dx) > 0.5) farmer.facing = dx > 0 ? 1 : -1;
     if (d <= step) {
@@ -2280,11 +2429,14 @@ export function createScene(canvas, images, level, opts = {}) {
       const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
       const x = Math.round(farmer.x) - 8;
       const y = Math.round(farmer.y) - 15 + hop + workBob;
-      pushSprite(outfitSprite(cosmetics.outfit), x, y, farmer.y + 1, images, {
-        flipX: farmer.facing < 0,
-        tool: farmer.tool,
-        toolFlip: farmer.facing < 0,
-      });
+      if ((farmer.alpha ?? 1) > 0.02) {
+        pushSprite(outfitSprite(cosmetics.outfit), x, y, farmer.y + 1, images, {
+          flipX: farmer.facing < 0,
+          tool: farmer.tool,
+          toolFlip: farmer.facing < 0,
+          alpha: farmer.alpha ?? 1,
+        });
+      }
     }
     void weather;
     void dayProgress;
@@ -2394,7 +2546,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
       const x = Math.round(farmer.x) - 8;
       const y = Math.round(farmer.y) - 15 + hop + workBob;
-      pushSprite(farmerSprite(), x, y, farmer.y + 1, images, { flipX: farmer.facing < 0, tool: farmer.tool, toolFlip: farmer.facing < 0 });
+      if ((farmer.alpha ?? 1) > 0.02) pushSprite(farmerSprite(), x, y, farmer.y + 1, images, { flipX: farmer.facing < 0, tool: farmer.tool, toolFlip: farmer.facing < 0, alpha: farmer.alpha ?? 1 });
     }
   }
 
@@ -3412,12 +3564,141 @@ export function createScene(canvas, images, level, opts = {}) {
     return scrollPair(scrollAnim ? scrollAnim.toX : scrollXDev, scrollAnim ? scrollAnim.to : scrollDev);
   }
 
+  // ── Zoom du joueur (pincement, boutons + / −, double toucher) ─────────────────────
+  /** Point de la bande visible (au-dessus d'une feuille ouverte), px CSS : ancre par défaut. */
+  function viewCenterCss() {
+    return { x: (band.x + band.w / 2) / dpr, y: (band.y + (band.h - overlayDev) / 2) / dpr };
+  }
+
+  /**
+   * Pose le zoom z (null = défaut) en gardant le point du monde (wx, wy) sous le point d'écran (sx, sy)
+   * (px réels). Recalcule les bornes du défilement (la vue reste dans la ferme).
+   */
+  function applyZoom(z, sx, sy, wx, wy) {
+    userZ = z === null || z === undefined ? null : z;
+    if (userZ !== null) userZBase = zoomBase;
+    stopFling();
+    scrollAnim = null;
+    scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
+    userScrolled = true;
+    computeCamera();
+    setScrollXDev(baseX + wx * zoom - sx);
+    setScrollDev(baseY + wy * zoom - sy);
+  }
+
+  function reduceMotionOn() {
+    return reducedMotion || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion'));
+  }
+
+  /** Point d'ancrage (px CSS) → { sx, sy } px réels et le point du monde dessous. */
+  function anchorAt(opts) {
+    const c = opts && Number.isFinite(opts.x) && Number.isFinite(opts.y) ? { x: opts.x, y: opts.y } : viewCenterCss();
+    const w = screenToWorld(c.x, c.y);
+    return { sx: c.x * dpr, sy: c.y * dpr, wx: w.x, wy: w.y };
+  }
+
+  /**
+   * setZoom(z, opts?) : z = nombre (posé sur l'entier le plus proche, borné), null (zoom par défaut),
+   * 'in' / 'out' (cran suivant). opts { x, y (px CSS, point qui ne bouge pas ; défaut : centre de la vue),
+   * animate (true ; jamais en mouvements réduits) }. Renvoie le zoom visé.
+   */
+  function setZoom(z, opts = {}) {
+    const cur = zoom;
+    let target;
+    if (z === 'in' || z === 'out') target = stepZoom(cur, z === 'in' ? 1 : -1, zoomB);
+    else if (z === null || z === undefined) target = zoomBase;
+    else target = snapZoom(z, zoomB);
+    const a = anchorAt(opts);
+    zoomGesture = false;
+    const final = target === zoomBase ? null : target;
+    if (opts.animate === false || reduceMotionOn() || Math.abs(target - cur) < 1e-3) {
+      zoomAnim = null;
+      applyZoom(final, a.sx, a.sy, a.wx, a.wy);
+      return zoom;
+    }
+    zoomAnim = { from: cur, to: target, final, t: 0, dur: ZOOM_ANIM, ...a };
+    applyZoom(cur, a.sx, a.sy, a.wx, a.wy);
+    return target;
+  }
+
+  function stepZoomAnim(dt) {
+    if (!zoomAnim) return;
+    const a = zoomAnim;
+    a.t = Math.min(a.dur, a.t + dt);
+    const k = a.t / a.dur;
+    const e = 1 - (1 - k) ** 3;
+    if (k >= 1) {
+      zoomAnim = null;
+      applyZoom(a.final, a.sx, a.sy, a.wx, a.wy);
+      return;
+    }
+    applyZoom(a.from + (a.to - a.from) * e, a.sx, a.sy, a.wx, a.wy);
+  }
+
+  /** Début d'un pincement : la vue passe en mode fenêtré (couche fixe indépendante du zoom). */
+  function beginZoomGesture() {
+    zoomAnim = null;
+    zoomGesture = true;
+    const z0 = zoom;
+    const a = anchorAt();
+    applyZoom(z0, a.sx, a.sy, a.wx, a.wy);
+    return { zoom: z0, ...zoomB };
+  }
+
+  /**
+   * Pendant le pincement : zoom z0 × d / d0 (borné, léger dépassement élastique), le point du monde
+   * (wx, wy) sous le point d'écran (x, y) px CSS (milieu des doigts : zoomer et déplacer à la fois).
+   */
+  function zoomGestureTo(z0, d0, d, x, y, wx, wy) {
+    if (!zoomGesture) beginZoomGesture();
+    applyZoom(pinchZoom(z0, d0, d, zoomB), x * dpr, y * dpr, wx, wy);
+    return zoom;
+  }
+
+  /** Fin du pincement : la vue se pose sur le zoom entier le plus proche (animé, sauf mouvements réduits). */
+  function endZoomGesture(opts = {}) {
+    if (!zoomGesture) return zoom;
+    const z = zoom;
+    zoomGesture = false;
+    // On garde un zoom fractionnaire le temps de l'animation (setZoom part de là).
+    userZ = z;
+    return setZoom(Math.round(clampZoom(z, zoomB)), opts);
+  }
+
+  function zoomInfo() {
+    return {
+      zoom,
+      base: zoomBase,
+      min: zoomB.min,
+      max: zoomB.max,
+      isDefault: userZ === null && !zoomGesture && !zoomAnim,
+      ratio: zoomRatio(userZ === null ? null : snapZoom(zoomAnim ? zoomAnim.to : userZ, zoomB), zoomBase),
+      gesture: zoomGesture,
+      animating: !!zoomAnim,
+      canIn: (zoomAnim ? zoomAnim.to : zoom) < zoomB.max - 1e-6,
+      canOut: (zoomAnim ? zoomAnim.to : zoom) > zoomB.min + 1e-6,
+    };
+  }
+
+  /** Préférence enregistrée (rapport au zoom par défaut) → zoom entier borné, sans animation, centre gardé. */
+  function setZoomRatio(r) {
+    const z = zoomFromRatio(r, zoomB);
+    const a = anchorAt();
+    zoomAnim = null;
+    zoomGesture = false;
+    if (z === null && userZ === null) return zoom;
+    applyZoom(z, a.sx, a.sy, a.wx, a.wy);
+    return zoom;
+  }
+
   // ── Image ───────────────────────────────────────────────────────────────────────
   const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, (timeMs - lastTime) / 1000));
     lastTime = timeMs;
     time += dt;
+    stepZoomAnim(dt);
     stepScrollAnim(dt);
     if (flingV !== 0 || flingVX !== 0) {
       const before = scrollDev;
@@ -3504,7 +3785,8 @@ export function createScene(canvas, images, level, opts = {}) {
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
-    c.drawImage(staticLayer, 0, 0);
+    if (windowed) c.drawImage(staticLayer, bufX0 - sBufX0, bufY0 - sBufY0, viewW, viewH, 0, 0, viewW, viewH);
+    else c.drawImage(staticLayer, 0, 0);
     c.translate(ox, oy);
     drawPlots(sheetsEnv, raining, season);
     effects.drawGround(c, images);
@@ -3533,6 +3815,7 @@ export function createScene(canvas, images, level, opts = {}) {
     // Canvas final
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
+    if (windowed) ctx.clearRect(0, 0, devW, devH);
     effects.cameraNudge(nudgeOut); // (lot 2) secousse douce (géant), 0 en mouvements réduits
     ctx.drawImage(view, 0, 0, viewW, viewH, blitX + nudgeOut.x * zoom, blitY + nudgeOut.y * zoom, viewW * zoom, viewH * zoom);
     drawSignText();
@@ -3778,7 +4061,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
 
     updateFarmer(dt);
-    actors.update(dt, { elapsed: game.state.time?.elapsed || 0, season, weather, dayProgress });
+    actors.update(dt, { elapsed: game.state.time?.elapsed || 0, speed: game.state.speed || 0, season, weather, dayProgress });
     emitCareerAmbient(dt, owned, season, weather, dayProgress);
     fxState.season = season;
     fxState.weather = weather;
@@ -3901,6 +4184,8 @@ export function createScene(canvas, images, level, opts = {}) {
       hover = hit || null;
     },
     onEvent(type, payload) {
+      // Geste d'un employé, d'une machine ou d'un aide sur une parcelle : le fermier ne s'y rend pas (syncPlots).
+      if (payload && payload.by && payload.by !== 'player' && Number.isInteger(payload.plotIndex ?? payload.index)) helperTouched.add(payload.plotIndex ?? payload.index);
       if (careerMode && type !== 'treeRemoved') {
         // Carrière : traité après la prochaine reconstruction de la disposition (positions à jour).
         deferred.push([type, payload || {}]);
@@ -4024,6 +4309,12 @@ export function createScene(canvas, images, level, opts = {}) {
     lot2Stats() {
       return { ...lot2.stats(), effects: effects.stats() };
     },
+    /** Mesures (QA du rythme) : fermier, acteurs de la carrière, animaux des niveaux, échelle (px CSS par px monde). */
+    actorProbe() {
+      const levelAnimals = [];
+      for (const kind of ANIMAL_KINDS) if (animals[kind]?.[0]) levelAnimals.push({ kind, x: animals[kind][0].x, y: animals[kind][0].y, moving: !!animals[kind][0].moving });
+      return { farmer: { x: farmer.x, y: farmer.y, walking: farmer.path.length > 0, walkT: farmer.walkT }, career: careerMode ? actors.probe() : null, animals: levelAnimals, cssPerWorld: zoom / (dpr || 1) };
+    },
     careerStats() {
       return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: staticW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };
     },
@@ -4054,6 +4345,12 @@ export function createScene(canvas, images, level, opts = {}) {
     minimapToWorld,
     minimapLotAt,
     focusWorld,
+    setZoom,
+    setZoomRatio,
+    beginZoomGesture,
+    zoomGestureTo,
+    endZoomGesture,
+    zoomInfo,
     /** Rectangle du monde (px) visible au-dessus de la feuille ouverte. */
     viewRect: visibleWorldRect,
     fling,

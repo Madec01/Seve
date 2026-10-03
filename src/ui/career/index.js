@@ -522,7 +522,7 @@ export function createCareerUI(app) {
     groupTimer = null;
     const t = app.toasts;
     if (grouped.stored) {
-      t.show({ kind: 'info', sprite: grouped.storedCrop ? cropIcon(grouped.storedCrop, 'sprite--sm') : cIcon('storage'), key: 'c-stored', title: grouped.stored > 1 ? `${grouped.stored} récoltes au grenier` : 'Récolte au grenier', text: 'Le cours est bas : elle attend un meilleur prix.', duration: 2800 });
+      t.show({ digest: 'récolte au grenier|récoltes au grenier', digestN: grouped.stored, kind: 'info', sprite: grouped.storedCrop ? cropIcon(grouped.storedCrop, 'sprite--sm') : cIcon('storage'), key: 'c-stored', title: grouped.stored > 1 ? `${grouped.stored} récoltes au grenier` : 'Récolte au grenier', text: 'Le cours est bas : elle attend un meilleur prix.', duration: 2800 });
       grouped.stored = 0;
     }
     if (grouped.collected) {
@@ -532,7 +532,7 @@ export function createCareerUI(app) {
       grouped.collectedAll = 0;
     }
     if (grouped.diverted) {
-      t.show({ kind: 'info', icon: 'harvest', key: 'c-divert', text: `${plural(grouped.diverted, 'récolte mise', 'récoltes mises')} de côté pour une commande.`, duration: 2600 });
+      t.show({ digest: 'récolte mise de côté|récoltes mises de côté', digestN: grouped.diverted, kind: 'info', icon: 'harvest', key: 'c-divert', text: `${plural(grouped.diverted, 'récolte mise', 'récoltes mises')} de côté pour une commande.`, duration: 2600 });
       grouped.diverted = 0;
     }
   }
@@ -576,7 +576,7 @@ export function createCareerUI(app) {
       case 'billPaid':
         if (ev.career) {
           app.audio.play('coin', { volume: 0.6 });
-          t.show({ kind: 'warn', icon: 'bill', title: `Charges ${season(ev.seasonId, 'of')} payées`, text: `−${fmt(ev.amount)} pièces${ev.detail?.lots ? ` (dont ${fmt((ev.detail.perLot || 0) * ev.detail.lots)} pour ${plural(ev.detail.lots, 'terrain')})` : ''}`, duration: 4200 });
+          t.show({ prio: 'info', digest: 'charges payées|charges payées', kind: 'warn', icon: 'bill', title: `Charges ${season(ev.seasonId, 'of')} payées`, text: `−${fmt(ev.amount)} pièces${ev.detail?.lots ? ` (dont ${fmt((ev.detail.perLot || 0) * ev.detail.lots)} pour ${plural(ev.detail.lots, 'terrain')})` : ''}`, duration: 4200 });
         }
         break;
       case 'lotBought':
@@ -616,7 +616,7 @@ export function createCareerUI(app) {
         break;
       case 'staffLevelUp':
         app.audio.play('unlock', { volume: 0.5 });
-        t.show({ kind: 'success', sprite: portrait(c.staff?.find((s) => s.id === ev.staffId)?.look, 'sprite--sm'), title: `${ev.name || nameOfStaff(ev.staffId)} : niveau ${ev.level ?? ''}`, text: ev.text || 'Plus efficace chaque jour (le salaire suit).', duration: 4600 });
+        t.show({ digest: 'employé plus efficace|employés plus efficaces', kind: 'success', sprite: portrait(c.staff?.find((s) => s.id === ev.staffId)?.look, 'sprite--sm'), title: `${ev.name || nameOfStaff(ev.staffId)} : niveau ${ev.level ?? ''}`, text: ev.text || 'Plus efficace chaque jour (le salaire suit).', duration: 4600 });
         break;
       case 'candidatesRenewed':
         badges.staff = true;
@@ -632,15 +632,15 @@ export function createCareerUI(app) {
         }
         break;
       case 'animalBorn':
-        t.show({ kind: 'success', sprite: animalIcon(ev.animalId, 'sprite--sm'), title: ev.count > 1 ? `${ev.count} petits sont nés !` : 'Une naissance !', text: `La famille s'agrandit (${ev.total ?? ''}).`.replace(' ()', ''), duration: 3600 });
+        t.show({ digest: 'naissance|naissances', kind: 'success', sprite: animalIcon(ev.animalId, 'sprite--sm'), title: ev.count > 1 ? `${ev.count} petits sont nés !` : 'Une naissance !', text: `La famille s'agrandit (${ev.total ?? ''}).`.replace(' ()', ''), duration: 3600 });
         break;
       case 'truffleFound':
-        t.show({ kind: 'money', sprite: animalProductIcon('pig', 'sprite--sm'), title: ev.count > 1 ? `${ev.count} truffes !` : 'Une truffe !', text: `Dans la porcherie, à ramasser (${fmt(ev.amount)}).`, duration: 3400 });
+        t.show({ digest: 'truffe|truffes', digestN: ev.count || 1, kind: 'money', sprite: animalProductIcon('pig', 'sprite--sm'), title: ev.count > 1 ? `${ev.count} truffes !` : 'Une truffe !', text: `Dans la porcherie, à ramasser (${fmt(ev.amount)}).`, duration: 3400 });
         break;
       case 'fishCaught':
         app.audio.play('coin');
         // (Lot 4) Le poisson dessiné (planche lot4), sinon la canne à pêche.
-        t.show({ kind: 'money', sprite: ev.fishId && hasSprite(`fish.${ev.fishId}`) ? sprite(`fish.${ev.fishId}`, 'sprite--sm') : cIcon('fishing'), title: ev.name ? `${ev.name} !` : 'Belle prise !', text: `+${fmt(ev.amount)} pièces`, duration: 3000 });
+        t.show({ digest: 'poisson pêché|poissons pêchés', kind: 'money', sprite: ev.fishId && hasSprite(`fish.${ev.fishId}`) ? sprite(`fish.${ev.fishId}`, 'sprite--sm') : cIcon('fishing'), title: ev.name ? `${ev.name} !` : 'Belle prise !', text: `+${fmt(ev.amount)} pièces`, duration: 3000 });
         break;
       case 'stored':
         grouped.stored += ev.n || 1;
@@ -650,7 +650,7 @@ export function createCareerUI(app) {
       case 'stockSold':
         if (ev.reason !== 'player' && ev.amount > 0) {
           const why = { seller: 'Votre vendeur a vendu du stock au bon cours', charges: 'L\'argent manquait : du stock a été vendu pour les charges', fair: 'Jour de fête : le stock est parti à la foire' }[ev.reason] || 'Stock vendu';
-          t.show({ kind: ev.reason === 'charges' ? 'warn' : 'money', sprite: cIcon('storage'), title: `${plural(ev.count, 'unité')} vendue${ev.count > 1 ? 's' : ''}`, text: `${why} : +${fmt(ev.amount)}.`, duration: 4200 });
+          t.show({ prio: 'info', digest: 'vente du grenier|ventes du grenier', kind: ev.reason === 'charges' ? 'warn' : 'money', sprite: cIcon('storage'), title: `${plural(ev.count, 'unité')} vendue${ev.count > 1 ? 's' : ''}`, text: `${why} : +${fmt(ev.amount)}.`, duration: 4200 });
         } else if (ev.reason === 'player') {
           app.audio.play('coin');
           t.show({ kind: 'money', sprite: cIcon('storage'), title: 'Vendu !', text: `${plural(ev.count, 'unité')} du grenier : +${fmt(ev.amount)} pièces`, duration: 3000 });
@@ -679,7 +679,7 @@ export function createCareerUI(app) {
         const text = ev.text || d.text || 'Du nouveau dans le carnet.';
         if (ev.kind === 'crows' || ev.id === 'crows') break; // message « Des corbeaux ! » (événement crow)
         if (d.offerId || ['visitor', 'merchant', 'stray'].includes(ev.kind)) break; // l'offre a son propre message
-        t.show({ kind: 'info', sprite: cIcon(eventIconName(ev.kind || ev.id)), title, text, duration: 5200, onClick: () => open.journal('agenda') });
+        t.show({ prio: 'info', digest: 'nouvelle du carnet|nouvelles du carnet', kind: 'info', sprite: cIcon(eventIconName(ev.kind || ev.id)), title, text, duration: 5200, onClick: () => open.journal('agenda') });
         break;
       }
       case 'offer': {
@@ -690,8 +690,8 @@ export function createCareerUI(app) {
         break;
       }
       case 'offerResolved':
-        if (ev.outcome === 'delivered' && ev.amount) t.show({ kind: 'money', icon: 'coin', title: 'Commande livrée', text: `+${fmt(ev.amount)} pièces`, duration: 3400 });
-        else if (ev.outcome === 'expired') t.show({ kind: 'info', icon: 'calendar', text: `${ev.data?.name || ev.name ? `La proposition (${ev.data?.name || ev.name})` : 'Une proposition'} a expiré : pas grave !`, duration: 3400 });
+        if (ev.outcome === 'delivered' && ev.amount) t.show({ digest: 'commande livrée|commandes livrées', kind: 'money', icon: 'coin', title: 'Commande livrée', text: `+${fmt(ev.amount)} pièces`, duration: 3400 });
+        else if (ev.outcome === 'expired') t.show({ prio: 'info', kind: 'info', icon: 'calendar', text: `${ev.data?.name || ev.name ? `La proposition (${ev.data?.name || ev.name})` : 'Une proposition'} a expiré : pas grave !`, duration: 3400 });
         break;
       case 'questOffered':
         // Demandée depuis le Carnet : la feuille s'ouvre déjà (pas de message en double).
@@ -704,7 +704,7 @@ export function createCareerUI(app) {
       case 'questReminder':
         // Rappels à 3 jours et à 1 jour de l'échéance d'une quête acceptée (une fois chacun).
         app.audio.play('warning', { volume: 0.35 });
-        t.show({ kind: ev.daysLeft <= 1 ? 'warn' : 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-reminder', title: ev.daysLeft <= 1 ? 'Quête de Joseph : dernier jour demain' : `Quête de Joseph : plus que ${plural(ev.daysLeft, 'jour')}`, text: `« ${ev.line || 'Petit rappel, rien de grave !'} »`, duration: 5600, onClick: () => open.quest() });
+        t.show({ prio: ev.daysLeft <= 1 ? 'important' : 'info', kind: ev.daysLeft <= 1 ? 'warn' : 'info', sprite: joseph('content', 'sprite--sm'), key: 'c-quest-reminder', title: ev.daysLeft <= 1 ? 'Quête de Joseph : dernier jour demain' : `Quête de Joseph : plus que ${plural(ev.daysLeft, 'jour')}`, text: `« ${ev.line || 'Petit rappel, rien de grave !'} »`, duration: 5600, onClick: () => open.quest() });
         break;
       case 'questWithdrawn':
         // Proposition jamais acceptée : Joseph la retire, sans reproche (message discret).
@@ -723,7 +723,7 @@ export function createCareerUI(app) {
         } catch (err) {
           console.warn('recordCareerEcus :', err);
         }
-        t.show({ kind: 'success', sprite: joseph('happy', 'sprite--sm'), title: `Quête réussie : +${fmt(ev.amount || 0)} pièces`, text: `« ${ev.line || 'Formidable, merci !'} »${ev.ecus ? ` · +${plural(ev.ecus, 'écu')}` : ''}`, duration: 5200 });
+        t.show({ digest: 'quête réussie|quêtes réussies', kind: 'success', sprite: joseph('happy', 'sprite--sm'), title: `Quête réussie : +${fmt(ev.amount || 0)} pièces`, text: `« ${ev.line || 'Formidable, merci !'} »${ev.ecus ? ` · +${plural(ev.ecus, 'écu')}` : ''}`, duration: 5200 });
         break;
       case 'questExpired':
         // Échec en douceur : aucune pénalité, ce qui a été mis de côté est payé.
@@ -740,13 +740,13 @@ export function createCareerUI(app) {
         app.toasts.banner({ kind: 'season', icon: game.query.calendar().seasonId, title: ev.name, text: ev.text || 'Jour de fête à la ferme !', duration: 5200 });
         break;
       case 'contestAnnounced':
-        t.show({ kind: 'info', sprite: cIcon('contest'), title: 'Le comice agricole est annoncé', text: 'Trois épreuves, jugées le dernier soir de l\'automne.', duration: 6000, onClick: () => open.journal('agenda') });
+        t.show({ prio: 'info', kind: 'info', sprite: cIcon('contest'), title: 'Le comice agricole est annoncé', text: 'Trois épreuves, jugées le dernier soir de l\'automne.', duration: 6000, onClick: () => open.journal('agenda') });
         break;
       case 'shelterFull':
         t.show({ kind: 'warn', sprite: safeProductIcon(ev.buildingId), icon: 'harvest', key: `full-${ev.buildingId}`, title: `${q('building', null, ev.buildingId)?.name || 'Abri'} : plein`, text: 'Ramassez vite : la production du jour se perd.', duration: 4200 });
         break;
       case 'touristsPassed':
-        if (ev.pass === 1) t.show({ kind: 'money', sprite: cIcon('visitor'), title: 'Des touristes !', text: `+${fmt(ev.amount)} pièces à chaque passage aujourd'hui.`, duration: 3600 });
+        if (ev.pass === 1) t.show({ digest: 'passage de touristes|passages de touristes', kind: 'money', sprite: cIcon('visitor'), title: 'Des touristes !', text: `+${fmt(ev.amount)} pièces à chaque passage aujourd'hui.`, duration: 3600 });
         break;
       case 'purchased': {
         const inv = game.query.investments().find((i) => i.id === ev.investmentId);

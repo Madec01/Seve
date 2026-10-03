@@ -28,7 +28,7 @@ import { loadImage, loadImages } from './render/assets.js';
 import { createScene } from './render/scene.js';
 import { createGame, loadGame } from './core/game.js';
 import { createCareer, loadCareer, careerMetaOf } from './core/career/career.js';
-import { DAY_SECONDS, SEASONS } from './data/balance.js';
+import { DAY_SECONDS, GAME_SECONDS_PER_REAL_SECOND, SEASONS } from './data/balance.js';
 import { getLevel, LEVELS } from './data/levels.js';
 import { getInvestment } from './data/investments.js';
 import { getCrop } from './data/crops.js';
@@ -43,6 +43,7 @@ import { createTooltip } from './ui/tooltip.js';
 import { createSheets } from './ui/sheets.js';
 import { createTabbar } from './ui/tabbar.js';
 import { createSceneInput } from './ui/gestures.js';
+import { createZoomControls } from './ui/zoom.js';
 import { createToasts } from './ui/toasts.js';
 import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
@@ -120,6 +121,7 @@ app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
 app.tutorial = createTutorial($('#tutorial'), app);
 app.input = createSceneInput(canvas, app);
+app.zoomUI = createZoomControls(app); // zoom de la scène (boutons + / −, préférence) ; pincement : gestures.js
 app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
@@ -131,7 +133,10 @@ app.newFarm = () => openNewFarm(app, {});
 app.messages = createMessages(app);
 app.toasts.setLogger((e) => app.messages.add(e));
 app.toasts.setMoreHandler(() => app.messages.open());
+// Réglage « Messages » (tous · importants seulement · aucun) : appliqué pendant une partie ; au menu, tout s'affiche.
+app.toasts.setMode(settings.messages, { active: () => !!app.game && !app.inMenu });
 app.todo = createTodo(app);
+app.toasts.setDigest((e) => app.todo.digest?.(e)); // infos non affichées : regroupées dans le résumé du matin
 app.openGuide = (opts = {}) => openGuide(app, opts);
 // Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
 // surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
@@ -165,6 +170,7 @@ app.updateSettings = (patch) => {
   app.hud.refreshMute();
   app.saveSettings();
   if ('keepAwake' in patch) updateWakeLock();
+  if ('messages' in patch) app.toasts.setMode(settings.messages);
 };
 
 app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
@@ -1063,7 +1069,7 @@ function flushGrouped() {
   const t = app.toasts;
   if (grouped.toWorkshop.size) {
     for (const [productId, n] of grouped.toWorkshop) {
-      t.show({ kind: 'success', sprite: productIcon(productId, 'sprite--sm'), text: n > 1 ? `${n} récoltes parties à l'atelier (${productName(productId).toLowerCase()}).` : `Récolte partie à l'atelier : ${productName(productId).toLowerCase()} en préparation.`, duration: 2600 });
+      t.show({ digest: 'récolte à l\'atelier|récoltes à l\'atelier', digestN: n, kind: 'success', sprite: productIcon(productId, 'sprite--sm'), text: n > 1 ? `${n} récoltes parties à l'atelier (${productName(productId).toLowerCase()}).` : `Récolte partie à l'atelier : ${productName(productId).toLowerCase()} en préparation.`, duration: 2600 });
     }
     grouped.toWorkshop.clear();
   }
@@ -1072,7 +1078,7 @@ function flushGrouped() {
     const n = grouped.sold.length;
     const first = grouped.sold[0].productId;
     const names = [...new Set(grouped.sold.map((x) => productName(x.productId).toLowerCase()))];
-    t.show({ kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
+    t.show({ digest: 'produit vendu|produits vendus', digestN: n, kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
     grouped.sold = [];
   }
   // Remboursements automatiques de Joseph : un seul message discret, mis à jour tant qu'il est
@@ -1084,6 +1090,7 @@ function flushGrouped() {
       t.show({
         key: 'neighbour-repay',
         kind: 'info',
+        digest: 'remboursement à Joseph|remboursements à Joseph',
         sprite: sprite('farmer', 'sprite--sm'),
         title: `−${fmt(L.total)} pour Joseph`,
         text: `Remboursement automatique · reste ${plural(L.remaining, 'pièce')}`,
@@ -1205,7 +1212,7 @@ function reactMessages(ev, game) {
       break;
     }
     case 'rot':
-      t.show({ kind: 'rot', icon: 'rain', text: `${cropName(ev.cropId)} : la culture a pourri sous la pluie.`, duration: 4200 });
+      t.show({ digest: 'culture pourrie|cultures pourries', kind: 'rot', icon: 'rain', text: `${cropName(ev.cropId)} : la culture a pourri sous la pluie.`, duration: 4200 });
       break;
     case 'purchased': {
       const inv = getInvestment(ev.investmentId);
@@ -1222,7 +1229,7 @@ function reactMessages(ev, game) {
       break;
     }
     case 'harvested':
-      if (ev.fatigue) t.show({ kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
+      if (ev.fatigue) t.show({ prio: 'info', digest: 'sol fatigué|sols fatigués', kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
       if (ev.processed) grouped.toWorkshop.set(ev.processed.productId, (grouped.toWorkshop.get(ev.processed.productId) || 0) + 1);
       break;
     case 'productSold':
@@ -1234,7 +1241,7 @@ function reactMessages(ev, game) {
         rent: `L'argent manquait : ${plural(ev.count, 'produit')} vendu${ev.count > 1 ? 's' : ''} en l'état avant le fermage (+${fmt(ev.amount)}).`,
         yearEnd: `Fin de l'année : ${plural(ev.count, 'produit')} en cours vendu${ev.count > 1 ? 's' : ''} en l'état (+${fmt(ev.amount)}).`,
       };
-      t.show({ kind: ev.reason === 'player' ? 'money' : 'warn', icon: 'coin', text: texts[ev.reason] || texts.player, duration: 4200 });
+      t.show({ prio: ev.reason === 'player' ? 'important' : 'info', kind: ev.reason === 'player' ? 'money' : 'warn', icon: 'coin', text: texts[ev.reason] || texts.player, duration: 4200 });
       break;
     }
     case 'processingToggled':
@@ -1267,18 +1274,18 @@ function reactMessages(ev, game) {
     case 'contestProgress':
       if (ev.done) {
         const goal = game.query.contest?.()?.goals.find((x) => x.id === ev.goalId);
-        t.show({ kind: 'success', icon: 'star', title: 'Épreuve réussie !', text: `${goal?.label || 'Concours'} : ${fmt(ev.progress)} / ${fmt(ev.target)}. Prix au jugement.`, duration: 4200 });
+        t.show({ digest: 'épreuve réussie|épreuves réussies', kind: 'success', icon: 'star', title: 'Épreuve réussie !', text: `${goal?.label || 'Concours'} : ${fmt(ev.progress)} / ${fmt(ev.target)}. Prix au jugement.`, duration: 4200 });
       }
       break;
     case 'dawn': {
       for (const inc of ev.incomes || []) {
-        if (inc.kind === 'shearing') t.show({ kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
+        if (inc.kind === 'shearing') t.show({ digest: 'tonte|tontes', kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
       }
       for (const inc of ev.incomes || []) {
-        if (inc.kind === 'refund' && inc.amount > 0) t.show({ kind: 'money', icon: 'winter', title: 'Assurance gel', text: `Graines remboursées : +${fmt(inc.amount)} pièces` });
+        if (inc.kind === 'refund' && inc.amount > 0) t.show({ digest: 'remboursement de l\'assurance|remboursements de l\'assurance', kind: 'money', icon: 'winter', title: 'Assurance gel', text: `Graines remboursées : +${fmt(inc.amount)} pièces` });
       }
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
-      if (loan) t.show({ kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
+      if (loan) t.show({ prio: 'info', digest: 'mensualité du prêt|mensualités du prêt', kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
       if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
       maybeLowMoneyHint(game);
       break;
@@ -1311,7 +1318,7 @@ function maybeLowMoneyHint(game) {
   else if (empty && fast) text = `Des parcelles sont vides : semez des ${cropCount(fast.id, 2).replace(/^2 /, '')}, ${fast.daysToMature <= 2 ? 'ça pousse vite' : `récolte dans ${plural(fast.daysToMature, 'jour')}`}.`;
   else text = 'Arrosez vos cultures pour qu\'elles soient mûres avant le soir du fermage.';
   if (p.state === 'loan') text += ' Et pas de panique : Joseph peut vous avancer le reste.';
-  t0().show({ kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
+  t0().show({ prio: 'important', kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
 }
 const t0 = () => app.toasts;
 
@@ -1895,13 +1902,16 @@ function frame(t) {
   lastT = t;
   if (!app.scene) return;
   let g = null;
+  // Rythme en temps réel (REAL_DAY_SECONDS, src/data/balance.js) : à ×1, un jour de 20 secondes de jeu dure 36 s
+  // réelles. Le rendu (personnages, effets) garde dt en secondes réelles.
+  const gameDt = dt * GAME_SECONDS_PER_REAL_SECOND;
   if (app.game && !app.inMenu) {
     g = app.game;
-    if (!document.hidden) g.update(dt);
+    if (!document.hidden) g.update(gameDt);
     processPending();
   } else if (attract) {
     g = attract;
-    g.update(dt);
+    g.update(gameDt);
     if (g.state.status !== 'playing') {
       attract = createDemoGame();
       syncSceneCareer();
@@ -1910,6 +1920,7 @@ function frame(t) {
   }
   if (g) app.scene.render(g, t);
   app.careerUI.frame(); // mini-carte de la carrière (dessinée par la scène, cachée hors carrière)
+  app.zoomUI.frame(); // zoom de la scène : préférence de la partie, boutons + / −
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
   app.hints.frame();

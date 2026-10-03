@@ -166,13 +166,13 @@ export function createAlbum(app) {
     const fmtFound = (name) => (texts.found || 'Album : {name} ✓').replace('{name}', name);
     if (list.length) {
       const first = caseName(list[0]);
-      app.toasts.show({ kind: 'achievement', key: 'album', sprite: ico(['icon.album'], 'sprite--sm', '📖'), title: fmtFound(first), text: list.length > 1 ? `et ${plural(list.length - 1, 'autre case', 'autres cases')} : Menu → L'album` : 'Menu → L\'album', duration: 3800, onClick: () => open(pageOf(list[0])) });
+      app.toasts.show({ prio: 'info', digest: 'case d\'album|cases d\'album', kind: 'achievement', key: 'album', sprite: ico(['icon.album'], 'sprite--sm', '📖'), title: fmtFound(first), text: list.length > 1 ? `et ${plural(list.length - 1, 'autre case', 'autres cases')} : Menu → L'album` : 'Menu → L\'album', duration: 3800, onClick: () => open(pageOf(list[0])) });
       for (const id of list.slice(1)) app.messages?.add?.({ kind: 'achievement', title: fmtFound(caseName(id)), text: 'Nouvelle case de l\'album.' });
       app.audio.play('page', { volume: 0.55, delay: 0.2 });
       app.hints?.maybe?.('cozy.album', null);
     } else {
       const s = stamps[0];
-      app.toasts.show({ kind: 'achievement', key: 'album', sprite: ico([`album.stamp.${s.stamp}`], 'sprite--sm', STAMP_EMOJI[s.stamp] || '★'), title: `Album : tampon ${STAMP_NAMES[s.stamp]?.toLowerCase() || ''}`.trim(), text: caseName(s.caseId), duration: 3200 });
+      app.toasts.show({ prio: 'info', digest: 'tampon d\'album|tampons d\'album', kind: 'achievement', key: 'album', sprite: ico([`album.stamp.${s.stamp}`], 'sprite--sm', STAMP_EMOJI[s.stamp] || '★'), title: `Album : tampon ${STAMP_NAMES[s.stamp]?.toLowerCase() || ''}`.trim(), text: caseName(s.caseId), duration: 3200 });
     }
     for (const s of stamps.slice(list.length ? 0 : 1)) app.messages?.add?.({ kind: 'achievement', title: `Tampon : ${STAMP_NAMES[s.stamp] || s.stamp}`, text: caseName(s.caseId) });
     app.onProgressChange?.();
@@ -204,7 +204,7 @@ export function createAlbum(app) {
     const tpl = MOD.data?.ALBUM_TEXTS?.retro || '{n} case{s} de l\'album retrouvée{s} dans vos anciennes parties';
     const text = tpl.replace('{n}', fmt(n)).replace(/\{s\}/g, n > 1 ? 's' : '');
     setTimeout(() => {
-      app.toasts.show({ kind: 'achievement', key: 'album-retro', sprite: ico(['icon.album'], 'sprite--sm', '📖'), title: 'L\'album de la ferme', text: `${text}.`, duration: 6000, actionLabel: 'Voir', onClick: () => app.grange?.open?.('album') });
+      app.toasts.show({ prio: 'info', kind: 'achievement', key: 'album-retro', sprite: ico(['icon.album'], 'sprite--sm', '📖'), title: 'L\'album de la ferme', text: `${text}.`, duration: 6000, actionLabel: 'Voir', onClick: () => app.grange?.open?.('album') });
     }, 1400);
   }
 
@@ -313,7 +313,7 @@ export function createAlbum(app) {
     const cos = rw.cosmeticId ? (v3.cosmetics?.COSMETICS || []).find((x) => x.id === rw.cosmeticId) : null;
     app.audio.tone?.('fanfare', { volume: 0.8 });
     app.vibrate?.([15, 60, 15, 60, 30]);
-    app.toasts.show({ kind: 'achievement', sprite: ico(['album.ribbon'], 'sprite--sm', '🎀'), title: rw.ecus ? `+${plural(rw.ecus, 'écu')}` : 'Reçu !', text: cos ? `${cos.name} : à poser avec « Décorer la ferme ».` : rw.already ? 'Vous l\'aviez déjà.' : 'Merci !', duration: 4600 });
+    app.toasts.show({ prio: 'important', kind: 'achievement', sprite: ico(['album.ribbon'], 'sprite--sm', '🎀'), title: rw.ecus ? `+${plural(rw.ecus, 'écu')}` : 'Reçu !', text: cos ? `${cos.name} : à poser avec « Décorer la ferme ».` : rw.already ? 'Vous l\'aviez déjà.' : 'Merci !', duration: 4600 });
     app.progression.checkGame?.(app.game && !app.inMenu && app.game.state.status === 'playing' ? app.game : null);
     app.applyCosmetics?.();
     paint();

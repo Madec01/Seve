@@ -1,8 +1,8 @@
 {
-  "id": "ae53cdb358cf",
+  "id": "135e7b25f528",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.a6f4735fd2.js",
-  "css": "dist/game.8ddf04ece6.css",
+  "js": "dist/game.b826e4d32b.js",
+  "css": "dist/game.8727d5a46d.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -152,9 +152,9 @@
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/cozy.css": "096b9ffea0c439ff",
     "css/fonts.css": "f6a60d8eb500f8f4",
-    "css/guidance.css": "f94433c31a91ab2e",
+    "css/guidance.css": "4f08f9e3874c4480",
     "css/lot2.css": "abbc12b1669158cb",
-    "css/style.css": "16f08987536c4f11",
+    "css/style.css": "4bafff27efc46b31",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
@@ -211,7 +211,7 @@
     "src/core/weather.js": "875f3410fa4564a6",
     "src/data/achievements.js": "d6fdb35c3ee617cf",
     "src/data/album.js": "833b7cfabc32bcb9",
-    "src/data/balance.js": "b22b443b96baad45",
+    "src/data/balance.js": "045a07b94b409c9b",
     "src/data/career/animals.js": "d3f59a1ff53f94bc",
     "src/data/career/buildings.js": "3a5a8bfb28733eb2",
     "src/data/career/career.js": "edf962ea04310d60",
@@ -237,11 +237,12 @@
     "src/data/variety.js": "b36642828067f688",
     "src/index.template.html": "abb0b4a4a78081a7",
     "src/loader.js": "8cd0d03467331dd6",
-    "src/main.js": "623baf5ab6e30f6a",
+    "src/main.js": "0d87b824216d9251",
     "src/pwa.js": "bd46161e75b8e039",
     "src/render/assets.js": "8b5cdcac35c36dde",
     "src/render/atlas.js": "cc01f0d416b1d768",
-    "src/render/career-actors.js": "593ae15b849d2305",
+    "src/render/camera-zoom.js": "3bbffdcbb5db98fb",
+    "src/render/career-actors.js": "566b8204a9a70036",
     "src/render/cozy-actors.js": "ab3907eddd76da9d",
     "src/render/effects.js": "7b873683ea943943",
     "src/render/layout-career.js": "7d89b09fcb6b3a97",
@@ -249,53 +250,70 @@
     "src/render/layout-portrait.js": "5185ed16cf6502de",
     "src/render/layout.js": "391ef10dd8ea0e06",
     "src/render/lot2-actors.js": "f58ca6268e9a71c7",
-    "src/render/scene.js": "e3c1ebcb72f9cfd8",
+    "src/render/scene.js": "bc1a98cbf5db5dc6",
     "src/render/variety-actors.js": "116b4db2523e4981",
-    "src/storage.js": "3265fe13c9509a6d",
+    "src/storage.js": "192b615d34734341",
     "src/ui/a11y.js": "d5d561bd705da86f",
-    "src/ui/album.js": "5a40e95eced20cd5",
+    "src/ui/album.js": "a546b880e4324e9a",
     "src/ui/buildings.js": "3935e0120d094ec7",
     "src/ui/career/buildings.js": "0a54ec028e45533a",
-    "src/ui/career/events.js": "ae744376ff300e5e",
-    "src/ui/career/index.js": "539a72863d7adb64",
+    "src/ui/career/events.js": "89e637e861bc33ee",
+    "src/ui/career/index.js": "87e109655aedea5c",
     "src/ui/career/journal.js": "0fd85ca656dcd545",
-    "src/ui/career/lots.js": "af6a985bce411945",
+    "src/ui/career/lots.js": "ac523a1931d6e024",
     "src/ui/career/menu.js": "6f058db96634d80a",
     "src/ui/career/minimap.js": "93eceb467345bc24",
     "src/ui/career/shop.js": "ac41c572d748cc12",
     "src/ui/career/staff.js": "d270c50586401e40",
     "src/ui/career/util.js": "020a8565fe234227",
     "src/ui/career/windows.js": "7d570734847d7ecc",
-    "src/ui/cozy.js": "23b00f79381085fc",
-    "src/ui/decor.js": "ddbaa7b13bc0e7f7",
-    "src/ui/dialogs.js": "a509df0e65bb2d9f",
+    "src/ui/cozy.js": "e09005ea33ce6d1c",
+    "src/ui/decor.js": "c295c12c0681e1c0",
+    "src/ui/dialogs.js": "ed2c0e1de2b0518e",
     "src/ui/dom.js": "4ce9149d5d52a48f",
     "src/ui/field.js": "f95beeba822372d1",
-    "src/ui/gestures.js": "a0cb4552d84c37f5",
-    "src/ui/grange.js": "8fc049e7dfa003fd",
+    "src/ui/gestures.js": "8c955fbfc8e1926a",
+    "src/ui/grange.js": "4c6164e1e2ec4dc3",
     "src/ui/guide-prefs.js": "e79573213ab6a060",
-    "src/ui/guide.js": "26e4987639148cad",
+    "src/ui/guide.js": "e5913fbec1e0d00a",
     "src/ui/hints.js": "5e2db5912a972dd6",
     "src/ui/hud.js": "216647354deb05ec",
     "src/ui/icons.js": "cd979dc037cdc49f",
     "src/ui/juice.js": "370e970fcf275dc2",
-    "src/ui/lot2.js": "7200b16ade9f6288",
-    "src/ui/messages.js": "b29329e852fef705",
+    "src/ui/lot2.js": "d9cb8c5b4dc500e7",
+    "src/ui/messages.js": "146eb103e695c19f",
     "src/ui/panel.js": "cf46872c0569b6f7",
-    "src/ui/progress.js": "83fd2b28c677bdf9",
+    "src/ui/progress.js": "cb186e540c2d9692",
     "src/ui/sheets.js": "cec7d204aff765c6",
     "src/ui/tabbar.js": "3074678b152f99db",
     "src/ui/text.js": "dcb262860db7a6de",
-    "src/ui/toasts.js": "11f17723e6b963f6",
-    "src/ui/todo.js": "76411d0765181178",
+    "src/ui/toasts.js": "ae395b89f9d00fba",
+    "src/ui/todo.js": "560ead1e74a2507b",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
-    "src/ui/tutorial.js": "948e641f4601395b",
+    "src/ui/tutorial.js": "b567fa8157c237dd",
     "src/ui/v3.js": "45edf2a4853e4468",
-    "src/ui/variety.js": "a18d5a99f7b118c3",
+    "src/ui/variety.js": "de2d58a58925120a",
+    "src/ui/zoom.js": "8b9269d7d476aee4",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "7d71ff01c80f9a0c"
   },
   "history": [
+    {
+      "id": "135e7b25f528",
+      "files": [
+        "dist/game.b826e4d32b.js",
+        "dist/game.b826e4d32b.js.map",
+        "dist/game.8727d5a46d.css"
+      ]
+    },
+    {
+      "id": "6eb156489a22",
+      "files": [
+        "dist/game.4b9f4bee57.js",
+        "dist/game.4b9f4bee57.js.map",
+        "dist/game.3c30041afa.css"
+      ]
+    },
     {
       "id": "ae53cdb358cf",
       "files": [
@@ -318,22 +336,6 @@
         "dist/game.0f63fd353e.js",
         "dist/game.0f63fd353e.js.map",
         "dist/game.22a6d55155.css"
-      ]
-    },
-    {
-      "id": "864966d397e8",
-      "files": [
-        "dist/game.271587ec5c.js",
-        "dist/game.271587ec5c.js.map",
-        "dist/game.c091cfddfc.css"
-      ]
-    },
-    {
-      "id": "b503546566cb",
-      "files": [
-        "dist/game.458fd19a68.js",
-        "dist/game.458fd19a68.js.map",
-        "dist/game.c091cfddfc.css"
       ]
     }
   ]

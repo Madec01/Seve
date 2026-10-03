@@ -256,7 +256,7 @@ export function createLot2(app) {
         wishPending = { game, options: ev.options || [] };
         break;
       case 'wishGranted':
-        app.toasts.show({ kind: 'success', sprite: specialIcon('shootingstar'), title: `Vœu exaucé : ${ev.name || ''}`.trim(), text: ev.text || '', duration: 4600 });
+        app.toasts.show({ prio: 'important', kind: 'success', sprite: specialIcon('shootingstar'), title: `Vœu exaucé : ${ev.name || ''}`.trim(), text: ev.text || '', duration: 4600 });
         break;
       case 'finds':
         onFinds(ev);

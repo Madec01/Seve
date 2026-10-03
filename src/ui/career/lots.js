@@ -115,7 +115,7 @@ function tapCell(ui, c) {
   const { app } = ui;
   if (c.state === 'forest' || !c.id) {
     app.audio.play('error', { volume: 0.5 });
-    app.toasts.show({ kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
+    app.toasts.show({ prio: 'important', kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
     return;
   }
   ui.open.lot(c.id);

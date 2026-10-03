@@ -11,6 +11,17 @@
 // proposent rien — s'effacent ; ils restent dans l'historique, et une pastille « +2 » (≥ 48 px) au-dessus des
 // messages ouvre la feuille « Messages » (`setMoreHandler(fn)`). Les messages ne captent JAMAIS les touchers :
 // seul le bouton d'un message qui propose une action (« Voir », `actionLabel`) et la pastille « +N » se touchent.
+//
+// Tri des messages (2026-10-03, retour joueur : « les notifs prennent beaucoup de place, on en reçoit beaucoup ») :
+// chaque message est « important » (à lire maintenant : danger, refus, choix à faire, réponse à un geste) ou « info »
+// (peut attendre). Réglage « Messages » (setMode) : 'all' (tous affichés), 'important' (par défaut : les infos vont
+// directement dans l'historique et le résumé du matin, regroupées) ou 'none' (seuls les refus et les messages du
+// système s'affichent). Rien n'est perdu : l'historique (cloche), la ligne « À faire » et le résumé du matin gardent
+// tout. Classement (priorityOf) : `o.prio` ('important' | 'info' | 'always') s'il est donné ; sinon important si le
+// message propose une action (onClick), reste touchable (keepTouch), est un refus (`log: false`) ou une alerte
+// (error, warn, frost) ; info pour le reste (info, money, success, achievement, rot).
+// Un message non affiché passe au journal (setLogger, `quiet: true`) et au résumé du matin (setDigest :
+// `o.digest` = 'vente|ventes' regroupe les répétitions, « 3 ventes »). show() renvoie alors null.
 
 import { el, clear, typo } from './dom.js';
 import { icon } from './icons.js';
@@ -20,11 +31,34 @@ const KIND_ICON = { info: 'info', error: 'lock', success: 'star', warn: 'bill', 
 export const MAX_VISIBLE = 2;
 /** Durée de la pastille « +N » après le dernier message effacé faute de place. */
 const MORE_MS = 7000;
+/** Réglage « Messages » : tous · importants seulement (par défaut) · aucun (refus et système seulement). */
+export const MESSAGE_MODES = Object.freeze(['all', 'important', 'none']);
+
+/** 'always' (refus, système) · 'important' (à lire maintenant) · 'info' (peut attendre). */
+export function priorityOf(o, kind = o.kind || 'info') {
+  if (o.prio === 'always' || o.prio === 'important' || o.prio === 'info') return o.prio;
+  if (o.keepTouch) return 'always';
+  if (o.log === false && (kind === 'error' || o.onClick)) return 'always';
+  if (o.onClick || o.log === false || ['error', 'warn', 'frost'].includes(kind)) return 'important';
+  return 'info';
+}
+
+/** Le message s'affiche-t-il avec ce réglage ? */
+export function visibleIn(mode, prio) {
+  if (prio === 'always') return true;
+  if (mode === 'all') return true;
+  if (mode === 'none') return false;
+  return prio === 'important';
+}
 
 export function createToasts(stack, bannerNode) {
   const recent = new Map(); // texte → { node, timer }
   let bannerTimer = null;
   let logger = null;
+  let digester = null;
+  let mode = 'important';
+  let modeActive = () => true; // le tri ne s'applique que pendant une partie (menu : tout s'affiche)
+  let quietCount = 0;
   let moreHandler = null;
   let hidden = 0; // messages effacés faute de place depuis que la pastille est apparue
   let moreTimer = null;
@@ -70,17 +104,17 @@ export function createToasts(stack, bannerNode) {
   const isImportant = (n) => n.dataset.important === '1';
   const liveToasts = () => [...stack.children].filter((n) => n.classList.contains('toast') && !n.classList.contains('is-leaving'));
 
-  /** Durée d'affichage : au moins 5 s pour ce qui compte (alerte, action à toucher, succès). */
-  function durationOf(o, kind) {
-    const d = o.duration || 3200;
-    const important = !!o.onClick || ['warn', 'frost', 'rot', 'achievement'].includes(kind) || (kind === 'error' && o.log !== false);
-    return important ? Math.max(5000, d) : d;
+  /** Durée d'affichage : 5 s pour ce qui compte (alerte, action à toucher), 3 s pour une info (7 s au plus). */
+  function durationOf(o, kind, prio) {
+    const d = Math.min(7000, o.duration || 3000);
+    const important = prio !== 'info' && (!!o.onClick || ['warn', 'frost', 'rot', 'achievement'].includes(kind) || (kind === 'error' && o.log !== false));
+    return important ? Math.max(5000, d) : prio === 'info' ? Math.min(d, 4200) : d;
   }
 
-  function log(o, kind, updated = false) {
+  function log(o, kind, updated = false, quiet = false) {
     if (!logger || o.log === false) return;
     try {
-      logger({ kind, title: o.title || '', text: o.text || '', key: o.key || null, onClick: o.onClick || null, updated });
+      logger({ kind, title: o.title || '', text: o.text || '', key: o.key || null, onClick: o.onClick || null, updated, quiet });
     } catch (err) {
       console.warn('Journal des messages :', err);
     }
@@ -108,7 +142,8 @@ export function createToasts(stack, bannerNode) {
   }
 
   /**
-   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3200, onClick?, actionLabel = 'Voir', key? }
+   * @param opts { text, title?, kind = 'info', icon?, sprite? (nœud), duration = 3000, onClick?, actionLabel = 'Voir', key?,
+   *               prio? ('important' | 'info' | 'always'), digest? ('vente|ventes'), digestN? }
    *   onClick : le message porte un bouton (actionLabel) ; seul ce bouton se touche (le reste laisse passer le doigt).
    *   key : un message déjà affiché avec la même clé est mis à jour (titre, texte) au lieu d'en
    *         empiler un nouveau (ex. remboursements successifs du voisin).
@@ -116,9 +151,23 @@ export function createToasts(stack, bannerNode) {
   function show(opts) {
     const o = typeof opts === 'string' ? { text: opts } : opts;
     const kind = o.kind || 'info';
+    const prio = priorityOf(o, kind);
+    // Réglage « Messages » : une info (ou tout message en « aucun ») va directement à l'historique et au résumé du matin.
+    if (!visibleIn(modeActive() ? mode : 'all', prio)) {
+      quietCount += 1;
+      log(o, kind, false, true);
+      if (digester && o.log !== false) {
+        try {
+          digester({ kind, prio, title: o.title || '', text: o.text || '', digest: o.digest || null, n: o.digestN || 1 });
+        } catch (err) {
+          console.warn('Résumé des messages :', err);
+        }
+      }
+      return null;
+    }
     const key = o.key ? `key|${o.key}` : `${kind}|${o.title || ''}|${o.text}`;
     const prev = recent.get(key);
-    const duration = durationOf(o, kind);
+    const duration = durationOf(o, kind, prio);
     if (prev && prev.node.isConnected && !prev.node.classList.contains('is-leaving')) {
       if (o.key) log(o, kind, true);
       if (o.key) {
@@ -166,6 +215,7 @@ export function createToasts(stack, bannerNode) {
       go,
     );
     if (o.onClick) node.classList.add('is-action');
+    node.dataset.prio = prio; // info : une ligne ; important : deux lignes au plus (style.css)
     if (o.keepTouch) node.classList.add('is-sticky'); // reste touchable même sur une feuille haute (mise à jour)
     if (duration >= 5000) node.dataset.important = '1';
     stack.prepend(node);
@@ -253,11 +303,23 @@ export function createToasts(stack, bannerNode) {
     setLogger(fn) {
       logger = typeof fn === 'function' ? fn : null;
     },
+    /** Réglage « Messages » ('all' | 'important' | 'none') ; active() : vrai pendant une partie (sinon tout s'affiche). */
+    setMode(m, { active } = {}) {
+      mode = MESSAGE_MODES.includes(m) ? m : 'important';
+      if (typeof active === 'function') modeActive = active;
+    },
+    get mode() {
+      return mode;
+    },
+    /** fn({ kind, prio, title, text, digest, n }) : message non affiché (résumé du matin, src/ui/todo.js). */
+    setDigest(fn) {
+      digester = typeof fn === 'function' ? fn : null;
+    },
     /** fn() : la pastille « +N » est touchée (ouvre l'historique des messages). */
     setMoreHandler(fn) {
       moreHandler = typeof fn === 'function' ? fn : null;
     },
     /** Nombre de messages visibles, et de messages passés dans l'historique faute de place (mesures, tests). */
-    stats: () => ({ visible: liveToasts().length, hidden: more.hidden ? 0 : hidden }),
+    stats: () => ({ visible: liveToasts().length, hidden: more.hidden ? 0 : hidden, quiet: quietCount, mode }),
   };
 }

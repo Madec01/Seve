@@ -274,7 +274,7 @@ export function createVariety(app) {
           if (res?.ok) {
             app.audio.play('page', { volume: 0.6 });
             const name = o.clientName || 'Le client';
-            app.toasts.show({ kind: res.premium ? 'money' : 'info', sprite: portraitOf(o.portrait, 'sprite--sm'), title: name, text: res.premium ? `Merci pour ce que vous avez déjà livré ! +${fmt(res.premium)}` : 'Pas de souci, une autre fois !', duration: 3200 });
+            app.toasts.show({ prio: 'important', kind: res.premium ? 'money' : 'info', sprite: portraitOf(o.portrait, 'sprite--sm'), title: name, text: res.premium ? `Merci pour ce que vous avez déjà livré ! +${fmt(res.premium)}` : 'Pas de souci, une autre fois !', duration: 3200 });
           }
         },
       },
@@ -743,7 +743,7 @@ export function createVariety(app) {
 
   function later(kind) {
     const where = isCareer() ? 'le Carnet (Agenda)' : 'le Bilan';
-    app.toasts.show({ kind: 'info', icon: 'star', key: `v-later-${kind}`, title: kind === 'cards' ? 'Votre cadeau attend' : 'Les défis attendent', text: `Retrouvez-${kind === 'cards' ? 'le' : 'les'} dans ${where}.`, duration: 3600, log: false });
+    app.toasts.show({ prio: 'important', kind: 'info', icon: 'star', key: `v-later-${kind}`, title: kind === 'cards' ? 'Votre cadeau attend' : 'Les défis attendent', text: `Retrouvez-${kind === 'cards' ? 'le' : 'les'} dans ${where}.`, duration: 3600, log: false });
     if (kind === 'cards') hint('variety.cards', null);
   }
 
@@ -791,7 +791,7 @@ export function createVariety(app) {
         const n = ev.added ?? (ev.slots || []).filter(Boolean).length;
         if (ev.reason === 'dawn' && n > 0) morning(`${n > 1 ? `${n} nouvelles commandes` : 'Une nouvelle commande'} au tableau du village.`);
         if (ev.reason === 'start' && n > 0) {
-          app.toasts.show({ kind: 'info', sprite: sectionIco('board', 'info'), title: 'Le tableau du village', text: 'Des villageois ont épinglé des commandes près du portail.', onClick: () => openBoard(), duration: 5200 });
+          app.toasts.show({ prio: 'info', kind: 'info', sprite: sectionIco('board', 'info'), title: 'Le tableau du village', text: 'Des villageois ont épinglé des commandes près du portail.', onClick: () => openBoard(), duration: 5200 });
           hint('variety.board', null);
         }
         break;
@@ -809,7 +809,7 @@ export function createVariety(app) {
         app.audio.tone?.('chime', { volume: 0.85, delay: 0.1 });
         app.audio.play('coin', { delay: 0.35, volume: 0.7 });
         app.vibrate?.([14, 50, 14]);
-        app.toasts.show({ kind: 'money', sprite: portraitOf(`portrait.client.${ev.clientId}`, 'sprite--sm'), title: `${ev.clientName || 'Commande'} : merci !`, text: `${ev.thanks ? `« ${ev.thanks} » ` : ''}Prime : +${fmt(ev.premium || 0)}`, duration: 4600 });
+        app.toasts.show({ digest: 'commande du tableau|commandes du tableau', kind: 'money', sprite: portraitOf(`portrait.client.${ev.clientId}`, 'sprite--sm'), title: `${ev.clientName || 'Commande'} : merci !`, text: `${ev.thanks ? `« ${ev.thanks} » ` : ''}Prime : +${fmt(ev.premium || 0)}`, duration: 4600 });
         break;
       }
       case 'orderRemoved':
@@ -817,7 +817,7 @@ export function createVariety(app) {
         break;
       case 'cartArrived':
         // Même mise à jour que la fin de saison (niveaux : la fenêtre du bilan arrive) : seulement le résumé du matin.
-        if (!(evening && evening.day && !career && seasonFlip(g))) app.toasts.show({ kind: 'info', sprite: sectionIco('cart', 'harvest'), title: 'La charrette du marché', text: 'Jusqu\'au dernier soir : vos récoltes à la main remplissent ses caisses.', onClick: () => openCart(), duration: 5200 });
+        if (!(evening && evening.day && !career && seasonFlip(g))) app.toasts.show({ prio: 'info', digest: 'arrivée de la charrette|arrivées de la charrette', kind: 'info', sprite: sectionIco('cart', 'harvest'), title: 'La charrette du marché', text: 'Jusqu\'au dernier soir : vos récoltes à la main remplissent ses caisses.', onClick: () => openCart(), duration: 5200 });
         morning('La charrette du marché est arrivée.');
         app.audio.play('page', { volume: 0.5, delay: 0.6 });
         hint('variety.cart', null);
@@ -826,7 +826,7 @@ export function createVariety(app) {
         break;
       case 'crateFull':
         app.audio.tone?.('pop', { volume: 0.85 });
-        app.toasts.show({ kind: 'success', sprite: cropIco(ev.cropId), text: `Caisse pleine (${cropWords(ev.cropId, 2)}) !`, duration: 2600 });
+        app.toasts.show({ digest: 'caisse pleine|caisses pleines', kind: 'success', sprite: cropIco(ev.cropId), text: `Caisse pleine (${cropWords(ev.cropId, 2)}) !`, duration: 2600 });
         break;
       case 'cartDeparted': {
         evening = { ...(evening && evening.day === dayOf(g) ? evening : {}), day: dayOf(g), cart: ev, at: performance.now() };
@@ -872,7 +872,7 @@ export function createVariety(app) {
         const t = medalText({ ...ev, ecus: e });
         app.audio.tone?.(ev.medal === 'gold' ? 'fanfare' : 'chime', { volume: 0.85, throttle: 300 });
         app.vibrate?.(ev.medal === 'gold' ? [20, 60, 20, 60, 30] : [12, 40, 12]);
-        app.toasts.show({ kind: 'achievement', sprite: medalSprite(ev.medal), title: t.title, text: t.text, onClick: () => openChallenges(), duration: 5000 });
+        app.toasts.show({ prio: 'info', digest: 'médaille de défi|médailles de défi', kind: 'achievement', sprite: medalSprite(ev.medal), title: t.title, text: t.text, onClick: () => openChallenges(), duration: 5000 });
         break;
       }
       case 'challengesJudged':
@@ -880,11 +880,11 @@ export function createVariety(app) {
         break;
       case 'merchantSoon':
         morning(ev.text || 'Demain, Basile le colporteur passe à la ferme.');
-        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur', text: ev.text || 'Demain, Basile le colporteur passe à la ferme.', duration: 4200 });
+        app.toasts.show({ prio: 'info', kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur', text: ev.text || 'Demain, Basile le colporteur passe à la ferme.', duration: 4200 });
         break;
       case 'merchantArrived':
         app.audio.tone?.('magic', { volume: 0.7, delay: 0.5 });
-        app.toasts.show({ kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : son étal vous attend.`, onClick: () => openMerchant(), duration: 6000 });
+        app.toasts.show({ prio: 'info', kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : son étal vous attend.`, onClick: () => openMerchant(), duration: 6000 });
         morning('Basile le colporteur est là (jusqu\'à demain soir).');
         hint('variety.merchant', null);
         break;
