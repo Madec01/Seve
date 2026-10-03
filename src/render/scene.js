@@ -127,6 +127,13 @@
 //   scene.setFeteMode(on), scene.feteMode, scene.setLanterns(values | null) (niveaux : meilleur résultat du niveau),
 //   scene.cozySpots(), scene.cozyStats(), scene.cozyItemRect(kind, id) (px du monde), scene.cozySing()
 //
+// Vallée vivante, lot V3 (places-actors.js, carrière seulement) : poteau « Vers la vallée » ({ type: 'valleyView' }),
+// terres sauvages (layout.wildBands : bloc sans clôture qui reprend en 3 états ; { type: 'wildLand', cellId }), forêts à
+// confier (layout.wildable : poteau à feuille → { type: 'wildCell', cellId }), mode terres sauvages
+// (scene.setWildPlacing(on) : seules les cases possibles répondent, { type: 'wildCell', cellId }), clairières de l'étape 7 ;
+// mini-carte (couleur + pictogramme des terres, pointillé vert des forêts à confier, points en mode) ; zoom tactile des
+// modes de visée (scene.ensureTouchZoom() / scene.restoreZoom()) ; zones de toucher ≥ 48 px CSS au zoom courant pour
+// toute cible isolée, parcelles = toute leur cellule (layout.plotCell). scene.placesItemRect(kind, id), placesStats().
 // Vallée vivante, lot V1 (valley-actors.js, carrière seulement) : aménagements nature sur leurs emplacements
 // (layout.valley, layout-career.js), jachères, étiquettes des planches d'essai, dessin des variétés anciennes
 // (heirloom.<id>.<étape>), bêtes (indice, bête qui attend avec « ? », habitants en promenade), cueillette des haies,
@@ -152,7 +159,8 @@ import { createLot2Actors } from './lot2-actors.js';
 import { createVarietyActors } from './variety-actors.js';
 import { createCozyActors } from './cozy-actors.js';
 import { createValleyActors } from './valley-actors.js';
-import { zoomBounds, snapZoom, stepZoom, clampZoom, pinchZoom, staticRegion, zoomRatio, zoomFromRatio } from './camera-zoom.js';
+import { createPlacesActors } from './places-actors.js';
+import { zoomBounds, snapZoom, stepZoom, clampZoom, pinchZoom, staticRegion, zoomRatio, zoomFromRatio, touchZoom } from './camera-zoom.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -240,6 +248,10 @@ export function createScene(canvas, images, level, opts = {}) {
   // (Vallée vivante, lot V1) Aménagements nature, bêtes, cueillette des haies, boîte en fer, lisière (valley-actors.js).
   const valley = createValleyActors(effects);
   valley.setImages(images);
+  // (Vallée vivante, lot V3) Poteau « Vers la vallée », terres sauvages, mode terres sauvages, clairières (places-actors.js).
+  const places = createPlacesActors(effects);
+  places.setImages(images);
+  let forcedZoom = null; // (V3) zoom tactile posé par un mode de visée : { prevZ } (zoom du joueur à rendre)
   /** Objet du lot 3 dans la liste triée par profondeur (sprite de l'atlas, ou repli dessiné : opts.img). */
   const pushVariety = (name, x, y, sortY, opts = {}) => {
     if (opts.img) {
@@ -989,25 +1001,32 @@ export function createScene(canvas, images, level, opts = {}) {
     const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
     const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
     if (cozy.feteMode) return cozy.hitTest(wx, wy, slop, cOpts); // (lot 4) mode fête : objets cachés seulement
+    // (Vallée V3) Mode terres sauvages : seules les cases possibles répondent (le défilement, le pincement et + / − restent).
+    if (places.wildPlacing) return places.hitTest(wx, wy, { minWorld: cOpts.minWorld });
     // (Vallée) Mode aménagement : seuls les emplacements libres répondent (et le défilement).
     if (valley.placing || valley.pair) return valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }); // (V2) mode paire aussi
-    const a = actors.hitTest(wx, wy, slop);
+    // Personnages : au doigt, une zone d'au moins 48 px CSS autour d'eux (sprites de 16 px).
+    const a = actors.hitTest(wx, wy, touch ? Math.max(slop, (cOpts.minWorld - TILE) / 2) : 0);
     if (a) return a;
     // (Vallée) Bête qui attend, trouvaille d'une haie, boîte en fer : cibles agrandies pour le doigt (≥ 48 px CSS).
     const vlHit = valley.hitTest(wx, wy, 0, { minWorld: cOpts.minWorld });
     if (vlHit) return vlHit;
+    // (Vallée V3) Poteau « Vers la vallée » (cible agrandie).
+    const plHit = places.hitTest(wx, wy, { minWorld: cOpts.minWorld });
+    if (plHit) return plHit;
     const cHit = cozy.hitTest(wx, wy, 0, { ...cOpts, minWorld: 0 }); // (lot 4) objets cachés, lisière, mangeoire…
     if (cHit) return cHit;
-    const vHit = variety.hitTest(wx, wy, 0); // (lot 3) panneau, charrette, roulotte, visiteur du thème
+    const vHit = variety.hitTest(wx, wy, 0, { minWorld: cOpts.minWorld }); // (lot 3) panneau, charrette, roulotte, visiteur du thème
     if (vHit) return vHit;
     const bs = lastGame?.state?.career?.buildings || {};
     for (const [id, s0] of Object.entries(layout.slots)) {
       if (!s0.animal || !(bs[id]?.pending > 0)) continue;
       const bx = s0.bubble ? s0.bubble.x : s0.anchor.x - 16;
       const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
-      if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
+      const bs2 = Math.max(slop, (cOpts.minWorld - 32) / 2);
+      if (wx >= bx - bs2 && wx < bx + 32 + bs2 && wy >= by - bs2 && wy < by + 32 + bs2) return { type: 'shelter', buildingId: id };
     }
-    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) || valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }) : null);
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop, cOpts.minWorld) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) || valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }) : null);
   }
 
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
@@ -1379,6 +1398,8 @@ export function createScene(canvas, images, level, opts = {}) {
         }
       }
     }
+    // 4 bis. (Vallée V3) Terres sauvages : sol et objets de leur sorte (sous la forêt de leurs lisières).
+    places.drawStaticGround(c, L, season, sheets);
     // 5. Forêt (bords, haut, terrain à vendre, bas) et lisières
     const fset = season === 'autumn' ? 'forest.autumn' : 'forest.green';
     for (let ty = ty0; ty <= ty1; ty++) {
@@ -1420,6 +1441,8 @@ export function createScene(canvas, images, level, opts = {}) {
       for (const [x, dy] of [[3, 0], [10, 0], [4, -1]]) drawSprite(c, sheets, 'land.stump', sx + x * TILE + 2, (sale.y0 + sale.rows - 1) * TILE + dy * 4);
       drawSprite(c, sheets, 'land.sale.sign.big', sx + 6 * TILE, (sale.y0 + sale.rows - 2) * TILE + 2);
     }
+    // (Vallée V3) Forêts qu'on peut confier (plus claires, petit poteau à feuille) ; clairières fleuries de l'étape 7.
+    places.drawStaticOver(c, L, season, sheets);
     // 6. Clôtures (champs : style de la personnalisation ; enclos et verger : bois)
     for (const f of L.fences) {
       if (f.kind === 'field') drawFieldFence(c, sheets, f.rect, f.gateX);
@@ -3347,11 +3370,15 @@ export function createScene(canvas, images, level, opts = {}) {
   const MM_COLORS = {
     field: '#b98049', meadow: '#8fcf64', orchard: '#5aa44c', workshops: '#a9a295', pond: '#4f9fd6', greenhouse: '#a9dde3',
     wild: '#6f8c46', yard: '#9fd36f', home: '#e6c68c', forSale: '#27402c', locked: '#1f3024',
+    // (Vallée V3) Terres sauvages
+    wood: '#2e5a2a', marsh: '#3f6f6a', grassland: '#a3b64f',
   };
   const MM_ICONS = {
     field: ['crop.carrot.icon', 'crop.wheat.icon', 'crop.potato.icon', 'crop.pumpkin.icon'], meadow: ['animal.sheep', 'animal.cow'], orchard: ['crop.apple.icon'],
     workshops: ['product.jam', 'product.cheese'], pond: ['product.fish.1', 'animal.duck.swim'], greenhouse: ['icon.career.greenhouse'], wild: ['land.tallgrass.1', 'land.stump'],
     yard: ['animal.chicken', 'product.eggs'], home: ['icon.career.house'], forSale: ['icon.career.coins'], locked: ['icon.career.lock'],
+    wood: ['icon.wildland.wood', 'nature.oak.sapling'], marsh: ['icon.wildland.marsh', 'nature.reeds'], grassland: ['icon.wildland.grassland', 'land.wildflower.1'],
+    wildable: ['wildland.offer', 'nature.oak.sapling'],
   };
   const mmIcon = (kind) => (MM_ICONS[kind] || []).find((n) => SPRITES[n]) || null;
 
@@ -3481,6 +3508,38 @@ export function createScene(canvas, images, level, opts = {}) {
       if (l.type === 'yard') continue; // icône dans la zone de la maison
       mmSprite(c, mmIcon(kind), r.x + r.w / 2, r.y + r.h / 2, cs * 0.5);
     }
+    // (Vallée V3) Terres sauvages : leur couleur et leur pictogramme (trait clair en bas tant qu'elles reprennent) ;
+    // forêts à confier : la forêt, un contour pointillé vert clair et une petite pousse.
+    for (const w of L.wildBands || []) {
+      const r = cellRect(w.rect);
+      c.fillStyle = MM_COLORS[w.kind] || MM_COLORS.wood;
+      c.fillRect(r.x, r.y, r.w, r.h);
+      c.fillStyle = 'rgba(63,38,49,0.55)';
+      c.fillRect(r.x, r.y + r.h - 1, r.w, 1);
+      if ((w.stage || 0) < 2) {
+        c.fillStyle = 'rgba(236,250,214,0.85)';
+        c.fillRect(r.x + 2, r.y + r.h - Math.max(2, Math.round(cs / 14)) - 1, r.w - 4, Math.max(2, Math.round(cs / 14)));
+      }
+      const ic = mmIcon(w.kind);
+      if (ic) mmSprite(c, ic, r.x + r.w / 2, r.y + r.h / 2, cs * 0.5);
+      else {
+        c.fillStyle = '#eafbe0';
+        c.fillRect(Math.round(r.x + r.w / 2 - 1), Math.round(r.y + r.h / 2 - 3), 2, 6);
+      }
+    }
+    for (const w of L.wildable || []) {
+      const r = cellRect(w.rect);
+      c.fillStyle = 'rgba(190,235,160,0.85)';
+      const d = Math.max(1, Math.round(cs / 24));
+      for (let x = r.x; x < r.x + r.w; x += 3 * d) { c.fillRect(x, r.y, Math.min(d * 2, r.x + r.w - x), d); c.fillRect(x, r.y + r.h - d, Math.min(d * 2, r.x + r.w - x), d); }
+      for (let y = r.y; y < r.y + r.h; y += 3 * d) { c.fillRect(r.x, y, d, Math.min(d * 2, r.y + r.h - y)); c.fillRect(r.x + r.w - d, y, d, Math.min(d * 2, r.y + r.h - y)); }
+      const ic = mmIcon('wildable');
+      if (ic) mmSprite(c, ic, r.x + r.w / 2, r.y + r.h / 2, cs * 0.36);
+      else {
+        c.fillStyle = '#9ad06a';
+        c.fillRect(Math.round(r.x + r.w / 2 - 1), Math.round(r.y + r.h / 2 - 2), 2, 5);
+      }
+    }
     // Allées (tuiles de chemin) par-dessus
     c.fillStyle = 'rgba(214,168,108,0.95)';
     const ps = Math.max(1, Math.round(cs / 11));
@@ -3571,6 +3630,14 @@ export function createScene(canvas, images, level, opts = {}) {
         if ((q && !q.accepted) || (j && j.state !== 'out')) {
           const p = j ? map.toMap(j.x, j.y) : map.toMap(layout.farmerHome.x, layout.farmerHome.y);
           mmSprite(c, 'icon.career.quest', p.x, p.y - icon * 0.4 - (pulse ? 1 : 0), icon);
+        }
+      }
+      // (Vallée V3) Mode terres sauvages : un point clair sur chaque case qu'on peut confier.
+      if (places.wildPlacing) {
+        const pulse4 = Math.sin(time * 4) > 0;
+        for (const id of places.eligible()) {
+          const r = layout.wildRect?.(id);
+          if (r) dot(map.toMap(r.x + r.w / 2, r.y + r.h / 2), pulse4 ? '#fff3b0' : '#c8f0a0', Math.max(2, Math.round(cs / 9)));
         }
       }
       // (Vallée V2) Mode paire : un point sur chaque terrain qui a une parcelle où semer la paire.
@@ -3757,7 +3824,29 @@ export function createScene(canvas, images, level, opts = {}) {
       animating: !!zoomAnim,
       canIn: (zoomAnim ? zoomAnim.to : zoom) < zoomB.max - 1e-6,
       canOut: (zoomAnim ? zoomAnim.to : zoom) > zoomB.min + 1e-6,
+      // (Vallée V3) Zoom tactile posé par un mode de visée : la préférence du joueur n'est pas enregistrée.
+      forced: !!forcedZoom,
+      touchZoom: Math.min(zoomB.max, touchZoom(dpr)),
     };
+  }
+
+  /**
+   * (Vallée V3, reste du V2 n° 1) Modes de visée (aménagement, paire, terres sauvages) : pose le « zoom tactile » (plus
+   * petit zoom entier où une parcelle fait ≥ 48 px CSS) s'il est plus grand que le zoom courant, sans animation en
+   * mouvements réduits ; restoreZoom() rend le zoom du joueur en sortant. → zoom visé.
+   */
+  function ensureTouchZoom(opts = {}) {
+    const tz = Math.min(zoomB.max, touchZoom(dpr));
+    if (forcedZoom) return zoom;
+    if ((zoomAnim ? zoomAnim.to : zoom) >= tz - 1e-6) return zoom;
+    forcedZoom = { prevZ: userZ === null ? null : snapZoom(zoomAnim ? zoomAnim.to : userZ, zoomB) };
+    return setZoom(tz, { animate: opts.animate !== false && !reduceMotionOn() });
+  }
+  function restoreZoom(opts = {}) {
+    if (!forcedZoom) return zoom;
+    const prev = forcedZoom.prevZ;
+    forcedZoom = null;
+    return setZoom(prev, { animate: opts.animate !== false && !reduceMotionOn() });
   }
 
   /** Préférence enregistrée (rapport au zoom par défaut) → zoom entier borné, sans animation, centre gardé. */
@@ -3941,6 +4030,7 @@ export function createScene(canvas, images, level, opts = {}) {
       variety.clear();
       cozy.clear();
       valley.clear();
+      places.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -4083,6 +4173,7 @@ export function createScene(canvas, images, level, opts = {}) {
     variety.onEvent(type, payload, L);
     cozy.onEvent(type, payload, L);
     valley.onEvent(type, payload, L);
+    places.onEvent(type, payload, L);
     effects.onEvent(type, payload, L);
   }
 
@@ -4134,6 +4225,7 @@ export function createScene(canvas, images, level, opts = {}) {
     variety.sync(game, layout, { time });
     cozy.sync(game, layout, { time });
     valley.sync(game, layout, { time });
+    places.sync(game, layout, { time, day: careerDay(game) });
     initialized = true;
     flushDeferred();
 
@@ -4159,6 +4251,7 @@ export function createScene(canvas, images, level, opts = {}) {
     variety.update(dt);
     cozy.update(dt);
     valley.update(dt);
+    places.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -4177,6 +4270,7 @@ export function createScene(canvas, images, level, opts = {}) {
     variety.collect(pushVariety);
     cozy.collect(pushVariety);
     valley.collect(pushVariety);
+    places.collect(pushVariety, fxState.view);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -4188,6 +4282,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawPlotMarkers();
     cozy.drawOverlay(c, layout);
     valley.drawOverlay(c, layout);
+    places.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -4253,6 +4348,7 @@ export function createScene(canvas, images, level, opts = {}) {
       variety.setReducedMotion(reducedMotion);
       cozy.setReducedMotion(reducedMotion);
       valley.setReducedMotion(reducedMotion);
+      places.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -4415,6 +4511,24 @@ export function createScene(canvas, images, level, opts = {}) {
       valley.setPlacing(kind || null);
       if (kind) hover = null;
     },
+    // ── (Vallée vivante, lot V3) ──
+    /** Mode terres sauvages : les cases de valley().wilds.eligible pulsent ; seules elles répondent au toucher. */
+    setWildPlacing(on) {
+      places.setWildPlacing(!!on);
+      if (on) hover = null;
+    },
+    get wildPlacing() {
+      return places.wildPlacing;
+    },
+    /** Rectangle (px du monde) : 'signpost' | 'wildCell' (cellId) | 'wildLand' (cellId) | 'wildSign' (cellId). */
+    placesItemRect(kind, id) {
+      return places.itemRect(kind, id);
+    },
+    placesStats() {
+      return places.stats();
+    },
+    ensureTouchZoom,
+    restoreZoom,
     get valleyPlacing() {
       return valley.placing;
     },

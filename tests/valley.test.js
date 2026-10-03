@@ -53,7 +53,7 @@ test('activation : par défaut, null avec valley: false ; avant le rang 2 rien n
   assert.equal(ev.of('valleyStarted').length, 0);
   assert.equal(r1.actions.career.openJar().reason, 'La Vallée commence au rang 2.');
   const parts = createCareer({ seed: 3, valley: { wildlife: false } });
-  assert.deepEqual(parts.state.career.valley.parts, { seeds: true, wildlife: false, heritage: true });
+  assert.deepEqual(parts.state.career.valley.parts, { seeds: true, wildlife: false, heritage: true, places: true });
 });
 
 test('début (première aube au rang 2) : boîte de Joseph (3 × 3 graines), première haie offerte, chapitre 0 à lire', () => {
@@ -266,6 +266,8 @@ test('progression : 2 pages d\'album (carrière), 7 succès (155 écus), décor 
   assert.deepEqual(ctx.career.valley, {
     started: true, fixed: ['bouleDOr'], installed: ['robin'], stage: 0, jars: 0, hand: 0,
     swaps: [], swapsFav: [], crossesFound: [], library: 0, fixedPays: 1, fixedVillage: 0, fixedCross: 0, installedV1: 1, installedV2: 0,
+    // (V3) étapes des lieux, lieux restaurés, habitants de la vallée, terres, pêches, chantiers.
+    places: { brook: 0, combe: 0, poppies: 0, millpond: 0, bocage: 0, oldOrchard: 0 }, restored: [], valleyInstalled: [], wilds: 0, riverFish: 0, works: 0,
   });
   const p = P.defaultProgress();
   const ids = P.checkAchievements(p, ctx);

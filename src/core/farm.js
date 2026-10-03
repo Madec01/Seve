@@ -22,7 +22,7 @@ import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
 import { SKY } from '../data/surprises.js';
 import { posterFactor } from './variety-effects.js';
-import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, returnTrialSeed, survivesFrost, winterGrowthOf } from './career/heirlooms.js';
+import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, returnTrialSeed, survivesFrost, valleyDryGrowth, winterGrowthOf } from './career/heirlooms.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -151,11 +151,13 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
       if (career && inGreenhouse(p)) {
         // Serre : la météo n'y entre pas (pas de canicule) ; pousse du niveau de la serre.
         const dry = valley ? heirloomDryGrowth(state, p, crop, false) : null;
-        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, false, level);
+        // (Vallée V3) « L'eau revient » (étape 6) : + 0,1 jour sans arrosage (valleyDryGrowth : `base` sans le V3).
+        const base = p.watered ? GROWTH.watered : valley ? valleyDryGrowth(state, dry ?? dryGrowthOf(crop, false, level), false) : dry ?? dryGrowthOf(crop, false, level);
         p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex) * vf);
       } else {
         const dry = valley ? heirloomDryGrowth(state, p, crop, heatwave) : null;
-        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, heatwave, level);
+        // (Vallée V3) Canicule (Ru des Saules ≥ 1) : + ¼ jour ; l'eau revient (étape 6) : + 0,1 jour.
+        const base = p.watered ? GROWTH.watered : valley ? valleyDryGrowth(state, dry ?? dryGrowthOf(crop, heatwave, level), heatwave) : dry ?? dryGrowthOf(crop, heatwave, level);
         const winter = valley && season === 'winter' ? winterGrowthOf(state, p) : 1;
         p.growth = Math.min(crop.growDays, p.growth + base * bonus * vf * winter);
       }

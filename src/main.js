@@ -72,6 +72,8 @@ import { createCozy } from './ui/cozy.js';
 import { createAlbum } from './ui/album.js';
 import { createValley } from './ui/career/valley.js';
 import { createHeritage } from './ui/career/heritage.js';
+import { createPlaces } from './ui/career/places.js';
+import { createValleyView } from './ui/career/valley-view.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -157,6 +159,10 @@ app.cozy = createCozy(app);
 // mode aménagement, boîte de Joseph, bocaux, observation des bêtes, lignes des fiches existantes (src/ui/career/valley.js).
 app.valley = createValley(app);
 app.heritage = createHeritage(app); // (Vallée V2) Grainothèque, troc, croisements, récits (appelé par app.valley)
+// (Vallée V3) Lieux de la vallée, terres sauvages, pêche, champignons (appelé par app.valley) ; l'écran « La vallée ».
+app.places = createPlaces(app);
+app.valleyView = createValleyView(app);
+app.images = () => images;
 
 applyDisplaySettings();
 
@@ -879,7 +885,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
-    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot'].includes(hit?.type)) pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot', 'valleyView', 'wildLand', 'wildCell'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -921,6 +927,8 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.valleyView?.active) return app.valleyView.close(); // (Vallée V3) « ‹ La ferme »
+    if (app.places?.wilding) return app.places.leaveWild(); // (Vallée V3) fin du mode terres sauvages
     if (app.heritage?.pairing) return app.heritage.leavePair(); // (Vallée V2) fin du mode paire
     if (app.valley.placing) return app.valley.leavePlacing(); // (Vallée) fin du mode aménagement
     if (!app.inMenu && app.game) app.openPauseMenu();
@@ -1576,6 +1584,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.cozy.reset(game);
   app.valley.reset(game);
   app.heritage.reset(game);
+  app.places.reset(game);
+  app.valleyView.reset();
   app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
@@ -1728,6 +1738,8 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.cozy.reset(null);
   app.valley.reset(null);
   app.heritage.reset(null);
+  app.places.reset(null);
+  app.valleyView.reset();
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1956,6 +1968,8 @@ function frame(t) {
   app.cozy.frame();
   app.valley.frame();
   app.heritage.frame();
+  app.places.frame();
+  app.valleyView.frame(dt); // (Vallée V3) l'écran « La vallée » (dessin, défilement, textes)
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1966,7 +1980,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2639,6 +2653,73 @@ if (DEBUG) {
     stats: () => app.scene?.valleyStats?.() || null,
   };
   for (const k of ['site', 'library', 'troc', 'swap', 'meet', 'cross', 'pair', 'box', 'story']) if (!window.__debug.valley[k]) window.__debug.valley[k] = window.__debug.valley2[k];
+  /**
+   * (Vallée vivante, lot V3) Aides de vérification : situations posées par l'action de débogage du cœur (triggerValley
+   * 'view' | 'works' | 'recover' | 'place' | 'wild' | 'wildGrow' | 'mushrooms' | 'riverReset' | 'visible' | 'install' |
+   * 'stage'), écrans ouverts par l'interface ; touch() mesure les zones de toucher (px CSS) au zoom courant.
+   */
+  window.__debug.valley3 = {
+    on: () => !!app.places?.on?.(),
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    view: () => app.game?.query?.career?.valleyView?.() ?? null,
+    open: (placeId) => (vlTrigger('view'), app.valleyView.open(placeId ? { placeId } : {})),
+    close: () => app.valleyView.close(),
+    works: (placeId) => vlTrigger('works', placeId),
+    recover: (placeId) => vlTrigger('recover', placeId),
+    place: (placeId, step) => vlTrigger('place', placeId, step),
+    wild: (cellId, kind = 'wood') => vlTrigger('wild', cellId, kind),
+    wildGrow: (cellId) => vlTrigger('wildGrow', cellId),
+    wildMode: (on = true) => (on ? app.places.enterWild() : (app.places.leaveWild(), false)),
+    mushrooms: (n = 2) => vlTrigger('mushrooms', n),
+    fish: () => app.places.openRiver(),
+    riverReset: () => vlTrigger('riverReset'),
+    visible: (id) => vlTrigger('visible', id),
+    install: (id) => vlTrigger('install', id),
+    stage: (n) => vlTrigger('stage', n),
+    story: (id) => app.heritage.openStory(id),
+    list: () => app.places.openList(),
+    placeUI: (id) => app.places.openPlace(id),
+    wildUI: (cellId) => app.places.openWild(cellId),
+    todo: () => app.todo.items().map((x) => ({ id: x.id, prio: x.prio, text: x.text, items: x.items ? x.items.map((y) => y.id) : undefined })),
+    rawTodo: () => app.todo.rawItems().map((x) => ({ id: x.id, prio: x.prio, text: x.text })),
+    /** Rectangle de la page d'une cible de la vue : { type: 'place', id } | { type: 'viewAnimal', id } | { type: 'river' }… */
+    viewPoint(hit) {
+      const r = app.valleyView.targetPageRect(hit);
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height } : null;
+    },
+    /** Point (px de la page) : 'signpost' | 'wildCell' (cellId) | 'wildLand' (cellId) | 'wildSign' (cellId). */
+    point(kind, id) {
+      const r = app.scene?.placesItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    /** Zones de toucher (px CSS) des cibles isolées de la scène et de la vue, au zoom courant. */
+    async touch() {
+      const s = app.scene;
+      const out = { zoom: s?.zoom, dpr: s?.dpr, scene: [], view: [], plots: [] };
+      if (s?.careerMode) {
+        const { careerIsolatedTargets } = await import('./render/layout-career.js');
+        const k = s.zoom / s.dpr;
+        const m = (48 * s.dpr) / s.zoom;
+        for (const t of careerIsolatedTargets(s.layout, app.game?.state)) out.scene.push({ kind: t.kind, id: t.id, w: Math.round(Math.max(t.rect.w, m) * k), h: Math.round(Math.max(t.rect.h, m) * k) });
+        for (const p of s.layout.plots || []) {
+          if (p.retired) continue;
+          const c = s.layout.plotCell?.(p.index);
+          if (c) out.plots.push({ index: p.index, w: Math.round(c.w * k), h: Math.round(c.h * k) });
+        }
+      }
+      const R = app.valleyView.renderer;
+      if (R && app.valleyView.active) {
+        const { viewTargets } = await import('./render/valley-view.js');
+        const L = R.layout;
+        const k = L.zoom / L.dpr;
+        for (const t of viewTargets(L, app.game?.query?.career?.valleyView?.())) out.view.push({ hit: t.hit, w: Math.round(t.rect.w * k), h: Math.round(t.rect.h * k) });
+      }
+      return out;
+    },
+    ui: () => ({ places: app.places.debugState(), view: app.valleyView.stats() }),
+    stats: () => ({ scene: app.scene?.placesStats?.() || null, view: app.valleyView.stats() }),
+  };
+  for (const [k, f] of Object.entries(window.__debug.valley3)) if (!window.__debug.valley[k]) window.__debug.valley[k] = f;
   window.__debug.lot3 = window.__debug.variety;
 }
 if (DEBUG) window.__debug.lot4 = window.__debug.cozy;

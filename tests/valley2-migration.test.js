@@ -14,15 +14,18 @@ import { nextDay, record, setRank, startedCareer } from './valley-helpers.js';
 
 const A = (g) => g.actions.career;
 const V2_FIELDS = ['library', 'site', 'troc', 'trocSeason', 'trocFairYear', 'swaps', 'crosses', 'stories'];
+/** (V3) Champs du V3 (inertes sans la partie `places`) : retirés aussi. */
+const V3_FIELDS = ['view', 'places', 'wilds', 'wildBought', 'river', 'mushrooms'];
 
 /** Sauvegarde « du V1 » : sans les champs du V2, `v: 1`, sans flux valley2. */
 function asV1(saved) {
   const s = JSON.parse(JSON.stringify(saved));
   const v = s.career.valley;
-  for (const k of V2_FIELDS) delete v[k];
+  for (const k of [...V2_FIELDS, ...V3_FIELDS]) delete v[k];
   delete v.parts.heritage;
-  for (const k of ['swaps', 'meets', 'crosses', 'heirloomCrops']) delete v.year[k];
-  for (const k of ['swaps', 'meets', 'crosses', 'pairs']) delete v.stats[k];
+  delete v.parts.places;
+  for (const k of ['swaps', 'meets', 'crosses', 'heirloomCrops', 'works', 'recovered', 'valleyInstalled', 'wilds', 'river', 'riverIncome', 'mushrooms']) delete v.year[k];
+  for (const k of ['swaps', 'meets', 'crosses', 'pairs', 'works', 'recovered', 'river', 'riverIncome', 'mushrooms', 'wilds', 'visits']) delete v.stats[k];
   v.v = 1;
   delete s.rng.valley2;
   return s;
@@ -39,7 +42,7 @@ test('carrière du V1 reprise : champs du V2 ajoutés sans rien retirer, v = 2, 
   const h = loadCareer(old);
   const v = h.state.career.valley;
   assert.equal(v.v, VALLEY_VERSION);
-  assert.deepEqual(v.parts, { seeds: true, wildlife: true, heritage: true });
+  assert.deepEqual(v.parts, { seeds: true, wildlife: true, heritage: true, places: true });
   assert.deepEqual([v.library, v.troc, v.trocSeason, v.trocFairYear, v.swaps, v.crosses, v.stories], [null, null, -1, 0, {}, {}, { available: [], read: [] }]);
   assert.equal(v.site, false);
   assert.deepEqual(v.year.heirloomCrops, []);

@@ -16,6 +16,7 @@
 
 import { SEED_RULES, SPECIES, VARIETIES } from './career/valley.js';
 import { CROSSES, CROP_NAMES, SPECIES_V2, TROC, VILLAGE_VARIETIES_BY_ID } from './career/heritage.js';
+import { PLACES, VALLEY_SPECIES } from './career/places.js';
 import { CLIENTS } from './variety.js';
 
 export const ALBUM_VERSION = 1;
@@ -253,7 +254,16 @@ const WILDLIFE2_CASES = SPECIES_V2.map((sp) => ({
   id: sp.id, name: sp.name, icon: sp.icon, mode: 'career', check: { type: 'wildlifeInstalled', id: sp.id }, text: sp.anecdote, hint: 'Remplissez sa recette d\'habitat, puis allez le voir quand il vient.',
 }));
 
-/** Les 16 pages (175 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1), puis les 3 du lot V2. */
+// (Vallée vivante, lot V3) Le carnet d'Hélène (habitant de la vallée installé), les lieux de la vallée (lieu à sa dernière
+// étape) : carrière.
+const VALLEY_WILD_CASES = VALLEY_SPECIES.map((sp) => ({
+  id: sp.id, name: sp.name, icon: sp.icon, mode: 'career', check: { type: 'wildlifeInstalled', id: sp.id }, text: sp.anecdote, hint: 'Rendez son lieu à la vie, puis allez le voir dans la vue de la vallée.',
+}));
+const PLACE_CASES = PLACES.map((pl) => ({
+  id: pl.id, name: pl.name, icon: pl.icon, mode: 'career', check: { type: 'placeRestored', id: pl.id }, text: pl.steps[pl.steps.length - 1].line, hint: 'Restaurez ce lieu de la vallée jusqu\'à sa dernière étape.',
+}));
+
+/** Les 18 pages (191 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1), les 3 du lot V2, les 2 du lot V3. */
 export const ALBUM_PAGES = [
   { id: 'garden', name: 'Le potager', icon: 'album.page.garden', cases: GARDEN, reward: { ecus: 30, cosmeticId: 'scarecrow.flower' } },
   { id: 'homemade', name: 'Fait maison et basse-cour', icon: 'album.page.homemade', cases: HOMEMADE, reward: { ecus: 25, cosmeticId: 'jam.shelf' } },
@@ -271,6 +281,8 @@ export const ALBUM_PAGES = [
   { id: 'swaps', name: 'Le troc du village', icon: 'album.page.swaps', cases: SWAP_CASES, reward: { ecus: 25, cosmeticId: 'swap.basket' } },
   { id: 'crosses', name: 'Les variétés de la ferme', icon: 'album.page.crosses', cases: CROSS_CASES, reward: { ecus: 40, cosmeticId: 'cross.sign' } },
   { id: 'wildlife2', name: 'Les habitants (suite)', icon: 'album.page.wildlife2', cases: WILDLIFE2_CASES, reward: { ecus: 20, cosmeticId: 'lizard.wall' } },
+  { id: 'valleyWild', name: 'Le carnet d\'Hélène', icon: 'album.page.valleyWild', cases: VALLEY_WILD_CASES, reward: { ecus: 30, cosmeticId: 'heron.vane' } },
+  { id: 'places', name: 'Les lieux de la vallée', icon: 'album.page.places', cases: PLACE_CASES, reward: { ecus: 40, cosmeticId: 'mill.wheel' } },
 ];
 
 /**

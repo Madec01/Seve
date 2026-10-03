@@ -74,7 +74,8 @@ export function createCareerUI(app) {
   const minimap = createMinimap(app, {
     active,
     openLot: (lotId) => {
-      if (lotId) open.lot(lotId);
+      if (lotId && app.places?.isWildCell?.(lotId)) app.places.openWild(lotId); // (Vallée V3) terre sauvage / forêt à confier
+      else if (lotId) open.lot(lotId);
     },
     openMap: () => open.map(),
   });

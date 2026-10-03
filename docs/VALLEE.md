@@ -1606,7 +1606,7 @@ en bas (élan léger ; pas de pincement : le dessin est déjà à la bonne taill
 
 ### 17.4 Les six lieux de la vallée
 
-Chaque lieu a **une étape 0** (l'état d'aujourd'hui, dessiné) et **3 étapes** à rendre (le ruisseau : 4). Une étape =
+Chaque lieu a **une étape 0** (l'état d'aujourd'hui, dessiné) et **3 étapes** à rendre (le ruisseau : 4). *(Réglage CORE V3 : les reprises des tableaux ci-dessous, 1 / 2 / 4 saisons, sont devenues **2 / 3 / 4** — Ru des Saules 2 / 2 / 3 / 3 —, § 17.12.8.)* Une étape =
 **chantier** (pièces, d'un geste) + **condition de vie** (lue en lignes cochées) + **reprise** (en saisons : une saison =
 la durée des saisons de la carrière, 7, 10 ou 14 jours ; décompte visible). Un lieu ne fait qu'**un chantier à la fois** ;
 les six lieux peuvent reprendre en même temps. Chaque ligne de Joseph (≤ 110 caractères) se lit dans la fiche du lieu.
@@ -2084,6 +2084,47 @@ Prix des chantiers (× 0,8 à × 1,2, total entre 130 000 et 190 000) ; prix des
 400) ; reprises (1 / 2 / 4 saisons → 1 / 1 / 2 ou 2 / 3 / 4) ; chance de venue des habitants de la vallée ; paliers des
 étapes 6 et 7 (50 à 60, 70 à 80) ; force des avantages (pousse sans arrosage + 0,1 → + 0,05 ; places du moulin ; touristes).
 **Jamais** les chiffres des niveaux, le rythme des rangs ni les tirages d'un flux existant.
+
+#### 17.12.8 Résultats et réglages (livraison CORE V3, 2026-10-03)
+
+Mesure : `node tools/simulate-career.js --compare-valley3 --runs 60 --jobs 4` (Détente, saisons de 7 jours, 60 carrières ×
+18 ans, même graine : sans la Vallée → V1 + V2 → V1 + V2 + V3 ; aide d'équipe `sim-career-staff.js` active). Classique :
+`--difficulty classique --strategy casual --runs 30`.
+
+**Réglages retenus** (leviers du § 17.12.7, dans l'ordre) : prix des chantiers (**160 000**), prix des terres
+(**2 500 + 300 × n = 90 900**), paliers des étapes 6 et 7 (**56 / 76**), chance de venue et avantages : **inchangés** ;
+**reprises 1 / 2 / 4 → 2 / 3 / 4 saisons** (étapes 1, 2, 3 ; Ru des Saules 2 / 2 / 3 / 3) — avec 1 / 2 / 4, l'étape 7
+venait vers l'an 15 et la vallée complète vers l'an 17. Robots précisés (§ 17.12.6, détails dans `docs/ARCHITECTURE.md`,
+« Écarts et précisions (livraison CORE V3) ») : le tranquille garde « l'argent qui dort » (un chantier ou une terre
+seulement si l'argent couvre trois fois le prix, comme la Grainothèque du V2), finit les chantiers prêts avant de confier
+une forêt, sème les jachères qu'un lieu demande.
+
+| Mesure (tranquille, médiane sauf mention) | Cible | Mesuré |
+|---|---|---|
+| Revenu 18 ans / ans 10-18 (V1 + V2 → V3) | + 0 à + 4 % | **+ 0,6 %** / **+ 0,9 %** |
+| Toute la Vallée par rapport à sans | ≤ + 8 % | **+ 7,3 %** |
+| Argent en caisse an 14 (moyenne) | < 128 285 et ≤ 50 % de sans ; visé ≈ 55 000 | **33 358** (18 % de sans ; V2 seul : 128 285) |
+| Argent en caisse an 18 (moyenne) | ≤ 25 % de sans | **55 640** (16 % de sans) |
+| Dépenses du V3 an 14 / an 18 | 50 000 à 90 000 / ≈ 251 000 | **96 500** / **250 900** |
+| Étape 6 / étape 7 | an 12 à 14 / an 15 à 17 (visée 16) | **an 13** (100 %) / **an 16** (97 %) |
+| 19 étapes / 10 habitants de la vallée / 18 terres | vers l'an 18 | **an 17 / an 18 / an 18** ; vallée complète **an 18** (93 %) |
+| Étapes des lieux (an) | — | Ru 11 / 13 / 16 / 17 · bois 11 / 13 / 15 · prairie 11 / 12,5 / 14,5 · étang 14 / 15 / 17 · bocage 11 / 12 / 15 · verger 11 / 13 / 16 |
+| Nouveautés (saisons avec au moins une, ans 10-18) | ≥ 80 % | **94 %** (V1 + V2 : 36 %) ; 98 % des carrières ≥ 80 % |
+| Gestes par jour (ans 10-18) | + 0,2 à + 0,8 ; à la main ≥ 50 % | **+ 0,84** ; à la main **86 %** |
+| Rangs, Domaine | à un an près | **identiques** chaque année ; Domaine an 7 → an 7 |
+| Faillites | aucune (Détente) ; Classique ≤ 20 % | **0 %** ; Classique **0 %** (revenu + 0,2 %) |
+| `handsOff` (ans 4 à 7) | ≤ + 3 % | **+ 0,0 %** (la vue ne s'ouvre jamais) |
+| `handsOffLate` (ans 13 à 16) | ≤ + 3 % | **− 2,9 %** (les avantages passifs restent petits) |
+| `automator` | aucun habitant de la vallée ; patrimoine ≤ + 3 % | **0** ; **+ 0,0 %** (n'atteint pas l'étape 5) |
+| Appliqué | tout restauré an 12 à 14 ; revenu ≤ + 6 % / sans | **an 13** (100 %) ; **+ 0,6 %** par rapport à sans (+ 1,1 % / V1 + V2) |
+| Débutant | rang 3 à l'an 5 ≥ 70 % ; V3 quand il chante | **98 %** ; n'atteint pas l'étape 5 en 18 ans (rien n'est perdu) |
+| Niveaux, `{ places: false }` | identiques | `node tools/simulate.js` identique octet pour octet ; parité 400 / 400 ; empreinte d'une carrière de 18 ans identique |
+
+**Écarts restants et lecture.** L'argent en caisse à l'an 14 (≈ 33 000) reste sous le « visé » 55 000 : le calendrier du
+§ 17.12.3 supposait les terres sauvages vers l'an 15, mais le 16ᵉ terrain arrive vers l'an 10-11 et le tranquille confie
+une forêt chaque saison où aucun chantier prêt n'attend ; la cible dure (« plus bas qu'avec le V2 seul et ≤ 50 % de sans »)
+est tenue largement. Les dépenses de l'an 14 (96 500) dépassent un peu la fourchette pour la même raison, et les gestes
+(+ 0,84) un peu le plafond (la pêche du ruisseau, un jour joué sur deux).
 
 ### 17.13 Liens avec l'existant (sans doublon)
 

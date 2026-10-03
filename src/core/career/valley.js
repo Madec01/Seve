@@ -21,15 +21,28 @@
 // state.rng.valley2 : 4 nombres par aube, rien d'autre), 4 récits de Joseph, « Revoir la boîte ». Lectures pures :
 // src/core/career/heritage.js ; données : src/data/career/heritage.js ; contrat : docs/ARCHITECTURE.md, « Vallée vivante —
 // contrats du lot V2 ». Avec { heritage: false } : le V1 exactement (aucun tirage valley2, aucune règle du V2).
+//
+// (V3, « Le ruisseau », partie `places`) Vue de la vallée (ouverte à l'étape 5, récit « Sur la colline »), 6 lieux en 19
+// étapes (chantier payé + condition de vie + reprise en saisons, un chantier par lieu), 10 habitants de la vallée (flux
+// NOUVEAU state.rng.valley3 : 10 nombres par aube une fois la vue ouverte ; 3 nombres par aube d'automne pour les
+// champignons dès l'étape 2 du bois ; 2 nombres par pêche au ruisseau ; rien d'autre), pêche au ruisseau, champignons,
+// Reinette grise, cerisier et poirier, terres sauvages (après le 16ᵉ terrain), étapes 6 et 7, 8 récits. Lectures pures :
+// src/core/career/places.js ; données : src/data/career/places.js ; contrat : docs/ARCHITECTURE.md, « Vallée vivante —
+// contrats du lot V3 ». Avec { places: false } : le V1 + V2 exactement (aucun tirage valley3, aucune règle du V3).
 
 import { SEASONS } from '../../data/balance.js';
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import { careerFactor } from '../../data/cozy.js';
 import {
   ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, ARRIVAL, FAIR_STALL, HEDGE_FINDS, HEDGE_FINDS_BY_ID, HEDGE_FIND_RULES,
-  JOSEPH_BOX, MAX_STAGE, NATURE_ITEMS, NATURE_ITEMS_BY_ID, SEED_RULES, SIGNS_ALL, SIGNS_V1, SPECIES, SPECIES_BY_ID, STAGES, TRAITS_BY_ID,
+  JOSEPH_BOX, MAX_STAGE, MAX_STAGE_ALL, NATURE_ITEMS, NATURE_ITEMS_BY_ID, SEED_RULES, SIGNS_ALL, SIGNS_ALL_V3, SIGNS_V1, SPECIES, SPECIES_BY_ID, STAGES, STAGES_ALL, TRAITS_BY_ID,
   VALLEY_PARTS, VALLEY_START, VALLEY_TEXTS, VALLEY_VERSION, VARIETIES, VARIETIES_BY_ID, VARIETY_OF_CROP, agreeWith, savedText,
 } from '../../data/career/valley.js';
+import {
+  MUSHROOMS, MUSHROOMS_BY_ID, MUSHROOM_RULES, ORCHARD_VARIETIES_BY_ID, PLACES, PLACES_BY_ID, PLACES_OPEN, PLACES_TEXTS, PLACE_MAX, STORIES_V3, STORIES_V3_BY_ID,
+  VALLEY_SPECIES, VALLEY_SPECIES_BY_ID, WILD_KINDS, WILD_KINDS_BY_ID, WILD_RULES,
+} from '../../data/career/places.js';
+import { inLotGrid, lotCellOf, lotNameAt } from '../../data/career/lots.js';
 import {
   CROP_LOVE, CROSSES, CROSS_RULES, HERITAGE_TEXTS, LIBRARY_MAX, SEED_LIBRARY, SPECIES_V2, STORIES_BY_ID, TROC, TROC_BY_CLIENT,
   VILLAGE_VARIETIES_BY_ID,
@@ -39,12 +52,17 @@ import { absDay } from '../surprises.js';
 import { inGreenhouse } from '../farm.js';
 import { treeSeedCost } from '../trees.js';
 import {
-  animalBonusOf, crossFactorOf, crossNeedOf, fixHandOf, fixedSeedCost, growthBonusOf, handSeedsOf, hedgeFindsMaxOf, heritagePartOn, isFixed,
-  libraryLevelOf, partOn, seasonAbs, touristBonusOf, valleyOf, varietyName, varietyOf,
+  animalBonusOf, crossFactorOf, crossNeedOf, fishFactor, fixHandOf, fixedSeedCost, growthBonusOf, handSeedsOf, hedgeCoinsFactorOf, hedgeFindsMaxOf, heritagePartOn, isFixed,
+  libraryLevelOf, meadowHivesOf, millPlacesOf, partOn, placeStepOf, placesOn, seasonAbs, speciesInPart, speciesInstalled, touristBonusOf, valleyOf, varietyInPart, varietyName, varietyOf,
 } from './heirlooms.js';
 import {
+  canStartWorks, mushroomSeason, mushroomsInfo, placeInfo, placesInfo, riverFishTable, riverInfo, stageNeedText, unreadV3, viewInfo, viewOpen, wildCellInfo, wildCells,
+  wildEligible, wildOpen, wildPrice, wildStageAt, wildTotal,
+} from './places.js';
+import { themeFishFactor } from './themes.js';
+import {
   beePlotsGrowing, fixedVarieties, habitatCounts, installedSpecies, loneTreeStage, naturePrice, nextHint, recipeStatus, seasonsText, seasonsWhen,
-  signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, stageSignsOf, stageTarget, valleyServices, whereText, granaryBuilt,
+  signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, stageSignsOf, stagesOf, stageTarget, valleyServices, whereText, granaryBuilt,
 } from './habitat.js';
 import {
   boxInfo, canSupply, clientInfo, crossLinks, crossOfCrop, farmOf, heritageSeedsOn, isFavGift, libraryInfo, nextTrocClient,
@@ -52,20 +70,35 @@ import {
   trocRemaining, unitOf,
 } from './heritage.js';
 
+/** (V3) Tous les récits par identifiant (V2 et V3). */
+const STORY_BY_ID = { ...STORIES_BY_ID, ...STORIES_V3_BY_ID };
+
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const SEASON_IN = { spring: 'au printemps', summer: 'en été', autumn: 'en automne', winter: 'en hiver' };
-const FROM = ['box', 'jar', 'fair', 'jay', 'swap', 'cross', 'debug'];
+const FROM = ['box', 'jar', 'fair', 'jay', 'swap', 'cross', 'debug', 'orchard'];
 const SPECIES_STATES = ['hint', 'visible', 'installed'];
 const STAGE_NAMES = STAGES.map((s) => s.name);
 
 // ── État ────────────────────────────────────────────────────────────────────────────────────
 
 function emptyYear() {
-  return { hand: 0, seedsSaved: 0, fixed: 0, installed: 0, placed: 0, finds: 0, jars: 0, spent: 0, swaps: 0, meets: 0, crosses: 0, heirloomCrops: [] };
+  return {
+    hand: 0, seedsSaved: 0, fixed: 0, installed: 0, placed: 0, finds: 0, jars: 0, spent: 0, swaps: 0, meets: 0, crosses: 0, heirloomCrops: [],
+    // (V3) chantiers lancés, étapes de lieux atteintes, habitants de la vallée, terres confiées, pêches au ruisseau, champignons.
+    works: 0, recovered: 0, valleyInstalled: 0, wilds: 0, river: 0, riverIncome: 0, mushrooms: 0,
+  };
 }
 
 function emptyStats() {
-  return { hand: 0, seedsSaved: 0, observed: 0, placed: 0, jars: 0, fallows: 0, finds: {}, swaps: 0, meets: 0, crosses: 0, pairs: 0 };
+  return {
+    hand: 0, seedsSaved: 0, observed: 0, placed: 0, jars: 0, fallows: 0, finds: {}, swaps: 0, meets: 0, crosses: 0, pairs: 0,
+    works: 0, recovered: 0, river: 0, riverIncome: 0, mushrooms: 0, wilds: 0, visits: 0,
+  };
+}
+
+/** (V3) Champs du V3 (vue, lieux, terres sauvages, pêche, champignons). */
+function emptyPlaces() {
+  return { view: { open: false, openedAt: null, visits: 0 }, places: {}, wilds: {}, wildBought: 0, river: { fishedDay: 0 }, mushrooms: [] };
 }
 
 /** Champs du V2 (Grainothèque, troc, croisements, récits). */
@@ -73,10 +106,12 @@ function emptyHeritage() {
   return { library: null, site: false, troc: null, trocSeason: -1, trocFairYear: 0, swaps: {}, crosses: {}, stories: { available: [], read: [] } };
 }
 
-/** Parties actives : true → toutes ; { seeds, wildlife } → absentes = true. */
+/** Parties actives : true → toutes ; { seeds, wildlife } → absentes = true. (V3) `places` n'existe pas sans `heritage`. */
 export function normalizeValleyParts(opt) {
   const o = opt && typeof opt === 'object' ? opt : {};
-  return Object.fromEntries(VALLEY_PARTS.map((k) => [k, o[k] !== false]));
+  const parts = Object.fromEntries(VALLEY_PARTS.map((k) => [k, o[k] !== false]));
+  if (!parts.heritage) parts.places = false;
+  return parts;
 }
 
 export function newValleyState(parts = normalizeValleyParts(true)) {
@@ -84,6 +119,7 @@ export function newValleyState(parts = normalizeValleyParts(true)) {
     v: VALLEY_VERSION, parts, started: null, stage: 0, chapters: { read: [] }, spent: 0, jars: { opened: 0 }, seeds: {}, varieties: {},
     nature: {}, reserve: {}, bought: {}, species: {}, finds: [], jayYear: 0, fair: null, year: emptyYear(), stats: emptyStats(), nextId: 1,
     ...emptyHeritage(),
+    ...emptyPlaces(),
   };
 }
 
@@ -103,6 +139,9 @@ function ensureRng(state) {
   if (!Number.isInteger(state.rng.valley)) state.rng.valley = hashSeed(state.seed, 'valley');
   // (V2) Flux des 4 habitants du V2, seulement avec la partie `heritage` (aucun tirage sinon).
   if (state.career?.valley?.parts?.heritage !== false && !Number.isInteger(state.rng.valley2)) state.rng.valley2 = hashSeed(state.seed, 'valley2');
+  // (V3) Flux des habitants de la vallée, des champignons et de la pêche au ruisseau : seulement avec la partie `places`.
+  const parts = state.career?.valley?.parts;
+  if (parts && parts.heritage !== false && parts.places !== false && !Number.isInteger(state.rng.valley3)) state.rng.valley3 = hashSeed(state.seed, 'valley3');
 }
 
 /** Complète une Vallée d'une version précédente (champs ajoutés plus tard ; rien n'est retiré). */
@@ -117,6 +156,12 @@ function completeValley(v) {
   if (!v.year.heirloomCrops || !Array.isArray(v.year.heirloomCrops)) v.year.heirloomCrops = [];
   if (!v.stories || !Array.isArray(v.stories.available) || !Array.isArray(v.stories.read)) v.stories = { available: [], read: [] };
   for (const k of ['swaps', 'crosses']) if (!v[k] || typeof v[k] !== 'object' || Array.isArray(v[k])) v[k] = {};
+  // (V3) Vue, lieux, terres sauvages, pêche, champignons (rien n'est retiré ni réinterprété ; l'étape garde sa valeur).
+  if (!v.view || typeof v.view !== 'object') v.view = { open: false, openedAt: null, visits: 0 };
+  for (const k of ['places', 'wilds']) if (!v[k] || typeof v[k] !== 'object' || Array.isArray(v[k])) v[k] = {};
+  if (!Number.isInteger(v.wildBought)) v.wildBought = Object.keys(v.wilds).length;
+  if (!v.river || typeof v.river !== 'object') v.river = { fishedDay: 0 };
+  if (!Array.isArray(v.mushrooms)) v.mushrooms = [];
   v.v = VALLEY_VERSION;
 }
 
@@ -135,11 +180,14 @@ export function checkValley(state) {
   }
   if (v === null || v === undefined) return null;
   if (!obj(v) || !int(v.v, 1, VALLEY_VERSION)) return 'Vallée (version)';
-  if (!obj(v.parts) || !VALLEY_PARTS.every((k) => typeof v.parts[k] === 'boolean' || (k === 'heritage' && v.parts[k] === undefined && v.v === 1))) return 'Vallée (parties)';
+  if (!obj(v.parts) || !VALLEY_PARTS.every((k) => typeof v.parts[k] === 'boolean' || (k === 'heritage' && v.parts[k] === undefined && v.v === 1) || (k === 'places' && v.parts[k] === undefined && v.v <= 2))) return 'Vallée (parties)';
   if (v.started !== null && !(obj(v.started) && int(v.started.year, 1) && int(v.started.day, 1) && int(v.started.abs, 1))) return 'Vallée (début)';
   // Paliers du V1 (les plus bas) : une étape atteinte avant le recalage du V2 reste valide (elle ne recule jamais).
-  if (!int(v.stage, 0, MAX_STAGE) || v.stage > stageFor(signsOfLife(state))) return 'Vallée (étape)';
-  if (!obj(v.chapters) || !Array.isArray(v.chapters.read) || !v.chapters.read.every((n) => int(n, 0, MAX_STAGE))) return 'Vallée (chapitres)';
+  // (V3) Étapes 6 et 7 : seulement avec la partie `places`, signes de vie et conditions de lieux remplis.
+  if (!int(v.stage, 0, MAX_STAGE_ALL)) return 'Vallée (étape)';
+  if (v.stage <= MAX_STAGE && v.stage > stageFor(signsOfLife(state))) return 'Vallée (étape)';
+  if (v.stage > MAX_STAGE && (!placesOn(state) || v.stage > stageTarget(state))) return 'Vallée (étape)';
+  if (!obj(v.chapters) || !Array.isArray(v.chapters.read) || !v.chapters.read.every((n) => int(n, 0, MAX_STAGE_ALL))) return 'Vallée (chapitres)';
   if (!(typeof v.spent === 'number' && Number.isFinite(v.spent) && v.spent >= 0)) return 'Vallée (dépenses)';
   if (!obj(v.jars) || !int(v.jars.opened) || v.jars.opened > (state.career.heirlooms || []).length) return 'Vallée (bocaux)';
   if (!obj(v.seeds) || !Object.entries(v.seeds).every(([id, n]) => ALL_VARIETIES_BY_ID[id] && int(n))) return 'Vallée (graines)';
@@ -164,7 +212,42 @@ export function checkValley(state) {
   if (!int(v.jayYear)) return 'Vallée (geai)';
   if (v.fair !== null && !(obj(v.fair) && int(v.fair.year, 1) && (v.fair.varietyId === null || VARIETIES_BY_ID[v.fair.varietyId]) && int(v.fair.price) && typeof v.fair.bought === 'boolean')) return 'Vallée (foire)';
   if (!obj(v.year) || !obj(v.stats) || !int(v.nextId, 1)) return 'Vallée (compteurs)';
-  return checkHeritage(state, v, obj, int);
+  return checkHeritage(state, v, obj, int) || checkPlaces(state, v, obj, int);
+}
+
+/** (V3) Vérification des champs du V3 (une sauvegarde V1 ou V2, sans eux, reste valide). */
+function checkPlaces(state, v, obj, int) {
+  if (v.view !== undefined && !(obj(v.view) && typeof v.view.open === 'boolean' && (v.view.openedAt === null || int(v.view.openedAt, 1)) && int(v.view.visits))) return 'Vallée (vue)';
+  if (v.places !== undefined) {
+    if (!obj(v.places)) return 'Vallée (lieux)';
+    for (const [id, e] of Object.entries(v.places)) {
+      const p = PLACES_BY_ID[id];
+      if (!p || !obj(e) || !int(e.step, 0, PLACE_MAX[id]) || !obj(e.steps)) return `Vallée (lieu ${id})`;
+      const keys = Object.keys(e.steps).map(Number);
+      if (keys.length !== e.step || !keys.every((n) => n >= 1 && n <= e.step) || !Object.values(e.steps).every((d) => int(d, 1))) return `Vallée (étapes du lieu ${id})`;
+      if (e.works !== null && e.works !== undefined) {
+        const w = e.works;
+        if (!obj(w) || w.step !== e.step + 1 || !int(w.startedAt, 1) || !int(w.readyAt, 1) || w.startedAt > w.readyAt || !(typeof w.cost === 'number' && w.cost >= 0)) return `Vallée (chantier ${id})`;
+      }
+    }
+  }
+  if (v.wilds !== undefined) {
+    if (!obj(v.wilds) || Object.keys(v.wilds).length > 34) return 'Vallée (terres sauvages)';
+    const owned = new Set(state.career.lots.map((l) => l.id));
+    for (const [cellId, e] of Object.entries(v.wilds)) {
+      const cell = lotCellOf(cellId);
+      if (!cell || !inLotGrid(cell.col, cell.row) || owned.has(cellId) || !obj(e) || !WILD_KINDS_BY_ID[e.kind] || e.col !== cell.col || e.row !== cell.row || !Number.isInteger(e.at)) return `Vallée (terre sauvage ${cellId})`;
+    }
+    if (v.wildBought !== undefined && v.wildBought !== Object.keys(v.wilds).length) return 'Vallée (terres confiées)';
+  }
+  if (v.river !== undefined && !(obj(v.river) && int(v.river.fishedDay))) return 'Vallée (ruisseau)';
+  if (v.mushrooms !== undefined) {
+    if (!Array.isArray(v.mushrooms) || v.mushrooms.length > MUSHROOM_RULES.max) return 'Vallée (champignons)';
+    for (const m of v.mushrooms) if (!obj(m) || typeof m.id !== 'string' || !MUSHROOMS_BY_ID[m.kind] || !int(m.spot, 0, MUSHROOM_RULES.spots - 1) || !int(m.day)) return 'Vallée (champignon)';
+  }
+  // Arbres du verger conservatoire : seulement au verger.
+  for (const p of state.plots) if (p && (p.cropId === 'cherry' || p.cropId === 'pear') && p.env !== 'orchard') return 'Vallée (arbre du verger conservatoire)';
+  return null;
 }
 
 /** (V2) Vérification des champs du V2 (une sauvegarde V1, `v: 1`, sans eux, reste valide). */
@@ -195,7 +278,7 @@ function checkHeritage(state, v, obj, int) {
   }
   if (v.stories !== undefined) {
     if (!obj(v.stories) || !Array.isArray(v.stories.available) || !Array.isArray(v.stories.read)) return 'Vallée (récits)';
-    if (!v.stories.available.every((id) => STORIES_BY_ID[id]) || !v.stories.read.every((id) => v.stories.available.includes(id))) return 'Vallée (récits)';
+    if (!v.stories.available.every((id) => STORY_BY_ID[id]) || !v.stories.read.every((id) => v.stories.available.includes(id))) return 'Vallée (récits)';
   }
   if (v.year?.heirloomCrops !== undefined && !(Array.isArray(v.year.heirloomCrops) && v.year.heirloomCrops.every((id) => getCrop(id)))) return 'Vallée (cultures de l\'année)';
   return null;
@@ -405,11 +488,113 @@ function dawnEvents(api) {
   const hintedV1 = v.parts.wildlife ? speciesDawn(api) : false;
   if (v.stage >= HEDGE_FIND_RULES.minStage && HEDGE_FIND_RULES.seasons.includes(seasonIdOf(state))) hedgeDawn(api);
   // (V2) Panneau de la Grainothèque et récit, troc (foire ou saison), habitants du V2 (flux valley2, 4 nombres).
+  let hinted = hintedV1;
   if (v.parts.heritage !== false) {
     siteDawn(api);
     if (v.parts.seeds) trocDawn(api);
-    if (v.parts.wildlife) speciesDawn(api, SPECIES_V2, 'valley2', hintedV1);
+    if (v.parts.wildlife) hinted = speciesDawn(api, SPECIES_V2, 'valley2', hintedV1);
   }
+  // (V3) Ouverture de la vue, reprises des lieux, terres sauvages, champignons, habitants de la vallée (flux valley3).
+  if (placesOn(state)) placesDawn(api, hinted);
+}
+
+// ── (V3) Aube : la vallée ───────────────────────────────────────────────────────────────────
+
+function rng3(state) {
+  ensureRng(state);
+  return stream(state.rng, 'valley3');
+}
+
+/** Récit du V3 disponible (une fois) : pousse storyAvailable. */
+function pushStoryV3(api, id) {
+  const v = V(api.state);
+  if (!STORIES_V3_BY_ID[id] || v.stories.available.includes(id)) return null;
+  v.stories.available.push(id);
+  api.push('storyAvailable', { id, title: STORIES_V3_BY_ID[id].title });
+  return id;
+}
+
+/**
+ * Pose l'étape `step` d'un lieu (reprise terminée, ou débogage) : steps[step], Reinette grise au verger 1 (3 greffons),
+ * récit du lieu à sa dernière étape → placeRecovered.
+ */
+function reachPlaceStep(api, placeId, step) {
+  const { state } = api;
+  const v = V(state);
+  const p = PLACES_BY_ID[placeId];
+  const abs = absDay(state);
+  const e = v.places[placeId] || (v.places[placeId] = { step: 0, steps: {}, works: null });
+  e.step = step;
+  e.steps[step] = abs;
+  if (e.works && e.works.step <= step) e.works = null;
+  v.stats.recovered = (v.stats.recovered || 0) + 1;
+  v.year.recovered = (v.year.recovered || 0) + 1;
+  const st = p.steps[step];
+  let grafts = null;
+  if (st.boon.kind === 'graftReinette') {
+    const x = ORCHARD_VARIETIES_BY_ID.reinetteGrise;
+    addVariety(v, x.id, 'orchard', abs);
+    v.seeds[x.id] = (v.seeds[x.id] || 0) + st.boon.value;
+    grafts = { varietyId: x.id, name: x.name, n: st.boon.value };
+  }
+  const story = step >= PLACE_MAX[placeId] && st.story ? st.story : null;
+  api.push('placeRecovered', {
+    placeId, step, name: st.name, placeName: p.name, boon: { kind: st.boon.kind, text: st.boon.text }, species: [...(st.species || [])], story, line: st.line,
+    ...(grafts ? { grafts } : {}), restored: step >= PLACE_MAX[placeId],
+  });
+  if (story) pushStoryV3(api, story);
+}
+
+function placesDawn(api, hintedBefore) {
+  const { state } = api;
+  const v = V(state);
+  const abs = absDay(state);
+  // 1. Ouverture : première aube où la vallée chante (étape ≥ 5).
+  if (!v.view.open && v.stage >= PLACES_OPEN.stage) {
+    v.view.open = true;
+    v.view.openedAt = abs;
+    api.push('valleyViewOpened', { first: true });
+    pushStoryV3(api, 'hill');
+  }
+  if (!v.view.open) return;
+  // 2. Reprises (ordre des lieux) : la condition n'est plus lue, la reprise va à son terme.
+  for (const p of PLACES) {
+    const e = v.places[p.id];
+    if (e?.works && abs >= e.works.readyAt) reachPlaceStep(api, p.id, e.works.step);
+  }
+  // 3. Terres sauvages qui passent à l'état 1 ou 2 ce matin.
+  for (const [cellId, e] of Object.entries(v.wilds)) {
+    const now = wildStageAt(state, e, abs);
+    if (now > wildStageAt(state, e, abs - 1)) api.push('wildLandGrown', { cellId, kind: e.kind, stage: now, name: lotNameAt(e.col, e.row) });
+  }
+  // 4. Champignons : effacés au 1er jour d'hiver ; en automne (bois ≥ 2), 3 nombres à chaque aube.
+  if (state.time.seasonIndex === 3 && state.time.dayOfSeason === 1 && v.mushrooms.length) v.mushrooms = [];
+  if (mushroomSeason(state)) mushroomDawn(api);
+  // 5. Habitants de la vallée (10 nombres valley3) ; une seule venue annoncée par aube toutes espèces confondues.
+  if (v.parts.wildlife) speciesDawn(api, VALLEY_SPECIES, 'valley3', hintedBefore);
+}
+
+function mushroomDawn(api) {
+  const { state } = api;
+  const v = V(state);
+  const rng = rng3(state);
+  const r = [rng.float(), rng.float(), rng.float()];
+  if (v.mushrooms.length >= MUSHROOM_RULES.max || r[0] >= MUSHROOM_RULES.chance) return;
+  const total = MUSHROOMS.reduce((a, m) => a + m.weight, 0);
+  let x = r[1] * total;
+  let kind = MUSHROOMS[MUSHROOMS.length - 1];
+  for (const m of MUSHROOMS) {
+    if (x < m.weight) {
+      kind = m;
+      break;
+    }
+    x -= m.weight;
+  }
+  const free = Array.from({ length: MUSHROOM_RULES.spots }, (_, k) => k).filter((k) => !v.mushrooms.some((m) => m.spot === k));
+  const spot = free[Math.min(free.length - 1, Math.floor(r[2] * free.length))];
+  const m = { id: `m${v.nextId++}`, kind: kind.id, spot, day: absDay(state) };
+  v.mushrooms.push(m);
+  api.push('mushroomsGrew', { finds: [{ id: m.id, kind: m.kind, spot }] });
 }
 
 // ── (V2) Aube : panneau, récits, troc ───────────────────────────────────────────────────────
@@ -472,7 +657,7 @@ function trocDawn(api) {
   api.push('trocOffered', trocPayload(state, entry, from));
 }
 
-/** Fin de l'aube : étape de la vallée (jamais en baisse). */
+/** Fin de l'aube : étape de la vallée (jamais en baisse ; (V3) jusqu'à 7). */
 function updateStage(api) {
   const { state } = api;
   const v = V(state);
@@ -480,7 +665,7 @@ function updateStage(api) {
   const target = stageTarget(state);
   while (v.stage < target) {
     v.stage += 1;
-    const st = STAGES[v.stage];
+    const st = STAGES_ALL[v.stage];
     api.push('valleyStage', { n: st.n, name: st.name, reward: clone(st.reward), chapter: { title: st.chapter.title, lines: [...st.chapter.lines] } });
   }
 }
@@ -488,11 +673,15 @@ function updateStage(api) {
 function beeIncome(api, { seasonId }) {
   const { state } = api;
   const v = V(state);
-  if (!v?.started || !v.parts.seeds || seasonId === 'winter') return [];
+  if (!v?.started || seasonId === 'winter') return [];
+  const out = [];
   const hives = state.investments.beehive || 0;
   const t = TRAITS_BY_ID.bee;
-  if (!hives || beePlotsGrowing(state) < t.minPlots) return [];
-  return [{ source: 'valleyBees', amount: hives * t.perHive, kind: 'valley', key: 'honey' }];
+  if (v.parts.seeds && hives && beePlotsGrowing(state) >= t.minPlots) out.push({ source: 'valleyBees', amount: hives * t.perHive, kind: 'valley', key: 'honey' });
+  // (V3) Prairie fleurie : + 1 pièce par ruche et par jour (hors hiver).
+  const meadow = hives ? meadowHivesOf(state) : 0;
+  if (meadow) out.push({ source: 'valleyMeadow', amount: hives * meadow, kind: 'valley', key: 'honey' });
+  return out;
 }
 
 /** Compteurs de l'année et ce qui est venu cette année (report.valley, query.career.yearReport().valley). */
@@ -504,16 +693,25 @@ export function careerValleyYear(state) {
   const installed = ALL_SPECIES.filter((s) => v.species[s.id]?.state === 'installed' && (v.species[s.id].at ?? 0) >= from).map((s) => s.id);
   const fixed = ALL_VARIETIES.filter((x) => (v.varieties[x.id]?.fixedAt ?? 0) >= from).map((x) => x.id);
   const v2 = v.parts.heritage !== false ? { swaps: v.year.swaps || 0, crosses: v.year.crosses || 0, meets: v.year.meets || 0, libraryLevel: libraryLevelOf(state) } : {};
+  // (V3) Bloc « La vallée cette année » : chantiers, étapes de lieux atteintes, habitants de la vallée, terres, pêches.
+  const v3 = placesOn(state)
+    ? {
+        works: v.year.works || 0, recovered: v.year.recovered || 0, valleyInstalled: v.year.valleyInstalled || 0, wilds: v.year.wilds || 0,
+        river: v.year.river || 0, riverIncome: v.year.riverIncome || 0, mushrooms: v.year.mushrooms || 0,
+        places: PLACES.map((p) => ({ id: p.id, step: placeStepOf(state, p.id) })),
+      }
+    : {};
   return {
     started: !!v.started,
     stage: v.stage,
-    stageName: STAGE_NAMES[v.stage],
+    stageName: STAGES_ALL[v.stage]?.name || STAGE_NAMES[v.stage],
     signs: signsOfLife(state),
     year: clone(v.year),
     installed,
     fixed,
     natureTotal: Object.keys(v.nature).length,
     ...v2,
+    ...v3,
   };
 }
 
@@ -648,11 +846,10 @@ export function heirloomSeedCost(api, varietyId) {
   return fixedSeedCost(isTreeCrop(crop) ? treeSeedCost(api.state, crop) : api.seedCost(crop.id), api.state);
 }
 
-/** Variété connue de cette partie (le V2 seulement avec la partie `heritage`). */
+/** Variété connue de cette partie (le V2 seulement avec la partie `heritage` ; la Reinette grise avec `places`). */
 function knownVariety(state, id) {
   const x = ALL_VARIETIES_BY_ID[id];
-  if (!x) return null;
-  if (x.group !== 'pays' && valleyOf(state)?.parts?.heritage === false) return null;
+  if (!x || !varietyInPart(state, x)) return null;
   return x;
 }
 
@@ -808,7 +1005,7 @@ function observe(api, speciesId) {
   const { state } = api;
   const v = V(state);
   const s0 = ALL_SPECIES_BY_ID[speciesId];
-  const s = s0 && (s0.group !== 'v2' || v.parts.heritage !== false) ? s0 : null;
+  const s = s0 && speciesInPart(state, s0) ? s0 : null;
   const e = s ? v.species[speciesId] : null;
   if (e?.state === 'installed') return api.fail(`Déjà ${agreeWith(s, 'installé')}.`);
   if (!s || !v.parts.wildlife || e?.state !== 'visible') return api.fail('Rien à observer ici.');
@@ -817,9 +1014,17 @@ function observe(api, speciesId) {
   v.stats.observed += 1;
   v.year.installed += 1;
   const first = installedSpecies(state).length === 1;
-  const extra = s.welcome ? { welcome: s.welcome } : {};
+  // (V3) Un habitant de la vallée : la fenêtre montre ce qu'il ouvre ; le premier fait venir Hélène (récit).
+  const valley = s.group === 'valley';
+  let firstValley = false;
+  if (valley) {
+    v.year.valleyInstalled = (v.year.valleyInstalled || 0) + 1;
+    firstValley = VALLEY_SPECIES.filter((x) => speciesInstalled(state, x.id)).length === 1;
+  }
+  const extra = { ...(s.welcome ? { welcome: s.welcome } : {}), ...(valley ? { valley: true, opens: s.opens, placeId: s.placeId, firstValley } : {}) };
   const out = { speciesId, name: s.name, service: serviceInfo(s), first, anecdote: s.anecdote, spotId: e.spotId, ...extra };
   api.push('speciesInstalled', { id: speciesId, name: s.name, service: serviceInfo(s), first, anecdote: s.anecdote, spotId: e.spotId, ...extra });
+  if (firstValley) pushStoryV3(api, 'helene');
   return { ok: true, ...out };
 }
 
@@ -832,7 +1037,8 @@ function pickHedgeFind(api, findId) {
   if (k < 0) return api.fail('Rien à cueillir ici.');
   const find = v.finds.splice(k, 1)[0];
   const def = HEDGE_FINDS_BY_ID[find.kind];
-  const amount = Math.round(def.coins * careerFactor(state.career.rank));
+  // (V3) Bocage : pièces × 1,5 (haies replantées), × 2 (vieux têtards).
+  const amount = Math.round(def.coins * careerFactor(state.career.rank) * hedgeCoinsFactorOf(state));
   api.earn('valley', amount);
   v.stats.finds[find.kind] = (v.stats.finds[find.kind] || 0) + 1;
   v.year.finds += 1;
@@ -873,7 +1079,7 @@ function buyFairHeirloom(api) {
 }
 
 function chapterOf(n) {
-  const st = STAGES[n];
+  const st = STAGES_ALL[n];
   return { n, title: st.chapter.title, lines: [...st.chapter.lines] };
 }
 
@@ -1008,10 +1214,137 @@ function readStory(api, id) {
   const refused = needStarted(api);
   if (refused) return refused;
   const v = V(api.state);
-  const s = STORIES_BY_ID[id];
-  if (!s || !v.stories?.available.includes(id)) return api.fail('Récit inconnu.');
+  const s = STORY_BY_ID[id];
+  if (!s || !v.stories?.available.includes(id) || (STORIES_V3_BY_ID[id] && !placesOn(api.state))) return api.fail('Récit inconnu.');
   if (!v.stories.read.includes(id)) v.stories.read.push(id);
   return { ok: true, story: { id: s.id, title: s.title, lines: [...s.lines], vignette: s.vignette } };
+}
+
+
+// ── (V3) Actions : vue de la vallée, chantiers, pêche, champignons, terres sauvages ─────────
+
+function needPlaces(api) {
+  const refused = needStarted(api);
+  if (refused) return refused;
+  if (!placesOn(api.state)) return api.fail(PLACES_TEXTS.disabled);
+  if (!viewOpen(api.state)) return api.fail(PLACES_TEXTS.notOpen);
+  return null;
+}
+
+/** Ouvre la vue de la vallée (compte une visite). → { ok, first, story: null | 'hill' } */
+function openValleyView(api) {
+  const refused = needPlaces(api);
+  if (refused) return refused;
+  const v = V(api.state);
+  v.view.visits = (v.view.visits || 0) + 1;
+  v.stats.visits = (v.stats.visits || 0) + 1;
+  const story = v.stories.available.includes('hill') && !v.stories.read.includes('hill') ? 'hill' : null;
+  return { ok: true, first: v.view.visits === 1, story };
+}
+
+/** Lance le chantier de l'étape suivante d'un lieu (poste « La Vallée », patrimoine 100 %). */
+function startWorks(api, placeId) {
+  const refused = needPlaces(api);
+  if (refused) return refused;
+  const { state } = api;
+  const check = canStartWorks(state, placeId);
+  if (!check.ok) return api.fail(check.reason);
+  const v = V(state);
+  const p = PLACES_BY_ID[placeId];
+  const st = p.steps[check.step];
+  const abs = absDay(state);
+  const readyAt = abs + st.seasons * state.career.seasonLength;
+  spendValley(api, st.cost);
+  const e = v.places[placeId] || (v.places[placeId] = { step: 0, steps: {}, works: null });
+  e.works = { step: st.n, startedAt: abs, readyAt, cost: st.cost };
+  v.stats.works = (v.stats.works || 0) + 1;
+  v.year.works = (v.year.works || 0) + 1;
+  const first = v.stats.works === 1;
+  const out = { placeId, step: st.n, name: st.name, cost: st.cost, seasons: st.seasons, readyAt, daysLeft: readyAt - abs, first };
+  api.push('worksStarted', { placeId, step: st.n, name: st.name, placeName: p.name, cost: st.cost, seasons: st.seasons, readyAt, first });
+  return { ok: true, ...out };
+}
+
+/** Pêche au ruisseau (une par jour ; 2 nombres valley3 : le poisson, la valeur). */
+function fishRiver(api) {
+  const refused = needPlaces(api);
+  if (refused) return refused;
+  const { state } = api;
+  const info = riverInfo(state);
+  if (!info.canFish) return api.fail(info.reason);
+  const v = V(state);
+  const table = riverFishTable(state);
+  const rng = rng3(state);
+  const weights = Object.fromEntries(table.map((f, k) => [k, f.weight]));
+  const f = table[Number(rng.weighted(weights))];
+  // Libellules × 1,25, étang du moulin × 1,15 (fishFactor), canne de Firmin × 1,5 (comme la mare).
+  const amount = Math.round(rng.int(f.min, f.max) * fishFactor(state) * (state.variety ? themeFishFactor(state) : 1));
+  v.river.fishedDay = absDay(state);
+  v.stats.river = (v.stats.river || 0) + 1;
+  v.stats.riverIncome = (v.stats.riverIncome || 0) + amount;
+  v.year.river = (v.year.river || 0) + 1;
+  v.year.riverIncome = (v.year.riverIncome || 0) + amount;
+  api.earn('valley', amount);
+  const first = v.stats.river === 1;
+  api.push('riverFished', { fishId: f.id, name: f.name, icon: f.icon, amount, first });
+  return { ok: true, fishId: f.id, name: f.name, icon: f.icon, amount, first };
+}
+
+/** Cueille un champignon du bois (pièces × careerFactor(rang), comme la cueillette des haies). */
+function pickMushroom(api, id) {
+  const refused = needPlaces(api);
+  if (refused) return refused;
+  const { state } = api;
+  const v = V(state);
+  const k = v.mushrooms.findIndex((m) => m.id === id);
+  if (k < 0) return api.fail(PLACES_TEXTS.noMushroom);
+  const m = v.mushrooms.splice(k, 1)[0];
+  const def = MUSHROOMS_BY_ID[m.kind];
+  const amount = Math.round(def.coins * careerFactor(state.career.rank));
+  api.earn('valley', amount);
+  v.stats.mushrooms = (v.stats.mushrooms || 0) + 1;
+  v.year.mushrooms = (v.year.mushrooms || 0) + 1;
+  api.push('mushroomPicked', { id: m.id, kind: m.kind, name: def.name, amount, spot: m.spot });
+  return { ok: true, kind: m.kind, name: def.name, amount };
+}
+
+/** Confie une forêt à la nature (sorte choisie pour toujours ; 2 500 + 300 × n ; patrimoine 100 %). */
+function rewild(api, cellId, kind) {
+  const refused = needStarted(api);
+  if (refused) return refused;
+  const { state } = api;
+  if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+  if ((state.career.lotsBought || 0) < WILD_RULES.needLots) return api.fail(PLACES_TEXTS.wildNeedLots);
+  const open = wildOpen(state);
+  if (!open.open) return api.fail(open.reason);
+  const cell = lotCellOf(cellId);
+  if (!cell || !inLotGrid(cell.col, cell.row)) return api.fail(PLACES_TEXTS.wildUnknown);
+  const v = V(state);
+  if (v.wilds[cellId] || state.career.lots.some((l) => l.id === cellId)) return api.fail(PLACES_TEXTS.wildNotForest);
+  if (!wildEligible(state).includes(cellId)) return api.fail(PLACES_TEXTS.wildNotTouching);
+  const k = WILD_KINDS_BY_ID[kind];
+  if (!k) return api.fail(PLACES_TEXTS.wildKindUnknown);
+  const cost = wildPrice(state);
+  if (state.money < cost) return api.fail(notEnough(cost - state.money));
+  spendValley(api, cost);
+  v.wilds[cellId] = { kind, col: cell.col, row: cell.row, at: absDay(state) };
+  v.wildBought = (v.wildBought || 0) + 1;
+  v.stats.wilds = (v.stats.wilds || 0) + 1;
+  v.year.wilds = (v.year.wilds || 0) + 1;
+  const name = lotNameAt(cell.col, cell.row);
+  const first = v.wildBought === 1;
+  api.push('wildLandGiven', { cellId, col: cell.col, row: cell.row, name, kind, cost, first });
+  return { ok: true, cellId, col: cell.col, row: cell.row, name, kind, cost, n: v.wildBought, first };
+}
+
+/** (Débogage) Ouvre la vue tout de suite (comme à l'aube de l'étape 5 : récit « Sur la colline »). */
+function openViewNow(api) {
+  const v = V(api.state);
+  if (v.view.open) return;
+  v.view.open = true;
+  v.view.openedAt = absDay(api.state);
+  api.push('valleyViewOpened', { first: true });
+  pushStoryV3(api, 'hill');
 }
 
 /** Débogage et tests (passent par l'état ; jamais appelé par le jeu). */
@@ -1113,7 +1446,7 @@ function triggerValley(api, kind, arg, arg2) {
     case 'visible':
     case 'install': {
       const s0 = ALL_SPECIES_BY_ID[arg];
-      const s = s0 && (s0.group !== 'v2' || v.parts.heritage !== false) ? s0 : null;
+      const s = s0 && speciesInPart(state, s0) ? s0 : null;
       if (!s) return api.fail('Espèce inconnue.');
       const spotId = speciesSpot(state, s.id);
       if (v.species[s.id]?.state === 'installed') return api.fail('Déjà installé.');
@@ -1125,21 +1458,110 @@ function triggerValley(api, kind, arg, arg2) {
       return observe(api, s.id);
     }
     case 'stage': {
-      const n = Math.max(0, Math.min(MAX_STAGE, Number(arg) || 0));
+      const p3 = placesOn(state);
+      const n = Math.max(0, Math.min(p3 ? MAX_STAGE_ALL : MAX_STAGE, Number(arg) || 0));
+      // (V3) Étapes 6 et 7 : la vue ouverte et les conditions de lieux posées d'abord (Ru des Saules ≥ 2 ; six lieux ≥ 2).
+      if (p3 && n >= 6) {
+        openViewNow(api);
+        for (const pl of PLACES) {
+          const want = n >= 7 ? 2 : pl.id === 'brook' ? 2 : 0;
+          if (placeStepOf(state, pl.id) < want) triggerValley(api, 'place', pl.id, want);
+        }
+      }
       // Signes de vie jusqu'au palier (variétés fixées d'abord, puis habitants), puis l'étape (comme à l'aube).
       const need = stageSignsOf(state, n);
       const h = heritagePartOn(state);
       for (const x of h ? ALL_VARIETIES : VARIETIES) {
         if (signsOfLife(state) >= need) break;
-        if (!isFixed(state, x.id)) triggerValley(api, 'fix', x.id);
+        if (!isFixed(state, x.id) && varietyInPart(state, x)) triggerValley(api, 'fix', x.id);
       }
       for (const s of h && v.parts.wildlife ? ALL_SPECIES : SPECIES) {
         if (signsOfLife(state) >= need) break;
-        if (v.species[s.id]?.state !== 'installed') triggerValley(api, 'install', s.id);
+        if (v.species[s.id]?.state !== 'installed' && speciesInPart(state, s)) triggerValley(api, 'install', s.id);
+      }
+      // (V3) Encore court (étape 7 : 76 signes) : les lieux avancent d'une étape à la fois.
+      if (p3 && n >= 6) {
+        let guard = 0;
+        while (signsOfLife(state) < need && guard++ < 30) {
+          const pl = PLACES.find((x) => placeStepOf(state, x.id) < PLACE_MAX[x.id]);
+          if (!pl) break;
+          triggerValley(api, 'place', pl.id, placeStepOf(state, pl.id) + 1);
+        }
       }
       updateStage(api);
       return { ok: true, stage: v.stage };
     }
+    // (V3) Vue de la vallée, lieux, terres sauvages, champignons, ruisseau (débogage et tests).
+    case 'view':
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      openViewNow(api);
+      return { ok: true };
+    case 'works': {
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      const pl = PLACES_BY_ID[arg];
+      if (!pl) return api.fail(PLACES_TEXTS.unknownPlace);
+      openViewNow(api);
+      const step = placeStepOf(state, arg) + 1;
+      const st = pl.steps[step];
+      if (!st) return api.fail(PLACES_TEXTS.restored);
+      const e = v.places[arg] || (v.places[arg] = { step: 0, steps: {}, works: null });
+      e.works = { step, startedAt: abs, readyAt: abs + st.seasons * state.career.seasonLength, cost: 0 };
+      api.push('worksStarted', { placeId: arg, step, name: st.name, placeName: pl.name, cost: 0, seasons: st.seasons, readyAt: e.works.readyAt, first: false });
+      return { ok: true, readyAt: e.works.readyAt };
+    }
+    case 'recover': {
+      const e = placesOn(state) ? v.places[arg] : null;
+      if (!e?.works) return api.fail('Aucun chantier ici.');
+      e.works.readyAt = Math.max(e.works.startedAt, abs + 1);
+      return { ok: true, readyAt: e.works.readyAt };
+    }
+    case 'place': {
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      const pl = PLACES_BY_ID[arg];
+      if (!pl) return api.fail(PLACES_TEXTS.unknownPlace);
+      openViewNow(api);
+      const target = Math.max(0, Math.min(PLACE_MAX[arg], Math.floor(Number(arg2) || 0)));
+      for (let k = placeStepOf(state, arg) + 1; k <= target; k++) reachPlaceStep(api, arg, k);
+      return { ok: true, step: placeStepOf(state, arg) };
+    }
+    case 'wild': {
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      const cell = lotCellOf(arg);
+      if (!cell || !inLotGrid(cell.col, cell.row) || v.wilds[arg] || state.career.lots.some((l) => l.id === arg)) return api.fail(PLACES_TEXTS.wildNotForest);
+      const kindId = WILD_KINDS_BY_ID[arg2] ? arg2 : WILD_KINDS[0].id;
+      v.wilds[arg] = { kind: kindId, col: cell.col, row: cell.row, at: abs };
+      v.wildBought = (v.wildBought || 0) + 1;
+      api.push('wildLandGiven', { cellId: arg, col: cell.col, row: cell.row, name: lotNameAt(cell.col, cell.row), kind: kindId, cost: 0, first: v.wildBought === 1 });
+      return { ok: true };
+    }
+    case 'wildGrow': {
+      const e = placesOn(state) ? v.wilds[arg] : null;
+      if (!e) return api.fail('Pas de terre sauvage ici.');
+      // Avance d'un état (0 → 1 → 2) tout de suite ; `at` peut passer avant le jour 1 (débogage).
+      const L = state.career.seasonLength;
+      const now = wildStageAt(state, e, abs);
+      if (now >= 2) return { ok: true, stage: 2 };
+      e.at = abs - (now === 0 ? WILD_RULES.youngSeasons : WILD_RULES.grownSeasons) * L;
+      api.push('wildLandGrown', { cellId: arg, kind: e.kind, stage: now + 1, name: lotNameAt(e.col, e.row) });
+      return { ok: true, stage: now + 1 };
+    }
+    case 'mushrooms': {
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      const n = Math.max(1, Math.min(MUSHROOM_RULES.max, Number(arg) || MUSHROOM_RULES.max));
+      const added = [];
+      while (v.mushrooms.length < n) {
+        const spot = Array.from({ length: MUSHROOM_RULES.spots }, (_, k) => k).find((k) => !v.mushrooms.some((m) => m.spot === k));
+        const m = { id: `m${v.nextId++}`, kind: MUSHROOMS[v.mushrooms.length % MUSHROOMS.length].id, spot, day: abs };
+        v.mushrooms.push(m);
+        added.push({ id: m.id, kind: m.kind, spot });
+      }
+      if (added.length) api.push('mushroomsGrew', { finds: added });
+      return { ok: true, mushrooms: v.mushrooms.length };
+    }
+    case 'riverReset':
+      if (!placesOn(state)) return api.fail(PLACES_TEXTS.disabled);
+      v.river.fishedDay = 0;
+      return { ok: true };
     case 'finds': {
       const hedges = Object.entries(v.nature).filter(([, n]) => n.kind === 'hedge').map(([spotId]) => spotId);
       if (!hedges.length) return api.fail('Aucune haie.');
@@ -1173,14 +1595,14 @@ function triggerValley(api, kind, arg, arg2) {
 
 // ── Requêtes ───────────────────────────────────────────────────────────────────────────────
 
-/** Variétés de la partie : les 35 avec le V2, les 12 du pays sinon. */
+/** Variétés de la partie : les 35 avec le V2 (36 avec le V3 : la Reinette grise), les 12 du pays sinon. */
 function partVarieties(state) {
-  return heritagePartOn(state) ? ALL_VARIETIES : VARIETIES;
+  return heritagePartOn(state) ? ALL_VARIETIES.filter((x) => varietyInPart(state, x)) : VARIETIES;
 }
 
-/** Habitants de la partie : les 16 avec le V2, les 12 du V1 sinon. */
+/** Habitants de la partie : les 16 avec le V2 (26 avec le V3), les 12 du V1 sinon. */
 function partSpecies(state) {
-  return heritagePartOn(state) ? ALL_SPECIES : SPECIES;
+  return heritagePartOn(state) ? ALL_SPECIES.filter((s) => speciesInPart(state, s)) : SPECIES;
 }
 
 /** (V2) Lien d'un parent avec son croisement : { cropId, partnerId, partnerName, meet, need, found } | null. */
@@ -1205,13 +1627,14 @@ function varietyInfo(api, x) {
       const c = clientInfo(x.clientId);
       hint = `${c.clientName} la garde dans son jardin : un troc, au tableau du village.`;
     } else if (group === 'cross') hint = HERITAGE_TEXTS.crossRule;
+    else if (group === 'orchard') hint = 'Trois greffons du verger conservatoire, quand il sera taillé et greffé (étape 1).';
     else hint = JOSEPH_BOX.varieties.includes(x.id) ? VALLEY_TEXTS.boxVariety : tree ? VALLEY_TEXTS.graftVariety : VALLEY_TEXTS.unknownVariety;
   }
   let name;
   if (group === 'cross') name = e ? varietyName(state, x) : '?';
   else name = e ? x.name : getCrop(x.cropId).name;
   const traits = traitInfos(x);
-  const extra = group === 'pays' ? {} : {
+  const extra = group === 'pays' ? {} : group === 'orchard' ? { clientId: null, seal: PLACES_TEXTS.orchardLabel } : {
     clientId: x.clientId || null,
     ...(group === 'cross' ? { parents: x.parents.map((id) => ({ varietyId: id, name: ALL_VARIETIES_BY_ID[id].name, icon: ALL_VARIETIES_BY_ID[id].icon })) } : {}),
   };
@@ -1236,6 +1659,8 @@ function speciesInfo(state, s, counts) {
     recipe: r.items, recipeOk: r.ok, service: serviceInfo(s), spotId: e?.spotId || null, where: e?.spotId ? whereText(state, e.spotId) : null,
     hint: st !== 'unknown' ? s.hint : null, hintIcon: s.hintIcon, anecdote: st === 'installed' ? s.anecdote : null, firstMet: s.firstMet || null,
     group: s.group || 'v1', ...(s.welcome ? { welcome: s.welcome } : {}),
+    // (V3) Habitant de la vallée : son lieu, où on le voit, ce qu'il ouvre ; « Il vous attend au ruisseau ».
+    ...(s.group === 'valley' ? { placeId: s.placeId, seenAt: s.seenAt, opens: s.opens, where: whereText(state, s.placeId) } : {}),
   };
 }
 
@@ -1293,8 +1718,10 @@ function valleyQuery(api) {
   if (!v) return null;
   if (!v.started) return { started: null, startsAtRank: VALLEY_START.rank };
   const signs = signsOfLife(state);
-  const st = STAGES[v.stage];
-  const next = STAGES[v.stage + 1] || null;
+  const p3 = placesOn(state);
+  const stages = stagesOf(state);
+  const st = STAGES_ALL[v.stage];
+  const next = stages[v.stage + 1] || null;
   const counts = habitatCounts(state);
   const jars = (state.career.heirlooms || []).slice(v.jars.opened).map((j, k) => ({
     index: v.jars.opened + k, cropId: j.cropId, label: VARIETIES_BY_ID[VARIETY_OF_CROP[j.cropId]]?.label || null, from: j.from || 'find',
@@ -1304,9 +1731,13 @@ function valleyQuery(api) {
   const out = {
     started: clone(v.started),
     parts: { ...v.parts },
-    stage: { n: v.stage, name: st.name, signs, total: v2 ? SIGNS_ALL : SIGNS_V1, next: next ? { n: next.n, name: next.name, signs: stageSignsOf(state, next.n) } : null, vignette: `valley.stage.${v.stage}`, reward: clone(st.reward) },
+    stage: {
+      n: v.stage, name: st.name, signs, total: p3 ? SIGNS_ALL_V3 : v2 ? SIGNS_ALL : SIGNS_V1,
+      next: next ? { n: next.n, name: next.name, signs: stageSignsOf(state, next.n), ...(next.n >= 6 ? { needs: stageNeedText(next.n) } : {}) } : null,
+      vignette: `valley.stage.${v.stage}`, reward: clone(st.reward), max: p3 ? MAX_STAGE_ALL : MAX_STAGE,
+    },
     hint: nextHint(state),
-    chapters: STAGES.map((s) => ({ n: s.n, title: s.chapter.title, lines: [...s.chapter.lines], read: v.chapters.read.includes(s.n), available: s.n <= v.stage })),
+    chapters: stages.map((s) => ({ n: s.n, title: s.chapter.title, lines: [...s.chapter.lines], read: v.chapters.read.includes(s.n), available: s.n <= v.stage })),
     jars: { pending: jars.length, list: jars },
     varieties: partVarieties(state).map((x) => varietyInfo(api, x)),
     species: partSpecies(state).map((s) => speciesInfo(state, s, counts)),
@@ -1322,7 +1753,7 @@ function valleyQuery(api) {
     heritage: v2,
   };
   if (!v2) return out;
-  return {
+  const withV2 = {
     ...out,
     library: libraryInfo(state),
     troc: v.parts.seeds ? swapInfo(state) : null,
@@ -1331,6 +1762,30 @@ function valleyQuery(api) {
     box: boxInfo(state),
     stories: storiesInfo(state),
     crossRule: HERITAGE_TEXTS.crossRule,
+  };
+  if (!p3) return withV2;
+  return { ...withV2, ...placesQuery(state) };
+}
+
+/** (V3) Champs du V3 de query.career.valley() : vue, lieux, terres sauvages, ruisseau, champignons. */
+function placesQuery(state) {
+  const v = V(state);
+  const open = viewOpen(state);
+  const wo = wildOpen(state);
+  const cells = Object.values(wildCells(state)).map((c) => ({ cellId: c.cellId, col: c.col, row: c.row, name: c.name, kind: c.kind, kindName: c.kindName, stage: c.stage, stageName: c.stageName, seasonsLeft: c.seasonsLeft, daysLeft: c.daysLeft }));
+  const river = riverInfo(state);
+  return {
+    places3: true,
+    view: { open, opensAtStage: PLACES_OPEN.stage, visits: v.view.visits || 0, openedAt: v.view.openedAt },
+    places: placesInfo(state),
+    steps: { done: PLACES.reduce((a, p) => a + placeStepOf(state, p.id), 0), total: PLACES.reduce((a, p) => a + PLACE_MAX[p.id], 0) },
+    wilds: {
+      open: wo.open, reason: wo.reason, count: Object.keys(v.wilds).length, total: wo.open ? wildTotal(state) : WILD_RULES.total, nextPrice: wildPrice(state),
+      kinds: WILD_KINDS.map((k) => ({ id: k.id, name: k.name, icon: k.icon, text: k.text, grown: k.grown })), eligible: wildEligible(state), cells,
+      before: PLACES_TEXTS.wildBefore,
+    },
+    river: { canFish: river.canFish, fishedToday: river.fishedToday, step: river.step, reason: river.reason },
+    mushrooms: mushroomsInfo(state),
   };
 }
 
@@ -1355,7 +1810,8 @@ function valleyAnimalsQuery(api) {
   if (!v?.started || !v.parts.wildlife) return [];
   const out = [];
   const abs = absDay(state);
-  const list = partSpecies(state);
+  // (V3) Les habitants de la vallée ne viennent pas sur la ferme : ils attendent dans la vue (query.career.valleyView()).
+  const list = partSpecies(state).filter((s) => s.group !== 'valley');
   for (const s of list) {
     const e = v.species[s.id];
     if (!e) continue;
@@ -1467,7 +1923,18 @@ export function valleyAchievementContext(state) {
     fixedVillage: fixed.filter((id) => group(id) === 'village').length,
     fixedCross: fixed.filter((id) => group(id) === 'cross').length,
     installedV1: installed.filter((id) => SPECIES_BY_ID[id]).length,
-    installedV2: installed.filter((id) => !SPECIES_BY_ID[id]).length,
+    installedV2: installed.filter((id) => ALL_SPECIES_BY_ID[id]?.group === 'v2').length,
+    // (V3) étapes des lieux, lieux restaurés, habitants de la vallée, terres confiées, pêches au ruisseau.
+    ...(placesOn(state)
+      ? {
+          places: Object.fromEntries(PLACES.map((p) => [p.id, placeStepOf(state, p.id)])),
+          restored: PLACES.filter((p) => placeStepOf(state, p.id) >= PLACE_MAX[p.id]).map((p) => p.id),
+          valleyInstalled: installed.filter((id) => VALLEY_SPECIES_BY_ID[id]),
+          wilds: Object.keys(v.wilds || {}).length,
+          riverFish: v.stats.river || 0,
+          works: v.stats.works || 0,
+        }
+      : {}),
   };
 }
 
@@ -1516,6 +1983,10 @@ export const valleyExtension = {
     patrimony(state) {
       return state.career?.valley ? state.career.valley.spent || 0 : 0;
     },
+    // (V3) Moulin à eau (Ru des Saules ≥ 4) : + 1 place au moulin.
+    extraPlaces(state, buildingId) {
+      return state.career?.valley ? millPlacesOf(state, buildingId) : 0;
+    },
     unlocks(rank) {
       // (V2) La Grainothèque au rang 3 ; le nichoir à chauves-souris (rang 4) vient avec les aménagements.
       const out = rank === SEED_LIBRARY.siteRank ? [{ kind: 'valley', id: 'seedLibrary', name: SEED_LIBRARY.name }] : [];
@@ -1537,6 +2008,12 @@ export const valleyExtension = {
     swapSeeds: (varietyId) => swapSeeds(api, varietyId),
     sowPair: (plotIndex, cropId) => sowPair(api, plotIndex, cropId),
     readStory: (id) => readStory(api, id),
+    // (V3)
+    openValleyView: () => openValleyView(api),
+    startWorks: (placeId) => startWorks(api, placeId),
+    fishRiver: () => fishRiver(api),
+    pickMushroom: (id) => pickMushroom(api, id),
+    rewild: (cellId, kind) => rewild(api, cellId, kind),
   }),
   queries: (api) => ({
     valley: () => valleyQuery(api),
@@ -1545,6 +2022,10 @@ export const valleyExtension = {
     // (V2)
     valleyCrossLinks: () => (valleyOf(api.state) ? crossLinks(api.state) : []),
     valleyPairPlots: (cropId) => (heritageSeedsOn(api.state) ? pairPlots(api.state, cropId) : []),
+    // (V3)
+    valleyView: () => (valleyOf(api.state) ? viewInfo(api.state) : null),
+    wildCell: (cellId) => (placesOn(api.state) ? wildCellInfo(api.state, cellId) : null),
+    place: (placeId) => (viewOpen(api.state) ? placeInfo(api.state, placeId) : null),
   }),
 };
 

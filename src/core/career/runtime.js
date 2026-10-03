@@ -37,7 +37,9 @@
 //      moneyChanged (un seul pour toute l'aube), rangs (rankUp), seasonWarning.
 
 import { DAY_SECONDS, EPSILON, SEASONS, WARNING_DAYS } from '../../data/balance.js';
-import { getCrop, isRareCrop, isTreeCrop } from '../../data/crops.js';
+import { getCrop, isRareCrop, isTreeCrop, isValleyTree } from '../../data/crops.js';
+import { PLACES_TEXTS } from '../../data/career/places.js';
+import { treesUnlocked } from './places.js';
 import { CROW_PENALTY, HARDSHIP, MAX_STAFF } from '../../data/career/career.js';
 import { BUILDINGS, BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { FARM_NAME_MAX } from '../../data/cosmetics.js';
@@ -183,8 +185,11 @@ export function createCareerRuntime(core) {
     const rare = !!state.variety && isRareCrop(crop.id);
     if (rare && by !== 'player') return fail('Les graines rares se sèment à la main.');
     if (rare && freeSowKind(state, crop.id) !== 'rare') return fail('Plus de graines rares : le colporteur en vend.');
+    // (Vallée V3) Cerisier et poirier du verger conservatoire : plantés à la main, une fois débloqués par le verger.
+    const valleyTree = !!state.career.valley && isValleyTree(crop.id);
+    if (valleyTree && (by !== 'player' || !treesUnlocked(state).includes(crop.id))) return fail(PLACES_TEXTS.treeLocked[crop.id]);
     // (Vallée vivante) Une variété ancienne se sème quel que soit le rang de sa culture (cadeau de la vallée).
-    if (!rare && !heirloom && !core.getCrops().includes(crop)) {
+    if (!rare && !heirloom && !valleyTree && !core.getCrops().includes(crop)) {
       const r = cropRank(crop.id);
       return fail(r ? `${crop.name} : ${rankLabel(r)}` : 'Culture inconnue.');
     }
@@ -384,8 +389,9 @@ export function createCareerRuntime(core) {
     // (Vallée V2) Variété parfumée : le rendement de la place d'atelier × 1,15 (rien de nouveau dans les places).
     const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, state.career.valley && p.variety ? yf * scentedFactorOf(state, p) : yf);
     let stored = false;
-    // (Vallée vivante) Une variété ancienne ne va jamais au grenier (son trait ne se perd pas dans le stock).
-    if (!diverted && !processed && !p.variety && wouldStore(state, cropId)) {
+    // (Vallée vivante) Une variété ancienne ne va jamais au grenier (son trait ne se perd pas dans le stock) ; (V3) les fruits
+    // du cerisier et du poirier non plus (cours fixe, hors de CROPS : le grenier ne les vendrait pas).
+    if (!diverted && !processed && !p.variety && !isValleyTree(cropId) && wouldStore(state, cropId)) {
       addStock(state, cropId);
       stored = true;
     }

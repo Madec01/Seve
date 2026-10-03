@@ -20,6 +20,9 @@
 //   journalCard(ui), reportSection(ui)   Carnet › Ferme (carte « La Vallée ») et Carnet › Bilan
 //   frame(), reset(game|null), enabled(game), started(game), debugState()
 // }
+// (Lot V3) Délègue à app.places (src/ui/career/places.js) : le segment « Lieux », les habitants de la vallée (groupe
+// « De la vallée »), le prochain indice (valleyAnimal, place, placeNeed, wild), les gestes de la scène (poteau, terres
+// sauvages), les lignes « À faire » vl-view-animal / vl-mushrooms ; chapitres 6 et 7 ; repaint().
 //
 // Règles : carrière seulement (rien sans state.career.valley) ; rien ne presse, rien ne culpabilise (une bête attend
 // sans limite de temps, un bocal attend qu'on l'ouvre) ; cibles ≥ 48 px, textes ≥ 14 px, peu de texte ; traits en
@@ -34,6 +37,10 @@ import { v3 } from '../v3.js';
 import { readPrefs } from '../guide-prefs.js';
 import { SEED_RULES, STAGES, VALLEY_HINTS, NATURE_ITEMS_BY_ID, TRAITS_BY_ID, JOSEPH_BOX, BOON_TEXTS, agreeWith, savedText } from '../../data/career/valley.js';
 import * as VD from '../../data/career/valley.js';
+import { BOON_TEXTS_V3, STAGES_V3, VALLEY_SPECIES_BY_ID } from '../../data/career/places.js';
+
+/** (V3) Habitant de la vallée (il attend dans la vue de la vallée, pas sur la ferme). */
+const isValleySp = (id) => !!VALLEY_SPECIES_BY_ID?.[id];
 
 // (V2) Lectures par identifiant sur les tables réunies (35 variétés, 16 habitants) quand elles existent.
 const VARIETIES_BY_ID = VD.ALL_VARIETIES_BY_ID || VD.VARIETIES_BY_ID;
@@ -130,6 +137,11 @@ export function fixBar(hand, need, unit = 'graine') {
 export function signsRow(signs, target) {
   const max = Math.max(1, target);
   const n = Math.max(0, Math.min(max, signs));
+  // (V3) Jusqu'à 99 signes : au-delà de 40 points, une barre lue (la rangée irait sur trois lignes).
+  if (max > 40) {
+    const pct = Math.round((n / max) * 100);
+    return el('span.vl-signs.is-bar', { role: 'img', 'aria-label': `${n} signes de vie sur ${max}` }, el('span.vl-signs-fill', { style: { width: `${pct}%` }, 'aria-hidden': 'true' }));
+  }
   return el(
     'span.vl-signs',
     { role: 'img', 'aria-label': `${n} signes de vie sur ${max}` },
@@ -272,7 +284,7 @@ export function createValley(app) {
     const next = st.next;
     return el(
       'div.vl-head',
-      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶'][st.n] || '🌿')),
+      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶', '💧', '🌳'][st.n] || '🌿')),
       el('p.vl-stage', el('b', `Étape ${st.n}`), ` · ${st.name}`),
       el(
         'div.vl-signs-line',
@@ -287,6 +299,8 @@ export function createValley(app) {
     const t = h.target || null;
     const v2 = app.heritage?.hintAction?.(h); // (V2) troc, paire, Grainothèque, récit
     if (v2) return v2;
+    const v3 = app.places?.hintAction?.(h); // (V3) bête de la vallée, lieu prêt, ce qui manque, terre sauvage
+    if (v3) return v3;
     switch (h.kind) {
       case 'observe':
         return { label: 'Aller voir', go: () => showInScene('wildlife', t?.id) };
@@ -330,10 +344,11 @@ export function createValley(app) {
       { id: 'seeds', label: 'Graines', on: V()?.parts?.seeds !== false },
       { id: 'wildlife', label: 'Habitants', on: V()?.parts?.wildlife !== false },
       { id: 'nature', label: 'Aménager', on: true },
+      { id: 'places', label: 'Lieux', on: !!app.places?.placesOpen?.() }, // (V3) 4ᵉ segment, une fois la vue ouverte
     ].filter((t) => t.on);
     if (!T.some((t) => t.id === tab)) tab = T[0]?.id || 'nature';
     return el(
-      'div.seg.vl-seg',
+      `div.seg.vl-seg${T.length >= 4 ? '.is-four' : ''}`,
       { role: 'tablist', 'aria-label': 'La Vallée' },
       T.map((t) =>
         el(
@@ -356,13 +371,13 @@ export function createValley(app) {
       const raw = enabled() ? q('valley') : null;
       return el('div.vl-valley', el('p.cz-lead', raw?.startsAtRank ? `La Vallée commence au rang ${raw.startsAtRank} : Joseph passera avec une boîte en fer.` : 'La Vallée n\'est pas active dans cette ferme.'));
     }
-    const body = tab === 'wildlife' ? wildlifeTab(v) : tab === 'nature' ? natureTab(v) : seedsTab(v);
+    const body = tab === 'wildlife' ? wildlifeTab(v) : tab === 'nature' ? natureTab(v) : tab === 'places' && app.places ? app.places.lieuxTab(v) : seedsTab(v);
     return el('div.vl-valley', stageHead(v), hintCard(v), tabs(), el('div.vl-panel', { role: 'tabpanel' }, body), chaptersSection(v));
   }
 
   function open(t = null) {
     if (!enabled()) return false;
-    if (t && ['seeds', 'wildlife', 'nature'].includes(t)) tab = t;
+    if (t && ['seeds', 'wildlife', 'nature', 'places'].includes(t)) tab = t;
     if (placing) leavePlacing({ silent: true });
     return openLive('vl-valley', { title: 'La Vallée', icon: vIcon(['icon.valley'], 'sprite--md', '🌿'), build: valleyContent, sig: valleySig });
   }
@@ -568,7 +583,7 @@ export function createValley(app) {
   }
 
   // ── Onglet Habitants ──────────────────────────────────────────────────────────
-  function speciesRow(s) {
+  function speciesRow(s, { goValley = null } = {}) {
     const unknown = s.state === 'unknown';
     const sp = { g: s.g || who(s.id).g, pl: s.pl ?? who(s.id).pl };
     const recipe = el(
@@ -582,7 +597,7 @@ export function createValley(app) {
     if (s.state === 'installed') state = el('p.vl-row-sub.is-ok', `${capitalize(agreeWith(sp, 'installé'))} ✓ — ${lower(s.service?.text || '')}`);
     else if (s.state === 'visible') {
       state = el('p.vl-row-sub.is-wait', `${sp.pl ? `${sp.g === 'f' ? 'Elles' : 'Ils'} vous attendent` : 'Vous attend'} ${s.where || ''}.`);
-      action = el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-see-${s.id}`, onclick: () => showInScene('wildlife', s.id) }, 'Aller voir');
+      action = el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-see-${s.id}`, onclick: () => (goValley ? goValley() : showInScene('wildlife', s.id)) }, 'Aller voir');
     } else if (s.state === 'hint') state = el('p.vl-row-sub', `Indice : ${lower(s.hint || '')}`);
     else if (s.recipeOk) state = el('p.vl-row-sub', s.inSeason ? `Tout est prêt : ${comes(sp)} bientôt.` : `Tout est prêt : ${comes(sp)} ${s.seasonsWhen || 'à sa saison'}.`);
     else state = null;
@@ -596,7 +611,10 @@ export function createValley(app) {
   }
 
   function wildlifeTab(v) {
-    const list = v.species || [];
+    const all = v.species || [];
+    // (V3) Les habitants de la vallée vivent dans un groupe replié « De la vallée » (en bas).
+    const isValley = (s) => s.group === 'valley' || isValleySp(s.id);
+    const list = all.filter((s) => !isValley(s));
     const n = list.filter((s) => s.state === 'installed').length;
     const order = { visible: 0, hint: 1, unknown: 2, installed: 3 };
     const sorted = [...list].sort((a, b) => (order[a.state] ?? 2) - (order[b.state] ?? 2));
@@ -604,7 +622,8 @@ export function createValley(app) {
     return el(
       'div.vl-wild',
       el('p.vl-count', `${n} / ${list.length} habitants installés`),
-      el('div.vl-rows', sorted.map(speciesRow)),
+      el('div.vl-rows', sorted.map((s) => speciesRow(s))),
+      app.places?.speciesGroup?.(all.filter(isValley), speciesRow) || null,
       services.length ? el('section.vl-services', el('h3.stats-title', 'Ce que la vallée vous rend'), el('ul', services.map((s) => el('li', s.text)))) : null,
       el('p.sheet-hint', 'Une bête venue vous attend, sans limite de temps : touchez-la pour qu\'elle s\'installe.'),
     );
@@ -674,6 +693,7 @@ export function createValley(app) {
       el('h3.cz-story-title', c.title),
       el('div.cz-story', c.lines.map((l, i) => el('p.cz-story-line', { style: { '--cz-delay': `${i}` } }, `« ${l} »`))),
       n > 0 && STAGES[n]?.reward?.boon ? el('p.vl-ok', BOON_TEXTS[STAGES[n].reward.boon]) : null,
+      n >= 6 && (STAGES_V3 || []).find((x) => x.n === n)?.reward?.boon ? el('p.vl-ok', BOON_TEXTS_V3?.[(STAGES_V3 || []).find((x) => x.n === n).reward.boon] || '') : null,
       el('button.btn.btn--red.btn--big.btn--wide.vl-go', { type: 'button', id: 'vl-chap-ok', onclick: () => readChapter(n) }, 'Merci, Joseph'),
     );
   }
@@ -739,6 +759,7 @@ export function createValley(app) {
     );
   }
   function observe(id) {
+    if (isValleySp(id)) return app.places?.observe?.(id) || false; // (V3) dans la vue
     const rect = sceneRect('wildlife', id);
     const res = act('observe', id);
     if (!res?.ok) return false;
@@ -805,6 +826,7 @@ export function createValley(app) {
     app.pushPause('valley');
     document.body.classList.add('in-valley-place');
     app.scene?.setValleyPlacing?.(kind);
+    app.scene?.ensureTouchZoom?.({ animate: !reduced() }); // (V3) zoom tactile : emplacements ≥ 48 px
     paintBar();
     app.audio.play('open', { volume: 0.6 });
     app.onDecorChange?.(true);
@@ -834,6 +856,7 @@ export function createValley(app) {
     placing = null;
     document.body.classList.remove('in-valley-place');
     app.scene?.setValleyPlacing?.(null);
+    if (!app.heritage?.pairing && !app.places?.wilding) app.scene?.restoreZoom?.({ animate: !reduced() });
     app.popPause('valley');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.onDecorChange?.(false);
@@ -882,6 +905,7 @@ export function createValley(app) {
   function onHit(hit) {
     if (!hit || !enabled()) return false;
     if (app.heritage?.onHit?.(hit)) return true; // (V2) Grainothèque, parcelle du mode paire
+    if (app.places?.onHit?.(hit)) return true; // (V3) poteau « Vers la vallée », terres sauvages
     switch (hit.type) {
       case 'wildlife':
         return observe(hit.id) || true;
@@ -914,7 +938,7 @@ export function createValley(app) {
     const v = V(g);
     if (!v) return [];
     const out = [];
-    const vis = (v.species || []).filter((s) => s.state === 'visible');
+    const vis = (v.species || []).filter((s) => s.state === 'visible' && s.group !== 'valley' && !isValleySp(s.id)); // (V3) vallée : vl-view-animal
     if (vis.length) {
       const s = vis[0];
       const w = who(s.id, s.name);
@@ -929,6 +953,7 @@ export function createValley(app) {
       out.push({ id: 'vl-trial', prio: 39, icon: () => vIcon([x.icon], 'sprite--sm', '🌱'), text: `${x.name} : récoltez à la main (+ ${x.seedsOnHand || 2} ${x.unit === 'greffon' ? 'greffon' : 'graines'}, ${Math.min(x.hand, x.need)} / ${x.need})`, short: `${lower(x.name)} à récolter à la main`, go: () => app.todo?.focusPlots?.(trials.map((p) => p.index), trials[0].index, 'harvest') });
     }
     for (const it of app.heritage?.todoItems?.(g) || []) out.push(it); // (V2) vl-troc, vl-story
+    for (const it of app.places?.todoItems?.(g) || []) out.push(it); // (V3) vl-view-animal, vl-mushrooms
     const finds = v.finds || [];
     if (finds.length) out.push({ id: 'vl-finds', prio: 66, icon: () => vIcon([finds[0].icon], 'sprite--sm', FIND_EMOJI[finds[0].kind] || '🫐'), text: finds.length > 1 ? `${finds.length} cueillettes dans les haies` : `${finds[0].name} dans une haie`, short: `${plural(finds.length, 'cueillette')} dans les haies`, go: () => showInScene('hedgeFind', finds[0].id) });
     return out;
@@ -1119,6 +1144,7 @@ export function createValley(app) {
     if (y.seedsSaved) bits.push(`${plural(y.seedsSaved, 'graine gardée', 'graines gardées')}`);
     if (y.finds) bits.push(`${plural(y.finds, 'cueillette', 'cueillettes')} dans les haies`);
     for (const t of app.heritage?.yearLines?.(report) || []) bits.push(t); // (V2) trocs, croisements, Grainothèque
+    for (const t of app.places?.yearLines?.(report) || []) bits.push(t); // (V3) chantiers, étapes de lieux, terres sauvages
     const names = [...(r.installed || []).map((id) => SPECIES_BY_ID[id]?.name), ...(r.fixed || []).map((id) => VARIETIES_BY_ID[id]?.name)].filter(Boolean);
     return el(
       'section.vl-year',
@@ -1139,7 +1165,7 @@ export function createValley(app) {
       if (!raw?.startsAtRank) return null;
       return el('section.c-sec.vl-jcard.is-soon', el('p.stats-note', vIcon(['icon.valley'], 'sprite--xs', '🌿'), ` La Vallée commence au rang ${raw.startsAtRank}.`));
     }
-    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0 || !!app.heritage?.pending?.(v);
+    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0 || !!app.heritage?.pending?.(v) || !!app.places?.pending?.(v);
     return el(
       'button.vl-jcard',
       { type: 'button', id: 'c-j-valley', onclick: () => open(), 'aria-label': `La Vallée : étape ${v.stage.n}, ${v.stage.name}, ${v.stage.signs} signes de vie${pending ? ', quelque chose vous attend' : ''}` },
@@ -1166,6 +1192,7 @@ export function createValley(app) {
       line('Graines gardées', fmt(s.seedsSaved || 0)),
       line('Aménagements posés', fmt(v.nature?.placed || 0)),
       ...(app.heritage?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
+      ...(app.places?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
       line('Dépensé pour la vallée', `${fmt(v.spent || 0)} pièces`),
       el('p.stats-note', 'Ces dépenses comptent entièrement dans le patrimoine.'),
     );
@@ -1203,6 +1230,17 @@ export function createValley(app) {
       app.heritage?.onEvent?.(ev, g); // (V2) troc, croisements, Grainothèque, récits
     } catch (err) {
       console.warn('Grainothèque (événement) :', err);
+    }
+    try {
+      app.places?.onEvent?.(ev, g); // (V3) lieux, reprises, pêche, champignons, terres sauvages, bêtes de la vallée
+      app.valleyView?.onEvent?.(ev, g);
+    } catch (err) {
+      console.warn('Lieux de la vallée (événement) :', err);
+    }
+    // (V3) Les bêtes de la vallée attendent dans la vue : leurs messages et leur fenêtre sont ceux de app.places.
+    if ((ev.type === 'speciesVisible' || ev.type === 'speciesInstalled') && isValleySp(ev.id)) {
+      if (live) schedule();
+      return;
     }
     switch (ev.type) {
       case 'valleyStarted':
@@ -1320,7 +1358,7 @@ export function createValley(app) {
       app.scene?.setValleyStage?.(n);
     }
     // Fenêtres en attente (boîte de Joseph) : seulement quand rien d'autre n'est affiché.
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !placing && !app.decor?.active) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'box') openBox(w.data);
     }
@@ -1342,6 +1380,7 @@ export function createValley(app) {
 
   return {
     open,
+    repaint,
     openJar,
     openVariety,
     openSpecies,

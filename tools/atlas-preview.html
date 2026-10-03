@@ -39,6 +39,7 @@
   <label><input type="checkbox" id="onlylot4"> lot 4 seulement</label>
   <label><input type="checkbox" id="onlyvalley1"> Vallée V1 seulement</label>
   <label><input type="checkbox" id="onlyvalley2"> Vallée V2 seulement</label>
+  <label><input type="checkbox" id="onlyvalley3"> Vallée V3 seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
@@ -97,6 +98,12 @@ const isValley2 = (name) => {
   return V2_HEIRLOOMS.test(name) || s.sheet === 'valley2' || !!(s.layers && s.layers.some((l) => l.sheet === 'valley2'));
 };
 
+// Vallée vivante, lot V3 : planches valley3 et valley3bg (grand fond de la vue)
+const isValley3 = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'valley3' || s.sheet === 'valley3bg' || !!(s.layers && s.layers.some((l) => l.sheet === 'valley3'));
+};
+
 const out = document.getElementById('out');
 const uiOut = document.getElementById('ui');
 
@@ -134,6 +141,7 @@ function render() {
   const onlyLot4 = document.getElementById('onlylot4').checked;
   const onlyValley1 = document.getElementById('onlyvalley1').checked;
   const onlyValley2 = document.getElementById('onlyvalley2').checked;
+  const onlyValley3 = document.getElementById('onlyvalley3').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
@@ -146,6 +154,7 @@ function render() {
     if (onlyLot4 && !isLot4(name)) continue;
     if (onlyValley1 && !isValley1(name)) continue;
     if (onlyValley2 && !isValley2(name)) continue;
+    if (onlyValley3 && !isValley3(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -243,7 +252,7 @@ setInterval(() => {
 }, 180);
 
 // Préréglage par l'adresse : ?career=1 (carrière seulement), ?lot2=1 (lot 2 seulement), ?lot3=1 (lot 3 seulement),
-// ?lot4=1 (lot 4 seulement), ?valley1=1 (Vallée vivante V1 seulement), ?valley2=1 (Vallée vivante V2 seulement),
+// ?lot4=1 (lot 4 seulement), ?valley1=1 (Vallée vivante V1 seulement), ?valley2=1 (Vallée vivante V2 seulement), ?valley3=1 (Vallée vivante V3 seulement),
 // ?scale=6, ?bg=%2384c669, ?filter=staff.f
 {
   const q = new URLSearchParams(location.search);
@@ -253,11 +262,12 @@ setInterval(() => {
   if (q.get('lot4')) document.getElementById('onlylot4').checked = true;
   if (q.get('valley1')) document.getElementById('onlyvalley1').checked = true;
   if (q.get('valley2')) document.getElementById('onlyvalley2').checked = true;
+  if (q.get('valley3')) document.getElementById('onlyvalley3').checked = true;
   if (q.get('scale')) document.getElementById('scale').value = q.get('scale');
   if (q.get('bg')) document.getElementById('bgsel').value = q.get('bg');
   if (q.get('filter')) document.getElementById('filter').value = q.get('filter');
 }
-for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2', 'onlylot3', 'onlylot4', 'onlyvalley1', 'onlyvalley2']) document.getElementById(id).addEventListener('input', render);
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2', 'onlylot3', 'onlylot4', 'onlyvalley1', 'onlyvalley2', 'onlyvalley3']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>

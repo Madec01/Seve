@@ -525,3 +525,185 @@ body:not(.in-valley-pair) .vl-pairbar { display: none; }
 .vl-troc-main { flex: 1 1 140px; }
 .vl-pair-row .seed-facts, .vl-pair-row .seed-facts > span { flex-wrap: wrap; white-space: normal; overflow-wrap: anywhere; }
 .vl-pair-row .seed-main { min-width: 0; }
+
+/* ═══ Vallée V3 « Le ruisseau » : la vue de la vallée, les lieux, les terres sauvages ═══ */
+
+/* Rangée de signes de vie au-delà de 40 : une barre lue. */
+.vl-signs.is-bar { display: block; width: min(16rem, 70vw); height: 12px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-signs-fill { display: block; height: 100%; background: var(--green-text, #3d8a3c); }
+
+/* Fiche « La Vallée » : quatre segments sur une ligne ; grille 2 × 2 sous 380 px avec un texte ≥ 130 %. */
+.seg.vl-seg.is-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.seg.vl-seg.is-four .seg-btn { padding: 0 2px; font-size: 0.875rem; }
+@media (max-width: 379px) {
+  html[data-text-scale='130'] .seg.vl-seg.is-four, html[data-text-scale='150'] .seg.vl-seg.is-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-text-scale='130'] .seg.vl-seg.is-four .seg-btn, html[data-text-scale='150'] .seg.vl-seg.is-four .seg-btn { min-height: 48px; font-size: 0.6875rem; }
+}
+
+/* ─── L'écran « La vallée » (au-dessus de la ferme, sous les feuilles, les messages et les conseils) ─── */
+.valley-view { position: fixed; inset: 0; z-index: 22; overflow: hidden; background: #a8daf4; touch-action: none; user-select: none; -webkit-user-select: none; }
+.valley-view[hidden] { display: none; }
+.vv-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; image-rendering: pixelated; }
+.vv-ribbon {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin: 0;
+  padding: calc(var(--safe-t) + 6px) calc(var(--safe-r) + 12px) 6px calc(var(--safe-l) + 12px);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--parch, #f3e9dc);
+  background: rgba(32, 51, 31, 0.86);
+  border-bottom: var(--u) solid var(--outline);
+  pointer-events: none;
+}
+.vv-bar {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 64px;
+  padding: 6px calc(var(--safe-r) + 6px) calc(var(--safe-b) + 6px) calc(var(--safe-l) + 6px);
+  background: var(--wood-dark);
+  border-top: var(--u) solid var(--outline);
+  box-shadow: inset 0 calc(var(--u) * 2) 0 var(--wood);
+}
+.vv-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 56px;
+  min-height: 52px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+.vv-back { min-width: 112px; }
+.vv-back-arrow { font-size: 1.5rem; line-height: 1; }
+.vv-btn:active { transform: translateY(var(--u)); }
+.vv-btn:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vv-count { flex: 1 1 auto; min-width: 0; font-size: 0.875rem; font-weight: 700; line-height: 1.25; text-align: center; color: var(--parch, #f3e9dc); }
+body.in-valley-view #hud, body.in-valley-view #tabbar, body.in-valley-view #todo, body.in-valley-view .zoom-controls, body.in-valley-view .minimap, body.in-valley-view #banner { visibility: hidden; }
+body.in-valley-view #toasts { bottom: calc(var(--safe-b) + 76px + var(--sheet-h)); }
+body.in-valley-view.has-sheet #toasts { bottom: calc(var(--sheet-h) + 10px); }
+body.layout-wide.in-valley-view .vv-bar { justify-content: center; }
+@media (max-width: 379px) {
+  .vv-back { min-width: 96px; padding: 0 8px; }
+  .vv-btn { font-size: 0.9375rem; }
+}
+
+/* ─── Fiche d'un lieu ─── */
+.vl3-place { display: grid; gap: 10px; }
+.vl3-place-head { display: flex; align-items: center; gap: 12px; }
+.vl3-place-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl3-place-title { display: grid; gap: 2px; min-width: 0; }
+.vl3-place-step { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text); }
+.vl3-place-stepname { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-dots { display: inline-flex; gap: 3px; }
+.vl3-dot { width: 10px; height: 10px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); border-radius: 50%; }
+.vl3-dot.is-on { background: var(--green-text, #3d8a3c); }
+.vl3-restored { margin: 0; padding: 8px 10px; font-size: 1rem; font-weight: 700; color: #f3fbe8; text-align: center; background: var(--green-text, #3d8a3c); }
+.vl3-works, .vl3-next { display: grid; gap: 6px; padding: 8px 10px; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2, #c8a050); }
+.vl3-sec-title { display: flex; align-items: center; gap: 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl3-works-name { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text); }
+.vl3-works-row { display: flex; align-items: center; gap: 10px; }
+.vl3-works-left { flex: none; font-size: 0.875rem; color: var(--text); }
+.vl3-bar { position: relative; flex: 1 1 auto; height: 14px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl3-bar-fill { display: block; height: 100%; background: repeating-linear-gradient(90deg, #5aa040 0 8px, #4a9034 8px 10px); }
+.vl3-next-title { margin: 0; font-size: 1rem; color: var(--text); }
+.vl3-next-title small { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
+.vl3-needs { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.vl3-need { display: flex; align-items: center; gap: 8px; min-height: 48px; font-size: 0.9375rem; color: var(--text); }
+.vl3-need .vl-check { flex: none; width: 1.2em; font-weight: 700; color: #b8483a; }
+.vl3-need.is-ok .vl-check { color: var(--green-text, #3d8a3c); }
+.vl3-need-text { flex: 1 1 auto; min-width: 0; }
+.vl3-need-go { flex: none; min-height: 48px; }
+.vl3-seasons { margin: 0; font-size: 0.875rem; color: var(--text-soft); }
+.vl3-start { min-height: 56px; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.vl3-boon-list { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; }
+.vl3-boon-list li { display: flex; gap: 8px; font-size: 0.9375rem; color: var(--text-soft); }
+.vl3-boon-list li.is-ok { color: var(--text); }
+.vl3-boon-list .vl-check { flex: none; width: 1.2em; font-weight: 700; }
+.vl3-sp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl3-sp { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; min-height: 72px; padding: 4px; font: inherit; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+button.vl3-sp { cursor: pointer; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) #c8283a; }
+.vl3-sp-ico { display: grid; place-items: center; width: 48px; height: 48px; }
+.vl3-sp-unknown { font-size: 1.5rem; font-weight: 700; color: var(--text-soft); }
+.vl3-sp-name { max-width: 88px; font-size: 0.875rem; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
+.vl3-sp-st { position: absolute; top: 2px; right: 4px; font-size: 0.875rem; font-weight: 700; }
+.vl3-sp.is-installed .vl3-sp-st { color: var(--green-text, #3d8a3c); }
+.vl3-sp.is-visible .vl3-sp-st { color: #c8283a; }
+.vl3-joseph { margin: 0; font-size: 0.9375rem; }
+.vl3-confirm-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 8px; font-size: 1rem; font-weight: 700; color: var(--text); }
+
+/* ─── Liste des lieux, segment Lieux ─── */
+.vl3-row-state { font-size: 0.875rem; color: var(--text-soft); }
+.vl3-row.is-ready .vl3-row-state { color: var(--text); font-weight: 700; }
+.vl3-row.is-ok .vl3-row-state { color: var(--green-text, #3d8a3c); font-weight: 700; }
+.vl3-row.is-works .vl3-row-state { color: #8a5a32; }
+.vl3-lieux, .vl3-list { display: grid; gap: 10px; }
+.vl3-viewcard { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); background: #e4f2fb; border: 0; box-shadow: inset 0 0 0 var(--u) #3a7ab8, 0 calc(var(--u) * 2) 0 var(--parch-3); cursor: pointer; }
+.vl3-viewcard-pic { display: grid; place-items: center; flex: none; width: 100px; height: 52px; background: #3a2a2f; }
+.vl3-viewcard-main { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.vl3-viewcard-main b { font-size: 1.0625rem; }
+.vl3-viewcard-main span { font-size: 0.9375rem; }
+.vl3-wildcard { display: grid; gap: 6px; padding: 8px 10px; background: #eef6dc; box-shadow: inset 0 0 0 var(--u) var(--green-text, #3d8a3c); }
+.vl3-wildcard .stats-title { display: flex; align-items: center; gap: 6px; margin: 0; }
+.vl3-wildcard.is-soon { background: transparent; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl3-wild-count { margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-wild-go { min-height: 52px; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.vl3-spgroup { margin: 10px 0 0; }
+.vl3-spgroup-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0 10px; font: inherit; font-size: 1rem; font-weight: 700; text-align: left; color: var(--text); background: #e4f2fb; border: 0; box-shadow: inset 0 0 0 var(--u) #3a7ab8; cursor: pointer; }
+.vl3-spgroup-head > span:first-child { flex: 1 1 auto; }
+.vl3-spgroup .vl-rows { margin-top: 6px; }
+
+/* ─── Pêche au ruisseau ─── */
+.vl3-river { display: grid; justify-items: center; gap: 4px; text-align: center; }
+.vl3-river-pic { display: grid; place-items: center; width: 96px; height: 80px; background: #cfe8f6; box-shadow: inset 0 0 0 var(--u) #3a7ab8; }
+.vl3-river-name { margin: 0; font-size: 1.125rem; font-weight: 700; color: var(--text); }
+.vl3-river-amount { margin: 0 0 6px; font-size: 1.25rem; font-weight: 700; color: #8a6a00; }
+
+/* ─── Terres sauvages : fiche, choix de la sorte, barre du mode ─── */
+.vl3-wild { display: grid; gap: 8px; }
+.vl3-wild-head { display: flex; align-items: center; gap: 12px; }
+.vl3-wild-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #2e5a2a; }
+.vl3-wild-kind { margin: 0; font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+.vl3-wild-stage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-wild-left { margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-choice { display: grid; gap: 8px; }
+.vl3-kinds { display: grid; gap: 8px; }
+.vl3-kind { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.vl3-kind.is-on { background: #eef6dc; box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #3d8a3c); }
+.vl3-kind.is-on .vl3-kind-main b::after { content: ' ✓'; }
+.vl3-kind-pic { display: grid; place-items: center; flex: none; width: 56px; height: 56px; }
+.vl3-kind-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vl3-kind-main b { font-size: 1rem; }
+.vl3-kind-main span { font-size: 0.875rem; color: var(--text-soft); }
+.vl3-forever { margin: 0; font-size: 0.9375rem; font-weight: 700; color: var(--text); }
+body.in-valley-wild .vl-placebar:not(.vl-wildbar) { display: none; }
+body:not(.in-valley-wild) .vl-wildbar { display: none; }
+
+/* ─── Ligne « À faire » regroupée : petite feuille ─── */
+.todo-group { display: grid; gap: 6px; }
+.todo-group-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 4px 10px; font: inherit; font-size: 0.9375rem; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.todo-group-text { flex: 1 1 auto; min-width: 0; }
+.todo-group-row:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+body.in-valley-view .sheet-backdrop { top: 0; }

@@ -1519,3 +1519,95 @@ Conception complète du lot V3 « Le ruisseau » et de ses contrats, sans code d
 - **Idées** : confiture de cerises et jus de poire à l'atelier (les dessins `product.cherryJam` / `product.pearJuice`
   existent) ; « avant / après » de la vue de la vallée au bilan (V4) ; Hélène qui commente les terres sauvages ; un
   robot `handsOffLate` gardé pour mesurer les services passifs des lots suivants.
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : planches de sprites `valley3.png` et `valley3-bg.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley3.py` (reprend les outils de `generate-valley2.py` / `generate-valley1.py`) →
+  `assets/sprites/valley3.png` (16 × 80 tuiles, 140 sprites) et `assets/sprites/valley3-bg.png` (48 × 27 tuiles : les 4 fonds
+  `view.bg.<saison>` de 192 × 432 côte à côte), bloc `// <valley3:auto>` d'`src/render/atlas.js` (après celui du V2),
+  `SHEETS.valley3` et `SHEETS.valley3bg` ; 144 noms du tableau « Sprites » du contrat V3, aucun heurt (vérifié par le script).
+- Lieux dessinés à leur taille exacte pour le cadrage commun de la vue, en été, avec les trois verts d'herbe Kenney (recolorés par
+  les planches de saison) ; le fond a ses quatre saisons et ses rectangles de lieux prennent exactement l'herbe recolorée de la
+  saison (`SEASON_GRASS`) : **les lieux doivent être tirés des planches de saison** pour se fondre dans le fond. Le ruisseau
+  (64 × 312, `h: 19.5`) nourrit l'étang (rien n'est dessiné entre son entrée et sa sortie), le bocage laisse transparente la
+  bande où passe le ruisseau (gué, passerelle, puis pont de pierre dessinés par le ruisseau). Grands dessins de la vue au
+  contour (64, 39, 50) : pas de neige automatique en hiver (givre laissé au rendu).
+- En plus du contrat : `portrait.helene` (32 × 32, gabarit de `portrait.joseph`). Cerisier et poirier : `tree.cherry.*` /
+  `tree.pear.*` existants réutilisés (comme prévu par le contrat).
+- `tools/atlas-preview.html` : case « Vallée V3 seulement » (`?valley3=1`). `CREDITS.md` : ligne `valley3.png` / `valley3-bg.png` (CC0).
+- Contrôle : planches ×6 et aperçus de la vue complète par saison et par étape (`--contact DOSSIER`), vue composée au zoom × 5
+  dans Chromium (412 × 915, DPR 2,625).
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : rendu et interface (paquet UI/RENDER)
+
+- **La vue de la vallée** : `src/render/valley-view.js` (disposition pure `viewLayout` : zoom entier ≥ 3, × 5 sur le Pixel 7 et
+  sur 360 × 740 ; cadrage commun des lieux ; cibles agrandies à ≥ 48 px CSS ; ordre des touchers ; dessin : fond de saison, lieux
+  tirés des **planches de saison** (consigne d'ART), givre l'hiver, ruisseau qui passe devant l'étang et sous le bocage, moulin
+  dont la roue tourne au Ru 4, panneau de chantier et pousses selon la reprise, fondu de 1,2 s à l'arrivée d'une étape, eau
+  animée, champignons, bêtes qui attendent (« ? »), habitants qui passent, Hélène, Joseph sur le banc, brume et oiseaux dès
+  l'étape 6 ; replis dessinés sans la planche) et `src/ui/career/valley-view.js` (écran plein `#valley-view`, temps en pause,
+  ruban « La vallée · Étape 6 · L'eau revient », barre « ‹ La ferme · 7 / 19 étapes · 62 signes de vie · Liste », défilement
+  au doigt avec élan, Échap et bouton retour d'Android, résumé lu par les lecteurs d'écran, le lieu gardé au-dessus de la
+  feuille ouverte).
+- **Lieux, habitants, gestes** : `src/ui/career/places.js` (fiche d'un lieu avec conditions cochées, « Voir » vers ce qui manque,
+  « Lancer le chantier · 13 000 » et sa confirmation, reprise en barre lue, ce que le lieu rend, habitants, ligne de Joseph,
+  récit relisible ; liste des lieux ; segment **Lieux** de « La Vallée » ; groupe replié « De la vallée » ; observation dans
+  la vue « ✓ Le carnet d'Hélène » ; pêche au ponton ; champignons ; récit « Sur la colline » qui ouvre la vue ; indices
+  `valleyAnimal` / `place` / `placeNeed` / `wild` ; messages, résumé du matin, bilan, Carnet › Bilan ; conseils `PLACES_HINTS`).
+- **Terres sauvages** : `layout.wildBands` / `layout.wildable` (`src/render/layout-career.js`, cellules `wildland` / `wildable`
+  de `grid()`), dessin du sol et des objets de chaque sorte et état (`src/render/places-actors.js`, nouveau : tirés par
+  `tileHash`, sans flux), lisières ouvertes vers un terrain ou une autre terre, aucune clôture ni allée, poteau à feuille ;
+  forêts à confier plus claires ; visiteurs du jour ; clairières de l'étape 7 ; mini-carte (couleur, pictogramme, trait de
+  reprise, pointillé vert, points du mode) ; mode terres sauvages (`#vl-wildbar`, cases qui pulsent, feuille « Confier à la
+  nature » à trois cartes, « …deviendra un bois, pour toujours »). Poteau « Vers la vallée » en x 12 sous la route.
+- **Les trois restes du V2** : (1) `touchZoom`, `expandHitCss`, `minWorldFor` (`camera-zoom.js`), zones ≥ 48 px CSS pour toutes
+  les cibles isolées (machines, ruches, panneaux, poteaux, personnages, tableau, visiteur du thème), parcelles = leur cellule
+  (`layout.plotCell`), zoom tactile posé et rendu par les modes aménagement, paire et terres sauvages (`scene.ensureTouchZoom` /
+  `restoreZoom`, jamais enregistré comme préférence) ; (2) `src/ui/todo-group.js` (« Le village : 4 choses », 5 entrées au
+  plus, petite feuille de 4 lignes) ; (3) une bulle par ouverture de feuille (`sheets.openCount`), `maybe(id, target,
+  { avoid })`, cible `sheet:`, le conseil du troc avant celui du tableau, rien ne couvre « Choisir une graine ».
+- Tests : `tests/valley3-render.test.js`, `tests/touch-targets.test.js`, `tests/todo-group.test.js` ; `tests/lot2-render.test.js`
+  connaît les 3 décors du V3. Débogage : `__debug.valley3.{ … touch(), viewPoint(hit), point(kind, id) … }`.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, touch, `?debug=1&nosw`, dev.html puis le paquet publié) : récit, poteau,
+  vue, liste, fiche, chantier lancé (3 500), reprise, martin-pêcheur touché (installé), pêche (vairon / goujon), champignon cueilli,
+  mode terres sauvages, forêt confiée (bois), terre reprise dessinée, « À faire » 4 à 5 entrées, conseil du troc sans couvrir
+  « Choisir une graine » puis celui du tableau à l'ouverture suivante, zoom tactile 3 → 4 → 3, texte à 150 % et mouvements
+  réduits ; 35 cibles de la scène et 11 de la vue ≥ 48 px CSS au zoom minimal ; aucune erreur console. Captures :
+  `valley3-ui-*.png` du dossier de travail.
+- **Bugs trouvés** : allée dessinée sur la dernière ligne des terres sauvages (corrigé) ; voile de la feuille qui laissait une bande
+  claire sous le ruban de la vue (corrigé) ; retour d'historique asynchrone qui refermait la vue rouverte aussitôt (corrigé) ; une
+  bulle cachée par une fenêtre ne revenait pas pendant la même ouverture (corrigé). Pour CORE : `triggerValley('wildGrow')` ne
+  fait pas passer une terre à l'état suivant (`at` posé au jour 1 seulement) ; 11 tests de logique attendent encore les comptes
+  du V3 (pages, succès, parties).
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : paquet CORE (logique, simulation, équilibrage)
+
+- **Logique** (contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V3 » ; écarts : « Écarts et précisions
+  (livraison CORE V3) ») : `src/data/career/places.js` (nouveau : 6 lieux en 19 étapes, 10 habitants de la vallée, poissons,
+  champignons, Reinette grise, cerisier et poirier hors de `CROPS`, terres sauvages, étapes 6 et 7, 8 récits, textes) ;
+  `src/core/career/places.js` (nouveau, lectures pures) ; extension `valley` : vue ouverte à l'étape 5 (« Sur la colline »),
+  chantier payé + condition de vie + reprise (un par lieu, les six en parallèle), pêche au ruisseau, champignons d'automne,
+  terres sauvages (2 500 + 300 × n, de proche en proche, sorte pour toujours, reprise en 1 puis 3 saisons), Hélène au premier
+  habitant de la vallée, étapes 6 (56 signes + Ru 2) et 7 (76 signes + six lieux à 2), signes de vie 99 ; avantages lus dans
+  `heirlooms.js` (canicule, l'eau revient, moulin, chauffage, foin, ruches, jachère, poissons, touristes, abris, corbeaux,
+  cueillette, trouvailles) ; grille des terrains (`wildland` / `wildable`, jamais à vendre) ; 2 pages d'album, 8 succès,
+  3 décors ; migration V2 → V3 sans perte ; flux `valley3` seulement (tous les autres flux tirent les mêmes nombres, la
+  2ᵉ pêche du jour comprise ; les corbeaux à 0 tirent quand même leur nombre).
+- **Vérifié** : `{ places: false }` = le V1 + V2 octet pour octet (empreinte de 4 carrières de 18 ans, test d'une carrière
+  de 18 ans) ; `{ heritage: false }` = le V1 (empreinte du V2 inchangée) ; `node tools/simulate.js` identique ; parité
+  400 / 400.
+- **Simulation** : `--compare-valley3` (18 ans, `--jobs`), robots `PLACES_STYLES`, nouveau robot `handsOffLate`.
+  Trouvé en mesurant : les terres sauvages (moins chères) affamaient les chantiers ; avec l'aide d'équipe, le tranquille ne
+  semait jamais de jachère (le Ru des Saules restait à l'étape 1 et bloquait l'étang, l'étape 6 et l'étape 7) ; le robot
+  ne gardait que 4 à 6 saisons d'impôts (≈ 1 500 pièces). Robots précisés (la vallée d'abord, l'argent qui dort ×3,
+  jachères demandées).
+- **Équilibrage** (60 carrières × 18 ans, `docs/VALLEE.md` § 17.12.8) : reprises 1 / 2 / 4 → **2 / 3 / 4 saisons** ; prix
+  et paliers inchangés. Tranquille : revenu + 0,6 % ; argent en caisse an 14 ≈ 33 400 (V2 seul : 128 300 ; visé 55 000,
+  écart documenté), an 18 ≈ 55 600 (16 % de sans) ; étape 6 an 13, étape 7 an 16, vallée complète an 18 (93 %) ;
+  nouveautés 94 % des saisons des ans 10-18 ; rangs identiques ; aucune faillite (Classique comprise) ; `handsOff` + 0 %,
+  `handsOffLate` − 2,9 % ; appliqué complet an 13.
+- **Retours de l'UI traités** : `triggerValley('wildGrow')` avance réellement d'un état ; `valley().wilds.total` = 18 ;
+  tests du V1 et du V2 mis aux nombres du V3. Tests nouveaux : `tests/valley3.test.js`, `valley3-places`, `valley3-wild`,
+  `valley3-migration`.
+- **Idée** : le « visé » de 55 000 pièces à l'an 14 demanderait que les terres sauvages viennent plus tard (le 16ᵉ terrain
+  arrive vers l'an 10-11) ; à rediscuter si l'argent dormant gêne encore.

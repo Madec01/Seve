@@ -381,7 +381,13 @@ export function createVariety(app) {
   function openBoard() {
     if (!enabled()) return false;
     const r = openLive('v-board', { title: 'Le tableau du village', icon: sectionIco('board', 'info', 'sprite--md'), build: boardContent, sig: boardSig });
-    hint('variety.board', { selector: '#v-reroll' });
+    // (Vallée V3, reste du V2 n° 3) Une seule bulle par ouverture : quand la carte « Troc » est en tête, le conseil du troc
+    // passe d'abord (cible « Choisir une graine », jamais recouverte) ; celui du tableau attend la prochaine ouverture.
+    const trocBtn = () => document.querySelector('#vl-board-troc-go')?.getBoundingClientRect() || null;
+    const trocFirst = isCareer() && !!app.game?.state?.career?.valley?.troc && !!document.querySelector('#vl-board-troc-go');
+    if (!(trocFirst && app.hints?.maybe?.('valley.troc', { selector: '#vl-board-troc-go', sheet: 'v-board' }, { avoid: [trocBtn] }))) {
+      app.hints?.maybe?.('variety.board', { selector: '#v-reroll', sheet: 'v-board' }, { avoid: [trocBtn] });
+    }
     return r;
   }
 
