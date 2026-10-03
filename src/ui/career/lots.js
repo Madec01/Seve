@@ -3,7 +3,7 @@
 // culture d'une saison.
 
 import { el, fmt, plural } from '../dom.js';
-import { icon } from '../icons.js';
+import { icon, spriteAny } from '../icons.js';
 import { season } from '../text.js';
 import { getCrop } from '../../data/crops.js';
 import {
@@ -78,7 +78,8 @@ function mapCells(ui) {
   const cols = [Math.min(bounds.cols[0], grid?.cols?.[0] ?? 0), Math.max(bounds.cols[1], grid?.cols?.[1] ?? 0)];
   const rows = [];
   for (let r = maxRow; r >= 0; r--) rows.push(r);
-  return { cols, rows, at: (c, r) => byKey.get(key(c, r)) || { col: c, row: r, id: null, state: 'forest' } };
+  const wild = [...byKey.values()].some((c) => c.state === 'wildland' || c.state === 'wildable');
+  return { cols, rows, wild, at: (c, r) => byKey.get(key(c, r)) || { col: c, row: r, id: null, state: 'forest' } };
 }
 
 /** Terrain regardé au centre de l'écran (id), pour « vous êtes ici ». */
@@ -94,8 +95,13 @@ export function lotInView(app) {
   }
 }
 
-function cellLabel(c) {
+/** (Vallée V3) Terres sauvages : nom court de la sorte, sur la grande carte. */
+const WILD_SHORT = { wood: 'Bois', marsh: 'Marais', grassland: 'Prairie' };
+
+export function cellLabel(c) {
   if (c.state === 'home') return 'Ferme';
+  if (c.state === 'wildland') return WILD_SHORT[c.wildKind] || 'Sauvage';
+  if (c.state === 'wildable') return c.price !== undefined ? fmt(c.price) : 'À confier';
   if (c.state === 'owned') return SHORT_TYPE[c.type] || c.lot?.typeName || 'Terrain';
   if (c.state === 'buyable') return c.lot?.price !== undefined ? fmt(c.lot.price) : 'À vendre';
   if (c.state === 'locked') return c.lot?.lockedByRank ? `Rang ${c.lot.lockedByRank}` : 'Fermé';
@@ -107,18 +113,36 @@ function cellIcon(c) {
   if (c.state === 'owned') return lotIcon(c.type || 'wild', 'sprite--sm');
   if (c.state === 'buyable') return lotIcon('forSale', 'sprite--sm');
   if (c.state === 'locked') return icon('lock', 'sm');
+  if (c.state === 'wildland') return spriteAny([`icon.wildland.${c.wildKind}`], 'sprite--sm', 'seed');
+  if (c.state === 'wildable') return spriteAny(['wildland.offer', 'icon.wildland.wood'], 'sprite--sm', 'seed');
   return null;
 }
 
 /** Toucher une case : le terrain à l'écran et sa fiche (ou sa feuille d'achat) ; forêt lointaine : un mot. */
 function tapCell(ui, c) {
   const { app } = ui;
+  // (Vallée V3) Terre sauvage : sa fiche ; forêt qu'on peut confier : le mode terres sauvages et le choix de la sorte.
+  if (c.state === 'wildland' && c.id && app.places?.openWild) {
+    app.places.openWild(c.id);
+    return;
+  }
+  if (c.state === 'wildable' && c.id && app.places?.enterWild) {
+    if (app.places.enterWild()) requestAnimationFrame(() => app.places.openChoice?.(c.id));
+    return;
+  }
   if (c.state === 'forest' || !c.id) {
     app.audio.play('error', { volume: 0.5 });
     app.toasts.show({ prio: 'important', kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
     return;
   }
   ui.open.lot(c.id);
+}
+
+/** Lecteurs d'écran : « Le Bas-Fond : un bois, en reprise » · « … : forêt à confier à la nature, 2 800 pièces ». */
+export function wildAria(c) {
+  if (c.state === 'wildland') return ` : terre sauvage, ${(WILD_SHORT[c.wildKind] || 'nature').toLowerCase()}${(c.wildStage ?? 2) < 2 ? ', en reprise' : ', reprise'}`;
+  if (c.state === 'wildable') return ` : forêt à confier à la nature${c.price !== undefined ? `, ${fmt(c.price)} pièces` : ''}`;
+  return '';
 }
 
 export function mapContent(ui) {
@@ -139,8 +163,8 @@ export function mapContent(ui) {
         const isHere = here && c.id && (c.id === here || (c.state === 'home' && here === 'home'));
         out.push(
           el(
-            `button.c-cell.is-${c.state}${c.type ? `.t-${c.type}` : ''}${isHere ? '.is-here' : ''}`,
-            { type: 'button', id: c.id ? `c-cell-${c.id}` : null, 'aria-label': `${c.name || 'Forêt'}${label ? ` : ${label}` : ''}`, onclick: () => tapCell(ui, c) },
+            `button.c-cell.is-${c.state}${c.type ? `.t-${c.type}` : ''}${c.wildKind ? `.w-${c.wildKind}` : ''}${isHere ? '.is-here' : ''}`,
+            { type: 'button', id: c.id ? `c-cell-${c.id}` : null, 'aria-label': `${c.name || 'Forêt'}${wildAria(c) || (label ? ` : ${label}` : '')}`, onclick: () => tapCell(ui, c) },
             cellIcon(c),
             label ? el('span.c-cell-label', label) : null,
           ),
@@ -178,6 +202,7 @@ export function mapContent(ui) {
       el('span.c-legend-item.is-buyable', el('i'), 'À vendre'),
       el('span.c-legend-item.is-locked', el('i'), 'Plus tard'),
       el('span.c-legend-item.is-forest', el('i'), 'Forêt'),
+      cells.wild ? el('span.c-legend-item.is-wildland', el('i'), 'Terre sauvage') : null,
     ),
     mm ? toggle(app, { id: 'c-minimap-toggle', label: 'Mini-carte à l\'écran', sub: 'En bas à droite : touchez-la pour aller quelque part', on: !mm.hidden, onChange: (v) => {
       mm.setHidden(!v);

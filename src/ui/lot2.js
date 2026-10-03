@@ -6,7 +6,7 @@
 //   frame()             main.js : montre les fenêtres en attente (vœu, trouvailles) quand rien d'autre n'est ouvert
 //   reset(game|null)    nouvelle partie / retour au menu
 //   openWish(game?)     fenêtre « Faites un vœu » (3 vœux du cœur → game.actions.makeWish)
-//   openFinds(ev)       carte « Trouvailles » du défrichage (carrière)
+//   openFinds(evs)      carte « Trouvailles » du défrichage (carrière) : une seule carte pour les terrains en attente
 //   specialIcon(id, cls) sprite de l'icône d'une météo spéciale (repli : icône de base + signe)
 //
 // Récompenses (à faire côté interface, contrat) : écus (surprise.ecus, finds[].ecus) → progression
@@ -42,12 +42,24 @@ export function specialIcon(id, cls = 'sprite--sm') {
   return node;
 }
 
+/**
+ * (Vallée V3) Cartes « Trouvailles » en attente → une seule carte : les événements `finds` qui ont des trouvailles,
+ * dans l'ordre d'achat (pur, testé : tests/valley3-qa.test.js).
+ */
+export function findsGroups(evs) {
+  return (Array.isArray(evs) ? evs : [evs]).filter((ev) => ev && Array.isArray(ev.finds) && ev.finds.length);
+}
+
 export function createLot2(app) {
   let wishPending = null; // { game, options }
   const findsQueue = [];
   let shownWishDay = null;
 
   const dialogsBusy = () => app.dialogs.isOpen() || app.tutorial?.active || app.inMenu || !app.game;
+  // (Vallée V3) Les fenêtres attendent aussi la fin des écrans et modes où l'on vise : vue de la vallée, terres
+  // sauvages, aménagement, paire, décoration, chasse de la fête (elles les masqueraient, ou les feraient quitter).
+  const screenBusy = () =>
+    !!(app.valleyView?.active || app.places?.wilding || app.valley?.placing || app.heritage?.pairing || app.decor?.active || app.cozy?.feteMode);
 
   // ── Récompenses ────────────────────────────────────────────────────────────────
   function grantEcus(n) {
@@ -164,17 +176,28 @@ export function createLot2(app) {
     );
   }
 
-  function openFinds(ev) {
-    const list = ev.finds || [];
-    if (!list.length) return;
+  /**
+   * Carte « Trouvailles » : une seule carte pour tous les terrains défrichés depuis la dernière (achats en série, 16ᵉ
+   * terrain) — `evs` : un événement `finds` ou une liste ; les trouvailles sont groupées par terrain.
+   */
+  function openFinds(evs) {
+    const groups = findsGroups(evs);
+    if (!groups.length) return;
+    const count = groups.reduce((a, ev) => a + ev.finds.length, 0);
     let handle = null;
+    const where = (ev) => (ev.lotName ? `« ${ev.lotName} »` : 'le terrain');
+    let i = 0;
+    const lists =
+      groups.length === 1
+        ? [el('ul.finds-list', groups[0].finds.map((f) => findLine(f, i++)))]
+        : groups.map((ev) => el('section.finds-lot', el('h3.finds-lot-name', where(ev).replace(/^./, (c) => c.toUpperCase())), el('ul.finds-list', ev.finds.map((f) => findLine(f, i++)))));
     const body = el(
       'div.lot2-card',
-      el('p.lot2-lead', `En défrichant ${ev.lotName ? `« ${ev.lotName} »` : 'le terrain'}, vous avez trouvé :`),
-      el('ul.finds-list', list.map(findLine)),
+      el('p.lot2-lead', groups.length === 1 ? `En défrichant ${where(groups[0])}, vous avez trouvé :` : `En défrichant ${groups.length} terrains, vous avez trouvé :`),
+      ...lists,
     );
     const node = app.dialogs.frame({
-      title: list.length > 1 ? 'Des trouvailles !' : 'Une trouvaille !',
+      title: count > 1 ? 'Des trouvailles !' : 'Une trouvaille !',
       cls: 'dialog--finds',
       body,
       actions: [app.dialogs.btn('Merveilleux !', () => handle.close(), 'btn--wide', { 'data-autofocus': '', id: 'finds-ok' })],
@@ -268,10 +291,11 @@ export function createLot2(app) {
 
   function frame() {
     if (!wishPending && !findsQueue.length) return;
-    if (dialogsBusy()) return;
+    if (dialogsBusy() || screenBusy()) return;
     const now = performance.now();
     if (findsQueue.length && now >= findsQueue[0].at) {
-      openFinds(findsQueue.shift().ev);
+      // Tout ce qui attend part ensemble : une seule carte, jamais une série de fenêtres.
+      openFinds(findsQueue.splice(0).map((x) => x.ev));
       return;
     }
     if (wishPending && wishPending.game === app.game) {

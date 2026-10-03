@@ -1,8 +1,8 @@
 {
-  "id": "c0d42c89c33c",
+  "id": "2f5814ff3255",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.f485033505.js",
-  "css": "dist/game.3989980aad.css",
+  "js": "dist/game.a1a7c86fe6.js",
+  "css": "dist/game.d2477431f1.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -157,9 +157,9 @@
     "css/cozy.css": "53756a793692ba6e",
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/guidance.css": "40cbbd0be7f99e99",
-    "css/lot2.css": "abbc12b1669158cb",
-    "css/style.css": "61bba55439eff2c0",
-    "css/valley.css": "cf966e9c412088fc",
+    "css/lot2.css": "76e1d7a60818095c",
+    "css/style.css": "d20cbc85c73d6844",
+    "css/valley.css": "dd62a77ae511e0ea",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
@@ -231,7 +231,7 @@
     "src/data/career/lots.js": "f9303b919614f5c0",
     "src/data/career/machines.js": "b4cb2d6a682b2ce2",
     "src/data/career/names.js": "8ed1d9050dae373d",
-    "src/data/career/places.js": "b3a53d9c480160b5",
+    "src/data/career/places.js": "bffa4bebf387ef43",
     "src/data/career/quests.js": "432ca817c2f8e4d3",
     "src/data/career/ranks.js": "b5930a5d8eef36d3",
     "src/data/career/staff.js": "7685179ad1eb19c1",
@@ -264,7 +264,7 @@
     "src/render/layout.js": "391ef10dd8ea0e06",
     "src/render/lot2-actors.js": "f58ca6268e9a71c7",
     "src/render/places-actors.js": "edc12aa20faf00ff",
-    "src/render/scene.js": "ae7468b45ed377f5",
+    "src/render/scene.js": "1679b8d5dc1b278f",
     "src/render/valley-actors.js": "926d148e111aee4c",
     "src/render/valley-view.js": "9a093f04e97d9f13",
     "src/render/variety-actors.js": "16e1e7c7da623a66",
@@ -277,14 +277,14 @@
     "src/ui/career/heritage.js": "a03347934c3b8dc6",
     "src/ui/career/index.js": "65f201cc3da6243b",
     "src/ui/career/journal.js": "cf89187869e94c5d",
-    "src/ui/career/lots.js": "c19f9cde5bf7a7fc",
+    "src/ui/career/lots.js": "aaac8901a23044ad",
     "src/ui/career/menu.js": "6f058db96634d80a",
     "src/ui/career/minimap.js": "d560b86b88f14fbe",
-    "src/ui/career/places.js": "52377f8e3ecf8779",
+    "src/ui/career/places.js": "cb07e7ded4d597ff",
     "src/ui/career/shop.js": "ac41c572d748cc12",
     "src/ui/career/staff.js": "d270c50586401e40",
     "src/ui/career/util.js": "971519f5a6b85201",
-    "src/ui/career/valley-view.js": "e21d5f170f683808",
+    "src/ui/career/valley-view.js": "1815978c36292239",
     "src/ui/career/valley.js": "5b403e30ca5835c6",
     "src/ui/career/windows.js": "ee6b9ce23bb9b7e1",
     "src/ui/cozy.js": "3e06797b7e1c42da",
@@ -300,14 +300,14 @@
     "src/ui/hud.js": "0fc9bd901b1e8597",
     "src/ui/icons.js": "cd979dc037cdc49f",
     "src/ui/juice.js": "370e970fcf275dc2",
-    "src/ui/lot2.js": "d9cb8c5b4dc500e7",
+    "src/ui/lot2.js": "f1bceb1ab04e363e",
     "src/ui/messages.js": "146eb103e695c19f",
     "src/ui/panel.js": "cf46872c0569b6f7",
     "src/ui/progress.js": "cb186e540c2d9692",
     "src/ui/sheets.js": "f1d2ef7472783ceb",
     "src/ui/tabbar.js": "3074678b152f99db",
     "src/ui/text.js": "dcb262860db7a6de",
-    "src/ui/toasts.js": "61de1dfb3f8450ce",
+    "src/ui/toasts.js": "60b8b6a7cda7f873",
     "src/ui/todo-group.js": "f8ee9954eb44fa65",
     "src/ui/todo.js": "a47ffa4fa4429131",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
@@ -319,6 +319,22 @@
     "tools/build.js": "6435a9537b392ecd"
   },
   "history": [
+    {
+      "id": "2f5814ff3255",
+      "files": [
+        "dist/game.a1a7c86fe6.js",
+        "dist/game.a1a7c86fe6.js.map",
+        "dist/game.d2477431f1.css"
+      ]
+    },
+    {
+      "id": "f20c6e5d8472",
+      "files": [
+        "dist/game.714b743f2a.js",
+        "dist/game.714b743f2a.js.map",
+        "dist/game.d2477431f1.css"
+      ]
+    },
     {
       "id": "c0d42c89c33c",
       "files": [
@@ -341,22 +357,6 @@
         "dist/game.a2d7e9bc92.js",
         "dist/game.a2d7e9bc92.js.map",
         "dist/game.3989980aad.css"
-      ]
-    },
-    {
-      "id": "828195f8fad0",
-      "files": [
-        "dist/game.a754555e06.js",
-        "dist/game.a754555e06.js.map",
-        "dist/game.8e2d760363.css"
-      ]
-    },
-    {
-      "id": "2e12f0ab8ba7",
-      "files": [
-        "dist/game.b83fabc2f6.js",
-        "dist/game.b83fabc2f6.js.map",
-        "dist/game.f97b1abe9c.css"
       ]
     }
   ]

@@ -24,7 +24,7 @@ export const PLACES = [
     { n: 0, name: 'À sec', line: 'Un lit de cailloux blancs. Petit, j\'y attrapais les truites à la main.' },
     {
       n: 1, name: 'Un filet d\'eau', cost: 3500, seasons: 2, needs: [{ kind: 'nature', id: 'hedge', n: 8 }],
-      boon: { kind: 'heatGrowth', value: 0.25, text: 'Canicule : une parcelle non arrosée pousse ½ jour (au lieu de ¼).' },
+      boon: { kind: 'heatGrowth', value: 0.25, text: 'Canicule : une parcelle non arrosée pousse ¼ de jour de plus (Détente : ½ jour au lieu de ¼).' },
       line: 'Les haies retiennent la pluie : l\'eau revient doucement au ruisseau.',
     },
     {

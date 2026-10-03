@@ -2125,6 +2125,54 @@ une forêt, sème les jachères qu'un lieu demande.
 une forêt chaque saison où aucun chantier prêt n'attend ; la cible dure (« plus bas qu'avec le V2 seul et ≤ 50 % de sans »)
 est tenue largement. Les dépenses de l'an 14 (96 500) dépassent un peu la fourchette pour la même raison, et les gestes
 (+ 0,84) un peu le plafond (la pêche du ruisseau, un jour joué sur deux).
+*(Lecture corrigée à l'intégration, ci-dessous : ce ne sont pas les terres sauvages, mais les chantiers.)*
+
+**Intégration et vérification (QA du V3, 2026-10-03).**
+
+*Simulation relancée* (`node tools/simulate-career.js --compare-valley3 --runs 60 --jobs 4`, après les corrections de
+l'intégration, qui ne touchent que l'interface et un texte) : chiffres **identiques** au tableau ci-dessus (revenu + 0,6 % /
++ 0,9 % ; argent an 14 : 33 358 ; an 18 : 55 640 ; étape 6 an 13, étape 7 an 16 ; vallée complète an 18, 93 % ; aucune
+faillite ; `handsOff` + 0,0 %, `handsOffLate` − 2,9 %). `node tools/capture-parity.js --check` : 400 / 400 ;
+`node tools/simulate.js` identique octet pour octet.
+
+*Faut-il faire attendre les terres sauvages ?* **Non** (évalué, mesuré). La trace du tranquille (médiane, 60 carrières)
+montre **1 terre à l'an 11, 2 aux ans 12 à 14**, 3 à l'an 15, 5 à l'an 16, puis 15 et 18 : les terres achetées avant l'an
+14 ne pèsent que **≈ 5 300 pièces** sur les 96 500 dépensées (le robot finit d'abord les chantiers prêts). L'écart à
+l'an 14 vient des **chantiers** (12 étapes de lieux à l'an 14, ≈ 91 000, contre ≈ 74 000 au calendrier du § 17.12.3).
+Essai mesuré (`--strategy casual --runs 60`) avec les terres réservées à l'étape 6 « L'eau revient » :
+
+| Tranquille (médiane sauf mention) | Sans attente (retenu) | Terres après l'étape 6 (essai) |
+|---|---|---|
+| Argent en caisse an 14 (moyenne / médiane) | 33 358 / 31 261 | 34 313 / 32 233 (+ 1 000) |
+| Argent en caisse an 18 (moyenne) | 55 640 | 55 385 |
+| Revenu 18 ans / ans 10-18 | + 0,6 % / + 0,9 % | + 0,5 % / + 0,7 % |
+| Terres confiées (an 11 → 18) | 1 · 2 · 2 · 2 · 3 · 5 · 15 · 18 | 0 · 0 · 0 · 0 · 0 · 4 · 16 · 18 |
+| Vallée complète | an 18 (93 %) | an 18 (95 %) |
+
+L'attente ne rapproche pas l'an 14 des 55 000 visés (+ 1 000 seulement) et elle **entasse** les 18 terres sur les deux
+dernières années (la carte ne changerait plus du tout des ans 11 à 15) : on garde la règle du § 17.8 (après le 16ᵉ
+terrain, rien d'autre). Si l'argent dormant de l'an 14 doit monter vers 55 000, le levier est celui des **chantiers**
+(§ 17.12.7 : prix × 1,1 à 1,2 sur les étapes 2 et 3, ou un chantier par saison au plus pour le tranquille) — à trancher
+par l'utilisateur ; la cible dure (« plus bas qu'avec le V2 seul et ≤ 50 % de sans ») reste tenue.
+
+*Vérifié au doigt* (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : vraie carrière du V2
+(fabriquée avec le code du commit `c958599` : étape 5, 16 terrains, 35 variétés) reprise sans rien perdre ; à la première
+aube, vue ouverte, récit « Sur la colline » (message « Écouter »), puis la vue s'ouvre d'elle-même ; poteau « Vers la
+vallée » touché dans la scène ; défilement au doigt (élan) ; cinq lieux lancés au doigt (fiche, confirmation, argent exact),
+reprise visible saison après saison (50 % puis étape atteinte, 2 saisons pour une étape 1) ; avantages constatés sur l'état
+réel (chauffage × 0,5, entretien × 0,9, cueillette des haies × 1,5, canicule ¼ → ½, 3 greffons de Reinette) ; martin-pêcheur
+venu, ouvert depuis « À faire », touché dans la vue (« Bienvenue, petit martin-pêcheur ! »), récit d'Hélène, page « Le
+carnet d'Hélène » ; pêche au ponton (fenêtre à 34 % de l'écran, 2ᵉ pêche refusée) ; deux champignons cueillis ; étapes 6
+et 7 (ruban, brume, banc du belvédère, « L'eau revient » + 0,1 jour) ; trois terres confiées en mode terres sauvages (zoom
+tactile × 4 posé puis rendu, bois / marais / prairie, prix 2 500 · 2 800 · 3 100), reprise 1 → 1 → 2 sur trois saisons,
+carte, mini-carte, grande carte et fiche ; cerisier et poirier plantés et cueillis au doigt (jamais au grenier) ; « À
+faire » : 11 entrées brutes → 5 ; une seule bulle au tableau avec un troc (« Choisir une graine » jamais couvert) ; succès
+« La Vallée · n / 21 » dans la grange ; les quatre saisons de la vue (givre l'hiver) ; mouvement réduit (vue figée) et
+texte 150 % ; niveau 1 en Détente et en Classique sans aucune trace. Cibles isolées de la scène mesurées au zoom minimal par
+de vrais `hitTest` à ± 23,5 px du centre : toutes ≥ 47 px (deux poteaux voisins se partagent la zone, le plus proche du
+doigt gagne, comme le veut le contrat) ; cibles de la vue (lieux, bête, champignons, ponton) ≥ 48 px. Aucune erreur
+console. Corrections et restes : `JOURNAL.md` (« Vallée V3 : intégration… »). Captures :
+`scratchpad/screens/valley3-qa-*.png`.
 
 ### 17.13 Liens avec l'existant (sans doublon)
 

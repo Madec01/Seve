@@ -605,13 +605,22 @@ body.in-valley-view #hud, body.in-valley-view #tabbar, body.in-valley-view #todo
 body.in-valley-view #toasts { bottom: calc(var(--safe-b) + 76px + var(--sheet-h)); }
 body.in-valley-view.has-sheet #toasts { bottom: calc(var(--sheet-h) + 10px); }
 body.layout-wide.in-valley-view .vv-bar { justify-content: center; }
+/* (QA du V3) Texte à 130 % et plus : le compte passe sur sa propre ligne, au-dessus des deux boutons (il s'écrivait sur
+   quatre lignes de 21 px entre eux). */
+html[data-text-scale="130"] .vv-bar,
+html[data-text-scale="150"] .vv-bar { flex-wrap: wrap; row-gap: 4px; }
+html[data-text-scale="130"] .vv-count,
+html[data-text-scale="150"] .vv-count { order: -1; flex: 1 0 100%; }
+html[data-text-scale="130"] .vv-btn,
+html[data-text-scale="150"] .vv-btn { flex: 1 1 0; }
 @media (max-width: 379px) {
   .vv-back { min-width: 96px; padding: 0 8px; }
   .vv-btn { font-size: 0.9375rem; }
 }
 
 /* ─── Fiche d'un lieu ─── */
-.vl3-place { display: grid; gap: 10px; }
+.vl3-place { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.vl3-place > *, .vl3-works > *, .vl3-next > * { min-width: 0; } /* (QA du V3) 360 px à 150 % : la fiche débordait de 48 px */
 .vl3-place-head { display: flex; align-items: center; gap: 12px; }
 .vl3-place-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
 .vl3-place-title { display: grid; gap: 2px; min-width: 0; }
@@ -682,14 +691,17 @@ button.vl3-sp { cursor: pointer; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) #c
 .vl3-river-amount { margin: 0 0 6px; font-size: 1.25rem; font-weight: 700; color: #8a6a00; }
 
 /* ─── Terres sauvages : fiche, choix de la sorte, barre du mode ─── */
-.vl3-wild { display: grid; gap: 8px; }
+.vl3-wild { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .vl3-wild-head { display: flex; align-items: center; gap: 12px; }
 .vl3-wild-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #2e5a2a; }
 .vl3-wild-kind { margin: 0; font-size: 1.0625rem; font-weight: 700; color: var(--text); }
 .vl3-wild-stage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--text); }
 .vl3-wild-left { margin: 0; font-size: 0.9375rem; color: var(--text); }
-.vl3-choice { display: grid; gap: 8px; }
-.vl3-kinds { display: grid; gap: 8px; }
+.vl3-choice { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl3-kinds { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl3-choice > *, .vl3-wild > * { min-width: 0; } /* (QA du V3) 150 % : la feuille « Confier à la nature » débordait */
+.vl3-choice .sheet-actions { flex-wrap: wrap; }
+.vl3-choice .sheet-actions > .btn { flex: 1 1 10rem; }
 .vl3-kind { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
 .vl3-kind.is-on { background: #eef6dc; box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #3d8a3c); }
 .vl3-kind.is-on .vl3-kind-main b::after { content: ' ✓'; }
@@ -707,3 +719,9 @@ body:not(.in-valley-wild) .vl-wildbar { display: none; }
 .todo-group-text { flex: 1 1 auto; min-width: 0; }
 .todo-group-row:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
 body.in-valley-view .sheet-backdrop { top: 0; }
+
+/* (QA du V3) Dans l'écran « La vallée », rien d'autre à l'écran (§ 17.3) : seuls les messages de la vallée (clés vl3-*)
+   et les refus restent ; ceux de la ferme (poulailler, demandes, pastille « +N messages ») attendent dans l'historique —
+   le temps est en pause. */
+body.in-valley-view #toasts > .toast:not([data-key^="vl3-"]):not(.toast--error),
+body.in-valley-view #toasts > #toast-more { display: none; }

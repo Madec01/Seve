@@ -881,6 +881,8 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); z-index: 32; }
 }
 /* Message à toucher (« Nouvelle version disponible ») : au-dessus des fenêtres, sinon le menu le recouvre. */
 #toasts:has(.toast.is-action) { z-index: 65; }
+/* (QA du V3) … sauf sous une bulle de conseil : le message à toucher recouvrait le bouton « Compris » de la bulle. */
+body:has(#hints.is-active) #toasts:has(.toast.is-action) { z-index: 35; }
 body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
 /* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
    sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
@@ -2682,6 +2684,13 @@ body.is-career.has-dialog #toasts:has(.toast.is-action) { z-index: 35; }
 .c-cell.is-owned.t-greenhouse { background: #b7e2d8; }
 .c-cell.is-buyable { background: #6b5a34; color: #fff3b0; box-shadow: inset 0 0 0 2px #fddc00; }
 .c-cell.is-locked { background: #4b4a45; color: #e8e0d0; }
+/* (Vallée V3) Terres sauvages (couleurs de la mini-carte) et forêts à confier (pointillé vert clair, lisible sans la couleur). */
+.c-cell.is-wildland { background: #2e5a2a; }
+.c-cell.is-wildland.w-marsh { background: #3f6f6a; }
+.c-cell.is-wildland.w-grassland { background: #a3b64f; color: var(--outline); }
+.c-cell.is-wildland.w-grassland .c-cell-label { text-shadow: none; }
+.c-cell.is-wildable { background: #3c5c3f; box-shadow: inset 0 0 0 2px rgba(190, 235, 160, 0.85); outline: 2px dashed rgba(190, 235, 160, 0.85); outline-offset: -6px; }
+.c-legend-item.is-wildland i { background: #2e5a2a; }
 .c-cell.is-here::after { content: ''; position: absolute; inset: -2px; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--outline); pointer-events: none; }
 .c-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 2px 4px; font-size: 0.875rem; color: var(--text-soft); }
 .c-legend-item { display: inline-flex; align-items: center; gap: 4px; }

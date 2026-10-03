@@ -199,6 +199,10 @@ export function createValleyView(app) {
     view = q('valleyView');
     viewT = clock;
     resize(true);
+    // (QA du V3) Aucune feuille à l'ouverture : la place d'une ancienne feuille ne compte plus (sinon la vue défilait trop
+    // loin, la bête ou le lieu visé hors de l'écran, après une fermeture faite feuille ouverte).
+    renderer.setOverlay(0);
+    lastOverlay = 0;
     renderer.render(view, 0);
     if (opts.placeId) renderer.scrollTo(opts.placeId, { animate: false });
     else if (opts.speciesId) {
@@ -221,6 +225,8 @@ export function createValleyView(app) {
     active = false;
     keep = null;
     press = null;
+    renderer?.setOverlay(0);
+    lastOverlay = 0;
     if (app.sheets.isOpen()) app.sheets.close('silent');
     root.hidden = true;
     document.body.classList.remove('in-valley-view');

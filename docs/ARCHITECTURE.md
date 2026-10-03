@@ -5214,3 +5214,36 @@ src/ui/{todo,hints,sheets,variety,zoom,field,grange,album}.js, src/ui/career/{va
   wildMode, mushrooms, fish, riverReset, visible, install, stage, story, list, placeUI, wildUI, todo, rawTodo, viewPoint(hit),
   point(kind, id), touch() (zones en px CSS au zoom courant), ui, stats }` (ajoutés aussi sous `__debug.valley` quand le nom
   est libre).
+
+### Intégration et vérification du lot V3 (2026-10-03)
+
+Corrections de l'intégration (interface seulement ; le cœur ne change pas, sauf un texte de `src/data/career/places.js`) :
+
+- **Carte « Trouvailles »** (`src/ui/lot2.js`) : toutes les trouvailles en attente partent en **une seule carte**, groupée
+  par terrain (`findsGroups(evs)`, pur) — l'achat du 16ᵉ terrain (ou une série d'achats) ouvrait une fenêtre par terrain ;
+  la carte (et le vœu) **attend** la fin de la vue de la vallée, du mode terres sauvages, du mode aménagement, du mode
+  paire, de la décoration et de la chasse de la fête (`screenBusy`) : elle ne passe plus devant la vue et ne fait plus
+  quitter un mode de visée.
+- **Vue de la vallée** (`src/ui/career/valley-view.js`) : la place d'une feuille est remise à zéro à l'ouverture et à la
+  fermeture de la vue (`setOverlay(0)`) — une vue fermée feuille ouverte (« Aménager », « Voir ») se rouvrait trop défilée,
+  la bête ou le lieu visé hors de l'écran. Messages (`src/ui/toasts.js` + `css/valley.css`) : chaque message garde sa clé
+  (`data-key`) ; dans la vue, seuls ceux de la vallée (`vl3-*`) et les refus se voient (§ 17.3 « rien d'autre à
+  l'écran ») ; les autres restent dans l'historique. Barre du bas à 130–150 % : le compte passe sur sa ligne.
+- **Grande carte des terrains** (`src/ui/career/lots.js`) : cases `wildland` (couleur et pictogramme de la sorte, « Bois »
+  / « Marais » / « Prairie », fiche au toucher) et `wildable` (pointillé vert clair, prix, toucher → mode terres sauvages
+  et choix de la sorte) ; légende « Terre sauvage » ; `cellLabel`, `wildAria` exportés (lecteurs d'écran). Avant : cases
+  muettes, et « Ce terrain n'existe plus » au toucher.
+- **Mini-carte** (`src/render/scene.js`) : trait « en reprise » sombre sur la prairie sauvage (le trait clair ne se voyait
+  pas).
+- **Feuilles** (`css/valley.css`) : fiche d'un lieu, « Confier à la nature » et fiche d'une terre en colonne bornée
+  (`minmax(0, 1fr)`) — elles débordaient de 48 px à 150 % ; « 12 haies sur la ferme (1 / 12) ».
+- **Observation d'une bête de la vallée** (`src/ui/career/places.js`, `opensText`) : « … peut maintenant passer à … »
+  seulement si plus rien ne manque au lieu ; sinon « Un pas de plus vers … : il manque encore … ».
+- **Bulle de conseil au-dessus des messages à toucher** (`css/style.css`) : un message « Écouter » recouvrait le bouton
+  « Compris ».
+- **Texte de la canicule** (`PLACES.brook.steps[1].boon.text`) : « ¼ de jour de plus (Détente : ½ jour au lieu de ¼) »,
+  juste aussi en Classique (¼ au lieu de 0, écart CORE « + 0,25 »).
+- Vérifié sans changement : reprises 2 / 3 / 4 et Ru 2 / 2 / 3 / 3 lues dans le cœur partout (fiche, confirmation,
+  message) ; `wilds.total` = 18 ; `wildGrow` ; fruits du cerisier et du poirier jamais au grenier ; `PLACES_ACHIEVEMENTS`
+  déjà rangés sous « La Vallée » (`src/ui/grange.js`, « La Vallée · n / 21 »). Terres sauvages : **aucune attente
+  ajoutée** (évaluation chiffrée : `docs/VALLEE.md` § 17.12.8). Test : `tests/valley3-qa.test.js`.

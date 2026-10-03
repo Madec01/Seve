@@ -38,10 +38,12 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/avant-vallee-v2-2026-10-03` | Avant le lot V2 « Le troc et les croisements » (grainothèque, troc, croisements), commit `090ec5c` |
 | 2026-10-03 | `backup/vallee-v2-2026-10-03` | Vallée V2 « Le troc et les croisements » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-vallee-v3-2026-10-03` | Avant le lot V3 « Le ruisseau » (vue de la vallée, 6 lieux, terres sauvages), commit `c958599` |
+| 2026-10-03 | `backup/vallee-v3-2026-10-03` | Vallée V3 « Le ruisseau » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee2-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V2 de la Vallée, commit `a0c0e17` (branche et tag créés en local) |
+| 2026-10-03 | `backup/avant-qa-vallee3-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V3 de la Vallée, commit `5a64fd7` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -1043,6 +1045,16 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Vallée V2 : au premier passage au tableau du village, le conseil du lot 3 (« Le tableau du village… », qui vise « Changer ») couvre le bouton « Choisir une graine » de la carte Troc | Noté (un toucher sur « Compris » suffit) |
 | 2026-10-03 | Vallée V2 : la case du troc dans l'album n'apparaît qu'à l'aube suivante (comme toutes les cases de l'album et les succès) | Noté (règle du lot 4) |
 | 2026-10-03 | Vallée V2 : au zoom minimal (toute la ferme visible), la Grainothèque et les parcelles du mode paire font 37 px à l'écran (comme toutes les parcelles à ce zoom) ; au zoom par défaut : 61 px (Pixel 7), 49 px (360 px) | Noté (choix du joueur ; zoom par défaut ≥ 48 px) |
+| 2026-10-03 | Vallée V3 : l'achat du 16ᵉ terrain (ou d'une série de terrains) ouvrait une fenêtre « Trouvailles » par terrain, qui passaient devant la vue de la vallée (et faisaient quitter le mode terres sauvages) | Corrigé (une seule carte groupée, qui attend la fin de la vue et des modes de visée — `lot2.js`, test) |
+| 2026-10-03 | Vallée V3 : vue fermée feuille ouverte (« Aménager », « Voir ») puis rouverte : trop défilée (place de l'ancienne feuille), la bête visée hors de l'écran | Corrigé (`valley-view.js`) |
+| 2026-10-03 | Vallée V3 : grande carte des terrains — terres sauvages et forêts à confier en cases muettes ; au toucher, « Ce terrain n'existe plus » | Corrigé (`lots.js` : couleur, nom de la sorte, prix, fiche ou mode terres sauvages ; test) |
+| 2026-10-03 | Vallée V3 : messages de la ferme (poulailler, demandes, « +13 messages ») par-dessus la vue de la vallée et la ferme à toucher | Corrigé (seuls les messages de la vallée et les refus dans la vue) |
+| 2026-10-03 | Vallée V3 : texte à 150 % — fiche d'un lieu et « Confier à la nature » plus larges que l'écran de 48 px (bouton « Voir », « Lancer le chantier » coupés) ; compte de la barre de la vue sur 4 lignes | Corrigé (`valley.css`) |
+| 2026-10-03 | Message « Écouter » (z 65) par-dessus le bouton « Compris » d'une bulle de conseil (z 64) | Corrigé (`style.css`) |
+| 2026-10-03 | Vallée V3 : texte de la canicule faux en Classique (« ½ jour au lieu de ¼ » : c'est ¼ au lieu de 0) | Corrigé (« ¼ de jour de plus ») |
+| 2026-10-03 | Vallée V3 : mini-carte — le trait « en reprise » ne se voyait pas sur la prairie sauvage (clair sur clair) | Corrigé (`scene.js`) |
+| 2026-10-03 | Vallée V3 : la case du « Carnet d'Hélène » n'arrive dans l'album qu'à l'aube suivante, alors que l'observation dit « ✓ Le carnet d'Hélène » | Noté (règle du lot 4 : l'album se remplit à l'aube) |
+| 2026-10-03 | Vallée V3 : au zoom minimal sur 360 px (× 2), un poteau « Terre sauvage ? » et le panneau du terrain voisin se partagent leurs zones de 48 px (le plus proche du doigt gagne) ; parcelles à 24–37 px (décision 5a : les modes de visée posent le zoom tactile) | Noté (conforme au contrat) |
 
 ### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
 
@@ -1611,3 +1623,41 @@ Conception complète du lot V3 « Le ruisseau » et de ses contrats, sans code d
   `valley3-migration`.
 - **Idée** : le « visé » de 55 000 pièces à l'an 14 demanderait que les terres sauvages viennent plus tard (le 16ᵉ terrain
   arrive vers l'an 10-11) ; à rediscuter si l'argent dormant gêne encore.
+
+### 2026-10-03 — Vallée V3 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde : `backup/avant-qa-vallee3-2026-10-03` (branche + tag locaux, commit `5a64fd7`).
+
+- **Trouvailles du 16ᵉ terrain** : une seule carte « Des trouvailles ! » groupée par terrain (16 terrains → une carte de 20
+  à 23 trouvailles, défilante), qui attend la fin de la vue de la vallée et des modes de visée (`src/ui/lot2.js`,
+  `findsGroups`).
+- **Vue de la vallée** : place d'une ancienne feuille remise à zéro (la vue se rouvrait trop défilée) ; dans la vue, seuls
+  les messages de la vallée et les refus (les autres attendent dans l'historique) ; barre du bas à 130–150 % : le compte
+  sur sa propre ligne.
+- **Grande carte des terrains** : terres sauvages (couleur, nom de la sorte, fiche) et forêts à confier (pointillé, prix,
+  mode terres sauvages) ; légende « Terre sauvage ». Mini-carte : trait « en reprise » visible sur la prairie.
+- **Feuilles à 150 %** (fiche d'un lieu, « Confier à la nature », fiche d'une terre) bornées à l'écran ; « 12 haies sur la
+  ferme (1 / 12) » ; bulle de conseil au-dessus des messages à toucher ; texte de la canicule juste en Classique.
+- **Cohérence CORE ↔ UI vérifiée** : reprises 2 / 3 / 4 et Ru 2 / 2 / 3 / 3 (fiche, confirmation, message, jours exacts) ;
+  canicule + 0,25 ; champignons (2 cueillis, pièces × rang) ; cerisier et poirier jamais au grenier ; `wilds.total` = 18 ;
+  `wildGrow` ; `PLACES_ACHIEVEMENTS` déjà sous « La Vallée » (« La Vallée · n / 21 »).
+- **Terres sauvages : pas d'attente ajoutée** (évalué) : le tranquille n'en confie que 2 avant l'an 14 (≈ 5 300 pièces) ;
+  l'essai « terres après l'étape 6 » ne donne que + 1 000 pièces à l'an 14 et entasse les 18 terres sur les ans 16-18.
+  L'écart aux 55 000 visés vient des chantiers (12 étapes à l'an 14) : levier à trancher (`docs/VALLEE.md` § 17.12.8).
+- **Vérifié au doigt** (Pixel 7 et 360 × 740, toucher seulement) : carrière du V2 (code de `c958599`) reprise sans perte ;
+  « Sur la colline » → vue ; poteau ; défilement ; 5 lieux lancés et repris saison après saison ; avantages constatés ;
+  martin-pêcheur depuis « À faire », Hélène, carnet ; pêche ; champignons ; étapes 6 et 7 ; 3 terres (mode, 3 sortes, carte,
+  mini-carte, reprise en 3 saisons) ; arbres du verger ; « À faire » 11 → 5 ; une bulle au tableau ; 4 saisons de la vue ;
+  mouvement réduit + 150 % ; niveaux Détente et Classique sans trace ; toutes les feuilles du V3 mesurées à 100 et 150 %
+  (cibles ≥ 48 px, textes ≥ 14 px, rien ne déborde ; mentions des cases de la grande carte à 12 px, secondaires) ; cibles
+  isolées mesurées au zoom minimal par `hitTest` réel. Aucune erreur console. Captures `scratchpad/screens/valley3-qa-*.png`.
+- **Vérifications** : `node --test tests/` 711 tests verts (4 nouveaux : `tests/valley3-qa.test.js`) ;
+  `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate-career.js --compare-valley3 --runs 60` identique
+  au tableau du § 17.12.8 ; `node tools/simulate.js` identique octet pour octet ; `node tools/build.js --check` à jour. Non
+  commité (à la demande).
+- **Relecture « joueur cosy »** : l'observation d'une bête de la vallée disait « Le ruisseau peut maintenant passer à… »
+  même s'il manquait l'autre condition — elle dit maintenant « Un pas de plus vers « Les truites reviennent » : il manque
+  encore le bois de la Combe à l'étape 1. » quand quelque chose manque.
+- Idées : la case de l'album pourrait se cocher tout de suite pour les habitants de la vallée (aujourd'hui à l'aube, règle
+  du lot 4) ; levier des chantiers pour l'argent de l'an 14 (à trancher).
+

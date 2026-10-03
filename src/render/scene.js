@@ -3517,7 +3517,7 @@ export function createScene(canvas, images, level, opts = {}) {
       c.fillStyle = 'rgba(63,38,49,0.55)';
       c.fillRect(r.x, r.y + r.h - 1, r.w, 1);
       if ((w.stage || 0) < 2) {
-        c.fillStyle = 'rgba(236,250,214,0.85)';
+        c.fillStyle = w.kind === 'grassland' ? 'rgba(63,38,49,0.6)' : 'rgba(236,250,214,0.85)'; // (QA) visible aussi sur la prairie claire
         c.fillRect(r.x + 2, r.y + r.h - Math.max(2, Math.round(cs / 14)) - 1, r.w - 4, Math.max(2, Math.round(cs / 14)));
       }
       const ic = mmIcon(w.kind);

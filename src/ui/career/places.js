@@ -269,7 +269,7 @@ export function createPlaces(app) {
           `li.vl3-need${x.ok ? '.is-ok' : ''}`,
           { id: `vl3-need-${i}` },
           el('span.vl-check', { 'aria-hidden': 'true' }, x.ok ? '✓' : '✗'),
-          el('span.vl3-need-text', x.text, x.ok ? '' : x.have !== undefined && x.target?.type === 'nature' && Number.isFinite(x.have) ? ` (${x.have})` : ''),
+          el('span.vl3-need-text', x.text, x.ok ? '' : x.have !== undefined && x.target?.type === 'nature' && Number.isFinite(x.have) ? ` (${x.have} / ${Number.isFinite(x.n) ? x.n : '?'})` : ''),
           el('span.sr-only', x.ok ? ' : rempli' : ' : il manque'),
           a ? el('button.btn.vl-small.vl3-need-go', { type: 'button', onclick: () => { app.vibrate?.(8); a.go(); } }, a.label) : null,
         );
@@ -474,10 +474,20 @@ export function createPlaces(app) {
       el('div.vl-big', speciesIcon(r.speciesId, 'sprite--hero')),
       el('h3.vl-obs-title', { role: 'status' }, `${the} ${s.pl ? 's\'installent' : 's\'installe'} !`),
       r.anecdote || s.anecdote ? el('p.cz-say', `« ${r.anecdote || s.anecdote} »`) : null,
-      el('p.vl-service', el('span.vl-heart', { 'aria-hidden': 'true' }, '♥ '), r.service?.text || s.opens || ''),
+      el('p.vl-service', el('span.vl-heart', { 'aria-hidden': 'true' }, '♥ '), opensText(r.speciesId, r.service?.text || s.opens || '')),
       el('p.vl-ok', '✓ Le carnet d\'Hélène'),
       el('button.btn.btn--red.btn--big.btn--wide.vl-go.vl-welcome', { type: 'button', id: 'vl3-welcome', onclick: () => app.sheets.close() }, r.welcome || s.welcome || 'Bienvenue !'),
     );
+  }
+  /**
+   * (QA du V3) Ce que la bête ouvre : « Le ruisseau peut maintenant passer à … » seulement si plus rien ne manque ; sinon
+   * « Un pas de plus vers … : il manque encore le bois de la Combe à l'étape 1. »
+   */
+  function opensText(speciesId, text) {
+    const p = placesOf().find((x) => (x.next?.needs || []).some((n) => n.target?.type === 'species' && n.target.id === speciesId));
+    const miss = p ? (p.next.needs || []).filter((n) => !n.ok) : [];
+    if (!p || !miss.length) return text;
+    return `Un pas de plus vers « ${p.next.name} » : il manque encore ${miss.map((n) => lower(n.text)).join(', ')}.`;
   }
   function observe(id) {
     const res = act('observe', id);
