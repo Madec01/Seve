@@ -40,6 +40,7 @@
 //   careerYear {n}                commencer l'année n
 //   careerStock {n}               n unités au grenier en même temps
 //   careerYearNet {n}             n pièces de bénéfice en une année
+//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand
 
 import { CROPS } from './crops.js';
 
@@ -100,10 +101,49 @@ function career(id, name, description, ecus, check) {
 }
 
 /**
- * Tous les succès (niveaux puis carrière) : c'est la liste que parcourt src/core/progression.js.
- * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career'.
+ * (lot 4) Succès « Album et fêtes » (docs/GAME_DESIGN.md § 17.7.2) : 12 succès, 255 écus, aucune étoile (la monnaie
+ * des bonus du mode Niveaux ne change pas). Communs aux deux modes.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS];
+export const COZY_ACHIEVEMENTS = [
+  cozy('albumPage', 'Première page', 'Compléter une page de l\'album.', 10, { type: 'albumPage' }),
+  cozy('goldenHerbarium', 'Herbier doré', 'La page dorée du potager : une récolte dorée de chacune des 15 cultures.', 30, { type: 'albumGoldPage' }),
+  cozy('albumComplete', 'Album complet', 'Compléter les 11 pages de l\'album.', 50, { type: 'albumComplete' }),
+  cozy('brightYear', 'Une année lumineuse', '15 lanternes en une année.', 15, { type: 'lanternsYear', n: 15 }),
+  cozy('allLanterns', 'Toutes les lanternes', '20 lanternes en une année.', 40, { type: 'lanternsYear', n: 20 }),
+  cozy('eggHunter', 'Chasseur d\'œufs', 'Trouver soi-même les 8 œufs d\'une chasse.', 10, { type: 'eggHunter' }),
+  cozy('goldRosette', 'Grand prix du jury', 'Une rosette d\'or au stand de la ferme.', 15, { type: 'goldRosette' }),
+  cozy('birdFriends', 'Les amis à plumes', 'Les 8 oiseaux de la mangeoire.', 15, { type: 'birdFriends', n: 8 }),
+  cozy('handPicked500', 'Les mains dans la terre', '500 récoltes à la main en carrière.', 20, { type: 'handPicked', n: 500 }),
+  cozy('orders50', 'Ami du village', '50 commandes du tableau livrées.', 20, { type: 'ordersTotal', n: 50 }),
+  cozy('fullCart', 'Charrette pleine', 'Remplir toutes les caisses d\'une charrette.', 10, { type: 'cartFull' }),
+  cozy('goldMedals10', 'Dix médailles d\'or', '10 médailles d\'or aux défis de la saison.', 20, { type: 'goldMedals', n: 10 }),
+];
+
+/**
+ * (Vallée vivante, lot V1) 7 succès de carrière (catégorie « Carrière », écus seulement, 155 écus). Condition
+ * careerValley { key, n } sur ctx.career.valley (query.achievementContext()) : started (boîte reçue), fixed (variétés
+ * fixées), installed (habitants installés), stage (étape), hand (récoltes à la main de variétés anciennes).
+ */
+export const VALLEY_ACHIEVEMENTS = [
+  career('valleyBox', 'La boîte en fer', 'Recevoir la boîte en fer de Joseph.', 10, { type: 'careerValley', key: 'started', n: 1 }),
+  career('firstSaved', 'Graine sauvée', 'Sauver une première variété ancienne.', 10, { type: 'careerValley', key: 'fixed', n: 1 }),
+  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixed', n: 12 }),
+  career('firstNeighbour', 'Premier habitant', 'Installer un premier habitant.', 10, { type: 'careerValley', key: 'installed', n: 1 }),
+  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installed', n: 12 }),
+  career('valleySings', 'La vallée chante', 'Atteindre l\'étape 5 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 5 }),
+  career('seedHands', 'Les mains dans les graines', '100 récoltes à la main de variétés anciennes.', 15, { type: 'careerValley', key: 'hand', n: 100 }),
+];
+
+function cozy(id, name, description, ecus, check) {
+  return { id, name, description, category: 'cozy', reward: { stars: 0, ecus }, check };
+}
+
+/**
+ * Tous les succès (niveaux, carrière, puis lot 4) : c'est la liste que parcourt src/core/progression.js.
+ * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
+ * category: 'cozy'.
+ */
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

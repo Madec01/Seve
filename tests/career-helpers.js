@@ -9,9 +9,15 @@ export { DAY_SECONDS, forceWeather, nextDay, record, skipDays };
  * Nouvelle carrière ; 1er jour ensoleillé par défaut (tests indépendants de la météo tirée).
  * Surprises du lot 2 désactivées par défaut (qualité, géants, fée… changeraient les nombres des règles testées
  * ici) : les tests du lot 2 les demandent ({ surprises: true }, tests/surprises*.test.js).
+ * Variété du lot 3 désactivée par défaut (tableau, charrette, colporteur, thèmes remplacent le visiteur et le
+ * marchand ambulant) : les tests du lot 3 la demandent ({ variety: true }, tests/variety*.test.js).
+ * Lot 4 (fêtes, hiver, lanternes, « aider sans remplacer ») désactivé par défaut : les tests du lot 4 le demandent
+ * ({ cozy: true }, tests/cozy*.test.js, tests/f1.test.js).
+ * La Vallée vivante désactivée par défaut (la boîte de Joseph, les habitants, les services changeraient les nombres) :
+ * les tests de la Vallée la demandent ({ valley: true }, tests/valley*.test.js).
  */
 export function newCareer(opts = {}, { rawWeather = false } = {}) {
-  const game = createCareer({ seed: 7, surprises: false, ...opts });
+  const game = createCareer({ seed: 7, surprises: false, variety: false, cozy: false, valley: false, ...opts });
   if (!rawWeather) game.state.weather.today = 'sunny';
   return game;
 }

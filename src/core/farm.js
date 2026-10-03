@@ -21,6 +21,8 @@ import { buildingLevelData } from './career/effects.js';
 import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
 import { SKY } from '../data/surprises.js';
+import { posterFactor } from './variety-effects.js';
+import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, returnTrialSeed, survivesFrost, winterGrowthOf } from './career/heirlooms.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -63,6 +65,8 @@ export function plotUnlockCost(state, level) {
     return START_FIELD.plotCost.base + START_FIELD.plotCost.step * state.plotsBought;
   }
   if (unlockedCount(state) >= level.maxPlots) return null;
+  // (lot 3) Carte « Coup de main au défrichage » : la prochaine parcelle achetée est gratuite.
+  if (state.variety?.cards?.pending?.freePlot) return 0;
   const pc = level.plotCost || PLOT_COST;
   return Math.max(0, pc.base + pc.step * state.plotsBought - perkValue(state, 'plotDiscount'));
 }
@@ -141,13 +145,19 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
     if (crop && isTreeCrop(crop)) {
       growTree(state, p, season, bonus);
     } else if (crop && !isMature(p)) {
+      // (Vallée vivante, carrière) Précoce, sol reposé (× vf) ; sobre (pousse sans arrosage) ; rustique l'hiver (× 0,5).
+      const valley = career && !!state.career?.valley;
+      const vf = valley ? growthFactorOf(state, p) : 1;
       if (career && inGreenhouse(p)) {
         // Serre : la météo n'y entre pas (pas de canicule) ; pousse du niveau de la serre.
-        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, false, level);
-        p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex));
+        const dry = valley ? heirloomDryGrowth(state, p, crop, false) : null;
+        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, false, level);
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex) * vf);
       } else {
-        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, heatwave, level);
-        p.growth = Math.min(crop.growDays, p.growth + base * bonus);
+        const dry = valley ? heirloomDryGrowth(state, p, crop, heatwave) : null;
+        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, heatwave, level);
+        const winter = valley && season === 'winter' ? winterGrowthOf(state, p) : 1;
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus * vf * winter);
       }
     }
     p.watered = false;
@@ -158,8 +168,10 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
 export function applyFrost(state) {
   const lost = [];
   state.plots.forEach((p, i) => {
-    if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p)) {
+    // (Vallée vivante, carrière) Une variété rustique passe le gel.
+    if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p) && !(state.career?.valley && survivesFrost(state, p))) {
       lost.push({ plotIndex: i, cropId: p.cropId });
+      if (state.career?.valley) returnTrialSeed(state, p); // (Vallée) la graine d'une planche d'essai revient
       clearPlot(p);
     }
   });
@@ -181,7 +193,10 @@ export function applyRot(state, rotChance, rng) {
     if (rng.chance(rotChance)) {
       lost.push({ plotIndex: i, cropId: p.cropId, tree });
       if (tree) p.fruit = 0;
-      else clearPlot(p);
+      else {
+        if (state.career?.valley) returnTrialSeed(state, p); // (Vallée) la graine d'une planche d'essai revient
+        clearPlot(p);
+      }
     }
   });
   return lost;
@@ -219,6 +234,13 @@ export function clearPlot(p) {
   if (p.care !== undefined) delete p.care;
   if (p.giant !== undefined) delete p.giant;
   if (p.giantSince !== undefined) delete p.giantSince;
+  // (lot 4, carrière) maturité et désherbage : propres à la culture en place.
+  if (p.ripeAt !== undefined) delete p.ripeAt;
+  if (p.weeded !== undefined) delete p.weeded;
+  if (p.weededBy !== undefined) delete p.weededBy;
+  // (Vallée vivante, carrière) variété et sol reposé : propres à la culture en place (lastVariety et jachère : gardés).
+  if (p.variety !== undefined) delete p.variety;
+  if (p.rested !== undefined) delete p.rested;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */
@@ -242,7 +264,9 @@ export function currentUnitPrice(state, crop) {
  */
 export function rawUnitPrice(state, level, crop) {
   if (state.mode === 'career') return careerCropPrice(state, level, crop);
-  const price = currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  let price = currentUnitPrice(state, crop) * level.modifiers.rawPriceFactor * (level.cropPriceFactor ?? 1);
+  // (lot 3) carte « Une affiche au marché » : récoltes × 1,05 (jamais en Classique : pas de state.variety).
+  if (state.variety) price *= posterFactor(state);
   // (lot 2) heure dorée : récoltes × 1,2 ce jour-là (jamais en Classique : pas de state.surprises).
   return state.surprises?.sky?.today === 'goldenhour' ? price * SKY.goldenPrice : price;
 }

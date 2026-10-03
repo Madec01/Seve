@@ -52,11 +52,34 @@ export const BASE_CROPS = ['carrot', 'turnip', 'wheat', 'cabbage', 'tomato', 'co
 /** Les nouveautés v3 (niveaux 9 à 12, ou bonus « Semencier » dans les niveaux 1 à 8). */
 export const NEW_CROPS = ['potato', 'strawberry', 'zucchini', 'pumpkin', 'apple'];
 
-/** Accès par identifiant. */
+/**
+ * (lot 3) Graines rares : elles n'existent que par le colporteur Basile (et les cartes « Sachet de graines rares »,
+ * le visiteur de l'année des lumières). HORS de CROPS (le marché de carrière, les trouvailles et « Herbier complet »
+ * parcourent CROPS : y ajouter une culture changerait leurs tirages) ; jamais dans les listes des niveaux ni les
+ * rangs de la carrière, jamais semées par le semoir ni les jardiniers, jamais demandées par le tableau ni la
+ * charrette. Un semis consomme une graine du sachet (state.variety.rare), sans payer. Pas de recette d'atelier.
+ * Règles : docs/GAME_DESIGN.md § 16.7.
+ */
+export const RARE_CROPS = [
+  { id: 'pea', name: 'Petits pois', seasons: ['spring'], growDays: 3, seedCost: 5, sellPrice: 17, frostHardy: false, rare: true },
+  { id: 'melon', name: 'Melon', seasons: ['summer'], growDays: 6, seedCost: 15, sellPrice: 64, frostHardy: false, rare: true },
+  { id: 'leek', name: 'Poireau', seasons: ['autumn', 'winter'], growDays: 5, seedCost: 8, sellPrice: 27, frostHardy: true, rare: true },
+];
+
+export const RARE_CROP_IDS = RARE_CROPS.map((c) => c.id);
+
+/** Accès par identifiant (cultures ordinaires ; getCrop trouve aussi les graines rares). */
 export const CROPS_BY_ID = Object.fromEntries(CROPS.map((c) => [c.id, c]));
 
+const RARE_BY_ID = Object.fromEntries(RARE_CROPS.map((c) => [c.id, c]));
+
 export function getCrop(id) {
-  return CROPS_BY_ID[id] || null;
+  return CROPS_BY_ID[id] || RARE_BY_ID[id] || null;
+}
+
+/** true si c'est une graine rare du colporteur (pea, melon, leek). */
+export function isRareCrop(id) {
+  return !!RARE_BY_ID[typeof id === 'string' ? id : id?.id];
 }
 
 /** true si c'est un arbre fruitier (pommier). */

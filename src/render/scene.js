@@ -48,6 +48,19 @@
 //   scene.focusRect(r, opts?)           (v3) défile pour voir le rectangle r (px du monde) au-dessus de la feuille
 //   scene.setContestDay(on | null)      (v3) force (true/false) ou laisse automatique (null) les fanions
 //   scene.layout, scene.effects, scene.zoom, scene.dpr
+//   Zoom du joueur (camera-zoom.js ; pincement et double toucher : src/ui/gestures.js, boutons : src/ui/zoom.js) :
+//   scene.setZoom(z, opts?)             z = nombre (entier le plus proche, borné) | null (défaut) | 'in' | 'out' ;
+//                                       opts { x, y (px CSS : ce point ne bouge pas ; défaut : centre de la vue),
+//                                       animate (true ; jamais en mouvements réduits) } → zoom visé
+//   scene.beginZoomGesture()            début d'un pincement → { zoom, min, max, base }
+//   scene.zoomGestureTo(z0, d0, d, x, y, wx, wy)  zoom z0 × d / d0 (fractionnaire, élastique aux bornes), le point
+//                                       du monde (wx, wy) sous le point d'écran (x, y) px CSS
+//   scene.endZoomGesture(opts?)         la vue se pose sur le zoom entier le plus proche (animé sauf opts.animate
+//                                       false ou mouvements réduits)
+//   scene.zoomInfo()                    { zoom, base, min, max, isDefault, ratio, gesture, animating, canIn, canOut }
+//   scene.setZoomRatio(r)               préférence enregistrée (rapport au défaut, null = défaut), sans animation
+//   Zoomé, la vue défile dans les deux sens (aussi en Niveaux), bornée au monde ; en Niveaux la vue passe alors
+//   en mode fenêtré (couche fixe sur tout le monde, indépendante du zoom) ; zoom par défaut : rendu inchangé.
 //
 // Mode Carrière (game.state.mode === 'career', détecté à chaque image) : disposition en colonne
 // (layout-career.js) qui grandit vers le haut, reconstruite quand les terrains, les bâtiments ou les
@@ -101,6 +114,28 @@
 // dorée, arc-en-ciel, étoiles filantes), légère secousse de la vue à la récolte d'un géant (effects.cameraNudge,
 // jamais en mouvements réduits). scene.lot2Stats() : mesures.
 //
+// Lot 3 « Variété » (variety-actors.js) : tableau du village et ses feuilles, charrette du marché et ses caisses,
+// roulotte de Basile, visiteur du thème, poule voyageuse ; triés par profondeur avec la scène, jamais sans
+// state.variety. hitTest + { type: 'villageBoard' | 'cart' | 'merchant' | 'themeVisitor' } ; scene.varietySpots(),
+// scene.varietyStats().
+//
+// Lot 4 « Collection & enjeux doux » (cozy-actors.js) : objets cachés des fêtes, stand du jour, maire et Lili,
+// trouvailles d'hiver, traces, mangeoire et oiseau, fenêtre de la veillée, porte-lanternes, badge « vous attend »
+// (carrière, F1) ; jamais sans state.cozy. hitTest + { type: 'feteItem', index } | { type: 'winterFind', id } |
+// { type: 'feeder' } | { type: 'storyWindow' } | { type: 'lanternRack' } | { type: 'feteStall' } (cibles ≥ 48 px CSS) ;
+// en mode fête (scene.setFeteMode(true)), seuls les objets cachés répondent (et le défilement).
+//   scene.setFeteMode(on), scene.feteMode, scene.setLanterns(values | null) (niveaux : meilleur résultat du niveau),
+//   scene.cozySpots(), scene.cozyStats(), scene.cozyItemRect(kind, id) (px du monde), scene.cozySing()
+//
+// Vallée vivante, lot V1 (valley-actors.js, carrière seulement) : aménagements nature sur leurs emplacements
+// (layout.valley, layout-career.js), jachères, étiquettes des planches d'essai, dessin des variétés anciennes
+// (heirloom.<id>.<étape>), bêtes (indice, bête qui attend avec « ? », habitants en promenade), cueillette des haies,
+// boîte en fer, lisière fleurie, oiseaux et papillons selon l'étape. hitTest + { type: 'wildlife', id } |
+// { type: 'hedgeFind', id } | { type: 'valleyBox' } | { type: 'natureSpot', spotId } (mode aménagement : seulement
+// celles-ci). scene.setValleyStage(n), scene.setValleyPlacing(kind | null), scene.valleyPlacing,
+// scene.valleyItemRect(kind, id), scene.valleySpots(), scene.valleyStats() ; mini-carte : points des terrains qui ont un
+// emplacement libre en mode aménagement.
+//
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import {
@@ -114,6 +149,10 @@ import { buildSeasonSheets } from './assets.js';
 import { createLayout, tileHash } from './layout.js';
 import { createEffects, canDraw, giantRect } from './effects.js';
 import { createLot2Actors } from './lot2-actors.js';
+import { createVarietyActors } from './variety-actors.js';
+import { createCozyActors } from './cozy-actors.js';
+import { createValleyActors } from './valley-actors.js';
+import { zoomBounds, snapZoom, stepZoom, clampZoom, pinchZoom, staticRegion, zoomRatio, zoomFromRatio } from './camera-zoom.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -122,7 +161,12 @@ const MAX_TILE_CSS = 40; // portrait : une tuile ne dépasse pas ~40 px CSS (tab
 const TOUCH_SLOP_CSS = 8; // tolérance du toucher autour des parcelles
 const ANIMAL_SPEED = { chicken: 15, sheep: 9, cow: 7, goat: 11 };
 const HOP_RATE = { chicken: 9, sheep: 6, cow: 4.5, goat: 7 };
-const FARMER_SPEED = 44;
+// Pas du fermier en px monde par seconde RÉELLE (2026-10-03 : 44, et ×3 sur les longs trajets en carrière, le
+// faisait courir à 250 px CSS/s) ; au-delà de FARMER_JUMP px, raccourci doux (farmerShortcut).
+const FARMER_SPEED = 30;
+const FARMER_JUMP = 150;
+const FARMER_LAND = 26;
+const FARMER_FADE = 0.22;
 const POP_TIME = 0.55;
 const ANIMAL_KINDS = ['chicken', 'sheep', 'cow', 'goat'];
 const PROCESSING_IDS = ['jamWorkshop', 'dairy', 'mill'];
@@ -187,6 +231,31 @@ export function createScene(canvas, images, level, opts = {}) {
   const effects = opts.effects || createEffects(images);
   const lot2 = createLot2Actors(effects); // (lot 2) surprises de l'aube, trouvailles
   lot2.setImages(images);
+  // (Lot 3) Tableau du village, charrette du marché, roulotte de Basile, visiteur du thème, poule voyageuse.
+  const variety = createVarietyActors(effects);
+  variety.setImages(images);
+  // (Lot 4) Fêtes, hiver vivant, porte-lanternes, badge « vous attend » (cozy-actors.js).
+  const cozy = createCozyActors(effects);
+  cozy.setImages(images);
+  // (Vallée vivante, lot V1) Aménagements nature, bêtes, cueillette des haies, boîte en fer, lisière (valley-actors.js).
+  const valley = createValleyActors(effects);
+  valley.setImages(images);
+  /** Objet du lot 3 dans la liste triée par profondeur (sprite de l'atlas, ou repli dessiné : opts.img). */
+  const pushVariety = (name, x, y, sortY, opts = {}) => {
+    if (opts.img) {
+      const e = entry();
+      e.img = opts.img;
+      e.name = '';
+      e.set = null;
+      e.x = x;
+      e.y = y;
+      e.sortY = sortY;
+      if (opts.alpha !== undefined) e.alpha = opts.alpha;
+      if (opts.flipX) e.flipX = true;
+      return e;
+    }
+    return pushSprite(name, x, y, sortY, images, opts);
+  };
   const nudgeOut = { x: 0, y: 0 };
   const minZoom = Math.max(1, opts.minZoom || MIN_ZOOM);
 
@@ -250,6 +319,15 @@ export function createScene(canvas, images, level, opts = {}) {
   let scrollAnim = null; // { from, to, t, dur } défilement animé (px réels, secondes)
   let scrollBeforeOverlay = null; // défilement d'avant l'ouverture de la feuille (px réels)
   const SCROLL_ANIM = 0.32;
+  // Zoom du joueur (camera-zoom.js) : null = zoom par défaut ; fractionnaire seulement pendant un geste.
+  let userZ = null;
+  let userZBase = 0; // zoom par défaut au moment du choix (l'écran change : on garde le rapport)
+  let zoomBase = 2; // zoom par défaut courant
+  let zoomB = { min: 1, max: 4, base: 2 };
+  let zoomGesture = false; // pincement en cours
+  let zoomAnim = null; // { from, to, t, dur, sx, sy, wx, wy } (px réels / monde)
+  let staticGeo = ''; // géométrie de la couche fixe (redessinée seulement si elle change)
+  const ZOOM_ANIM = 0.2;
 
   // Lot 1 « confort » : mouvements réduits (setReducedMotion) et repères des parcelles (setPlotHints).
   let reducedMotion = false;
@@ -291,8 +369,10 @@ export function createScene(canvas, images, level, opts = {}) {
 
   // Fermier
   const farmer = {
-    x: 0, y: 0, path: [], facing: 1, where: 'home', idle: 0, tool: null, toolT: 0, walkT: 0,
+    x: 0, y: 0, path: [], facing: 1, where: 'home', idle: 0, tool: null, toolT: 0, walkT: 0, alpha: 1, jump: null,
   };
+  /** Parcelles touchées par un employé, une machine ou un aide depuis la dernière synchronisation (onEvent). */
+  const helperTouched = new Set();
 
   // Liste de dessin triée par profondeur (réutilisée)
   const entries = [];
@@ -396,37 +476,57 @@ export function createScene(canvas, images, level, opts = {}) {
     band.w = Math.max(1, devW - band.x - Math.round(insets.right * dpr));
     band.h = Math.max(1, devH - band.y - Math.round(insets.bottom * dpr));
     const ess = layout.essential;
+    let zBase;
     if (careerMode && mode !== 'portrait') {
       // Ordinateur : la même colonne, centrée, zoom par la hauteur (≈ 22 tuiles visibles).
       const byWidth = Math.floor(band.w / ess.w);
       const byHeight = Math.max(minZoom, Math.floor(band.h / (CAREER_VISIBLE_ROWS * TILE)));
-      zoom = Math.max(1, Math.min(byWidth, byHeight));
+      zBase = Math.max(1, Math.min(byWidth, byHeight));
     } else if (mode === 'portrait') {
       const byWidth = Math.floor(band.w / ess.w);
       // Le champ entier doit tenir en hauteur dans la bande (cas extrêmes : écran très bas).
       const byField = Math.floor(band.h / (layout.fieldRect.h + TILE));
       const cap = Math.max(1, Math.floor((MAX_TILE_CSS * dpr) / TILE));
-      zoom = Math.max(1, Math.min(byWidth, byField, cap));
+      zBase = Math.max(1, Math.min(byWidth, byField, cap));
     } else {
-      zoom = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
+      zBase = Math.max(minZoom, Math.floor(Math.min(band.w / layout.width, band.h / layout.height)));
     }
+    // Zoom du joueur (pincement, boutons + / −) : bornes autour du zoom par défaut ; entier hors geste.
+    const W0 = layout.x0 ?? 0;
+    const W1 = layout.x1 ?? layout.width;
+    zoomB = zoomBounds({ base: zBase, bandW: band.w, bandH: band.h, worldW: W1 - W0, worldH: layout.height, career: careerMode });
+    if (userZ !== null && userZBase && userZBase !== zBase && !zoomGesture && !zoomAnim) userZ = Math.round((userZ * zBase) / userZBase);
+    if (userZ !== null) userZBase = zBase;
+    if (userZ !== null && !zoomGesture && !zoomAnim && snapZoom(userZ, zoomB) === zBase) userZ = null;
+    zoomBase = zBase;
+    zoom = userZ === null ? zBase : zoomGesture || zoomAnim ? userZ : snapZoom(userZ, zoomB);
+    // Vue limitée à l'écran et couche fixe sur tout le monde : toujours en carrière ; en Niveaux dès que le
+    // joueur a zoomé (la couche fixe ne dépend plus du zoom : rien à reconstruire pendant un pincement).
+    windowed = careerMode || userZ !== null || zoomGesture;
     // Horizontal : partie essentielle centrée dans la bande. (Carrière 2D) le centre de la vue va du
     // centre de la colonne la plus à gauche à celui de la plus à droite (défilement horizontal).
     xLo = ess.x + ess.w / 2;
-    maxScrollXDev = 0;
+    let xHi = xLo;
+    const hw = band.w / 2 / zoom;
     if (careerMode && layout.grid) {
       const G = layout.grid;
       const colW = CAREER_COL_TILES * TILE;
-      const hw = band.w / 2 / zoom;
-      const W0 = layout.x0 ?? 0;
-      const W1 = layout.x1 ?? layout.width;
       const mid = (W0 + W1) / 2;
       let lo = Math.max(G.cMin * colW + xLo, Math.min(W0 + hw, mid));
       let hi = Math.min(G.cMax * colW + xLo, Math.max(W1 - hw, mid));
       if (lo > hi) lo = hi = mid;
       xLo = lo;
-      maxScrollXDev = Math.max(0, Math.round((hi - lo) * zoom));
+      xHi = hi;
     }
+    if (userZ !== null) {
+      // Zoomé : tout le monde (bords compris) se visite de côté, sans jamais sortir de la ferme.
+      let lo2 = W0 + hw;
+      let hi2 = W1 - hw;
+      if (lo2 > hi2) lo2 = hi2 = (W0 + W1) / 2;
+      xLo = Math.min(xLo, lo2);
+      xHi = Math.max(xHi, hi2);
+    }
+    maxScrollXDev = Math.max(0, Math.round((xHi - xLo) * zoom));
     baseX = Math.round(band.x + band.w / 2 - xLo * zoom);
     // Vertical : monde centré s'il tient, sinon défilement (0 = haut du monde en haut de la bande).
     const worldDevH = layout.height * zoom;
@@ -435,7 +535,7 @@ export function createScene(canvas, images, level, opts = {}) {
       maxScrollDev = 0;
     } else {
       baseY = band.y;
-      maxScrollDev = worldDevH - band.h;
+      maxScrollDev = Math.round(worldDevH - band.h);
     }
     // Tampon : couvre tout le canvas, pour tout défilement possible.
     bufX0 = Math.floor(-baseX / zoom) - 1;
@@ -443,33 +543,46 @@ export function createScene(canvas, images, level, opts = {}) {
     let w = Math.ceil(devW / zoom) + 3;
     // + une hauteur d'écran : défilement au-delà du bas du monde quand une feuille est ouverte.
     let h = Math.ceil((devH * 2 + maxScrollDev) / zoom) + 3;
-    // (Carrière) Fenêtré : la vue ne couvre que l'écran ; la couche fixe garde tout le monde.
-    const sh = h;
-    const sw = Math.ceil((devW + maxScrollXDev) / zoom) + 3;
+    let sw = w;
+    let sh = h;
     if (windowed) {
-      sBufY0 = bufY0;
-      sBufX0 = bufX0;
-      h = Math.ceil(devH / zoom) + 3;
+      // Fenêtré : la vue ne couvre que l'écran (taille par le zoom entier inférieur : pas de réallocation à
+      // chaque image d'un pincement) ; la couche fixe couvre le monde pour tout zoom permis (staticRegion).
+      const zs = Math.max(1, Math.floor(zoom + 1e-6));
+      const reg = staticRegion({ worldX0: W0, worldX1: W1, worldH: layout.height, minZoom: zoomB.min, devW, devH, bandCx: band.x + band.w / 2 });
+      sBufX0 = reg.x0;
+      sBufY0 = reg.y0;
+      sw = reg.w;
+      sh = reg.h;
+      w = Math.ceil(devW / zs) + 3;
+      h = Math.ceil(devH / zs) + 3;
     }
     ox = -bufX0;
     oy = -bufY0;
-    const wantStaticH = windowed ? sh : h;
-    const wantStaticW = windowed ? sw : w;
-    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h || staticLayer.height !== wantStaticH || staticLayer.width !== wantStaticW) {
+    if (w !== viewW || h !== viewH || view.width !== w || view.height !== h) {
       viewW = w;
       viewH = h;
-      staticH = wantStaticH;
-      staticW = wantStaticW;
       view.width = viewW;
       view.height = viewH;
-      staticLayer.width = staticW;
-      staticLayer.height = staticH;
       scratch.width = viewW;
       scratch.height = viewH;
       vctx = noSmooth(view.getContext('2d'));
+    }
+    if (staticLayer.height !== sh || staticLayer.width !== sw) {
+      staticH = sh;
+      staticW = sw;
+      staticLayer.width = staticW;
+      staticLayer.height = staticH;
       sctx = noSmooth(staticLayer.getContext('2d'));
     }
-    staticKey = -1;
+    staticW = sw;
+    staticH = sh;
+    // La couche fixe n'est redessinée que si sa géométrie change (taille, origine, mode).
+    const geo = windowed ? `w|${sBufX0}|${sBufY0}|${staticW}|${staticH}` : `n|${ox}|${oy}|${viewW}|${viewH}`;
+    if (geo !== staticGeo) {
+      staticGeo = geo;
+      staticKey = -1;
+    }
     if (!userScrolled) focusFieldDev();
     else {
       if (keepY !== null && keepY !== undefined) setScrollDev(baseY + keepY * zoom - (band.y + band.h / 2));
@@ -492,7 +605,7 @@ export function createScene(canvas, images, level, opts = {}) {
   function applyScroll() {
     if (windowed) {
       // La vue suit le défilement : son coin haut-gauche est le premier pixel du monde visible.
-      bufY0 = Math.max(sBufY0, Math.floor((scrollDev - baseY) / zoom) - 1);
+      bufY0 = Math.max(sBufY0, Math.min(sBufY0 + Math.max(0, staticH - viewH), Math.floor((scrollDev - baseY) / zoom) - 1));
       bufX0 = Math.max(sBufX0, Math.min(sBufX0 + Math.max(0, staticW - viewW), Math.floor((scrollXDev - baseX) / zoom) - 1));
       oy = -bufY0;
       ox = -bufX0;
@@ -850,7 +963,20 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     if (careerMode) return hitTestCareer(w.x, w.y, hitOpts);
     const owned = lastGame ? lastGame.state.investments : undefined;
-    if (hitOpts && hitOpts.touch) return layout.hitTestNear(w.x, w.y, owned, (TOUCH_SLOP_CSS * dpr) / zoom);
+    // (Lot 4) Mode fête : seuls les objets cachés répondent (cibles d'au moins 48 px CSS).
+    const touch = !!(hitOpts && hitOpts.touch);
+    const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
+    if (cozy.feteMode) return cozy.hitTest(w.x, w.y, touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0, cOpts);
+    // (Lot 3) Panneau, charrette, roulotte : touchés en plein d'abord ; la tolérance du doigt ne passe qu'après
+    // les parcelles et les bâtiments (un toucher près du champ reste pour la parcelle).
+    const cHit = cozy.hitTest(w.x, w.y, 0, { ...cOpts, minWorld: 0 });
+    if (cHit) return cHit;
+    const vHit = variety.hitTest(w.x, w.y, 0);
+    if (vHit) return vHit;
+    if (touch) {
+      const slop = (TOUCH_SLOP_CSS * dpr) / zoom;
+      return layout.hitTestNear(w.x, w.y, owned, slop) || cozy.hitTest(w.x, w.y, slop, cOpts) || variety.hitTest(w.x, w.y, slop);
+    }
     return layout.hitTest(w.x, w.y, owned);
   }
 
@@ -861,8 +987,19 @@ export function createScene(canvas, images, level, opts = {}) {
   function hitTestCareer(wx, wy, hitOpts) {
     const touch = !!(hitOpts && hitOpts.touch);
     const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
+    const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
+    if (cozy.feteMode) return cozy.hitTest(wx, wy, slop, cOpts); // (lot 4) mode fête : objets cachés seulement
+    // (Vallée) Mode aménagement : seuls les emplacements libres répondent (et le défilement).
+    if (valley.placing) return valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld });
     const a = actors.hitTest(wx, wy, slop);
     if (a) return a;
+    // (Vallée) Bête qui attend, trouvaille d'une haie, boîte en fer : cibles agrandies pour le doigt (≥ 48 px CSS).
+    const vlHit = valley.hitTest(wx, wy, 0, { minWorld: cOpts.minWorld });
+    if (vlHit) return vlHit;
+    const cHit = cozy.hitTest(wx, wy, 0, { ...cOpts, minWorld: 0 }); // (lot 4) objets cachés, lisière, mangeoire…
+    if (cHit) return cHit;
+    const vHit = variety.hitTest(wx, wy, 0); // (lot 3) panneau, charrette, roulotte, visiteur du thème
+    if (vHit) return vHit;
     const bs = lastGame?.state?.career?.buildings || {};
     for (const [id, s0] of Object.entries(layout.slots)) {
       if (!s0.animal || !(bs[id]?.pending > 0)) continue;
@@ -870,7 +1007,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
       if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
     }
-    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop);
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) || valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }) : null);
   }
 
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
@@ -1037,13 +1174,18 @@ export function createScene(canvas, images, level, opts = {}) {
   function buildStatic(season, owned) {
     const sheets = seasonSheets[season];
     const c = sctx;
+    // Fenêtré (zoom du joueur) : la couche fixe couvre tout le monde, à son origine propre (sBufX0, sBufY0).
+    const SOX = windowed ? -sBufX0 : ox;
+    const SOY = windowed ? -sBufY0 : oy;
+    const SW = windowed ? staticW : viewW;
+    const SH = windowed ? staticH : viewH;
     c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, viewW, viewH);
-    c.translate(ox, oy);
-    const tx0 = Math.floor(-ox / TILE) - 1;
-    const ty0 = Math.floor(-oy / TILE) - 1;
-    const tx1 = Math.ceil((viewW - ox) / TILE) + 1;
-    const ty1 = Math.ceil((viewH - oy) / TILE) + 1;
+    c.clearRect(0, 0, SW, SH);
+    c.translate(SOX, SOY);
+    const tx0 = Math.floor(-SOX / TILE) - 1;
+    const ty0 = Math.floor(-SOY / TILE) - 1;
+    const tx1 = Math.ceil((SW - SOX) / TILE) + 1;
+    const ty1 = Math.ceil((SH - SOY) / TILE) + 1;
     const fr = flowerRate(season);
 
     // 1. Herbe
@@ -1465,7 +1607,10 @@ export function createScene(canvas, images, level, opts = {}) {
       prevForage[i] = p.forage || null;
     }
     // Une action du joueur touche une ou deux parcelles ; au-delà, c'est l'aube (pluie, arroseurs).
-    if (changed >= 1 && changed <= 2) farmerGoTo(lastIdx, lastTool);
+    // (2026-10-03) … mais pas celle d'un employé, d'une machine ou d'un aide : en carrière, le fermier courait après
+    // chaque geste de l'équipe (en continu, à 250 px CSS/s).
+    if (changed >= 1 && changed <= 2 && !helperTouched.has(lastIdx)) farmerGoTo(lastIdx, lastTool);
+    helperTouched.clear();
     if (!initialized) {
       // Étal : cagettes des cultures les plus récoltées jusqu'ici.
       const harvested = game.state.stats?.year?.cropsHarvested || {};
@@ -1533,6 +1678,78 @@ export function createScene(canvas, images, level, opts = {}) {
     for (const p of route) farmer.path.push(p);
   }
 
+  /** Longueur restante du trajet du fermier (px monde). */
+  function farmerPathLeft() {
+    let d = 0;
+    let px = farmer.x;
+    let py = farmer.y;
+    for (const p of farmer.path) {
+      d += Math.hypot(p.x - px, p.y - py);
+      px = p.x;
+      py = p.y;
+    }
+    return d;
+  }
+
+  /**
+   * Raccourci doux du fermier : trajet plus long que FARMER_JUMP → fondu (FARMER_FADE s), réapparition à FARMER_LAND px
+   * du but, fondu d'entrée en marchant. Mouvements réduits : saut direct au dernier point. true : l'image est consommée.
+   */
+  function farmerShortcut(dt) {
+    const last = farmer.path[farmer.path.length - 1];
+    if (reducedMotion) {
+      // Au but tout de suite (son outil compris), sans trajet.
+      farmer.path.length = 0;
+      farmer.x = last.x;
+      farmer.y = last.y;
+      farmer.alpha = 1;
+      farmer.jump = null;
+      if (last.tool) {
+        farmer.tool = last.tool;
+        farmer.toolT = 1.1;
+        farmer.facing = last.facing || 1;
+      }
+      farmer.where = inField(farmer.x, farmer.y) ? 'field' : 'home';
+      farmer.idle = 0;
+      return true;
+    }
+    if (!farmer.jump) {
+      if (farmerPathLeft() <= FARMER_JUMP) return false;
+      farmer.jump = { t: 0, done: false };
+    }
+    const j = farmer.jump;
+    j.t += dt;
+    if (!j.done) {
+      farmer.alpha = Math.max(0, 1 - j.t / FARMER_FADE);
+      if (j.t < FARMER_FADE) return false; // il s'efface en marchant
+      // Réapparaît le long du chemin, à FARMER_LAND px du but.
+      let left = farmerPathLeft();
+      while (farmer.path.length > 1) {
+        const p = farmer.path[0];
+        const seg = Math.hypot(p.x - farmer.x, p.y - farmer.y);
+        if (left - seg < FARMER_LAND) break;
+        left -= seg;
+        farmer.x = p.x;
+        farmer.y = p.y;
+        farmer.path.shift();
+      }
+      const p = farmer.path[0];
+      const seg = Math.hypot(p.x - farmer.x, p.y - farmer.y);
+      const cut = Math.max(0, left - FARMER_LAND);
+      if (seg > 0 && cut > 0) {
+        const k = Math.min(1, cut / seg);
+        farmer.x += (p.x - farmer.x) * k;
+        farmer.y += (p.y - farmer.y) * k;
+      }
+      j.done = true;
+      j.t = 0;
+      return true;
+    }
+    farmer.alpha = Math.min(1, j.t / FARMER_FADE);
+    if (farmer.alpha >= 1) farmer.jump = null;
+    return false;
+  }
+
   function updateFarmer(dt) {
     if (farmer.tool) {
       farmer.toolT -= dt;
@@ -1542,15 +1759,21 @@ export function createScene(canvas, images, level, opts = {}) {
     const next = farmer.path[0];
     if (!next) {
       farmer.walkT = 0;
+      farmer.alpha = 1;
+      farmer.jump = null;
       farmer.idle += dt;
       if (farmer.where === 'field' && farmer.idle > 14) farmerGoHome();
       return;
     }
+    // Rythme (2026-10-03) : pas tranquille en temps réel ; un long trajet (maison ↔ champ lointain) se fait par un
+    // « raccourci doux » (fondu, réapparition près du but) au lieu d'une course à travers la ferme. Mouvements
+    // réduits : le fermier est tout de suite à destination.
+    if (farmerShortcut(dt)) return;
     const dx = next.x - farmer.x;
     const dy = next.y - farmer.y;
     const d = Math.hypot(dx, dy);
-    // Il presse le pas sur les longs trajets (maison ↔ champ).
-    const step = FARMER_SPEED * (farmer.path.length > 2 ? (careerMode ? 3 : 1.7) : 1) * dt;
+    // Il allonge un peu le pas sur les longs trajets (maison ↔ champ).
+    const step = FARMER_SPEED * (farmer.path.length > 2 ? 1.25 : 1) * dt;
     farmer.walkT += dt;
     if (Math.abs(dx) > 0.5) farmer.facing = dx > 0 ? 1 : -1;
     if (d <= step) {
@@ -1775,7 +1998,9 @@ export function createScene(canvas, images, level, opts = {}) {
       } else if (stage >= 2 && season !== 'winter') {
         dy += Math.sin(time * 1.3 + i * 0.9) > 0.8 ? -1 : 0;
       }
-      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+      // (Vallée) Variété ancienne : son propre dessin (heirloom.<id>.<étape>), sinon celui de la culture.
+      const hName = pv.variety?.id ? `heirloom.${pv.variety.id}.${stage}` : null;
+      drawSprite(c, images, hName && canDraw(images, hName) ? hName : cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
       // Graine tout juste semée : une pousse bien lisible (forme), même sur une terre sombre.
       if (stage === 0) drawPixelMap(c, MARK_SPROUT, r.x + 5 * k, r.y + 7 * k, k);
       if (pv.mature) {
@@ -2187,13 +2412,7 @@ export function createScene(canvas, images, level, opts = {}) {
     for (const id of PROCESSING_IDS) if (A.has(id)) pushWorkshop(id, owned, objSet);
 
     // (v3) Décorations posées sur les emplacements (la mare est au sol, dans la couche fixe)
-    for (const d of layout.decorSlots || []) {
-      if (d.kind !== 'small') continue;
-      const name = decorSprite(cosmetics.decor[d.id]);
-      if (!name || name === 'deco.pond') continue;
-      const tall = (SPRITES[name].h || 1) > 1;
-      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
-    }
+    for (const d of layout.decorSlots || []) pushDecor(d, objSet);
     // (v3) Coupe du concours posée sur le panneau de la ferme
     const cres = lastGame?.state?.contest?.result;
     const met = cres && Array.isArray(cres.goalsMet) ? cres.goalsMet.length : 0;
@@ -2230,11 +2449,14 @@ export function createScene(canvas, images, level, opts = {}) {
       const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
       const x = Math.round(farmer.x) - 8;
       const y = Math.round(farmer.y) - 15 + hop + workBob;
-      pushSprite(outfitSprite(cosmetics.outfit), x, y, farmer.y + 1, images, {
-        flipX: farmer.facing < 0,
-        tool: farmer.tool,
-        toolFlip: farmer.facing < 0,
-      });
+      if ((farmer.alpha ?? 1) > 0.02) {
+        pushSprite(outfitSprite(cosmetics.outfit), x, y, farmer.y + 1, images, {
+          flipX: farmer.facing < 0,
+          tool: farmer.tool,
+          toolFlip: farmer.facing < 0,
+          alpha: farmer.alpha ?? 1,
+        });
+      }
     }
     void weather;
     void dayProgress;
@@ -2319,13 +2541,7 @@ export function createScene(canvas, images, level, opts = {}) {
       }
     }
     // Décorations posées sur les emplacements
-    for (const d of L.decorSlots || []) {
-      if (d.kind !== 'small') continue;
-      const name = decorSprite(cosmetics.decor[d.id]);
-      if (!name || name === 'deco.pond') continue;
-      const tall = (SPRITES[name].h || 1) > 1;
-      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
-    }
+    for (const d of L.decorSlots || []) pushDecor(d, objSet);
     const pond = (L.decorSlots || []).find((d) => d.id === 'pond');
     if (pond && decorSprite(cosmetics.decor.pond) === 'deco.pond') pushSprite('deco.pond', pond.x, pond.y, pond.y + 1, objSet);
     // Coupe du comice sur le panneau de la ferme ; cocarde pendant le comice
@@ -2350,7 +2566,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const workBob = farmer.tool && Math.sin(farmer.toolT * 18) > 0 ? 1 : 0;
       const x = Math.round(farmer.x) - 8;
       const y = Math.round(farmer.y) - 15 + hop + workBob;
-      pushSprite(farmerSprite(), x, y, farmer.y + 1, images, { flipX: farmer.facing < 0, tool: farmer.tool, toolFlip: farmer.facing < 0 });
+      if ((farmer.alpha ?? 1) > 0.02) pushSprite(farmerSprite(), x, y, farmer.y + 1, images, { flipX: farmer.facing < 0, tool: farmer.tool, toolFlip: farmer.facing < 0, alpha: farmer.alpha ?? 1 });
     }
   }
 
@@ -2446,9 +2662,15 @@ export function createScene(canvas, images, level, opts = {}) {
   /** Eau des mares : quelques reflets qui scintillent. */
   function drawWater() {
     const c = vctx;
+    // (Lot 4) Hiver vivant : la mare gèle (glace et trou de pêche), on y pêche quand même.
+    const iced = !!(lastGame?.state?.cozy?.parts?.winter && lastGame.state.time && (lastGame.state.time.seasonIndex % 4) === 3);
     for (const p of layout.ponds) {
       const w = p.water;
       if ((w.y + w.h) * TILE < -oy || w.y * TILE > -oy + viewH) continue;
+      if (iced) {
+        drawIce(c, w);
+        continue;
+      }
       for (let k = 0; k < 7; k++) {
         const ph = (time * 0.7 + k * 0.37) % 1;
         if (ph > 0.5) continue;
@@ -2461,6 +2683,40 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       c.globalAlpha = 1;
     }
+  }
+
+  /** (Lot 4) Glace d'hiver sur une mare (tuiles d'eau) : voile clair, fissures, trou de pêche rond. */
+  function drawIce(c, w) {
+    const x = (w.x + 1) * TILE - 4;
+    const y = (w.y + 1) * TILE - 4;
+    const ww = (w.w - 2) * TILE + 8;
+    const hh = (w.h - 2) * TILE + 8;
+    if (ww <= 0 || hh <= 0) return;
+    c.globalAlpha = 0.55;
+    c.fillStyle = '#e8f4ff';
+    c.fillRect(x, y, ww, hh);
+    c.globalAlpha = 0.8;
+    c.fillStyle = '#b9d4ee';
+    for (let k = 0; k < 4; k++) {
+      const cx = x + Math.floor(tileHash(w.x, k, 41) * (ww - 10)) + 3;
+      const cy = y + Math.floor(tileHash(w.y, k, 43) * (hh - 6)) + 2;
+      c.fillRect(cx, cy, 5, 1);
+      c.fillRect(cx + 4, cy + 1, 3, 1);
+    }
+    // Trou de pêche (au bord droit) : eau sombre qui scintille.
+    const hx = x + ww - 14;
+    const hy = y + Math.floor(hh / 2) - 3;
+    c.globalAlpha = 1;
+    c.fillStyle = OUTLINE;
+    c.fillRect(hx - 1, hy, 9, 6);
+    c.fillRect(hx, hy - 1, 7, 8);
+    c.fillStyle = '#3b6891';
+    c.fillRect(hx, hy, 7, 6);
+    if (!reducedMotion && Math.sin(time * 2.3) > 0.6) {
+      c.fillStyle = '#e8f6ff';
+      c.fillRect(hx + 2, hy + 2, 2, 1);
+    }
+    c.globalAlpha = 1;
   }
 
   /** Bulles de ramassage au-dessus des abris (production en attente) ; nombres à l'écran ensuite. */
@@ -2565,6 +2821,44 @@ export function createScene(canvas, images, level, opts = {}) {
     ctx.restore();
   }
 
+  /**
+   * Décoration posée sur un emplacement (petite, ou grande 2 × 2 hors mare : le grand herbier, le grand lampion du
+   * lot 4). Sprite absent (planche pas encore chargée) : petit repli dessiné.
+   */
+  function pushDecor(d, objSet) {
+    if (d.kind !== 'small' && d.kind !== 'large') return;
+    const name = decorSprite(cosmetics.decor[d.id]);
+    if (!name || name === 'deco.pond') return;
+    if (d.kind === 'large' && (SPRITES[name].h || 1) < 2) return; // mare de l'emplacement : couche fixe
+    if (!canDraw(objSet, name)) {
+      pushVariety(null, d.x, d.kind === 'large' ? d.y : d.y, d.y + d.h - 0.5, { img: decorFallback(d.kind === 'large' ? 32 : 16) });
+      return;
+    }
+    const tall = d.kind === 'small' && (SPRITES[name].h || 1) > 1;
+    pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + (d.kind === 'large' ? d.h : TILE) - 0.5, objSet);
+  }
+
+  const decorFallbacks = {};
+  /** Repli d'une décoration dont la planche manque : socle de bois et étoile (16 ou 32 px). */
+  function decorFallback(size) {
+    if (decorFallbacks[size]) return decorFallbacks[size];
+    const cv = makeCanvas(size, size);
+    const g = cv.getContext('2d');
+    const k = size / 16;
+    g.fillStyle = OUTLINE;
+    g.fillRect(3 * k, 11 * k, 10 * k, 4 * k);
+    g.fillStyle = '#b8794a';
+    g.fillRect(4 * k, 12 * k, 8 * k, 2 * k);
+    g.fillStyle = OUTLINE;
+    g.fillRect(6 * k, 3 * k, 4 * k, 8 * k);
+    g.fillRect(4 * k, 5 * k, 8 * k, 4 * k);
+    g.fillStyle = '#fddc00';
+    g.fillRect(7 * k, 4 * k, 2 * k, 6 * k);
+    g.fillRect(5 * k, 6 * k, 6 * k, 2 * k);
+    decorFallbacks[size] = cv;
+    return cv;
+  }
+
   function drawEntries() {
     drawList.length = 0;
     for (let i = 0; i < entryCount; i++) drawList.push(entries[i]);
@@ -2578,7 +2872,15 @@ export function createScene(canvas, images, level, opts = {}) {
     const vx1 = -ox + viewW + 8;
     for (const e of drawList) {
       if (e.img) {
-        c.drawImage(e.img, e.x, e.y);
+        if (e.alpha !== 1) c.globalAlpha = Math.max(0, Math.min(1, e.alpha));
+        if (e.flipX) {
+          c.save();
+          c.translate(e.x + e.img.width, e.y);
+          c.scale(-1, 1);
+          c.drawImage(e.img, 0, 0);
+          c.restore();
+        } else c.drawImage(e.img, e.x, e.y);
+        if (e.alpha !== 1) c.globalAlpha = 1;
         continue;
       }
       if (cull) {
@@ -2913,7 +3215,8 @@ export function createScene(canvas, images, level, opts = {}) {
       const name = decorSprite(cosmetics.decor[d.id]);
       if (name) {
         const tall = (SPRITES[name].h || 1) > 1 && d.kind === 'small';
-        drawSprite(c, objSet, name, d.x, tall ? d.y - TILE : d.y);
+        if (canDraw(objSet, name)) drawSprite(c, objSet, name, d.x, tall ? d.y - TILE : d.y);
+        else c.drawImage(decorFallback(d.kind === 'large' ? 32 : 16), d.x, d.y);
         // Objet posé : souligné d'un trait clair.
         c.globalAlpha = 0.6 + 0.4 * pulse;
         c.fillStyle = '#fff3b0';
@@ -3227,6 +3530,17 @@ export function createScene(canvas, images, level, opts = {}) {
           mmSprite(c, 'icon.career.quest', p.x, p.y - icon * 0.4 - (pulse ? 1 : 0), icon);
         }
       }
+      // (Vallée) Mode aménagement : un point sur chaque terrain qui a un emplacement libre du genre choisi.
+      if (valley.placing) {
+        const pulse2 = Math.sin(time * 4) > 0;
+        const seen = new Set();
+        for (const s0 of valley.placingSpots()) {
+          if (seen.has(s0.lotId)) continue;
+          seen.add(s0.lotId);
+          const r = layout.valley?.spots?.[s0.spotId];
+          if (r) dot(map.toMap(r.x + r.w / 2, r.y + r.h / 2), pulse2 ? '#fff3b0' : '#8ee06a', Math.max(2, Math.round(cs / 10)));
+        }
+      }
       // Vue courante
       const v = visibleWorldRect();
       const a = map.toMap(v.x, v.y);
@@ -3281,12 +3595,141 @@ export function createScene(canvas, images, level, opts = {}) {
     return scrollPair(scrollAnim ? scrollAnim.toX : scrollXDev, scrollAnim ? scrollAnim.to : scrollDev);
   }
 
+  // ── Zoom du joueur (pincement, boutons + / −, double toucher) ─────────────────────
+  /** Point de la bande visible (au-dessus d'une feuille ouverte), px CSS : ancre par défaut. */
+  function viewCenterCss() {
+    return { x: (band.x + band.w / 2) / dpr, y: (band.y + (band.h - overlayDev) / 2) / dpr };
+  }
+
+  /**
+   * Pose le zoom z (null = défaut) en gardant le point du monde (wx, wy) sous le point d'écran (sx, sy)
+   * (px réels). Recalcule les bornes du défilement (la vue reste dans la ferme).
+   */
+  function applyZoom(z, sx, sy, wx, wy) {
+    userZ = z === null || z === undefined ? null : z;
+    if (userZ !== null) userZBase = zoomBase;
+    stopFling();
+    scrollAnim = null;
+    scrollBeforeOverlay = null;
+    scrollXBeforeOverlay = null;
+    userScrolled = true;
+    computeCamera();
+    setScrollXDev(baseX + wx * zoom - sx);
+    setScrollDev(baseY + wy * zoom - sy);
+  }
+
+  function reduceMotionOn() {
+    return reducedMotion || (typeof document !== 'undefined' && document.documentElement.classList.contains('reduced-motion'));
+  }
+
+  /** Point d'ancrage (px CSS) → { sx, sy } px réels et le point du monde dessous. */
+  function anchorAt(opts) {
+    const c = opts && Number.isFinite(opts.x) && Number.isFinite(opts.y) ? { x: opts.x, y: opts.y } : viewCenterCss();
+    const w = screenToWorld(c.x, c.y);
+    return { sx: c.x * dpr, sy: c.y * dpr, wx: w.x, wy: w.y };
+  }
+
+  /**
+   * setZoom(z, opts?) : z = nombre (posé sur l'entier le plus proche, borné), null (zoom par défaut),
+   * 'in' / 'out' (cran suivant). opts { x, y (px CSS, point qui ne bouge pas ; défaut : centre de la vue),
+   * animate (true ; jamais en mouvements réduits) }. Renvoie le zoom visé.
+   */
+  function setZoom(z, opts = {}) {
+    const cur = zoom;
+    let target;
+    if (z === 'in' || z === 'out') target = stepZoom(cur, z === 'in' ? 1 : -1, zoomB);
+    else if (z === null || z === undefined) target = zoomBase;
+    else target = snapZoom(z, zoomB);
+    const a = anchorAt(opts);
+    zoomGesture = false;
+    const final = target === zoomBase ? null : target;
+    if (opts.animate === false || reduceMotionOn() || Math.abs(target - cur) < 1e-3) {
+      zoomAnim = null;
+      applyZoom(final, a.sx, a.sy, a.wx, a.wy);
+      return zoom;
+    }
+    zoomAnim = { from: cur, to: target, final, t: 0, dur: ZOOM_ANIM, ...a };
+    applyZoom(cur, a.sx, a.sy, a.wx, a.wy);
+    return target;
+  }
+
+  function stepZoomAnim(dt) {
+    if (!zoomAnim) return;
+    const a = zoomAnim;
+    a.t = Math.min(a.dur, a.t + dt);
+    const k = a.t / a.dur;
+    const e = 1 - (1 - k) ** 3;
+    if (k >= 1) {
+      zoomAnim = null;
+      applyZoom(a.final, a.sx, a.sy, a.wx, a.wy);
+      return;
+    }
+    applyZoom(a.from + (a.to - a.from) * e, a.sx, a.sy, a.wx, a.wy);
+  }
+
+  /** Début d'un pincement : la vue passe en mode fenêtré (couche fixe indépendante du zoom). */
+  function beginZoomGesture() {
+    zoomAnim = null;
+    zoomGesture = true;
+    const z0 = zoom;
+    const a = anchorAt();
+    applyZoom(z0, a.sx, a.sy, a.wx, a.wy);
+    return { zoom: z0, ...zoomB };
+  }
+
+  /**
+   * Pendant le pincement : zoom z0 × d / d0 (borné, léger dépassement élastique), le point du monde
+   * (wx, wy) sous le point d'écran (x, y) px CSS (milieu des doigts : zoomer et déplacer à la fois).
+   */
+  function zoomGestureTo(z0, d0, d, x, y, wx, wy) {
+    if (!zoomGesture) beginZoomGesture();
+    applyZoom(pinchZoom(z0, d0, d, zoomB), x * dpr, y * dpr, wx, wy);
+    return zoom;
+  }
+
+  /** Fin du pincement : la vue se pose sur le zoom entier le plus proche (animé, sauf mouvements réduits). */
+  function endZoomGesture(opts = {}) {
+    if (!zoomGesture) return zoom;
+    const z = zoom;
+    zoomGesture = false;
+    // On garde un zoom fractionnaire le temps de l'animation (setZoom part de là).
+    userZ = z;
+    return setZoom(Math.round(clampZoom(z, zoomB)), opts);
+  }
+
+  function zoomInfo() {
+    return {
+      zoom,
+      base: zoomBase,
+      min: zoomB.min,
+      max: zoomB.max,
+      isDefault: userZ === null && !zoomGesture && !zoomAnim,
+      ratio: zoomRatio(userZ === null ? null : snapZoom(zoomAnim ? zoomAnim.to : userZ, zoomB), zoomBase),
+      gesture: zoomGesture,
+      animating: !!zoomAnim,
+      canIn: (zoomAnim ? zoomAnim.to : zoom) < zoomB.max - 1e-6,
+      canOut: (zoomAnim ? zoomAnim.to : zoom) > zoomB.min + 1e-6,
+    };
+  }
+
+  /** Préférence enregistrée (rapport au zoom par défaut) → zoom entier borné, sans animation, centre gardé. */
+  function setZoomRatio(r) {
+    const z = zoomFromRatio(r, zoomB);
+    const a = anchorAt();
+    zoomAnim = null;
+    zoomGesture = false;
+    if (z === null && userZ === null) return zoom;
+    applyZoom(z, a.sx, a.sy, a.wx, a.wy);
+    return zoom;
+  }
+
   // ── Image ───────────────────────────────────────────────────────────────────────
   const fxState = { season: 'spring', weather: 'sunny', dayProgress: 0.5, view: { x: 0, y: 0, w: 512, h: 320 } };
   function render(game, timeMs = (typeof performance !== 'undefined' ? performance.now() : Date.now())) {
     const dt = lastTime === null ? 0 : Math.min(0.1, Math.max(0, (timeMs - lastTime) / 1000));
     lastTime = timeMs;
     time += dt;
+    stepZoomAnim(dt);
     stepScrollAnim(dt);
     if (flingV !== 0 || flingVX !== 0) {
       const before = scrollDev;
@@ -3325,6 +3768,8 @@ export function createScene(canvas, images, level, opts = {}) {
       resetTracking();
       effects.clear();
       lot2.clear();
+      variety.clear();
+      cozy.clear();
     }
 
     const cal = game.query.calendar();
@@ -3338,6 +3783,8 @@ export function createScene(canvas, images, level, opts = {}) {
     syncOwned(game);
     syncPlots(game, raining);
     lot2.sync(game, layout, { day: game.state.time?.day || 0, dayProgress });
+    variety.sync(game, layout, { time });
+    cozy.sync(game, layout, { time });
     initialized = true;
 
     // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
@@ -3361,17 +3808,22 @@ export function createScene(canvas, images, level, opts = {}) {
     fxState.view.h = viewH;
     effects.update(dt, fxState);
     lot2.update(dt);
+    variety.update(dt);
+    cozy.update(dt);
 
     // Tampon de vue
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.globalAlpha = 1;
     c.globalCompositeOperation = 'source-over';
-    c.drawImage(staticLayer, 0, 0);
+    if (windowed) c.drawImage(staticLayer, bufX0 - sBufX0, bufY0 - sBufY0, viewW, viewH, 0, 0, viewW, viewH);
+    else c.drawImage(staticLayer, 0, 0);
     c.translate(ox, oy);
     drawPlots(sheetsEnv, raining, season);
     effects.drawGround(c, images);
     collectDrawables(owned, season, sheetsEnv, weather, dayProgress);
+    variety.collect(pushVariety);
+    cozy.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3379,6 +3831,7 @@ export function createScene(canvas, images, level, opts = {}) {
     if (contestDay(cal)) drawBunting();
     drawWorkBubbles(owned);
     drawPlotMarkers();
+    cozy.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3387,11 +3840,13 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
     drawLampGlow(dayProgress, weather);
+    cozy.drawGlow(c, ox, oy, dayProgress, weather);
     effects.postProcess(c, view, scratch);
 
     // Canvas final
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
+    if (windowed) ctx.clearRect(0, 0, devW, devH);
     effects.cameraNudge(nudgeOut); // (lot 2) secousse douce (géant), 0 en mouvements réduits
     ctx.drawImage(view, 0, 0, viewW, viewH, blitX + nudgeOut.x * zoom, blitY + nudgeOut.y * zoom, viewW * zoom, viewH * zoom);
     drawSignText();
@@ -3435,6 +3890,9 @@ export function createScene(canvas, images, level, opts = {}) {
       resetTracking();
       effects.clear();
       lot2.clear();
+      variety.clear();
+      cozy.clear();
+      valley.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -3469,6 +3927,9 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.shift(0, dy);
       actors.shift(dy);
       lot2.shift(0, dy);
+      variety.shift(0, dy);
+      cozy.shift(0, dy);
+      valley.shift(0, dy);
     }
     computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
     if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
@@ -3571,6 +4032,9 @@ export function createScene(canvas, images, level, opts = {}) {
         break;
     }
     actors.onEvent(type, payload, L);
+    variety.onEvent(type, payload, L);
+    cozy.onEvent(type, payload, L);
+    valley.onEvent(type, payload, L);
     effects.onEvent(type, payload, L);
   }
 
@@ -3619,6 +4083,9 @@ export function createScene(canvas, images, level, opts = {}) {
     syncPlots(game, raining);
     actors.sync(game, layout, time);
     lot2.sync(game, layout, { day: careerDay(game), dayProgress, career: true });
+    variety.sync(game, layout, { time });
+    cozy.sync(game, layout, { time });
+    valley.sync(game, layout, { time });
     initialized = true;
     flushDeferred();
 
@@ -3629,7 +4096,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
 
     updateFarmer(dt);
-    actors.update(dt, { elapsed: game.state.time?.elapsed || 0, season, weather, dayProgress });
+    actors.update(dt, { elapsed: game.state.time?.elapsed || 0, speed: game.state.speed || 0, season, weather, dayProgress });
     emitCareerAmbient(dt, owned, season, weather, dayProgress);
     fxState.season = season;
     fxState.weather = weather;
@@ -3641,6 +4108,9 @@ export function createScene(canvas, images, level, opts = {}) {
     fxState.view.h = viewH;
     effects.update(dt, fxState);
     lot2.update(dt);
+    variety.update(dt);
+    cozy.update(dt);
+    valley.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -3651,10 +4121,14 @@ export function createScene(canvas, images, level, opts = {}) {
     c.translate(ox, oy);
     drawWater();
     drawPlots(sheetsEnv, raining, season);
+    valley.drawGround(c, layout, fxState.view); // (Vallée) jachères, bandes fleuries, berges, indices
     drawGlass();
     effects.drawGround(c, images);
     drawClearing(season, sheetsEnv);
     collectCareer(owned, season, sheetsEnv);
+    variety.collect(pushVariety);
+    cozy.collect(pushVariety);
+    valley.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3664,6 +4138,8 @@ export function createScene(canvas, images, level, opts = {}) {
     drawWorkBubbles(owned);
     drawCollectBubbles();
     drawPlotMarkers();
+    cozy.drawOverlay(c, layout);
+    valley.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3672,6 +4148,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
     drawLampGlow(dayProgress, weather);
+    cozy.drawGlow(c, ox, oy, dayProgress, weather);
     drawFairGlow(dayProgress, weather);
     effects.postProcess(c, view, scratch);
 
@@ -3690,6 +4167,9 @@ export function createScene(canvas, images, level, opts = {}) {
     resetTracking();
     effects.clear();
     lot2.clear();
+    variety.clear();
+    cozy.clear();
+    valley.clear();
     userScrolled = false;
     stopFling();
     scrollAnim = null;
@@ -3722,6 +4202,9 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.setReducedMotion?.(reducedMotion);
       actors.setReducedMotion?.(reducedMotion);
       lot2.setReducedMotion(reducedMotion);
+      variety.setReducedMotion(reducedMotion);
+      cozy.setReducedMotion(reducedMotion);
+      valley.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -3742,6 +4225,8 @@ export function createScene(canvas, images, level, opts = {}) {
       hover = hit || null;
     },
     onEvent(type, payload) {
+      // Geste d'un employé, d'une machine ou d'un aide sur une parcelle : le fermier ne s'y rend pas (syncPlots).
+      if (payload && payload.by && payload.by !== 'player' && Number.isInteger(payload.plotIndex ?? payload.index)) helperTouched.add(payload.plotIndex ?? payload.index);
       if (careerMode && type !== 'treeRemoved') {
         // Carrière : traité après la prochaine reconstruction de la disposition (positions à jour).
         deferred.push([type, payload || {}]);
@@ -3761,6 +4246,8 @@ export function createScene(canvas, images, level, opts = {}) {
         }
       }
       if (LOT2_EVENTS.has(type)) lot2.onEvent(type, payload || {}, layout);
+      variety.onEvent(type, payload || {}, layout);
+      cozy.onEvent(type, payload || {}, layout);
       effects.onEvent(type, payload, layout);
     },
     setLevel,
@@ -3826,8 +4313,72 @@ export function createScene(canvas, images, level, opts = {}) {
       return actors;
     },
     /** (Lot 2) Surprises en cours (mesures, débogage). */
+    /** (Lot 3) Repères du tableau, de la charrette et de la roulotte (px du monde), ou null. */
+    varietySpots() {
+      return variety.spots();
+    },
+    varietyStats() {
+      return variety.stats();
+    },
+    // ── (Lot 4) Fêtes, hiver, lanternes ──
+    /** Mode fête (chasse aux œufs…) : seuls les objets cachés répondent au toucher ; le défilement reste. */
+    setFeteMode(on) {
+      cozy.setFeteMode(on);
+      if (on) hover = null;
+    },
+    get feteMode() {
+      return cozy.feteMode;
+    },
+    /** Niveaux : porte-lanternes du perron (meilleur résultat du niveau, [5] de 0 à 4), null = éteint. */
+    setLanterns(values) {
+      cozy.setLanterns(values);
+    },
+    cozySpots() {
+      return cozy.spots();
+    },
+    cozyStats() {
+      return cozy.stats();
+    },
+    /** Rectangle (px du monde) d'une cible du lot 4 : 'feteItem' (index) | 'winterFind' (id) | 'feeder' | … */
+    cozyItemRect(kind, id) {
+      return cozy.itemRect(kind, id);
+    },
+    /** L'oiseau de la mangeoire chante (petit saut). */
+    cozySing() {
+      cozy.sing();
+    },
+    // ── (Vallée vivante, lot V1) ──
+    /** Étape de la vallée (0..5) : lisière fleurie, vols d'oiseaux, papillons l'été. */
+    setValleyStage(n) {
+      valley.setStage(n);
+    },
+    /** Mode aménagement : les emplacements libres du genre pulsent ; seuls eux répondent au toucher (null : fin). */
+    setValleyPlacing(kind) {
+      valley.setPlacing(kind || null);
+      if (kind) hover = null;
+    },
+    get valleyPlacing() {
+      return valley.placing;
+    },
+    /** Rectangle (px du monde) : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId). */
+    valleyItemRect(kind, id) {
+      return valley.itemRect(kind, id);
+    },
+    /** Repères de la Vallée de la disposition : { spots, box, animalAnchors } (px du monde), ou null. */
+    valleySpots() {
+      return careerMode ? layout.valley || null : null;
+    },
+    valleyStats() {
+      return valley.stats();
+    },
     lot2Stats() {
       return { ...lot2.stats(), effects: effects.stats() };
+    },
+    /** Mesures (QA du rythme) : fermier, acteurs de la carrière, animaux des niveaux, échelle (px CSS par px monde). */
+    actorProbe() {
+      const levelAnimals = [];
+      for (const kind of ANIMAL_KINDS) if (animals[kind]?.[0]) levelAnimals.push({ kind, x: animals[kind][0].x, y: animals[kind][0].y, moving: !!animals[kind][0].moving });
+      return { farmer: { x: farmer.x, y: farmer.y, walking: farmer.path.length > 0, walkT: farmer.walkT }, career: careerMode ? actors.probe() : null, animals: levelAnimals, cssPerWorld: zoom / (dpr || 1) };
     },
     careerStats() {
       return { ...actors.stats(), view: { w: viewW, h: viewH }, staticLayer: { w: staticW, h: staticH }, world: { w: layout.width, h: layout.height }, zoom, windowed };
@@ -3859,6 +4410,12 @@ export function createScene(canvas, images, level, opts = {}) {
     minimapToWorld,
     minimapLotAt,
     focusWorld,
+    setZoom,
+    setZoomRatio,
+    beginZoomGesture,
+    zoomGestureTo,
+    endZoomGesture,
+    zoomInfo,
     /** Rectangle du monde (px) visible au-dessus de la feuille ouverte. */
     viewRect: visibleWorldRect,
     fling,

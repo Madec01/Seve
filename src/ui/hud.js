@@ -78,10 +78,12 @@ export function createHud(root, app) {
   // Symbole (✓ / ! / ✗, dessiné en CSS) et mot d'état : la couleur n'est jamais seule à parler.
   const billGlyph = el('span.bill-glyph', { 'aria-hidden': 'true' });
   const billWord = el('span.bill-word', '');
+  // (Lot 3) Carte « Le geste du propriétaire » : prochain fermage −20 % (query.finance().nextBill.reduced).
+  const billCut = el('small.bill-cut', { hidden: true, 'aria-hidden': 'true' }, '−20 %');
   const bill = el(
     'button.hud-cell.hud-bill.has-tip',
     { type: 'button', id: 'hud-bill', 'data-tip-side': 'bottom', 'aria-label': 'Prochain fermage', onclick: () => openInfo('bill') },
-    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount, billGlyph),
+    el('span.hud-line.hud-line--big', icon('bill', 'sm'), billAmount, billCut, billGlyph),
     el('span.hud-line.hud-small.bill-line', billWord, billDays),
   );
   bill._tip = () => billTip();
@@ -241,14 +243,29 @@ export function createHud(root, app) {
   /**
    * Case météo trop étroite (carrière : argent à 5 chiffres, « couvert · demain ») : l'icône du jour seule,
    * plutôt qu'une flèche coupée et « Nu… » (le nom et demain restent dans la fiche de la météo).
+   * Puis case du fermage trop étroite (carrière à 150 % sur 360 px : « couvert · 6 j » recouvrait l'icône de la
+   * météo) : le mot d'état s'efface (le symbole ✓ / ! / ✗ et la couleur restent, le mot est dans la fiche et le
+   * libellé), puis l'icône du fermage ; s'il le faut encore, la ligne est coupée dans sa case (css/style.css),
+   * jamais sur la voisine.
    */
   let fitKey = '';
-  function fitWeather() {
+  let shownMoneyLen = 0;
+  // Police chargée après la première mesure : les largeurs changent, on remesure.
+  document.fonts?.addEventListener?.('loadingdone', () => {
+    fitKey = '';
+    fitRow();
+  });
+  function fitRow() {
     const key = `${window.innerWidth}|${document.documentElement.dataset.textScale || ''}|${weather.parentElement?.textContent || weather.textContent}`;
     if (key === fitKey) return;
     fitKey = key;
     weather.classList.remove('is-tight');
+    bill.classList.remove('is-tight', 'is-tighter');
     if (weather.scrollWidth > weather.clientWidth + 1) weather.classList.add('is-tight');
+    // Les lignes et leurs morceaux se coupent déjà en « … » (css) : on regarde chacun.
+    const cut = () => [...bill.querySelectorAll('.hud-line, .hud-line > *')].some((n) => n.scrollWidth > n.clientWidth + 1);
+    if (cut()) bill.classList.add('is-tight'); // 1) le mot d'état s'efface
+    if (cut()) bill.classList.add('is-tighter'); // 2) puis l'icône du fermage (le montant et ✓ / ! / ✗ restent)
   }
 
   /** (Lot 2) Icône de météo spéciale à la place de l'icône de base (nœud mis en cache par météo). */
@@ -283,6 +300,7 @@ export function createHud(root, app) {
       el('div', p.daysLeft === 0 ? `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} ce soir.` : `${career ? 'Elles seront prélevées' : 'Il sera prélevé'} le soir du dernier jour de la saison, ${p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`}.`),
       row('Argent actuel', fmt(p.money)),
     ];
+    if (p.reduced) nodes.splice(1, 0, el('div.tip-ok', career ? 'Ristourne de la coopérative : −20 %.' : 'Le geste du propriétaire : −20 %.'));
     if (p.daysLeft > 0) nodes.push(row(p.daysLeft > 1 ? `Solde des ${p.daysLeft} prochains matins` : 'Solde du prochain matin', signed(p.netTotal), p.netTotal < 0 ? 'neg' : ''));
     if (p.loanTotal) nodes.push(row('Mensualité du prêt', signed(-p.loanTotal)));
     if (p.crops > 0) nodes.push(row('Récoltes à venir (estimation)', signed(p.crops)));
@@ -384,7 +402,7 @@ export function createHud(root, app) {
         loanBlocked = `Joseph peut avancer au plus ${fmt(nl.maxMissing)} pièces ; il en manquerait ${fmt(missing)}.`;
       }
     }
-    return { amount: bill.amount, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell, surchargePct: nl ? Math.round((nl.surcharge || 0) * 100) : 0 };
+    return { amount: bill.amount, reduced: !!bill.reduced, daysLeft, seasonId: bill.seasonId, money: f.money, netTotal, loanTotal, crops, products, neighbourShare, projected, state, lend, loanBlocked, rentAutoSell: !!f.rentAutoSell, surchargePct: nl ? Math.round((nl.surcharge || 0) * 100) : 0 };
   }
 
   // ── Mises à jour ──────────────────────────────────────────────────────────────
@@ -412,12 +430,12 @@ export function createHud(root, app) {
     setText(wName, spToday ? SPECIAL_WEATHERS_BY_ID[spToday]?.name || weatherName(w.today) : weatherName(w.today));
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
     weather.querySelector('.w-arrow').style.visibility = w.tomorrow ? '' : 'hidden';
-    fitWeather();
     weather.setAttribute('aria-label', `Météo : ${weatherName(w.today)}${w.tomorrow ? `, demain ${weatherName(w.tomorrow)}` : ''}`);
 
     const p = projection();
     const status = game.state.status;
     setText(billAmount, fmt(p.amount));
+    billCut.hidden = !(p.reduced && status === 'playing');
     if (status === 'victory') setText(billDays, 'payé : année finie !');
     else if (status === 'bankrupt') setText(billDays, career ? 'impayées' : 'impayé');
     else setText(billDays, p.daysLeft === 0 ? 'ce soir !' : p.daysLeft === 1 ? 'demain' : `${p.daysLeft} j`); // après le mot d'état : « couvert · 6 j »
@@ -426,13 +444,14 @@ export function createHud(root, app) {
     billGlyph.dataset.glyph = look.glyph;
     setText(billWord, status === 'playing' ? look.word : '');
     bill.dataset.state = state;
-    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces, ${status === 'playing' ? (p.daysLeft === 0 ? 'ce soir' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`) : billDays.textContent}. Prévision : ${look.say}.`);
+    bill.setAttribute('aria-label', `${career ? 'Charges de saison' : 'Fermage'} : ${fmt(p.amount)} pièces${p.reduced ? ' (réduit de 20 %)' : ''}, ${status === 'playing' ? (p.daysLeft === 0 ? 'ce soir' : p.daysLeft === 1 ? 'demain' : `dans ${p.daysLeft} jours`) : billDays.textContent}. Prévision : ${look.say}.`);
     bill.classList.toggle('is-ok', state === 'ok');
     bill.classList.toggle('is-warn', state === 'warn' || state === 'loan');
     bill.classList.toggle('is-loan', state === 'loan');
     bill.classList.toggle('is-danger', state === 'danger');
     // Pas d'alarme qui clignote quand Joseph couvrira le manque : le jeu reste calme.
     bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && (p.state === 'warn' || p.state === 'danger'));
+    fitRow(); // météo puis fermage : chacun reste dans sa case
 
     const sp = game.state.speed;
     setIcon(speedIcon, sp === 0 ? 'pause' : sp <= 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
@@ -538,6 +557,13 @@ export function createHud(root, app) {
       moneyValue.textContent = fmt(n);
       money.classList.toggle('is-negative', n < 0);
       money.setAttribute('aria-label', `Argent : ${fmt(n)} pièces`);
+      // Le compteur s'allonge en roulant (« 980 » → « 98 765 ») : météo et fermage se réajustent (une mesure
+      // seulement quand le nombre de caractères change).
+      const len = moneyValue.textContent.length;
+      if (len !== shownMoneyLen) {
+        shownMoneyLen = len;
+        fitRow();
+      }
     }
     // Avancée de la journée
     // (écritures de style seulement quand la valeur affichée change : pas de mise en page à

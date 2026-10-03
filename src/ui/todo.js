@@ -8,6 +8,8 @@
 //   reset(game),               nouvelle partie (ou reprise) : oublie l'argent de la veille, les anneaux…
 //   showResume(game),          fenêtre « Où en étais-je ? » (reprise depuis le menu)
 //   morningToggle(),           interrupteur « Résumé du matin » (feuille Messages)
+//   digest(entry),             message non affiché (réglage « Messages », toasts.setDigest) : compté pour le résumé du
+//                              matin (« Hier aussi : 12 récoltes de l'équipe (+46), 3 produits vendus »)
 //   ring(rects), focusPlots(indexes)
 // }
 //
@@ -54,8 +56,38 @@ export function createTodo(app) {
   let lastCollectKey = '';
   let lastH = -1;
   const morning = { prevMoney: null, pending: null, lastShownAt: -Infinity, notes: [] };
-
-  app.messages?.onChange(() => paintBell());
+  // (2026-10-03) Nouvelles de la journée qui ne se sont pas affichées (réglage « Messages ») et travail de l'équipe :
+  // regroupées dans le prochain résumé du matin.
+  const quiet = { groups: new Map(), other: 0, team: { n: 0, amount: 0 } };
+  const resetQuiet = () => {
+    quiet.groups.clear();
+    quiet.other = 0;
+    quiet.team.n = 0;
+    quiet.team.amount = 0;
+  };
+  function digest(e) {
+    if (!e) return;
+    if (e.digest && typeof e.digest === 'string') {
+      const g = quiet.groups.get(e.digest) || { n: 0 };
+      g.n += Math.max(1, Math.round(e.n || 1));
+      quiet.groups.set(e.digest, g);
+    } else quiet.other += 1;
+  }
+  /** « Hier aussi : 12 récoltes de l'équipe (+46), 3 produits vendus, 1 naissance. 2 autres nouvelles dans les messages. » */
+  function quietText(q) {
+    const parts = [];
+    if (q.team.n > 0) parts.push(`${plural(q.team.n, 'récolte', 'récoltes')} de l'équipe${q.team.amount > 0 ? ` (+${fmt(Math.round(q.team.amount))})` : ''}`);
+    const groups = [...q.groups.entries()].sort((a, b) => b[1].n - a[1].n);
+    const room = Math.max(0, 3 - parts.length);
+    for (const [label, g] of groups.slice(0, room)) {
+      const [one, many] = label.split('|');
+      parts.push(`${g.n} ${g.n > 1 ? many || one : one}`);
+    }
+    const more = Math.max(0, groups.length - room) + q.other;
+    const head = parts.length ? `Hier aussi : ${parts.join(', ')}.` : '';
+    const tail = more ? `${plural(more, 'autre nouvelle', 'autres nouvelles')} dans les messages.` : '';
+    return [head, tail].filter(Boolean).join(' ');
+  }
 
   // ── Ce qu'il y a à faire ─────────────────────────────────────────────────────
   function safe(fn, fallback) {
@@ -148,7 +180,11 @@ export function createTodo(app) {
         const id = o.offerId ?? o.id;
         const who = o.data?.name || o.title || 'un visiteur';
         const Who = who.charAt(0).toUpperCase() + who.slice(1);
-        if (!o.accepted) {
+        if (!o.accepted && o.kind === 'themeVisitor') {
+          // Visiteur du thème : il attend près du panneau du village, souvent hors de la vue (ou sous la mini-carte) ;
+          // toucher la ligne amène la vue sur lui (on le touche ensuite dans la scène), sinon ouvre sa fiche.
+          add({ id: `offer-${id}`, prio: 30, icon: () => cIco('visitor', 'star'), text: `Un visiteur vous attend : ${who}`, short: `un visiteur (${who})`, go: () => focusVisitor(id) });
+        } else if (!o.accepted) {
           const last = o.daysLeft !== undefined && o.daysLeft <= 0;
           add({ id: `offer-${id}`, prio: 30, icon: () => cIco(o.kind === 'visitor' || o.kind === 'order' ? 'visitor' : 'event', 'star'), text: `${Who} vous fait une proposition${last ? ' (aujourd\'hui seulement)' : ''}`, short: `une proposition (${who})`, go: () => app.careerUI?.open.offer(id) });
         } else if (o.n) {
@@ -197,6 +233,21 @@ export function createTodo(app) {
         add({ id: 'plant', prio: 55, icon: () => icon('seed', 'md'), text: `${plural(empty.length, 'parcelle libre', 'parcelles libres')} : semez`, short: `${plural(empty.length, 'parcelle')} à semer`, go: () => app.field.openSeedPicker(first.index) });
       }
     }
+
+    // (Lot 3) Tableau du village, charrette, colporteur, cadeau et défis de la saison (src/ui/variety.js).
+    for (const it of safe(() => app.variety?.todoItems?.(game), []) || []) add(it);
+    // (Lot 4) Fête du jour, hiver vivant, veillée ; carrière : « Le Haut-Champ : 12 parcelles mûres vous attendent »
+    // (remplace « N parcelles à récolter » : `replaces`).
+    for (const it of safe(() => app.cozy?.todoItems?.(game), []) || []) {
+      if (it.replaces) {
+        const k = out.findIndex((x) => x.id === it.replaces);
+        if (k >= 0) out.splice(k, 1);
+      }
+      add(it);
+    }
+
+    // (Vallée vivante) Bête qui attend, chapitre de Joseph, bocaux, planche d'essai mûre, cueillette des haies.
+    if (career) for (const it of safe(() => app.valley?.todoItems?.(game), []) || []) add(it);
 
     if (career) {
       // Terrain à acheter (si l'argent suffit en gardant les charges de saison).
@@ -317,10 +368,31 @@ export function createTodo(app) {
     clearTimeout(ringTimer);
     ringTimer = setTimeout(() => ring([]), 1900);
     if (kind && visible && list.length > 1 && app.isTouch) {
-      app.toasts.show({ kind: 'info', icon: kind === 'water' ? 'water' : 'harvest', key: 'todo-swipe', text: kind === 'water' ? 'Glissez le doigt sur les parcelles entourées pour toutes les arroser.' : 'Glissez le doigt sur les parcelles entourées pour tout récolter.', duration: 3200, log: false });
+      app.toasts.show({ prio: 'important', kind: 'info', icon: kind === 'water' ? 'water' : 'harvest', key: 'todo-swipe', text: kind === 'water' ? 'Glissez le doigt sur les parcelles entourées pour toutes les arroser.' : 'Glissez le doigt sur les parcelles entourées pour tout récolter.', duration: 3200, log: false });
     }
   }
   let ringTimer = null;
+
+  /** Amène la vue sur le visiteur du thème (hors de la mini-carte et de la ligne « À faire ») et l'entoure. */
+  function focusVisitor(offerId) {
+    const s = app.scene;
+    const v = safe(() => s?.varietySpots?.()?.visitor, null);
+    if (!s?.focusWorld || !v) {
+      app.careerUI?.open.offer(offerId);
+      return;
+    }
+    const r = { x: v.x - 2, y: v.y - 17, w: 20, h: 21 };
+    safe(() => s.focusWorld(r.x + r.w / 2, r.y + r.h / 2, { animate: !app.reducedMotion?.() }), null);
+    let n = 0;
+    const paint = () => {
+      const pr = app.worldPageRect?.(r);
+      ring(pr ? [pr] : []);
+      if (++n < 40) requestAnimationFrame(paint);
+    };
+    requestAnimationFrame(paint);
+    clearTimeout(ringTimer);
+    ringTimer = setTimeout(() => ring([]), 2400);
+  }
 
   function ring(rects) {
     rings.replaceChildren(
@@ -344,6 +416,8 @@ export function createTodo(app) {
     if (app.hints?.active) return false;
     if (app.tutorial?.active && app.tutorial.stepId !== 'wait-winter') return false;
     if (app.decor?.active) return false;
+    if (app.cozy?.feteMode) return false;
+    if (app.valley?.placing) return false; // (Vallée) mode aménagement : la barre remplace les onglets // (lot 4) mode fête : la barre de la chasse remplace les onglets
     if (document.body.classList.contains('is-rotated')) return false;
     return true;
   }
@@ -426,24 +500,29 @@ export function createTodo(app) {
 
   // ── Résumé du matin (E5) ──────────────────────────────────────────────────────
   function onEvent(ev, game) {
+    if (ev.type === 'harvested' && ev.by && ev.by !== 'player') {
+      quiet.team.n += 1;
+      quiet.team.amount += Math.max(0, Number(ev.amount) || 0);
+    }
     if (ev.type === 'dawn') {
       const money = game.state.money;
       if (morning.prevMoney !== null && game.state.status === 'playing') {
         const delta = Math.round(money - morning.prevMoney);
-        morning.pending = { delta, game, at: performance.now(), weather: ev.weather || game.state.weather?.today };
+        morning.pending = { delta, game, at: performance.now(), weather: ev.weather || game.state.weather?.today, quiet: quietText(quiet) };
       }
+      resetQuiet();
       morning.prevMoney = money;
       lastTick = 0;
     } else if (ev.type === 'autoPaused') {
       // Option « pause chaque matin » (cœur : src/core/options.js) : le résumé du matin le dit.
       if (morning.pending) morning.pending.paused = true;
-      else app.toasts.show({ kind: 'info', icon: 'pause', key: 'auto-pause', title: 'Pause du matin', text: 'Touchez le bouton de vitesse pour lancer la journée.', duration: 4200 });
+      else app.toasts.show({ prio: 'important', kind: 'info', icon: 'pause', key: 'auto-pause', title: 'Pause du matin', text: 'Touchez le bouton de vitesse pour lancer la journée.', duration: 4200 });
     } else if (ev.type === 'crow' && game.mode === 'career') {
       // La parcelle visée par les corbeaux peut être hors de l'écran : la vue y va (sans fiche ni fenêtre ouverte).
       const plotsHit = ev.plots || [];
       if (plotsHit.length && !app.sheets.isOpen() && !app.dialogs.isOpen()) requestAnimationFrame(() => focusPlots(plotsHit));
       lastTick = 0;
-    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought'].includes(ev.type)) {
+    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderKept', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought', 'feteSoon', 'feteStarted', 'feteFound', 'feteDone', 'feteEnded', 'seedPackBought', 'winterFind', 'winterPicked', 'feederFilled', 'feederBird', 'storyReady', 'storyHeard', 'weeded'].includes(ev.type)) {
       lastTick = 0;
     }
   }
@@ -454,6 +533,7 @@ export function createTodo(app) {
     const yesterday = d > 0 ? `Hier : +${fmt(d)} pièces.` : d < 0 ? `Hier : ${fmt(d)} pièces.` : 'Hier : ni gain ni perte.';
     // (Lot 2) Surprises de la nuit, météo rare, légume géant : en tête du programme du jour.
     if (morning.notes.length) parts.push(morning.notes.splice(0).slice(0, 2).join(' '));
+    if (p.quiet) parts.push(p.quiet);
     const list = safe(() => items(p.game), []).filter((x) => !['goal', 'rank'].includes(x.id)).slice(0, 3);
     if (list.length) parts.push(`Aujourd'hui : ${list.map((x) => x.short).join(', ')}.`);
     else parts.push('Aujourd\'hui : rien d\'urgent, profitez !');
@@ -474,10 +554,13 @@ export function createTodo(app) {
     const title = c ? `Bonjour ! ${p.game.mode === 'career' ? `${season(c.seasonId)}, jour ${c.dayOfSeason}` : `Jour ${c.day}`}` : 'Bonjour !';
     const text = `${morningText(p)}${p.paused ? ' Le jeu attend : touchez la vitesse pour lancer la journée.' : ''}`;
     const now = performance.now();
-    // À ×4, une journée dure 5 s : au plus un résumé toutes les 25 s à l'écran (tous restent dans les messages).
-    if ((prefs.morning || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.tutorial?.active) {
+    // À ×4, une journée dure 9 s : au plus un résumé toutes les 25 s à l'écran (tous restent dans les messages).
+    // (2026-10-03) Réglage « Messages » : le résumé s'affiche en « Tous » (interrupteur « Résumé du matin ») ; en
+    // « Importants » (par défaut) et « Aucun », il attend derrière la cloche — sauf quand le jeu est en pause et attend.
+    const mode = app.toasts.mode || 'important';
+    if (((prefs.morning && mode === 'all') || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.tutorial?.active) {
       morning.lastShownAt = now;
-      app.toasts.show({ kind: 'info', icon: p.paused ? 'pause' : ['sunny', 'cloudy', 'rain', 'storm', 'heatwave', 'snow'].includes(p.weather) ? p.weather : 'sunny', key: 'morning', title, text, duration: p.paused ? 7000 : 5200 });
+      app.toasts.show({ prio: p.paused ? 'important' : 'info', kind: 'info', icon: p.paused ? 'pause' : ['sunny', 'cloudy', 'rain', 'storm', 'heatwave', 'snow'].includes(p.weather) ? p.weather : 'sunny', key: 'morning', title, text, duration: p.paused ? 7000 : 5200 });
     } else {
       app.messages?.add({ kind: 'info', title, text });
     }
@@ -485,7 +568,7 @@ export function createTodo(app) {
 
   /** (Lot 2) Ligne ajoutée au prochain résumé du matin (surprise de l'aube, météo rare, légume géant). */
   function morningNote(text) {
-    if (!text) return;
+    if (!text || morning.notes.includes(text)) return;
     morning.notes.push(text);
     if (morning.notes.length > 4) morning.notes.shift();
   }
@@ -508,7 +591,7 @@ export function createTodo(app) {
         },
       },
       el('span.checkbox'),
-      el('span.opt-label', 'Résumé du matin (un petit message chaque matin)'),
+      el('span.opt-label', 'Résumé du matin à l\'écran (avec « Messages à l\'écran : Tous » ; sinon, il attend ici)'),
     );
     return btn;
   }
@@ -578,6 +661,7 @@ export function createTodo(app) {
     morning.prevMoney = game ? game.state.money : null;
     morning.pending = null;
     morning.notes.length = 0;
+    resetQuiet();
     current = null;
     lastKey = '';
     lastCollectKey = '';
@@ -596,6 +680,7 @@ export function createTodo(app) {
     showResume,
     morningToggle,
     morningNote,
+    digest,
     ring,
     focusPlots,
     collectAll,

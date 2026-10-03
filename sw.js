@@ -34,13 +34,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = 'a400d9b9f543';
-// 147 fichiers, 26.4 Mo ; installés d'emblée (core) : 65 fichiers, 1.28 Mo
+const VERSION = '6ddfbe3caf4e';
+// 150 fichiers, 27.0 Mo ; installés d'emblée (core) : 68 fichiers, 1.93 Mo
 const PRECACHE = [
-  ["index.html", '2398fb189d48c316', 26044, 'core'],
+  ["index.html", '778601efa975ecb8', 26045, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.beb00c62a1.js", '18789fea21f4272c', 959480, 'core'],
-  ["dist/game.43fdc47c95.css", '43fdc47c95bc148a', 123205, 'core'],
+  ["dist/game.ddfc8aa79d.js", '9a396be3a1359824', 1506612, 'core'],
+  ["dist/game.cf80c27a4b.css", 'cf80c27a4b235ce7', 170718, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],
@@ -138,6 +138,8 @@ const PRECACHE = [
   ["assets/sprites/career.png", '5a56f900f27067c2', 90000, 'core'],
   ["assets/sprites/extra.png", '098e40185d5f7f51', 1950, 'core'],
   ["assets/sprites/lot2.png", '5655cb48e14ec3cd', 13147, 'core'],
+  ["assets/sprites/lot3.png", '3420c4cb1bb93369', 28369, 'core'],
+  ["assets/sprites/lot4.png", '595227c2e6a9df92', 24086, 'core'],
   ["assets/sprites/tiny-farm.png", '0c4b3b4058cacf6a', 5866, 'core'],
   ["assets/sprites/tiny-town.png", '3a54d99ecde790d4', 5042, 'core'],
   ["assets/sprites/ui/banner-red-deep.png", '16bb0f1b1af14a60', 568, 'core'],
@@ -184,6 +186,7 @@ const PRECACHE = [
   ["assets/sprites/ui/slot-wood-deep.png", 'ee73765497a9b1f2', 166, 'core'],
   ["assets/sprites/ui/slot-wood.png", '77631b56d79873e0', 174, 'core'],
   ["assets/sprites/v3.png", '897aacf1899d5794', 18649, 'core'],
+  ["assets/sprites/valley1.png", 'e1043eae1319e9fc', 36791, 'core'],
 ];
 // </precache>
 

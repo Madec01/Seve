@@ -18,6 +18,7 @@ import { capacityAt } from '../processing.js';
 import { getCareerInvestment } from './effects.js';
 import { careerExtensions } from './registry.js';
 import { shelterCapacity, staffCapacity, storageCapacity } from './buildings.js';
+import { planVariety } from './heirlooms.js';
 
 export { CAREER_SCHEMA, CAREER_VERSION };
 
@@ -185,7 +186,8 @@ export function checkCareerState(s) {
       }
     } else if (l.slots !== null) return `emplacements du terrain ${l.id}`;
     if (l.plan !== null) {
-      if (!obj(l.plan) || !SEASONS.every((sid) => l.plan[sid] === null || l.plan[sid] === 'same' || !!getCrop(l.plan[sid]))) return `plan du terrain ${l.id}`;
+      // (Vallée vivante) 'heirloom:<id>' : une variété ancienne (vérifiée par l'extension valley).
+      if (!obj(l.plan) || !SEASONS.every((sid) => l.plan[sid] === null || l.plan[sid] === 'same' || !!getCrop(l.plan[sid]) || (!!c.valley && !!planVariety(l.plan[sid])))) return `plan du terrain ${l.id}`;
     }
     lotIds.add(l.id);
   }

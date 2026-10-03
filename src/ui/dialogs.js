@@ -187,11 +187,13 @@ export function createDialogs(layer, app) {
     buttons.push(btn([el('span.btn-main', 'Les niveaux'), el('span.btn-sub', '12 années à contraintes')], () => levelSelect(), 'btn--big', { id: 'menu-new' }));
     if (app.progression?.available()) {
       // Pastille dorée : une étoile peut être dépensée, ou un succès n'a pas encore été vu.
-      const dot = app.progression.canSpendStars() || app.hasNewAchievements?.();
+      // (Lot 4) … ou une case de l'album / une récompense de page attend.
+      const albumNew = (app.album?.badge?.() || 0) > 0;
+      const dot = app.progression.canSpendStars() || app.hasNewAchievements?.() || albumNew;
       buttons.push(
         btn(
           [icon('star', 'sm'), el('span', 'La grange aux souvenirs'), dot ? el('span.menu-dot', { 'aria-label': 'Nouveau' }) : null],
-          () => app.grange.open(app.progression.canSpendStars() ? 'bonus' : app.hasNewAchievements?.() ? 'achievements' : 'bonus'),
+          () => app.grange.open(app.progression.canSpendStars() ? 'bonus' : app.hasNewAchievements?.() ? 'achievements' : albumNew ? 'album' : 'bonus'),
           'btn--big.btn--grange',
           { id: 'menu-grange' },
         ),
@@ -317,7 +319,7 @@ export function createDialogs(layer, app) {
       vibration: () => ('vibrate' in navigator ? optToggle('vibration', 'Vibrations', (v) => { setA11y({ vibration: v }); if (v) app.vibrate(20); }, { sub: 'Petite vibration au toucher et aux alertes.' }) : null),
       controlsBottom: () => optToggle('controlsBottom', 'Vitesse et pause en bas', (v) => setA11y({ controlsBottom: v }), { sub: 'Le bouton de vitesse passe dans la barre du bas, sous le pouce.' }),
       leftHanded: () => optToggle('leftHanded', 'Disposition pour gaucher', (v) => setA11y({ leftHanded: v }), { sub: 'Le bouton de vitesse passe à gauche.' }),
-      pinchZoom: () => optToggle('pinchZoom', 'Zoom à deux doigts', (v) => setA11y({ pinchZoom: v }), { sub: 'Agrandir l\'écran en écartant deux doigts sur les barres et les fiches.' }),
+      pinchZoom: () => optToggle('pinchZoom', 'Loupe de l\'interface', (v) => setA11y({ pinchZoom: v }), { sub: 'Agrandir toute la page en écartant deux doigts sur les barres et les fiches. (Pour la ferme seule : pincez la ferme, ou boutons + et −.)' }),
     };
     const keys = welcome ? ['readableFont', 'pauseOnSheet', 'slowSpeed', 'reducedMotion', 'controlsBottom'] : Object.keys(t);
     return keys.map((k) => t[k]());
@@ -516,6 +518,8 @@ export function createDialogs(layer, app) {
         el(
           'div.level-foot',
           el('span.level-stars', [0, 1, 2].map((i) => icon(i < stars ? 'star' : 'star-empty', 'sm'))),
+          // (Lot 4) Meilleur total des lanternes du niveau (« 🏮 13 / 20 »).
+          app.cozy?.levelBadge?.(lvl.id) || null,
           unlocked ? el('span.level-best', p.bestMoney != null ? `Record : ${fmt(p.bestMoney)}` : lvl.id === 1 ? 'Avec tutoriel' : 'Nouveau !') : el('span.level-lock', icon('lock', 'sm'), `Finir le niveau ${lvl.id - 1}`),
         ),
       );
@@ -568,6 +572,8 @@ export function createDialogs(layer, app) {
       slider('sfxVolume', 'Sons'),
       slider('ambienceVolume', 'Ambiance'),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
+      el('h3.opt-section', { id: 'opt-msg' }, 'Messages'),
+      app.messages?.modePicker?.() || null,
       el('h3.opt-section', { id: 'opt-a11y' }, 'Accessibilité'),
       textSizePicker(),
       ...a11yToggles(),
@@ -770,6 +776,9 @@ export function createDialogs(layer, app) {
     if (s.productIncome || s.rawSales) lines.push(moneyLine('Produits transformés', gain((s.productIncome || 0) + (s.rawSales || 0)), 'pos'));
     if (s.contestPrize) lines.push(moneyLine('Prix du concours', gain(s.contestPrize), 'pos'));
     if (s.frostRefund) lines.push(moneyLine('Assurance gel', gain(s.frostRefund), 'pos'));
+    // (Lots 2 et 3) Surprises de l'aube ; le village (primes des commandes et de la charrette, cadeaux, médailles).
+    if (s.surpriseIncome) lines.push(moneyLine('Surprises', gain(s.surpriseIncome), 'pos'));
+    if (s.varietyIncome) lines.push(moneyLine('Le village (primes, cadeaux)', s.varietyIncome >= 0 ? gain(s.varietyIncome) : loss(-s.varietyIncome), s.varietyIncome >= 0 ? 'pos' : 'neg'));
     lines.push(moneyLine('Charges quotidiennes', loss(s.charges), 'neg'));
     if (s.waterSpent) lines.push(moneyLine('Arrosage', loss(s.waterSpent), 'neg'));
     if (s.loanPaid) lines.push(moneyLine('Prêt', loss(s.loanPaid), 'neg'));
@@ -878,16 +887,33 @@ export function createDialogs(layer, app) {
         : debt > 0
           ? el('p.next-warn.is-loan', sprite('farmer', 'sprite--sm'), `Vous devez encore ${plural(debt, 'pièce')} à Joseph : tant que ce n'est pas réglé, il ne pourra pas vous dépanner.`)
           : null,
-      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold)), nextBlock),
+      el('div.season-cols', el('div', el('h3.sum-title', icon(ev.seasonId, 'sm'), `Bilan ${season(ev.seasonId, 'of')}`), summaryLines(s.season, { rent: ev.amount }), harvestChips(s.season.cropsHarvested, s.season.productsSold), app.variety?.seasonSummary?.(ev) || null), nextBlock),
     );
+    // (Lot 3) Pages suivantes : « Un cadeau pour la saison » (2 cartes), puis « Les défis de … » (3 défis).
+    // Chaque page a « Plus tard » : le choix attend (pastille sur l'onglet Bilan).
+    const pages = app.variety?.seasonPages?.(ev) || [];
+    let idx = 0;
+    const onClose = (reason) => {
+      if (reason !== 'replace') extra.onClose?.(reason);
+    };
+    const nextPage = () => {
+      if (idx >= pages.length) {
+        closeTop();
+        return;
+      }
+      const p = pages[idx++];
+      const pageNode = frame({ title: p.title, ribbon: 'ribbon', cls: 'dialog--season.dialog--variety', body: p.body(nextPage), actions: p.actions(nextPage) });
+      open(pageNode, { id: 'season-end', pauses: true, replace: true, sound: false, onClose });
+      app.audio.play('page', { volume: 0.7 });
+    };
     const node = frame({
       title: season(ev.seasonId, 'end'),
       ribbon: 'ribbon',
       cls: 'dialog--season',
       body,
-      actions: [btn([`Continuer`, icon('play', 'sm')], () => closeTop(), 'btn--red', { 'data-autofocus': '', id: 'season-continue' })],
+      actions: [btn([`Continuer`, icon('play', 'sm')], () => nextPage(), 'btn--red', { 'data-autofocus': '', id: 'season-continue' })],
     });
-    return open(node, { id: 'season-end', pauses: true, onClose: extra.onClose });
+    return open(node, { id: 'season-end', pauses: true, onClose });
   }
 
   // ── Prêt du voisin (mode détente) ─────────────────────────────────────────────
@@ -995,19 +1021,26 @@ export function createDialogs(layer, app) {
         : `Le fermage ${season(ev.seasonId, 'of')} s'élevait à ${plural(ev.amountDue, 'pièce')}, mais vous n'en aviez que ${fmt(ev.money)}.`),
       el('p.end-missing', `Il manquait ${plural(missing, 'pièce')}.`),
       why ? el('p.end-why', sprite('farmer', 'sprite--xs'), why) : null,
-      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
+      el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold), app.variety?.seasonSummary?.(ev) || null),
       el('p.end-tip', icon('info', 'sm'), tip),
       rewardsBlock(record),
     );
+    const finalActions = () => [
+      btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'bankrupt-menu' }),
+      btn('Réessayer', () => app.startLevel(lvl.id, { skipConfirm: true }), 'btn--red', { id: 'bankrupt-retry', 'data-autofocus': '' }),
+    ];
+    // (Lot 4) Détente : « Les lanternes de l'année » après le bilan, avec « L'an prochain, ça ira mieux ».
+    const lp = app.cozy?.lanternPage?.({ bankrupt: true });
+    const showLanterns = () => {
+      open(frame({ title: lp.title, ribbon: 'ribbon', cls: 'dialog--victory.dialog--lanterns', body: lp.body(), actions: finalActions() }), { id: 'bankrupt', closable: false, replace: true, sound: false });
+      lp.onShow?.();
+    };
     const node = frame({
       title: 'Faillite…',
       ribbon: 'dark',
       cls: 'dialog--bankrupt',
       body,
-      actions: [
-        btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'bankrupt-menu' }),
-        btn('Réessayer', () => app.startLevel(lvl.id, { skipConfirm: true }), 'btn--red', { id: 'bankrupt-retry', 'data-autofocus': '' }),
-      ],
+      actions: lp ? [btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'bankrupt-menu' }), btn(['Les lanternes', icon('play', 'sm')], () => showLanterns(), 'btn--red', { id: 'bankrupt-lanterns', 'data-autofocus': '' })] : finalActions(),
     });
     return open(node, { id: 'bankrupt', closable: false, sound: false });
   }
@@ -1049,8 +1082,18 @@ export function createDialogs(layer, app) {
       rewardsBlock(record),
       el('div.end-sum', el('h3.sum-title', 'Votre année'), summaryLines(s), harvestChips(s.cropsHarvested, s.productsSold)),
     );
-    const actions = [btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'victory-menu' }), btn('Rejouer', () => app.startLevel(lvl.id, { skipConfirm: true }), '', { id: 'victory-replay' })];
-    if (next) actions.push(btn('Niveau suivant', () => app.startLevel(next.id, { skipConfirm: true }), 'btn--red', { id: 'victory-next', 'data-autofocus': '' }));
+    const finalActions = () => {
+      const list = [btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'victory-menu' }), btn('Rejouer', () => app.startLevel(lvl.id, { skipConfirm: true }), '', { id: 'victory-replay' })];
+      if (next) list.push(btn('Niveau suivant', () => app.startLevel(next.id, { skipConfirm: true }), 'btn--red', { id: 'victory-next', 'data-autofocus': '' }));
+      return list;
+    };
+    // (Lot 4) Détente : page « Les lanternes de l'année » après le bilan (les lanternes s'allument une à une).
+    const lp = app.cozy?.lanternPage?.();
+    const showLanterns = () => {
+      open(frame({ title: lp.title, ribbon: 'ribbon', cls: 'dialog--victory.dialog--lanterns', body: lp.body(), actions: finalActions() }), { id: 'victory', closable: false, replace: true, sound: false });
+      lp.onShow?.();
+    };
+    const actions = lp ? [btn('Menu', () => app.quitToMenu({ ended: true }), '', { id: 'victory-menu' }), btn(['Les lanternes', icon('play', 'sm')], () => showLanterns(), 'btn--red', { id: 'victory-lanterns', 'data-autofocus': '' })] : finalActions();
     const node = frame({ title: 'Année réussie !', ribbon: 'ribbon', cls: 'dialog--victory', body, actions });
     const handle = open(node, { id: 'victory', closable: false, sound: false });
     // Étoiles une à une
@@ -1088,6 +1131,8 @@ export function createDialogs(layer, app) {
         ),
       ),
       all ? el('p.end-record', icon('star', 'sm'), 'Les trois épreuves : prix spécial du jury !') : null,
+      // (Lot 4) Le stand de la fête des récoltes, présenté de nouveau au comice (ruban bleu ou rosette d'or).
+      ev.standBonus ? el('p.end-record.cz-stand-bonus', spriteAny([ev.ribbon ? `ribbon.${ev.ribbon}` : 'ribbon.blue'], 'sprite--sm', 'star'), `Stand du comice : +${fmt(ev.standBonus)}`) : null,
       el('p.contest-total', ev.amount > 0 ? `Prix : +${plural(ev.amount, 'pièce')}` : 'Prix : 0'),
     );
     const node = frame({

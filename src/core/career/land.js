@@ -9,6 +9,7 @@
 //   plan (champs et serre) : { spring, summer, autumn, winter } → 'same' | cropId | null (semoir, jardiniers)
 // Parcelles d'un terrain : state.plots[i].lot === lot.id (index du cœur, ajoutées à la fin, jamais renumérotées).
 
+import { CARD_VALUES } from '../../data/variety.js';
 import { SEASONS } from '../../data/balance.js';
 import { countNoun } from '../../data/french.js';
 import { getCrop } from '../../data/crops.js';
@@ -19,6 +20,9 @@ import { ensureLotPlots, newPlot, notEnoughMoney, placeBuilding, rankLabel, remo
 import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
 import { lotFinds } from './surprises.js';
+import { reserveLotNature } from './habitat.js';
+import { isFixed, planVariety, returnTrialSeed } from './heirlooms.js';
+import { VARIETIES_BY_ID } from '../../data/career/valley.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
 
@@ -234,8 +238,15 @@ export function checkDevelop(state, lotId, type) {
   if (lot.type !== 'wild' && !isLotEmpty(state, lot)) return { ok: false, reason: 'Videz d\'abord le terrain (cultures, bâtiments, animaux).' };
   if (def.rank > state.career.rank) return { ok: false, reason: rankLabel(def.rank) };
   if (countType(state, type) >= def.max) return { ok: false, reason: `Au plus ${countNoun(def.max, def.name.toLowerCase())} dans la ferme.` };
-  if (state.money < def.cost) return { ok: false, reason: notEnoughMoney(def.cost - state.money) };
-  return { ok: true, cost: def.cost, def };
+  const cost = developCost(state, def);
+  if (state.money < cost) return { ok: false, reason: notEnoughMoney(cost - state.money) };
+  return { ok: true, cost, def };
+}
+
+/** Prix d'un aménagement ; (lot 3) carte « Coup de main au défrichage » : le prochain moins cher (CARD_VALUES.clearing). */
+export function developCost(state, def) {
+  if (def.cost > 0 && state.variety?.cards?.pending?.clearingHalf) return Math.round(def.cost * CARD_VALUES.clearing.careerFactor);
+  return def.cost;
 }
 
 /** Aménage (ou réaménage) un terrain acheté. → { ok, cost, plots: [index] } */
@@ -248,13 +259,21 @@ export function developLot(api, lotId, type) {
   // Ce que l'ancien aménagement laisse : parcelles retirées (index gardés), bâtiment du terrain retiré.
   for (const i of lotPlots(state, lot.id)) {
     const p = state.plots[i];
+    if (state.career.valley) {
+      // (Vallée) La graine d'une planche d'essai revient ; variété, jachère et sol reposé ne survivent pas au réaménagement
+      // (sinon la parcelle, réutilisée vide par ensureLotPlots, garderait une variété sans culture : sauvegarde refusée).
+      returnTrialSeed(state, p);
+      for (const k of ['variety', 'fallow', 'rested']) if (p[k] !== undefined) delete p[k];
+    }
     p.env = null;
     p.unlocked = false;
   }
   for (const [id, b] of Object.entries(state.career.buildings)) if (b.lotId === lot.id) removeBuilding(state, id);
-  if (def.cost > 0) api.spend('develop', def.cost);
+  const cost = check.cost;
+  if (cost > 0) api.spend('develop', cost);
+  if (cost !== def.cost && state.variety) state.variety.cards.pending.clearingHalf = false;
   lot.type = type;
-  lot.developPaid = (lot.developPaid || 0) + def.cost;
+  lot.developPaid = (lot.developPaid || 0) + cost;
   lot.slots = def.slots > 0 ? Array.from({ length: def.slots }, () => null) : null;
   lot.plan = def.plots && def.plots.env !== 'orchard' ? { ...DEFAULT_PLAN } : null;
   let plots = [];
@@ -263,8 +282,11 @@ export function developLot(api, lotId, type) {
     const count = def.building === 'greenhouse' ? BUILDINGS_BY_ID.greenhouse.levels[0].plots : def.plots.count;
     plots = ensureLotPlots(state, lot, def.plots.env, count);
   }
-  api.push('lotDeveloped', { lotId: lot.id, lotType: type, cost: def.cost, plots }); // « lotType » : « type » écraserait le type de l'événement (on('*'))
-  return { ok: true, cost: def.cost, plots };
+  api.push('lotDeveloped', { lotId: lot.id, lotType: type, cost, plots }); // « lotType » : « type » écraserait le type de l'événement (on('*'))
+  // (Vallée vivante) Les haies restent ; les autres aménagements nature du terrain vont à la réserve (à replacer gratuitement).
+  const kinds = state.career.valley ? reserveLotNature(state, lot.id) : [];
+  if (kinds.length) api.push('natureReserved', { lotId: lot.id, kinds });
+  return kinds.length ? { ok: true, cost, plots, natureReserved: kinds } : { ok: true, cost, plots };
 }
 
 /** Aménagements proposés pour un terrain : [{ type, name, cost, canDevelop, reason, max, count, rank }]. */
@@ -272,7 +294,7 @@ export function lotTypesFor(state, lotId) {
   return LOT_TYPES.map((t) => {
     const check = checkDevelop(state, lotId, t.id);
     const about = aboutFields('lotType', t.id);
-    return { type: t.id, name: t.name, cost: t.cost, rank: t.rank, canDevelop: check.ok, reason: check.ok ? null : check.reason, max: Number.isFinite(t.max) ? t.max : null, count: countType(state, t.id), phase: t.phase || null, role: about.role, tips: about.tips, effectLines: about.effectLines };
+    return { type: t.id, name: t.name, cost: developCost(state, t), rank: t.rank, canDevelop: check.ok, reason: check.ok ? null : check.reason, max: Number.isFinite(t.max) ? t.max : null, count: countType(state, t.id), phase: t.phase || null, role: about.role, tips: about.tips, effectLines: about.effectLines };
   });
 }
 
@@ -288,8 +310,17 @@ export function setPlan(api, lotId, seasonId, cropId) {
   if (!lot) return api.fail('Terrain inconnu.');
   if (!lot.plan) return api.fail('Ce terrain n\'a pas de plan de culture.');
   if (!SEASONS.includes(seasonId)) return api.fail('Saison inconnue.');
-  if (cropId !== null && cropId !== 'same') {
+  // (Vallée vivante) 'heirloom:<id>' : une variété ancienne fixée (sauvée) dans le plan de culture.
+  const heirloom = state.career.valley ? planVariety(cropId) : null;
+  if (heirloom) {
+    const x = VARIETIES_BY_ID[heirloom];
+    const crop = getCrop(x.cropId);
+    if (!isFixed(state, heirloom)) return api.fail(`${x.name} : sauvez-la d'abord (6 récoltes à la main).`);
+    if (crop.kind === 'tree') return api.fail('Culture inconnue.');
+    if (lot.type !== 'greenhouse' && !crop.seasons.includes(seasonId)) return api.fail(`${crop.name} : ne se sème pas cette saison.`);
+  } else if (cropId !== null && cropId !== 'same') {
     const crop = getCrop(cropId);
+    if (crop && crop.rare) return api.fail('Les graines rares se sèment à la main.');
     if (!crop || crop.kind === 'tree') return api.fail('Culture inconnue.');
     if (!api.level.crops.includes(cropId)) return api.fail('Culture pas encore débloquée.');
     if (lot.type !== 'greenhouse' && !crop.seasons.includes(seasonId)) return api.fail(`${crop.name} : ne se sème pas cette saison.`);

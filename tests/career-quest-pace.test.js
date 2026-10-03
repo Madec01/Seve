@@ -250,7 +250,7 @@ test('commandes de visiteurs : 5 jours, une seule à la fois, cultures qu\'on pe
   g.state.career.events.lastKind = null;
   assert.equal(g.actions.career.triggerEvent('visitor').ok, false);
   // Saisons de 14 jours : 7 jours.
-  const h = createCareer({ seed: 7, seasonLength: 14 });
+  const h = createCareer({ seed: 7, seasonLength: 14, variety: false });
   h.state.weather.today = 'sunny';
   goTo(h, 1, 5);
   assert.ok(h.actions.career.triggerEvent('visitor').ok);

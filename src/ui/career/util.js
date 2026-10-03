@@ -145,6 +145,12 @@ export const INCOME_LABELS = {
   tourists: 'Touristes',
   rides: 'Balades à cheval',
   truffle: 'Truffes',
+  // (Lot 3 / lot 4) Commandes du tableau, charrette ; fêtes participatives et hiver vivant.
+  orders: 'Commandes du village',
+  cart: 'La charrette',
+  fetes: 'Fêtes du village',
+  winter: 'Trouvailles d\'hiver',
+  valley: 'La Vallée (cueillette)',
   other: 'Autres',
 };
 export const SPENT_LABELS = {
@@ -161,6 +167,7 @@ export const SPENT_LABELS = {
   animals: 'Animaux',
   items: 'Ruches et panneaux',
   water: 'Arrosage',
+  valley: 'La Vallée',
   other: 'Autres',
 };
 export const CHARGE_LABELS = {

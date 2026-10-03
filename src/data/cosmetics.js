@@ -24,8 +24,38 @@ export const COSMETICS = [
   // (lot 2) Décors trouvés à la ferme (surprise de l'aube, trouvaille au défrichage) : ne s'achètent pas.
   { id: 'owl.carved', name: 'Chouette sculptée', category: 'small', price: 0, found: true },
   { id: 'statue.small', name: 'Petite statue', category: 'small', price: 0, found: true },
+  // (lot 3) Décors du colporteur Basile et du visiteur de l'année touristique (carrière) : ne s'achètent pas.
+  { id: 'lantern.peddler', name: 'Lanterne du colporteur', category: 'small', price: 0, found: true },
+  { id: 'weathervane.rooster', name: 'Girouette au coq', category: 'small', price: 0, found: true },
+  { id: 'sign.magazine', name: 'Vu dans le magazine', category: 'small', price: 0, found: true },
+  // (lot 4) Décors « trouvés dans l'album » (récompenses des pages) et lanternes de couleur (lanternes de fin d'année) :
+  // ne s'achètent pas, sans aucun effet sur le jeu.
+  { id: 'scarecrow.flower', name: 'Épouvantail fleuri', category: 'small', price: 0, found: true },
+  { id: 'can.golden', name: 'Arrosoir doré', category: 'small', price: 0, found: true },
+  { id: 'barrow.giant', name: 'Brouette au géant', category: 'small', price: 0, found: true },
+  { id: 'jam.shelf', name: 'Étagère à confitures', category: 'small', price: 0, found: true },
+  { id: 'weathervane.pig', name: 'Girouette au cochon', category: 'small', price: 0, found: true },
+  { id: 'sundial', name: 'Cadran solaire', category: 'small', price: 0, found: true },
+  { id: 'lantern.fairy', name: 'Lanterne des fées', category: 'small', price: 0, found: true },
+  { id: 'pump.village', name: 'Pompe à eau du village', category: 'small', price: 0, found: true },
+  { id: 'bunting.post', name: 'Mât à guirlandes', category: 'small', price: 0, found: true },
+  { id: 'arch.fete', name: 'Arche de fête', category: 'small', price: 0, found: true },
+  { id: 'woodpile', name: 'Tas de bois', category: 'small', price: 0, found: true },
+  { id: 'heron.wood', name: 'Héron en bois', category: 'small', price: 0, found: true },
+  { id: 'rocking.chair', name: 'Fauteuil de Joseph', category: 'small', price: 0, found: true },
+  { id: 'lantern.green', name: 'Lanterne verte (variété)', category: 'small', price: 0, found: true },
+  { id: 'lantern.blue', name: 'Lanterne bleue (soin)', category: 'small', price: 0, found: true },
+  { id: 'lantern.pink', name: 'Lanterne rose (voisinage)', category: 'small', price: 0, found: true },
+  { id: 'lantern.yellow', name: 'Lanterne jaune (beauté)', category: 'small', price: 0, found: true },
+  { id: 'lantern.orange', name: 'Lanterne orange (prospérité)', category: 'small', price: 0, found: true },
+  { id: 'seed.cabinet', name: 'Le semainier à graines', category: 'small', price: 0, found: true },
+  { id: 'nestbox.painted', name: 'Le nichoir peint', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
+  { id: 'herbarium', name: 'Le grand herbier', category: 'large', price: 0, found: true },
+  // (Vallée vivante, lot V1) Pages de l'album « Graines anciennes » et « Les habitants de la ferme », étape 5 de la vallée.
+  { id: 'valley.linden', name: 'Le tilleul de la vallée', category: 'large', price: 0, found: true },
+  { id: 'lantern.grand', name: 'Le grand lampion', category: 'large', price: 0, found: true },
   // Allées
   { id: 'path.dirt', name: 'Allées de terre', category: 'path', price: 0, isDefault: true },
   { id: 'path.stone', name: 'Pavés de pierre', category: 'path', price: 40 },

@@ -28,7 +28,7 @@ import { loadImage, loadImages } from './render/assets.js';
 import { createScene } from './render/scene.js';
 import { createGame, loadGame } from './core/game.js';
 import { createCareer, loadCareer, careerMetaOf } from './core/career/career.js';
-import { DAY_SECONDS, SEASONS } from './data/balance.js';
+import { DAY_SECONDS, GAME_SECONDS_PER_REAL_SECOND, SEASONS } from './data/balance.js';
 import { getLevel, LEVELS } from './data/levels.js';
 import { getInvestment } from './data/investments.js';
 import { getCrop } from './data/crops.js';
@@ -43,6 +43,7 @@ import { createTooltip } from './ui/tooltip.js';
 import { createSheets } from './ui/sheets.js';
 import { createTabbar } from './ui/tabbar.js';
 import { createSceneInput } from './ui/gestures.js';
+import { createZoomControls } from './ui/zoom.js';
 import { createToasts } from './ui/toasts.js';
 import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
@@ -66,6 +67,10 @@ import { openGuide } from './ui/guide.js';
 import { speedCycle } from './ui/a11y.js';
 import { createJuice } from './ui/juice.js';
 import { createLot2 } from './ui/lot2.js';
+import { createVariety } from './ui/variety.js';
+import { createCozy } from './ui/cozy.js';
+import { createAlbum } from './ui/album.js';
+import { createValley } from './ui/career/valley.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -117,6 +122,7 @@ app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
 app.tutorial = createTutorial($('#tutorial'), app);
 app.input = createSceneInput(canvas, app);
+app.zoomUI = createZoomControls(app); // zoom de la scène (boutons + / −, préférence) ; pincement : gestures.js
 app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
@@ -127,12 +133,28 @@ app.newFarm = () => openNewFarm(app, {});
 // Guidage (lot 1 « confort ») : historique des messages, ligne « À faire », guide de la ferme.
 app.messages = createMessages(app);
 app.toasts.setLogger((e) => app.messages.add(e));
+app.toasts.setMoreHandler(() => app.messages.open());
+// Réglage « Messages » (tous · importants seulement · aucun) : appliqué pendant une partie ; au menu, tout s'affiche.
+app.toasts.setMode(settings.messages, { active: () => !!app.game && !app.inMenu });
 app.todo = createTodo(app);
+app.toasts.setDigest((e) => app.todo.digest?.(e)); // infos non affichées : regroupées dans le résumé du matin
 app.openGuide = (opts = {}) => openGuide(app, opts);
 // Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
 // surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
 app.juice = createJuice(app);
 app.lot2 = createLot2(app);
+// Lot 3 « Variété » : tableau du village, cadeau et défis de la saison, charrette du marché, Basile le colporteur,
+// années à thème de la carrière (src/ui/variety.js ; rien n'apparaît sans state.variety, donc jamais en Classique).
+app.variety = createVariety(app);
+// Lot 4 « Collection & enjeux doux » : album de la ferme (progression permanente, aussi en Classique), fêtes
+// participatives et mode fête, hiver vivant, lanternes de fin d'année, « aider sans remplacer » (carrière)
+// (src/ui/album.js, src/ui/cozy.js ; rien de state.cozy en Classique).
+app.storage = storage;
+app.album = createAlbum(app);
+app.cozy = createCozy(app);
+// La Vallée vivante, lot V1 « La boîte en fer » (carrière seulement : rien sans state.career.valley) : fiche « La Vallée »,
+// mode aménagement, boîte de Joseph, bocaux, observation des bêtes, lignes des fiches existantes (src/ui/career/valley.js).
+app.valley = createValley(app);
 
 applyDisplaySettings();
 
@@ -152,6 +174,7 @@ app.updateSettings = (patch) => {
   app.hud.refreshMute();
   app.saveSettings();
   if ('keepAwake' in patch) updateWakeLock();
+  if ('messages' in patch) app.toasts.setMode(settings.messages);
 };
 
 app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
@@ -184,7 +207,9 @@ pwa.onUpdateAvailable(() => {
     kind: 'info',
     icon: 'star',
     title: 'Nouvelle version disponible',
-    text: 'Touchez ici pour recharger (la partie est sauvegardée).',
+    text: 'La partie est sauvegardée.',
+    actionLabel: 'Recharger',
+    keepTouch: true,
     duration: 60000,
     onClick: () => {
       save();
@@ -373,6 +398,17 @@ function addPauseGuidance(node) {
   const after = list.querySelector('#pause-resume');
   if (after) after.after(messages, guide);
   else list.prepend(messages, guide);
+  // (Lot 4) L'album de la ferme (le jeu reste en pause) : pastille quand une case est nouvelle.
+  if (app.album?.available?.() && !list.querySelector('#pause-album')) {
+    const n = app.album.badge();
+    const album = app.dialogs.btn([el('span', 'L\'album'), n ? el('span.pause-count', ` (${n} nouveauté${n > 1 ? 's' : ''})`) : null], () => app.album.open(), 'btn--big', { id: 'pause-album' });
+    guide.after(album);
+  }
+  // (Vallée vivante) La fiche « La Vallée » (carrière, une fois commencée).
+  if (app.valley?.started?.() && !list.querySelector('#pause-valley')) {
+    const vb = app.dialogs.btn('La Vallée', () => { app.dialogs.closeTop(); app.valley.open(); }, 'btn--big', { id: 'pause-valley' });
+    (list.querySelector('#pause-album') || guide).after(vb);
+  }
 }
 
 // ── Onglets et feuilles ───────────────────────────────────────────────────────────
@@ -426,6 +462,8 @@ app.onDecorChange = () => {
 };
 app.onDialogChange = () => {
   document.body.classList.toggle('has-dialog', app.dialogs?.isOpen() ?? false);
+  // (QA du lot 4) Fenêtre de fin (saison, année, victoire) : les messages attendent dans l'historique (css/style.css).
+  document.body.dataset.dialog = (app.dialogs?.isOpen() && app.dialogs.top()) || '';
   app.tabbar?.refresh();
   updateWakeLock();
 };
@@ -642,6 +680,16 @@ app.plotPageRect = (index) => {
   return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
 };
 
+/** Rectangle du monde (px) en pixels de la page. */
+app.worldPageRect = (r) => {
+  const scene = app.scene;
+  if (!scene || !r) return null;
+  const s = canvas.getBoundingClientRect();
+  const a = scene.worldToScreen(r.x, r.y);
+  const b = scene.worldToScreen(r.x + r.w, r.y + r.h);
+  return { left: s.left + a.x, top: s.top + a.y, right: s.left + b.x, bottom: s.top + b.y, width: b.x - a.x, height: b.y - a.y };
+};
+
 /** Rectangle du champ clôturé en pixels de la page (placement des bulles du tutoriel). */
 app.fieldPageRect = () => {
   const f = app.scene?.layout.field;
@@ -815,7 +863,7 @@ function updateHoverTip() {
     app.tooltip.hide('scene');
     return;
   }
-  const content = app.decor.active ? app.decor.hoverText(h) : h.type === 'plot' ? app.field.plotTip(h.index) : app.field.investmentTip(h.id);
+  const content = app.decor.active ? app.decor.hoverText(h) : h.type === 'plot' ? app.field.plotTip(h.index) : h.type === 'investment' ? app.field.investmentTip(h.id) : null;
   if (content) app.tooltip.showAtPoint(content, hover.x, hover.y, 'scene');
   else app.tooltip.hide('scene');
 }
@@ -829,6 +877,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -870,6 +919,7 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.valley.placing) return app.valley.leavePlacing(); // (Vallée) fin du mode aménagement
     if (!app.inMenu && app.game) app.openPauseMenu();
     return;
   }
@@ -942,6 +992,23 @@ function onGameEvent(ev, game) {
     app.hud.onEvent(ev);
     app.juice.onEvent(ev, game);
     app.lot2.onEvent(ev, game);
+    try {
+      app.variety.onEvent(ev, game);
+    } catch (err) {
+      console.warn('Variété (événement) :', err);
+    }
+    try {
+      app.cozy.onEvent(ev, game);
+    } catch (err) {
+      console.warn('Lot 4 (événement) :', err);
+    }
+    if (career) {
+      try {
+        app.valley.onEvent(ev, game);
+      } catch (err) {
+        console.warn('Vallée (événement) :', err);
+      }
+    }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
@@ -989,7 +1056,14 @@ function onGameEvent(ev, game) {
       default:
         break;
     }
-    if (ev.type === 'dawn') app.progression.checkGame(game);
+    if (ev.type === 'dawn') {
+      app.progression.checkGame(game);
+      try {
+        app.album.onDawn(game); // (lot 4) nouvelles cases de l'album, comme les succès
+      } catch (err) {
+        console.warn('Album :', err);
+      }
+    }
     scheduleRefresh();
   }
 }
@@ -1012,7 +1086,7 @@ function flushGrouped() {
   const t = app.toasts;
   if (grouped.toWorkshop.size) {
     for (const [productId, n] of grouped.toWorkshop) {
-      t.show({ kind: 'success', sprite: productIcon(productId, 'sprite--sm'), text: n > 1 ? `${n} récoltes parties à l'atelier (${productName(productId).toLowerCase()}).` : `Récolte partie à l'atelier : ${productName(productId).toLowerCase()} en préparation.`, duration: 2600 });
+      t.show({ digest: 'récolte à l\'atelier|récoltes à l\'atelier', digestN: n, kind: 'success', sprite: productIcon(productId, 'sprite--sm'), text: n > 1 ? `${n} récoltes parties à l'atelier (${productName(productId).toLowerCase()}).` : `Récolte partie à l'atelier : ${productName(productId).toLowerCase()} en préparation.`, duration: 2600 });
     }
     grouped.toWorkshop.clear();
   }
@@ -1021,7 +1095,7 @@ function flushGrouped() {
     const n = grouped.sold.length;
     const first = grouped.sold[0].productId;
     const names = [...new Set(grouped.sold.map((x) => productName(x.productId).toLowerCase()))];
-    t.show({ kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
+    t.show({ digest: 'produit vendu|produits vendus', digestN: n, kind: 'money', sprite: productIcon(first, 'sprite--sm'), title: n > 1 ? `${n} produits vendus` : 'Produit vendu', text: `${names.join(', ')} : +${fmt(total)} pièces`, duration: 3400 });
     grouped.sold = [];
   }
   // Remboursements automatiques de Joseph : un seul message discret, mis à jour tant qu'il est
@@ -1033,6 +1107,7 @@ function flushGrouped() {
       t.show({
         key: 'neighbour-repay',
         kind: 'info',
+        digest: 'remboursement à Joseph|remboursements à Joseph',
         sprite: sprite('farmer', 'sprite--sm'),
         title: `−${fmt(L.total)} pour Joseph`,
         text: `Remboursement automatique · reste ${plural(L.remaining, 'pièce')}`,
@@ -1154,7 +1229,7 @@ function reactMessages(ev, game) {
       break;
     }
     case 'rot':
-      t.show({ kind: 'rot', icon: 'rain', text: `${cropName(ev.cropId)} : la culture a pourri sous la pluie.`, duration: 4200 });
+      t.show({ digest: 'culture pourrie|cultures pourries', kind: 'rot', icon: 'rain', text: `${cropName(ev.cropId)} : la culture a pourri sous la pluie.`, duration: 4200 });
       break;
     case 'purchased': {
       const inv = getInvestment(ev.investmentId);
@@ -1164,11 +1239,14 @@ function reactMessages(ev, game) {
       else if (inv.effects.chargeReduction) what = `Vos charges baissent de ${inv.effects.chargeReduction} par jour.`;
       else if (inv.effects.shearing) what = `Tonte : +${inv.effects.shearing} à la fin de chaque saison (sauf l'hiver).`;
       else if (q?.income || Object.values(q?.incomeBySeason || {}).some(Boolean)) what = `${incomePhrase(q.incomeBySeason)}.`;
-      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} acheté${['beehive', 'guestHouse', 'cow', 'goat', 'dairy'].includes(inv.id) ? 'e' : ''} !`, text: what });
+      // (lot 3) Cadeau (carte « Un essaim d'abeilles ») ou objet d'occasion du colporteur.
+      const fem = ['beehive', 'guestHouse', 'cow', 'goat', 'dairy'].includes(inv.id) ? 'e' : '';
+      const verb = ev.gift ? `offert${fem}` : ev.used ? `d'occasion acheté${fem}` : `acheté${fem}`;
+      t.show({ kind: 'success', sprite: investmentIcon(ev.investmentId, 'sprite--sm'), title: inv.kind === 'upgrade' ? `${inv.name} : niveau ${ev.owned}` : `${inv.name} ${verb} !`, text: what });
       break;
     }
     case 'harvested':
-      if (ev.fatigue) t.show({ kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
+      if (ev.fatigue) t.show({ prio: 'info', digest: 'sol fatigué|sols fatigués', kind: 'warn', icon: 'info', text: 'Sol fatigué : même culture que la dernière fois, récolte réduite.' });
       if (ev.processed) grouped.toWorkshop.set(ev.processed.productId, (grouped.toWorkshop.get(ev.processed.productId) || 0) + 1);
       break;
     case 'productSold':
@@ -1180,7 +1258,7 @@ function reactMessages(ev, game) {
         rent: `L'argent manquait : ${plural(ev.count, 'produit')} vendu${ev.count > 1 ? 's' : ''} en l'état avant le fermage (+${fmt(ev.amount)}).`,
         yearEnd: `Fin de l'année : ${plural(ev.count, 'produit')} en cours vendu${ev.count > 1 ? 's' : ''} en l'état (+${fmt(ev.amount)}).`,
       };
-      t.show({ kind: ev.reason === 'player' ? 'money' : 'warn', icon: 'coin', text: texts[ev.reason] || texts.player, duration: 4200 });
+      t.show({ prio: ev.reason === 'player' ? 'important' : 'info', kind: ev.reason === 'player' ? 'money' : 'warn', icon: 'coin', text: texts[ev.reason] || texts.player, duration: 4200 });
       break;
     }
     case 'processingToggled':
@@ -1213,18 +1291,18 @@ function reactMessages(ev, game) {
     case 'contestProgress':
       if (ev.done) {
         const goal = game.query.contest?.()?.goals.find((x) => x.id === ev.goalId);
-        t.show({ kind: 'success', icon: 'star', title: 'Épreuve réussie !', text: `${goal?.label || 'Concours'} : ${fmt(ev.progress)} / ${fmt(ev.target)}. Prix au jugement.`, duration: 4200 });
+        t.show({ digest: 'épreuve réussie|épreuves réussies', kind: 'success', icon: 'star', title: 'Épreuve réussie !', text: `${goal?.label || 'Concours'} : ${fmt(ev.progress)} / ${fmt(ev.target)}. Prix au jugement.`, duration: 4200 });
       }
       break;
     case 'dawn': {
       for (const inc of ev.incomes || []) {
-        if (inc.kind === 'shearing') t.show({ kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
+        if (inc.kind === 'shearing') t.show({ digest: 'tonte|tontes', kind: 'money', icon: 'coin', title: 'Tonte des moutons', text: `+${fmt(inc.amount)} pièces` });
       }
       for (const inc of ev.incomes || []) {
-        if (inc.kind === 'refund' && inc.amount > 0) t.show({ kind: 'money', icon: 'winter', title: 'Assurance gel', text: `Graines remboursées : +${fmt(inc.amount)} pièces` });
+        if (inc.kind === 'refund' && inc.amount > 0) t.show({ digest: 'remboursement de l\'assurance|remboursements de l\'assurance', kind: 'money', icon: 'winter', title: 'Assurance gel', text: `Graines remboursées : +${fmt(inc.amount)} pièces` });
       }
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
-      if (loan) t.show({ kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
+      if (loan) t.show({ prio: 'info', digest: 'mensualité du prêt|mensualités du prêt', kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
       if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
       maybeLowMoneyHint(game);
       break;
@@ -1257,7 +1335,7 @@ function maybeLowMoneyHint(game) {
   else if (empty && fast) text = `Des parcelles sont vides : semez des ${cropCount(fast.id, 2).replace(/^2 /, '')}, ${fast.daysToMature <= 2 ? 'ça pousse vite' : `récolte dans ${plural(fast.daysToMature, 'jour')}`}.`;
   else text = 'Arrosez vos cultures pour qu\'elles soient mûres avant le soir du fermage.';
   if (p.state === 'loan') text += ' Et pas de panique : Joseph peut vous avancer le reste.';
-  t0().show({ kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
+  t0().show({ prio: 'important', kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
 }
 const t0 = () => app.toasts;
 
@@ -1361,7 +1439,8 @@ function recordEnd(game, outcome, ev = null) {
   } catch {
     ctx = {};
   }
-  return app.progression.recordRunEnd({
+  const albumBefore = app.album?.available?.() ? app.album.snapshot() : null;
+  const rec = app.progression.recordRunEnd({
     levelId: game.level.id,
     outcome,
     stars: outcome === 'victory' ? ev?.stars || 0 : 0,
@@ -1372,7 +1451,11 @@ function recordEnd(game, outcome, ev = null) {
     investments: ctx.investments,
     availableInvestments: ctx.availableInvestments,
     dailyCharges: ctx.dailyCharges,
+    context: ctx, // (lot 4) l'album lit le contexte de la fin de partie
   });
+  // (Lot 4) Cases de l'album trouvées au bilan de fin (recordRunEnd lit summary.cozy et le contexte).
+  if (albumBefore && outcome !== 'abandon') app.album.announceSince(albumBefore);
+  return rec;
 }
 
 /** Une partie en cours est abandonnée (« Recommencer », ou nouvelle partie par-dessus) : cumul. */
@@ -1486,6 +1569,10 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.todo.reset(game);
   app.juice.reset();
   app.lot2.reset(game);
+  app.variety.reset(game);
+  app.cozy.reset(game);
+  app.valley.reset(game);
+  app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
@@ -1577,7 +1664,10 @@ app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
   const perks = app.progression.runPerks();
   // Mode choisi pour les nouvelles parties (Détente par défaut).
   const difficulty = app.difficulty();
-  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks, difficulty });
+  // (Lot 4) Détente : fêtes, hiver vivant, lanternes ; le décor de la progression compte pour la « beauté » (copié au
+  // lancement, comme les bonus). Classique : aucune option (clé state.cozy absente, parité).
+  const cozy = difficulty === 'classique' ? undefined : { decor: app.progression.decorSummary?.() || { placed: 0, path: false, fence: false } };
+  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks, difficulty, ...(cozy ? { cozy } : {}) });
   startRun(game);
 };
 
@@ -1630,6 +1720,9 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.todo.reset(null);
   app.juice.reset();
   app.lot2.reset(null);
+  app.variety.reset(null);
+  app.cozy.reset(null);
+  app.valley.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1828,13 +1921,16 @@ function frame(t) {
   lastT = t;
   if (!app.scene) return;
   let g = null;
+  // Rythme en temps réel (REAL_DAY_SECONDS, src/data/balance.js) : à ×1, un jour de 20 secondes de jeu dure 36 s
+  // réelles. Le rendu (personnages, effets) garde dt en secondes réelles.
+  const gameDt = dt * GAME_SECONDS_PER_REAL_SECOND;
   if (app.game && !app.inMenu) {
     g = app.game;
-    if (!document.hidden) g.update(dt);
+    if (!document.hidden) g.update(gameDt);
     processPending();
   } else if (attract) {
     g = attract;
-    g.update(dt);
+    g.update(gameDt);
     if (g.state.status !== 'playing') {
       attract = createDemoGame();
       syncSceneCareer();
@@ -1843,6 +1939,7 @@ function frame(t) {
   }
   if (g) app.scene.render(g, t);
   app.careerUI.frame(); // mini-carte de la carrière (dessinée par la scène, cachée hors carrière)
+  app.zoomUI.frame(); // zoom de la scène : préférence de la partie, boutons + / −
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
   app.tutorial.frame();
   app.hints.frame();
@@ -1850,12 +1947,42 @@ function frame(t) {
   app.hud.frame(dt);
   app.juice.frame(dt);
   app.lot2.frame();
+  app.variety.frame();
+  app.cozy.frame();
+  app.valley.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
 }
 
 // ── Chargement ────────────────────────────────────────────────────────────────────
+/**
+ * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
+ * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
+ */
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1']);
+async function loadSheets() {
+  const required = {};
+  const optional = [];
+  for (const [k, v] of Object.entries(SHEETS)) {
+    if (OPTIONAL_SHEETS.has(k)) optional.push([k, v]);
+    else required[k] = v;
+  }
+  const [imgs, ...extra] = await Promise.all([
+    loadImages(required),
+    ...optional.map(([k, v]) =>
+      loadImage(v, 1)
+        .then((img) => [k, img])
+        .catch(() => {
+          console.info(`Planche ${k} absente : dessins de repli.`);
+          return [k, null];
+        }),
+    ),
+  ]);
+  for (const [k, img] of extra) if (img) imgs[k] = img;
+  return imgs;
+}
+
 async function boot() {
   const loading = $('#loading');
   const fill = $('.loading-fill', loading);
@@ -1919,7 +2046,7 @@ async function boot() {
   try {
     let uiDone = 0;
     const tasks = [
-      loadImages(SHEETS).then((imgs) => {
+      loadSheets().then((imgs) => {
         parts.images = 1;
         paint();
         return imgs;
@@ -1996,6 +2123,7 @@ async function boot() {
     audio.playMusic('menu', { fade: 1 });
     app.dialogs.mainMenu();
     maybeDetenteNotice();
+    app.album.boot(); // (lot 4) « N cases de l'album retrouvées dans vos anciennes parties »
     if (legacyAchievements.length) {
       app.audio.play('unlock', { delay: 0.4, volume: 0.7 });
       app.toasts.show({ kind: 'achievement', icon: 'star', title: 'Grange aux souvenirs', text: `${plural(legacyAchievements.length, 'succès débloqué', 'succès débloqués')} grâce à vos anciennes parties !`, duration: 5200 });
@@ -2281,6 +2409,145 @@ if (DEBUG) {
       },
       stats: () => ({ juice: app.juice.stats(), scene: app.scene?.lot2Stats?.(), voices: audio.synthVoices }),
     },
+    /**
+     * (Lot 3) Aides de vérification de la variété : chaque situation passe par l'action de débogage du cœur
+     * (actions.triggerVariety : 'board' | 'cart' | 'merchant' | 'cards' | 'challenges' | 'theme') ou par les actions
+     * publiques (récolte à la main pour remplir une commande). Alias : __debug.lot3.
+     */
+    variety: (() => {
+      const V = {
+        on: () => !!app.game?.state.variety,
+        /** Requête complète (query.variety()). */
+        state: () => (app.game?.state.variety ? app.game.query.variety?.() ?? null : null),
+        /** actions.triggerVariety(kind, arg) puis fenêtres en attente. */
+        trigger(kind, arg) {
+          const g = app.game;
+          if (!g) return { ok: false, reason: 'pas de partie' };
+          const fn = g.actions.triggerVariety;
+          if (typeof fn !== 'function') return { ok: false, reason: 'triggerVariety indisponible' };
+          const res = fn(kind, arg);
+          processPending();
+          return res;
+        },
+        board: (arg) => V.trigger('board', arg),
+        cart: (arg) => V.trigger('cart', arg),
+        merchant: (arg) => V.trigger('merchant', arg),
+        cards: (arg) => V.trigger('cards', arg),
+        challenges: (arg) => V.trigger('challenges', arg),
+        theme: (id) => V.trigger('theme', id),
+        /** Médaille n (1..3) du défi id : le cœur seul sait compter ; essaie triggerVariety('medal'). */
+        medal: (id, n = 1) => V.trigger('medal', { challengeId: id, medal: n }),
+        /** Remplit la commande de la place `slot` par de vraies récoltes à la main (parcelles rendues mûres). */
+        fill(slot = 0, units = null) {
+          const g = app.game;
+          const o = g?.query.orders?.()?.slots?.[slot];
+          if (!o || o.empty) return { ok: false, reason: 'place vide' };
+          let done = 0;
+          for (const line of o.lines || []) {
+            let left = units ?? (line.left ?? line.n - (line.got || 0));
+            const crop = getCrop(line.cropId);
+            const plots = g.state.plots.map((p, i) => ({ p, i })).filter(({ p }) => p && p.unlocked !== false && p.env !== null && !p.giant && (!p.cropId || getCrop(p.cropId)?.kind !== 'tree'));
+            for (const { p, i } of plots) {
+              if (left <= 0) break;
+              p.cropId = line.cropId;
+              p.growth = crop?.growDays ?? 3;
+              p.watered = true;
+              delete p.forage;
+              const res = app.harvest(i);
+              if (res?.ok) {
+                left -= res.giant ? 4 : 1;
+                done += 1;
+              }
+            }
+          }
+          processPending();
+          return { ok: done > 0, harvested: done, order: g.query.orders?.()?.slots?.[slot] };
+        },
+        /** Ouvre une feuille : 'board' | 'cart' | 'merchant' | 'cards' | 'challenges' | 'theme'. */
+        open(kind = 'board') {
+          const f = { board: 'openBoard', cart: 'openCart', merchant: 'openMerchant', cards: 'openCards', challenges: 'openChallenges', theme: 'openTheme' }[kind];
+          return f ? app.variety[f]() : false;
+        },
+        /** Avance jusqu'au soir du dernier jour de la saison (la fenêtre de fin de saison s'ouvre). */
+        seasonEnd() {
+          const g = app.game;
+          if (!g) return 0;
+          const s0 = g.state.time.seasonIndex;
+          const y0 = g.state.time.year;
+          let n = 0;
+          while (g.state.status === 'playing' && g.state.time.seasonIndex === s0 && g.state.time.year === y0 && !app.dialogs.isOpen() && n < 40) {
+            if (!window.__debug.skipDays(1)) break;
+            n += 1;
+          }
+          return n;
+        },
+        /** Point (px de la page) d'une cible de la scène : 'board' | 'cart' | 'merchant' | 'visitor'. */
+        point(kind = 'board') {
+          const v = app.scene?.varietySpots?.();
+          if (v && kind === 'visitor') return v.visitor ? worldToPage(v.visitor.x + 8, v.visitor.y - 7) : null;
+          const r = v ? (kind === 'merchant' ? v.merchant : kind === 'cart' ? v.cart : v.board) : null;
+          return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+        },
+        ui: () => app.variety.debugState(),
+        stats: () => app.scene?.varietyStats?.() || null,
+      };
+      return V;
+    })(),
+    /**
+     * (Lot 4) Aides de vérification « Collection & enjeux doux » : chaque situation passe par l'action de débogage du
+     * cœur (actions.triggerCozy : 'fete' (id) | 'winter' | 'bird' (id) | 'trace' (kind) | 'story' | 'lanterns' |
+     * 'ripe' (aubes)) ou par les actions publiques (feteFind, cookSoup, presentStand, giveBaskets, …). Alias :
+     * __debug.lot4.
+     */
+    cozy: (() => {
+      const C = {
+        on: () => !!app.game?.state.cozy,
+        /** Requête complète (query.cozy()). */
+        state: () => (app.game?.state.cozy ? app.game.query.cozy?.() ?? null : null),
+        /** actions.triggerCozy(kind, arg) puis fenêtres en attente. */
+        trigger(kind, arg) {
+          const g = app.game;
+          if (!g) return { ok: false, reason: 'pas de partie' };
+          const fn = g.actions.triggerCozy;
+          if (typeof fn !== 'function') return { ok: false, reason: 'triggerCozy indisponible' };
+          const res = fn(kind, arg);
+          processPending();
+          return res;
+        },
+        fete: (id) => C.trigger('fete', id),
+        winter: () => C.trigger('winter'),
+        bird: (id) => C.trigger('bird', id),
+        trace: (kind) => C.trigger('trace', kind),
+        story: () => C.trigger('story'),
+        lanterns: () => C.trigger('lanterns'),
+        ripe: (n = 4) => C.trigger('ripe', n),
+        /** Trouve l'objet caché n° i (comme un toucher dans la scène). */
+        find(i) {
+          return app.cozy.onHit({ type: 'feteItem', index: i });
+        },
+        soup: (ids) => app.game?.actions.cookSoup?.((ids || []).map((id) => (typeof id === 'string' ? { kind: 'crop', id } : id))),
+        stand: (items) => app.game?.actions.presentStand?.(items || []),
+        baskets: (b) => app.game?.actions.giveBaskets?.(b || []),
+        /** Ouvre une feuille : 'fete' | 'winter' | 'story' | 'lanterns' | 'album'. */
+        open(kind = 'fete') {
+          if (kind === 'album') return !!app.album.open();
+          const f = { fete: 'openFete', winter: 'openWinter', story: 'openStory', lanterns: 'openLanterns' }[kind];
+          return f ? app.cozy[f]() : false;
+        },
+        feteMode: (on = true) => (on ? app.cozy.enterFeteMode() : (app.cozy.leaveFeteMode(), false)),
+        hint: () => app.cozy.showHint(),
+        album: () => !!app.album.open(),
+        albumAll: () => app.album.fillAll(),
+        /** Point (px de la page) d'une cible du lot 4 : 'feteItem' (index) | 'winterFind' (id) | 'feeder' | … */
+        point(kind, id) {
+          const r = app.scene?.cozyItemRect?.(kind, id);
+          return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+        },
+        ui: () => app.cozy.debugState(),
+        stats: () => app.scene?.cozyStats?.() || null,
+      };
+      return C;
+    })(),
     /** Centre du panneau d'un terrain (px de la page), si le rendu le connaît. */
     lotPoint(id) {
       const l = app.scene?.layout?.lots?.find?.((x) => x.id === id);
@@ -2291,6 +2558,54 @@ if (DEBUG) {
     },
   };
 }
+
+if (DEBUG) {
+  /**
+   * (Vallée vivante, lot V1) Aides de vérification : chaque situation passe par l'action de débogage du cœur
+   * (actions.career.triggerValley) ou par les actions publiques ; les fenêtres en attente s'ouvrent ensuite.
+   */
+  const VL = () => app.game?.actions?.career;
+  const vlTrigger = (kind, arg, arg2) => {
+    const fn = VL()?.triggerValley;
+    if (typeof fn !== 'function') return { ok: false, reason: 'triggerValley indisponible' };
+    const r = fn(kind, arg, arg2);
+    processPending();
+    app.careerUI?.refresh?.();
+    return r;
+  };
+  window.__debug.valley = {
+    on: () => !!app.game?.state?.career?.valley,
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    start: () => vlTrigger('start'),
+    jar: (cropId = 'carrot') => vlTrigger('jar', cropId),
+    seeds: (id, n = 3) => vlTrigger('seeds', id, n),
+    fix: (id) => vlTrigger('fix', id),
+    visible: (id) => vlTrigger('visible', id),
+    install: (id) => vlTrigger('install', id),
+    stage: (n) => vlTrigger('stage', n),
+    finds: () => vlTrigger('finds'),
+    fair: () => vlTrigger('fair'),
+    tree: (spotId) => vlTrigger('tree', spotId),
+    /** Pose un aménagement : premier emplacement libre du genre (vraie action du joueur). */
+    place(kind, spotId = null) {
+      const g = app.game;
+      const sid = spotId || (g?.query.career.valleySpots?.(kind) || []).find((s) => s.free)?.spotId;
+      if (!sid) return { ok: false, reason: 'aucun emplacement libre' };
+      return g.actions.career.placeNature(sid, kind);
+    },
+    open: (tab) => app.valley.open(tab),
+    placing: (kind) => (kind ? app.valley.enterPlacing(kind) : (app.valley.leavePlacing(), false)),
+    /** Point (px de la page) d'une cible : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId). */
+    point(kind, id) {
+      const r = app.scene?.valleyItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    ui: () => app.valley.debugState(),
+    stats: () => app.scene?.valleyStats?.() || null,
+  };
+  window.__debug.lot3 = window.__debug.variety;
+}
+if (DEBUG) window.__debug.lot4 = window.__debug.cozy;
 
 // Application installable : service worker (hors ligne, mises à jour), invitation à installer.
 // (`?nosw` dans l'adresse : sans service worker, pour le débogage.)

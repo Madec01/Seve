@@ -18,9 +18,12 @@ const TABS = [
   { id: 'bonus', label: 'Bonus' },
   { id: 'achievements', label: 'Succès' },
   { id: 'farm', label: 'Ma ferme' },
+  // (Lot 4) L'album de la ferme (src/ui/album.js) : cases trouvées dans tous les modes, récompenses de page.
+  { id: 'album', label: 'Album', when: (app) => !!app.album?.available?.() },
 ];
 
 export function createGrange(app) {
+  const grangeTabs = () => TABS.filter((t) => !t.when || t.when(app));
   let handle = null;
   let tab = 'bonus';
   let panel = null;
@@ -30,11 +33,11 @@ export function createGrange(app) {
 
   function open(which = 'bonus') {
     if (!P()?.available()) return;
-    tab = TABS.some((t) => t.id === which) ? which : 'bonus';
+    tab = grangeTabs().some((t) => t.id === which) ? which : 'bonus';
     const d = app.dialogs;
     farmTitle = el('p.grange-farm', '');
     panel = el('div.grange-panel', { role: 'tabpanel', id: 'grange-panel' });
-    tabButtons = TABS.map((t) =>
+    tabButtons = grangeTabs().map((t) =>
       el(
         'button.seg-btn',
         {
@@ -53,7 +56,7 @@ export function createGrange(app) {
         el('span.seg-dot', { 'aria-hidden': 'true' }),
       ),
     );
-    const tabs = el('div.seg', { role: 'tablist', 'aria-label': 'Grange aux souvenirs' }, tabButtons);
+    const tabs = el(`div.seg${tabButtons.length >= 4 ? '.is-four' : ''}`, { role: 'tablist', 'aria-label': 'Grange aux souvenirs' }, tabButtons);
     const node = d.frame({
       title: 'La grange',
       ribbon: 'ribbon',
@@ -91,8 +94,9 @@ export function createGrange(app) {
     }
     tabButtons[0].querySelector('.seg-dot').classList.toggle('is-on', P().canSpendStars());
     tabButtons[1].querySelector('.seg-dot').classList.toggle('is-on', !!app.hasNewAchievements?.());
+    tabButtons[3]?.querySelector('.seg-dot').classList.toggle('is-on', (app.album?.badge?.() || 0) > 0);
     farmTitle.textContent = `Grange aux souvenirs · ${P().farmName()}`;
-    const content = tab === 'bonus' ? bonusTab() : tab === 'achievements' ? achievementsTab() : farmTab();
+    const content = tab === 'bonus' ? bonusTab() : tab === 'achievements' ? achievementsTab() : tab === 'album' ? app.album.tabContent() : farmTab();
     panel.replaceChildren(content);
     if (tab === 'achievements') app.markAchievementsSeen?.();
     if (scroller) scroller.scrollTop = reset ? 0 : top;
@@ -255,7 +259,20 @@ export function createGrange(app) {
 
   function achievementsTab() {
     const list = P().achievementList(null);
-    const career = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
+    const careerAll = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
+    // (Vallée vivante) Les 7 succès de la Vallée, rangés sous leur propre titre.
+    const valleyIds = new Set((v3.achievements?.VALLEY_ACHIEVEMENTS || []).map((a) => a.id));
+    const career = careerAll.filter((a) => !valleyIds.has(a.id));
+    const valley = careerAll.filter((a) => valleyIds.has(a.id));
+    const vdone = valley.filter((a) => a.done).length;
+    // (Lot 4) « Album et fêtes » : écus seulement.
+    let cozy = [];
+    try {
+      if (typeof v3.progression?.cozyAchievementList === 'function') cozy = v3.progression.cozyAchievementList(P().get(), careerContext()) || [];
+    } catch {
+      cozy = [];
+    }
+    const zdone = cozy.filter((a) => a.done).length;
     const done = list.filter((a) => a.done).length;
     const cdone = career.filter((a) => a.done).length;
     const pc = P().get().career || {};
@@ -264,15 +281,19 @@ export function createGrange(app) {
       'div.grange-ach',
       el(
         'div.ach-head',
-        el('b.ach-score', `${done + cdone} / ${list.length + career.length}`),
+        el('b.ach-score', `${done + cdone + zdone + vdone} / ${list.length + career.length + cozy.length + valley.length}`),
         el('span', 'succès obtenus'),
-        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length + career.length ? Math.round(((done + cdone) / (list.length + career.length)) * 100) : 0}%` } })),
+        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length + career.length + cozy.length + valley.length ? Math.round(((done + cdone + zdone + vdone) / (list.length + career.length + cozy.length + valley.length)) * 100) : 0}%` } })),
       ),
       el('h3.farm-sec-title.ach-sec', `Les niveaux · ${done} / ${list.length}`),
       el('div.ach-list', list.map(achievementRow)),
       career.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-career' }, `Ma ferme (carrière) · ${cdone} / ${career.length}`) : null,
       career.length ? el('p.sheet-hint', 'Les succès de la carrière rapportent des écus (pas d\'étoile).') : null,
       career.length ? el('div.ach-list', career.map(achievementRow)) : null,
+      valley.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-valley' }, `La Vallée · ${vdone} / ${valley.length}`) : null,
+      valley.length ? el('div.ach-list', valley.map(achievementRow)) : null,
+      cozy.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-cozy' }, `Album et fêtes · ${zdone} / ${cozy.length}`) : null,
+      cozy.length ? el('div.ach-list', cozy.map(achievementRow)) : null,
       archive.length
         ? el(
             'section.farm-sec.ach-archive',
@@ -330,7 +351,7 @@ export function createGrange(app) {
                 onPick: async (it, st) => {
                   if (st === 'owned') {
                     app.audio.play('click');
-                    app.toasts.show({ kind: 'info', icon: 'star', text: `« ${it.name} » est débloqué : posez-le avec « Décorer la ferme ».` });
+                    app.toasts.show({ prio: 'important', kind: 'info', icon: 'star', text: `« ${it.name} » est débloqué : posez-le avec « Décorer la ferme ».` });
                     return;
                   }
                   if (await unlockFlow(app, it)) render();

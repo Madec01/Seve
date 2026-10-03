@@ -8,7 +8,7 @@
 //   actors.reset()                         oublie tout (nouvelle partie)
 //   actors.shift(dy)                       le monde a grandi vers le haut : tout descend de dy px
 //   actors.sync(game, layout, time)        relit l'état (employés, abris, corbeaux, quête, offres, animaux)
-//   actors.update(dt, env)                 avance (env : { elapsed, season, weather, dayProgress })
+//   actors.update(dt, env)                 avance (dt : secondes réelles ; env : { elapsed, speed, season, weather, dayProgress })
 //   actors.collect(push, view)             ajoute les sprites à la liste de dessin de la scène
 //                                          push(name, x, y, sortY, set, opts) ; view : { x0, y0, x1, y1 } (px monde)
 //   actors.hitTest(wx, wy, slop)           { type: 'employee', staffId } | { type: 'joseph' } |
@@ -19,15 +19,32 @@
 //   actors.markers()                       positions des employés, de Joseph, des visiteurs (mini-carte)
 //
 // Lecture seule : l'état du jeu n'est jamais modifié. Les heures des tâches et des passages sont celles
-// du cœur (secondes écoulées dans la journée, state.time.elapsed) : à ×4, tout va 4 fois plus vite.
+// du cœur (secondes écoulées dans la journée, state.time.elapsed) : à ×4, le travail va 4 fois plus vite, mais les
+// employés ne courent pas — ils marchent au pas (temps réel, accélération modérée) et coupent par un fondu quand la
+// tâche suivante est trop loin (walkToward). Les animaux, les visiteurs, Joseph et les promeneurs sont du décor en
+// temps réel. Mouvements réduits : aucun trajet dessiné (l'employé est à sa tâche).
 
 import { TILE, SPRITES, staffSprite } from './atlas.js';
 import { tileHash } from './layout-common.js';
 import { MAX_ANIMALS_DRAWN } from './layout-career.js';
+import { GAME_SECONDS_PER_REAL_SECOND } from '../data/balance.js';
 
 const T = TILE;
-const WALK_SPEED = 64; // px du monde par seconde de jeu
-const HOME_WALK = 36; // flânerie près de la maison (px par seconde réelle)
+// Rythme des personnages (2026-10-03, retour joueur : « en ×1 les personnages semblent accélérés, comme en ×4 ») :
+// les employés marchent au pas tranquille en temps RÉEL (≈ 42 px CSS/s sur le Pixel 7, 59 au plus pressé), un peu plus vite aux vitesses
+// rapides (paceFactor : ×1,25 à ×2, ×1,5 à ×4) ; quand la tâche suivante est trop loin pour y arriver sans courir, ils
+// « coupent » (fondu, puis réapparition près du but) au lieu de traverser la ferme en courant. La cadence des pas suit
+// la distance parcourue (une bascule de pose tous les STEP_PX px : ≈ 4 à 5 pas/s), jamais l'image.
+const STAFF_WALK = 22; // px du monde par seconde réelle, à ×1
+const STAFF_HURRY = 1.4; // un peu plus vif quand l'heure presse (au-delà : raccourci doux)
+const STEP_PX = 6;
+const JUMP_DIST = 64; // retard (px) au-delà duquel l'employé coupe
+const JUMP_LAND = 18; // il réapparaît à cette distance du but
+const FADE_S = 0.22; // durée de chaque fondu (s réelles)
+/** Accélération modérée des mouvements aux vitesses rapides (jamais ×4 à ×4). */
+export function paceFactor(speed) {
+  return speed >= 4 ? 1.5 : speed >= 2 ? 1.25 : 1;
+}
 const POP_TIME = 0.55;
 const TOOL_OF = { water: 'can', harvest: 'basket', pick: 'basket', sow: 'seedbag', collect: 'pail', craft: 'hoe', sell: 'basket' };
 const JOB_TOOL = { keeper: 'pail', artisan: 'hoe', seller: 'basket' };
@@ -84,6 +101,7 @@ export function createCareerActors() {
   let time = 0;
   let elapsed = 0;
   let prevElapsed = null;
+  let speed = 1; // vitesse du jeu (env.speed) : raccourcis et accélération modérée
   let initialized = false;
 
   const staff = new Map(); // staffId → acteur
@@ -119,8 +137,9 @@ export function createCareerActors() {
     for (const a of staff.values()) {
       a.y += dy;
       a.homeY += dy;
-      if (a.route) for (const p of a.route) p.y += dy;
-      a.routeKey = '';
+      a.wy += dy;
+      if (a.path) for (const p of a.path) p.y += dy;
+      a.goalKey = '';
     }
     for (const list of herds.values()) for (const a of list) { a.y += dy; a.ty += dy; a.minY += dy; a.maxY += dy; }
     for (const c of crows.values()) c.y += dy;
@@ -218,7 +237,7 @@ export function createCareerActors() {
       let a = staff.get(s.id);
       if (!a) {
         const hp = homePoint(k);
-        a = { id: s.id, k, x: hp.x, y: hp.y, homeX: hp.x, homeY: hp.y, facing: 1, walkD: 0, pose: 'idle', tool: null, visible: true, route: null, routeKey: '', routeLen: 0, wander: rnd(0.5, 3), wx: hp.x, wy: hp.y, born: initialized ? time : -10 };
+        a = { id: s.id, k, x: hp.x, y: hp.y, homeX: hp.x, homeY: hp.y, facing: 1, walkD: 0, pose: 'idle', tool: null, visible: true, path: [], goalKey: '', alpha: 1, jump: null, working: false, wander: rnd(0.5, 3), wx: hp.x, wy: hp.y, born: initialized ? time : -10 };
         staff.set(s.id, a);
       }
       a.k = k;
@@ -391,7 +410,8 @@ export function createCareerActors() {
     gdt = Math.min(2, Math.max(0, gdt));
     prevElapsed = e;
     elapsed = e;
-    for (const a of staff.values()) updateStaff(a, dt, gdt);
+    speed = Number.isFinite(env?.speed) ? env.speed : speed;
+    for (const a of staff.values()) updateStaff(a, dt);
     for (const list of herds.values()) for (const a of list) updateAnimal(a, dt);
     for (let i = flying.length - 1; i >= 0; i--) {
       const f = flying[i];
@@ -404,7 +424,119 @@ export function createCareerActors() {
     updateMachines(dt, gdt);
   }
 
-  function updateStaff(a, dt, gdt) {
+  /**
+   * Avance l'employé vers (tx, ty) au pas tranquille, le long d'un chemin (a.path) recalculé quand le but change.
+   * Trop loin (retard > JUMP_DIST : la tâche suivante est loin, ou il a pris du retard à ×4) :
+   * « raccourci doux » — il s'efface, puis réapparaît un peu avant le but et finit à pied. Renvoie true s'il marche.
+   * @param avail secondes RÉELLES avant la fin de la tâche (Infinity : pas d'échéance)
+   */
+  function walkToward(a, tx, ty, dt, avail) {
+    const key = `${Math.round(tx)},${Math.round(ty)}`;
+    if (key !== a.goalKey) {
+      a.goalKey = key;
+      a.path = Math.hypot(tx - a.x, ty - a.y) > 1 ? layout.route({ x: a.x, y: a.y }, { x: tx, y: ty }) : [];
+      if (!a.path.length || Math.hypot(a.path[a.path.length - 1].x - tx, a.path[a.path.length - 1].y - ty) > 0.5) a.path.push({ x: tx, y: ty });
+    }
+    // Mouvements réduits : pas de trajet dessiné, l'employé est à sa tâche.
+    if (reducedMotion) {
+      a.x = tx;
+      a.y = ty;
+      a.path.length = 0;
+      a.alpha = 1;
+      a.jump = null;
+      return false;
+    }
+    const left = remaining(a, tx, ty);
+    if (left <= 0.5 && !a.jump) {
+      a.path.length = 0;
+      return false;
+    }
+    const base = STAFF_WALK * paceFactor(speed);
+    // Vitesse : le pas tranquille, un peu plus vif (×STAFF_HURRY au plus) si l'heure presse ; au-delà, raccourci doux.
+    const need = Number.isFinite(avail) && avail > 0 ? left / (avail * 0.8) : 0;
+    const v = Math.min(base * STAFF_HURRY, Math.max(base, need));
+    // Raccourci seulement quand il est vraiment loin : un employé un peu en retard (à ×4, deux tâches par seconde)
+    // continue d'avancer au pas et rattrape par un seul fondu quand le retard dépasse JUMP_DIST (pas de clignotement).
+    if (!a.jump && left > JUMP_DIST) {
+      a.jump = { t: 0, done: false };
+      a.jumps = (a.jumps || 0) + 1;
+    }
+    let step = v * dt;
+    if (a.jump) {
+      a.jump.t += dt;
+      if (!a.jump.done) {
+        a.alpha = Math.max(0, 1 - a.jump.t / FADE_S);
+        if (a.jump.t >= FADE_S) {
+          // Réapparaît à JUMP_LAND px du but (le long du chemin), puis finit à pied.
+          placeAlong(a, Math.min(JUMP_LAND, remaining(a, tx, ty)));
+          a.jump.done = true;
+          a.jump.t = 0;
+          step = 0;
+        }
+      } else {
+        a.alpha = Math.min(1, a.jump.t / FADE_S);
+        if (a.alpha >= 1) a.jump = null;
+      }
+    } else a.alpha = 1;
+    if (step <= 0) return true;
+    const prevX = a.x;
+    let rest = step;
+    while (rest > 0 && a.path.length) {
+      const n = a.path[0];
+      const d = Math.hypot(n.x - a.x, n.y - a.y);
+      if (d <= rest) {
+        a.x = n.x;
+        a.y = n.y;
+        rest -= d;
+        a.path.shift();
+      } else {
+        a.x += ((n.x - a.x) / d) * rest;
+        a.y += ((n.y - a.y) / d) * rest;
+        rest = 0;
+      }
+    }
+    if (Math.abs(a.x - prevX) > 0.05) a.facing = a.x > prevX ? 1 : -1;
+    // Cadence des pas liée à la distance parcourue (une bascule tous les STEP_PX px) : jamais à l'image près.
+    a.walkD += step - rest;
+    return step - rest > 0;
+  }
+
+  /** Distance restante le long du chemin. */
+  function remaining(a, tx, ty) {
+    let d = 0;
+    let px = a.x;
+    let py = a.y;
+    for (const n of a.path) {
+      d += Math.hypot(n.x - px, n.y - py);
+      px = n.x;
+      py = n.y;
+    }
+    return a.path.length ? d : Math.hypot(tx - a.x, ty - a.y);
+  }
+
+  /** Place l'acteur sur son chemin à `left` px de la fin (retire les points dépassés). */
+  function placeAlong(a, left) {
+    const pts = [{ x: a.x, y: a.y }, ...a.path];
+    const total = polyLength(pts);
+    pointAlong(pts, Math.max(0, total - left), tmp);
+    let acc = 0;
+    let keep = pts.length - 1;
+    for (let i = 1; i < pts.length; i++) {
+      acc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      if (acc >= total - left - 0.01) {
+        keep = i;
+        break;
+      }
+    }
+    a.path = pts.slice(keep);
+    a.x = tmp.x;
+    a.y = tmp.y;
+    if (Math.abs(tmp.dx) > 0.5) a.facing = tmp.dx > 0 ? 1 : -1;
+  }
+
+  const walkPose = (a) => (Math.floor(a.walkD / STEP_PX) % 2 ? 'walk' : 'walk2');
+
+  function updateStaff(a, dt) {
     const s = a.s;
     a.visible = !!s && !s.onLeave;
     if (!a.visible) return;
@@ -412,77 +544,41 @@ export function createCareerActors() {
     const hp = homePoint(a.k);
     a.homeX = hp.x;
     a.homeY = hp.y;
+    const rate = Math.max(1e-6, speed * GAME_SECONDS_PER_REAL_SECOND); // secondes de jeu par seconde réelle
     if (!task || task.kind === 'home' && elapsed >= task.doneAt) {
-      // Flânerie près de la maison.
+      // Flânerie près de la maison (temps réel : décor).
       a.tool = s.job ? JOB_TOOL[s.job] || null : null;
-      a.pose = 'idle';
       if (task && task.kind === 'home') a.tool = null;
-      const d = Math.hypot(a.wx - a.x, a.wy - a.y);
-      if (d > 1) {
-        const far = Math.hypot(a.x - a.homeX, a.y - a.homeY) > 64;
-        const step = (far ? 110 : HOME_WALK) * dt;
-        if (far && !a.routeHome) {
-          a.routeHome = layout.route({ x: a.x, y: a.y }, { x: a.wx, y: a.wy });
-        }
-        const target = a.routeHome && a.routeHome.length ? a.routeHome[0] : { x: a.wx, y: a.wy };
-        const dx = target.x - a.x;
-        const dy = target.y - a.y;
-        const dd = Math.hypot(dx, dy);
-        if (dd <= step) {
-          a.x = target.x;
-          a.y = target.y;
-          if (a.routeHome && a.routeHome.length) a.routeHome.shift();
-        } else {
-          a.x += (dx / dd) * step;
-          a.y += (dy / dd) * step;
-        }
-        if (Math.abs(dx) > 0.3) a.facing = dx > 0 ? 1 : -1;
-        a.walkD += step;
-        a.pose = Math.floor(a.walkD / 5) % 2 ? 'walk' : 'walk2';
-      } else {
-        a.routeHome = null;
+      a.working = false;
+      const moving = walkToward(a, a.wx, a.wy, dt, Infinity);
+      if (moving) a.pose = walkPose(a);
+      else {
+        a.pose = 'idle';
         a.wander -= dt;
         if (a.wander <= 0) {
-          a.wander = rnd(2, 6);
+          a.wander = rnd(2.5, 7);
           a.wx = a.homeX + rnd(-22, 22);
           a.wy = a.homeY + rnd(-3, 5);
         }
       }
       return;
     }
-    a.routeHome = null;
     a.wx = a.homeX;
     a.wy = a.homeY;
-    const k = a.k;
-    const from = targetPoint(task.from, k);
-    const to = targetPoint(task.target, k);
-    const key = `${task.startAt}|${task.doneAt}|${task.kind}|${to.x},${to.y}`;
-    if (key !== a.routeKey) {
-      a.routeKey = key;
-      // Départ : là où l'employé se trouve s'il est déjà dessiné près du point de départ, sinon `from`.
-      const start = Math.hypot(a.x - from.x, a.y - from.y) < 48 ? { x: a.x, y: a.y } : from;
-      a.route = [start, ...layout.route(start, to)];
-      a.routeLen = polyLength(a.route);
-    }
-    const dur = Math.max(0.05, task.doneAt - task.startAt);
-    const walkDur = Math.min(a.routeLen / WALK_SPEED, dur * (task.kind === 'idle' || task.kind === 'home' ? 1 : 0.7));
-    const u = elapsed <= task.startAt ? 0 : walkDur <= 0 ? 1 : Math.min(1, (elapsed - task.startAt) / walkDur);
-    const prevX = a.x;
-    pointAlong(a.route, a.routeLen * u, tmp);
-    a.x = tmp.x;
-    a.y = tmp.y;
-    const moving = u > 0 && u < 1 && a.routeLen > 1;
+    const to = targetPoint(task.target, a.k);
+    const before = elapsed < task.startAt;
+    const avail = (task.doneAt - elapsed) / rate;
+    const moving = before ? false : walkToward(a, to.x, to.y, dt, task.kind === 'idle' ? Infinity : avail);
+    const arrived = !moving && !a.jump && Math.hypot(a.x - to.x, a.y - to.y) <= 1;
     if (moving) {
-      if (Math.abs(tmp.dx) > 0.5) a.facing = tmp.dx > 0 ? 1 : -1;
-      a.walkD += Math.abs(a.x - prevX) + (gdt > 0 ? 0.6 : 0);
-      a.pose = Math.floor(a.walkD / 5) % 2 ? 'walk' : 'walk2';
+      a.pose = walkPose(a);
       a.tool = TOOL_OF[task.kind] || (s.job ? JOB_TOOL[s.job] : null) || null;
       a.working = false;
-    } else if (u >= 1 && elapsed < task.doneAt && task.kind !== 'idle' && task.kind !== 'home') {
+    } else if (arrived && !before && elapsed < task.doneAt && task.kind !== 'idle' && task.kind !== 'home') {
       a.pose = 'work';
       a.working = true;
       a.tool = task.kind === 'chase' ? null : TOOL_OF[task.kind] || (s.job ? JOB_TOOL[s.job] : null) || 'hoe';
-      if (task.kind === 'chase') a.facing = Math.sin(time * 12) > 0 ? 1 : -1;
+      if (task.kind === 'chase') a.facing = Math.sin(time * 6) > 0 ? 1 : -1;
     } else {
       a.pose = 'idle';
       a.working = false;
@@ -552,7 +648,7 @@ export function createCareerActors() {
 
   function updateVisitors(dt) {
     for (const [id, v] of [...visitors]) {
-      const arrived = stepTo(v, v.tx, v.ty, v.kind === 'pet' ? 20 : 34, dt);
+      const arrived = stepTo(v, v.tx, v.ty, v.kind === 'pet' ? 20 : 26, dt);
       v.moving = !arrived;
       if (arrived && v.leaving) visitors.delete(id);
       else if (arrived) v.facing = v.kind === 'pet' ? v.facing : 1;
@@ -605,12 +701,12 @@ export function createCareerActors() {
     }
     const len = polyLength(j.route);
     const prevX = j.x;
-    j.d = Math.min(len, j.d + 30 * dt);
+    j.d = Math.min(len, j.d + 24 * dt);
     pointAlong(j.route, j.d, tmp);
     j.x = tmp.x;
     j.y = tmp.y;
     if (Math.abs(j.x - prevX) > 0.01) j.facing = j.x > prevX ? 1 : -1;
-    j.walkD += 30 * dt;
+    j.walkD += 24 * dt;
     j.moving = j.d < len;
     if (!j.moving) {
       if (j.state === 'in') {
@@ -683,7 +779,8 @@ export function createCareerActors() {
       const moved = Math.hypot(a.x - px0, a.y - py0);
       a.moving = moved > 0.05;
       if (a.moving && Math.abs(a.x - px0) > 0.05) a.facing = a.x > px0 ? 1 : -1;
-      a.frameD += moved + (a.run && gdt > 0 ? 0.4 : 0);
+      // Roues / sabots : cadence plafonnée en temps réel (≤ 8 images/s), même quand la machine file à ×4.
+      a.frameD += Math.min(moved, 36 * dt) + (a.run && gdt > 0 ? 12 * dt : 0);
     }
   }
 
@@ -786,7 +883,10 @@ export function createCareerActors() {
       const age = time - a.born;
       const scale = age < POP_TIME && !reducedMotion ? popScale(age / POP_TIME) : 1;
       if (scale !== 1) push(name, Math.round(x + (16 - 16 * scale) / 2), Math.round(y + 16 - 16 * scale), a.y + 1, base, { scale });
-      else push(name, x, y, a.y + 1, base, { flipX: a.facing < 0, overlay });
+      else if ((a.alpha ?? 1) < 1) {
+        if (a.alpha <= 0.02) continue; // raccourci doux : effacé
+        push(name, x, y, a.y + 1, base, { flipX: a.facing < 0, overlay, alpha: a.alpha });
+      } else push(name, x, y, a.y + 1, base, { flipX: a.facing < 0, overlay });
       n++;
     }
     // Corbeaux posés
@@ -976,5 +1076,15 @@ export function createCareerActors() {
   function setReducedMotion(on) {
     reducedMotion = !!on;
   }
-  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, markers, setReducedMotion, get joseph() { return joseph; } };
+  /** Mesures (QA du rythme) : position, pose et opacité des employés, des visiteurs, de Joseph et d'un animal par troupeau. */
+  function probe() {
+    const out = { staff: [], animals: [], visitors: [], joseph: joseph ? { x: joseph.x, y: joseph.y, moving: !!joseph.moving } : null };
+    for (const [id, a] of staff) if (a.visible) out.staff.push({ id, x: a.x, y: a.y, pose: a.pose, alpha: a.alpha ?? 1, working: !!a.working, walkD: a.walkD || 0, jumps: a.jumps || 0 });
+    for (const list of herds.values()) if (list[0]) out.animals.push({ kind: list[0].kind, x: list[0].x, y: list[0].y, moving: !!list[0].moving });
+    for (const [id, v] of visitors) out.visitors.push({ id, x: v.x, y: v.y, moving: !!v.moving });
+    for (const w of walkers) out.visitors.push({ id: 'walker', x: w.x, y: w.y, moving: !(w.pause > 0) });
+    return out;
+  }
+
+  return { reset, shift, sync, update, collect, hitTest, rectOf, onEvent, stats, markers, probe, setReducedMotion, get joseph() { return joseph; } };
 }

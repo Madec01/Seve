@@ -263,7 +263,7 @@ test('serre : 4 puis 8 parcelles, toutes les cultures en toute saison, ni gel ni
   setRank(g, 3);
   g.actions.career.buyLot();
   const r = g.actions.career.developLot('lot3', 'greenhouse');
-  assert.equal(r.cost, 800);
+  assert.equal(r.cost, 500); // (lot 4) serre au rang 2, 500
   assert.equal(r.plots.length, 4);
   assert.equal(g.state.career.buildings.greenhouse.level, 1);
   assert.equal(g.actions.career.upgradeBuilding('greenhouse').cost, 1200);

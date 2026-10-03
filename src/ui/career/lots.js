@@ -115,7 +115,7 @@ function tapCell(ui, c) {
   const { app } = ui;
   if (c.state === 'forest' || !c.id) {
     app.audio.play('error', { volume: 0.5 });
-    app.toasts.show({ kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
+    app.toasts.show({ prio: 'important', kind: 'info', icon: 'lock', key: 'c-map-forest', text: `${c.name || 'Cette forêt'} : achetez d'abord un terrain qui la touche.`, duration: 2600 });
     return;
   }
   ui.open.lot(c.id);
@@ -216,6 +216,9 @@ export function lotContent(ui, lotId) {
     parts.push(staffSection(ui, lot));
     if (lot.index >= 3) parts.push(developSection(ui, lot, true));
   }
+  // (Vallée vivante) Section « Nature » : emplacements du terrain, posés ou à poser.
+  const nature = ui.app.valley?.lotSection?.(lot);
+  if (nature) parts.splice(Math.min(parts.length, 2), 0, nature);
   return el('div.info-sheet.c-lot', parts);
 }
 
@@ -299,13 +302,14 @@ function planSection(ui, lot) {
   const cur = ui.game.query.calendar().seasonId;
   const rows = SEASON_ORDER.map((sid) => {
     const v = lot.plan?.[sid];
-    const crop = v && v !== 'same' ? getCrop(v) : null;
+    const vl = ui.app.valley?.planLabel?.(v) || null;
+    const crop = v && v !== 'same' && !vl ? getCrop(v) : null;
     return el(
       `button.c-plan-row${sid === cur ? '.is-now' : ''}`,
       { type: 'button', id: `c-plan-${sid}`, onclick: () => ui.open.plan(lot.id, sid) },
       icon(sid, 'md'),
       el('span.c-plan-season', season(sid)),
-      el('span.c-plan-value', crop ? [cropIcon(crop.id, 'sprite--sm'), el('span', crop.name)] : v === null ? el('span.mid', 'Rien') : el('span', 'Même culture')),
+      el('span.c-plan-value', vl || (crop ? [cropIcon(crop.id, 'sprite--sm'), el('span', crop.name)] : v === null ? el('span.mid', 'Rien') : el('span', 'Même culture'))),
       el('span.c-row-go', '›'),
     );
   });
@@ -325,10 +329,12 @@ function orchardSection(ui, lot) {
 
 function pondSection(ui) {
   const { app } = ui;
+  // (Lot 4) Hiver vivant : la mare gèle, la pêche continue (« pêche sous la glace »).
+  const ice = !!ui.game?.state?.cozy?.parts?.winter && ((ui.game.state.time?.seasonIndex ?? 0) % 4) === 3;
   return el(
     'section.c-sec',
-    el('h3.stats-title', cIcon('fishing', 'sprite--sm', 'water'), 'Pêche'),
-    el('p.stats-note', 'Une fois par jour, touchez le ponton pour pêcher (5 à 40 pièces).'),
+    el('h3.stats-title', cIcon('fishing', 'sprite--sm', 'water'), ice ? 'Pêche sous la glace' : 'Pêche'),
+    el('p.stats-note', ice ? 'La mare a gelé : une fois par jour, pêchez par le trou dans la glace (mêmes poissons).' : 'Une fois par jour, touchez le ponton pour pêcher (5 à 40 pièces).'),
     cBtn(app, 'Pêcher', () => ui.act('fish'), { id: 'c-fish', cls: 'btn--wide' }),
   );
 }
@@ -481,6 +487,8 @@ export function planPickerContent(ui, lotId, seasonId) {
       row('same', 'Même culture', 'Replanter la dernière culture récoltée sur chaque parcelle', icon('seed', 'md'), 'c-plan-same'),
       row(null, 'Rien', 'Ne rien semer cette saison', icon('close', 'md'), 'c-plan-none'),
       crops.map((c) => row(c.id, c.name, [el('span', icon('calendar', 'xs'), plural(c.growDays, 'jour')), el('span', icon('seed', 'xs'), fmt(c.seedCost)), el('span', icon('coin', 'xs'), fmt(c.sellPrice))], cropIcon(c.id, 'sprite--seed'), `c-plan-${c.id}`)),
+      // (Vallée vivante) Variétés sauvées : l'équipe et le semoir peuvent les semer (sans jamais garder de graines).
+      app.valley?.planRows?.({ lotId, seasonId, greenhouse, cur, pick }) || null,
     ),
     el('p.sheet-hint', 'Sécurité : jamais de semis qui gèlerait avant d\'être mûr, ni sans argent pour la graine.'),
   );

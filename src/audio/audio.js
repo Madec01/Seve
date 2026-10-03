@@ -12,7 +12,7 @@
 //   audio.note(step, opts)             (lot 2) note synthétisée n° step d'une série de récolte (gamme
 //                                      pentatonique qui monte, src/audio/synth.js), sur le bus des effets
 //   audio.tone(name, opts)             (lot 2) son synthétisé : 'belle' | 'gold' | 'fanfare' | 'thud' |
-//                                      'splash' | 'pop' | 'chime' | 'magic' | 'wish' | 'reveal'
+//                                      'splash' | 'pop' | 'chime' | 'magic' | 'wish' | 'reveal' | 'chirp' (lot 4 : oiseau)
 //
 // Avant le déverrouillage, les demandes de musique et d'ambiance sont mémorisées et appliquées
 // dès que le contexte existe ; les effets sonores sont ignorés.

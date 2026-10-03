@@ -48,52 +48,52 @@ test('calendrier : fêtes au bon jour, bandeau la veille, cochées puis remises 
   const ev = record(g);
   setRank(g, 2);
   skipYear(g);
+  // (lot 4) Ordre de l'année : fête du printemps (j. 3), du village, des récoltes, marché de Noël, foire aux graines
+  // (dernier jour de l'hiver).
+  const order = ['springFete', 'villageFete', 'harvestFestival', 'christmasMarket', 'seedFair'];
   const fests = ev.of('festival');
-  assert.deepEqual(fests.map((f) => f.id), CALENDAR_EVENTS.map((f) => f.id));
+  assert.deepEqual(fests.map((f) => f.id), order);
   for (const f of fests) {
     const def = CALENDAR_EVENTS.find((x) => x.id === f.id);
-    assert.equal(f.day, def.day);
+    assert.equal(f.day, def.day === 'last' ? g.state.career.seasonLength : def.day);
   }
   // Nouvelle année : calendrier remis à zéro, bilan de l'année complété.
   assert.deepEqual(g.state.career.events.calendarDone, []);
   const yearEnd = ev.of('yearEnd')[0];
-  assert.deepEqual(yearEnd.report.events.festivals, CALENDAR_EVENTS.map((f) => f.id));
-  // Veille de la foire aux semis : bandeau « demain ».
+  assert.deepEqual(yearEnd.report.events.festivals, order);
+  // Veille de la fête du printemps : bandeau « demain ».
   goTo(g, 2, 2);
   const q = g.query.career.events();
-  assert.equal(q.tomorrow.id, 'seedFair');
+  assert.equal(q.tomorrow.id, 'springFete');
   assert.equal(q.today, null);
-  assert.equal(q.calendar[0].id, 'seedFair');
+  assert.equal(q.calendar[0].id, 'springFete');
   assert.equal(q.calendar[0].daysUntil, 1);
 });
 
-test('calendrier : marché de Noël seulement à partir du rang 2', () => {
+test('calendrier : marché de Noël dès le rang 1 (paniers, lot 4), ses facteurs de prix seulement au rang 2', () => {
   const g = newCareer();
   const ev = record(g);
-  skipYear(g);
-  assert.ok(!ev.of('festival').some((f) => f.id === 'christmasMarket'));
-  assert.ok(g.query.career.events().calendar.find((c) => c.id === 'christmasMarket').locked);
+  goTo(g, 1, dayOf(3, 4));
+  assert.equal(festivalToday(g.state).id, 'christmasMarket');
+  assert.ok(ev.of('festival').some((f) => f.id === 'christmasMarket'));
+  assert.deepEqual(g.query.career.events().today.factors, {}, 'rang 1 : pas de facteurs');
+  setRank(g, 2);
+  assert.deepEqual(g.query.career.events().today.factors, { product: 1.5, stock: 1.25 });
+  assert.equal(g.query.career.events().calendar.find((c) => c.id === 'christmasMarket').locked, false);
 });
 
-test('foire aux semis : graines à −25 % (joueur et semoir), seulement ce jour-là', () => {
+test('foire aux graines (lot 4) : plus de remise au printemps ; le dernier jour de l\'hiver, quelle que soit la durée', () => {
   const g = newCareer();
-  goTo(g, 1, 2);
-  assert.equal(festivalToday(g.state), null);
-  const normal = g.query.plantableCrops(0).find((o) => o.id === 'tomato') ?? null;
-  void normal;
-  const money0 = g.state.money;
-  assert.ok(g.actions.plant(0, 'strawberry').ok);
-  const costDay2 = money0 - g.state.money;
-  assert.equal(costDay2, getCrop('strawberry').seedCost);
-  nextDay(g);
-  assert.equal(festivalToday(g.state).id, 'seedFair');
+  goTo(g, 1, 3);
+  assert.equal(festivalToday(g.state).id, 'springFete');
   const money1 = g.state.money;
   assert.ok(g.actions.plant(1, 'strawberry').ok);
-  assert.equal(money1 - g.state.money, Math.round(getCrop('strawberry').seedCost * 0.75));
-  nextDay(g);
-  const money2 = g.state.money;
-  assert.ok(g.actions.plant(2, 'strawberry').ok);
-  assert.equal(money2 - g.state.money, getCrop('strawberry').seedCost);
+  assert.equal(money1 - g.state.money, getCrop('strawberry').seedCost, 'printemps : prix normal');
+  goTo(g, 1, dayOf(3, 7));
+  assert.equal(festivalToday(g.state).id, 'seedFair');
+  const h = newCareer({ seasonLength: 10 });
+  goTo(h, 1, 3 * 10 + 10);
+  assert.equal(festivalToday(h.state).id, 'seedFair');
 });
 
 test('fête du village : récoltes +25 % ; fête des récoltes : +15 % partout ; marché de Noël : grenier +25 %', () => {
@@ -167,7 +167,7 @@ test('événements au hasard : ≈ 30 % des jours libres, jamais deux fois le m�
   let started = 0;
   let free = 0;
   for (let seed = 1; seed <= 12; seed++) {
-    const g = createCareer({ seed, surprises: false }); // (lot 2 : le renard chasserait les corbeaux)
+    const g = createCareer({ seed, surprises: false, variety: false }); // (lot 2 : le renard chasserait les corbeaux ; lot 3 : sans visiteur ni marchand)
     setRank(g, 2);
     g.state.money = 5000;
     let last = null;

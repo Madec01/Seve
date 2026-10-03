@@ -13,6 +13,7 @@ import { CAREER_MARKET, OFF_SEASON_FACTOR } from '../../data/career/career.js';
 import { stream } from '../rng.js';
 import { priceBonus } from '../economy.js';
 import { providedFactor } from './registry.js';
+import { themeMarketBounds } from '../variety-effects.js';
 
 /** Cours de départ : 1 pour toutes les cultures (même celles d'un rang pas encore atteint). */
 export function initialCareerMarket() {
@@ -22,7 +23,11 @@ export function initialCareerMarket() {
 /** Nouveau cours du jour, pour toutes les cultures (aube, étape 6). */
 export function updateCareerMarket(state) {
   const rng = stream(state.rng, 'market');
-  const { min, max, meanReversion, step } = CAREER_MARKET;
+  const { meanReversion, step } = CAREER_MARKET;
+  // (lot 3) Année des grands marchés : cours plus vifs (× 0,7 à × 1,45) — mêmes tirages.
+  const bounds = state.variety ? themeMarketBounds(state) : null;
+  const min = bounds ? bounds.min : CAREER_MARKET.min;
+  const max = bounds ? bounds.max : CAREER_MARKET.max;
   for (const c of CROPS) {
     const m = state.market[c.id] ?? 1;
     const next = m + (1 - m) * meanReversion + (rng.float() * 2 - 1) * step;

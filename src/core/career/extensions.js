@@ -13,5 +13,16 @@ import './machines.js';
 import './staff.js';
 import './work.js';
 import './surprises.js';
+import { varietyExtension } from './variety.js';
+import { cozyExtension } from './cozy.js';
+import { valleyExtension } from './valley.js';
+import { registerCareerExtension } from './registry.js';
+
+// (lot 3) La variété après tous les autres (récoltes comptées : quête de Joseph, puis tableau et charrette).
+registerCareerExtension(varietyExtension);
+// (lot 4) Fêtes, hiver, lanternes, F1 : en dernier (après la variété).
+registerCareerExtension(cozyExtension);
+// (Vallée vivante, lot V1) La boîte en fer, les graines anciennes, les habitants : en DERNIER (après le lot 4).
+registerCareerExtension(valleyExtension);
 
 export {};

@@ -1,0 +1,262 @@
+/* La Vallée vivante, lot V1 « La boîte en fer » : fiche « La Vallée » (vignette, étape, signes de vie, le prochain
+   indice, segments Graines · Habitants · Aménager), fenêtres (boîte de Joseph, bocal, observation, chapitres), barre du
+   mode aménagement, lignes des fiches existantes (parcelle, graines, terrain, plan, foire, bilan, Carnet).
+   Téléphone d'abord : cibles ≥ 48 px, textes ≥ 14 px (0,875 rem), lignes ≥ 72 px, traits en pictogramme ET en mot.
+   (Ajoutée à CSS_FILES de tools/build.js, donc au paquet et à dev.html.) */
+
+/* ─── Communs ─── */
+.sprite--vl-vignette { --sk: 3; max-width: 100%; height: auto; }
+.sprite--vl-thumb { --sk: 1; max-width: 96px; height: auto; }
+.vl-emoji.is-lg { width: 64px; height: 64px; font-size: 48px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.vl-ok { margin: 6px 0; font-size: 0.9375rem; font-weight: 700; color: var(--green-text); }
+.vl-count { margin: 2px 0 8px; font-size: 0.9375rem; font-weight: 700; color: var(--text-soft); }
+.vl-note { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; font-size: 0.9375rem; color: var(--text-soft); }
+.vl-small { min-height: 48px; min-width: 48px; padding: 0 10px; font-size: 0.9375rem; flex: none; }
+.vl-go { margin: 10px 0 4px; min-width: 0; max-width: 100%; }
+.vl-welcome { min-height: 56px; }
+.vl-lock { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+
+/* Trait : pictogramme + mot (jamais la couleur seule). */
+.vl-trait { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px 1px 2px; font-size: 0.875rem; font-weight: 700; color: var(--text); background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); border-radius: 2px; }
+.vl-trait .sprite { --sk: 1; }
+.vl-trait-long { margin: 6px 0; }
+.vl-trait-long .vl-trait { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; text-align: left; white-space: normal; font-weight: 600; padding: 6px 8px; font-size: 0.9375rem; line-height: 1.3; }
+.vl-trait-long .vl-trait > span { flex: 1 1 auto; }
+.vl-trait-long .vl-trait .sprite { --sk: 2; flex: none; }
+
+/* Barre de fixation (segments lus « 4 récoltes à la main sur 6 »). */
+.vl-fix { display: inline-flex; align-items: center; gap: 6px; vertical-align: middle; }
+.vl-fix-bar { display: inline-flex; gap: 2px; }
+.vl-fix-seg { width: 12px; height: 10px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-fix-seg.is-on { background: var(--green, #6cbf4a); }
+.vl-fix-seg.is-on::after { content: ''; display: block; width: 4px; height: 4px; margin: 3px auto 0; background: #fffbe8; }
+.vl-fix-txt { font-size: 0.875rem; font-weight: 700; color: var(--text); }
+
+/* Signes de vie (● ○). */
+.vl-signs { display: inline-flex; flex-wrap: wrap; gap: 3px; }
+.vl-sign { width: 10px; height: 10px; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 2px var(--outline); }
+.vl-sign.is-on { background: var(--green, #6cbf4a); box-shadow: inset 0 0 0 2px var(--outline); }
+
+/* ─── Fiche « La Vallée » ─── */
+.vl-head { display: grid; justify-items: center; gap: 4px; margin: 0 0 10px; text-align: center; }
+.vl-vignette { display: grid; place-items: center; width: 100%; padding: 6px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-vignette .sprite { image-rendering: pixelated; }
+.vl-stage { margin: 4px 0 0; font-size: 1rem; color: var(--text); }
+.vl-signs-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; }
+.vl-signs-txt { font-size: 0.875rem; color: var(--text-soft); }
+
+.vl-hint { margin: 0 0 10px; padding: 8px 10px; min-height: 72px; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-hint-title { display: block; margin: 0 0 4px; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); text-transform: none; }
+.vl-hint-row { display: flex; align-items: center; gap: 10px; }
+.vl-hint-ico { display: grid; place-items: center; flex: none; width: 44px; }
+.vl-hint-text { flex: 1 1 auto; margin: 0; font-size: 0.9375rem; line-height: 1.3; color: var(--text); }
+.vl-hint-go { flex: none; min-height: 48px; min-width: 48px; padding: 0 12px; font-size: 0.9375rem; }
+
+.vl-rows { display: grid; gap: 6px; }
+.vl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--parch);
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) var(--parch-3), 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+button.vl-row:active { transform: translateY(var(--u)); }
+.vl-row:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl-row.is-static { cursor: default; }
+.vl-row-ico { display: grid; place-items: center; flex: none; width: 52px; height: 52px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-row-ico .sprite { max-width: 48px; max-height: 48px; object-fit: contain; }
+.vl-row-main { display: flex; flex: 1 1 auto; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 0; }
+.vl-row-name { font-size: 1rem; font-weight: 700; color: var(--text); }
+.vl-row-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; font-size: 0.875rem; line-height: 1.3; color: var(--text-soft); }
+.vl-row-sub.is-ok { color: var(--green-text); font-weight: 700; }
+.vl-row-sub.is-wait { color: var(--text); font-weight: 700; }
+.vl-row-sub.is-soft { font-style: italic; }
+.vl-variety.is-unknown .vl-row-ico .sprite, .vl-species.is-unknown .vl-row-ico .sprite, .vl-species.is-unknown .vl-row-ico .cz-emoji { filter: grayscale(1) brightness(0.55); opacity: 0.55; }
+.vl-variety.is-fixed { box-shadow: inset 0 0 0 var(--u) var(--green-text), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-species.is-visible { background: #fff8e8; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) var(--gold-2); }
+.vl-recipe { margin: 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--text-soft); }
+.vl-recipe li { display: flex; align-items: center; gap: 6px; min-height: 20px; }
+.vl-recipe li.is-ok { color: var(--green-text); }
+.vl-check { display: inline-grid; place-items: center; width: 16px; font-weight: 700; }
+.vl-anec { font-size: 0.875rem; }
+.vl-services { margin: 12px 0 0; }
+.vl-services ul { margin: 4px 0 0; padding: 0 0 0 1.1rem; font-size: 0.9375rem; color: var(--text); }
+.vl-services li + li { margin-top: 3px; }
+.vl-jars { margin: 0 0 10px; gap: 8px; }
+
+.vl-cards { display: grid; gap: 6px; }
+.vl-card { display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 6px 8px; background: var(--parch); box-shadow: inset 0 0 0 var(--u) var(--parch-3), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-card.is-locked { opacity: 0.75; }
+.vl-card-ico { display: grid; place-items: center; flex: none; width: 48px; height: 48px; }
+.vl-card-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-card-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 700; color: var(--text); }
+
+.vl-chapters { margin: 14px 0 0; }
+.vl-chapters .stats-title { display: flex; align-items: center; gap: 6px; }
+.vl-chap-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.vl-chap { min-height: 48px; padding: 0 12px; font-size: 0.9375rem; }
+.vl-chap.is-new { border-image: var(--img-btn-red) 5 fill / calc(var(--u) * 5) stretch; color: #fffbe8; }
+.vl-new { font-weight: 700; }
+
+/* Fiche d'une variété */
+.vl-detail .cz-say { margin: 8px 0; }
+.vl-big { display: flex; align-items: flex-end; justify-content: center; gap: 12px; margin: 0 0 8px; padding: 10px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-big .sprite--hero { image-rendering: pixelated; }
+.vl-label { font-size: 0.9375rem; font-style: italic; color: var(--text-soft); }
+.vl-fixline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; font-size: 0.9375rem; }
+.vl-fair { margin: 0 0 10px; }
+.vl-fair .stats-title { display: flex; align-items: center; gap: 6px; }
+.vl-buy { flex: none; min-height: 48px; min-width: 72px; gap: 4px; }
+
+/* Bocal */
+.vl-jar { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.vl-jar-pic { position: relative; display: grid; place-items: center; width: 120px; height: 100px; }
+.vl-jar-pop { position: absolute; top: -6px; right: 6px; animation: vl-pop 600ms var(--ease-out) both; }
+@keyframes vl-pop { from { transform: translateY(24px) scale(0.4); opacity: 0; } 60% { transform: translateY(-8px) scale(1.1); opacity: 1; } }
+.vl-jar-label { margin: 0; font-size: 1rem; line-height: 1.3; color: var(--text); }
+.vl-jar-label b { font-size: 1.125rem; }
+.vl-jar .sheet-actions { width: 100%; }
+
+/* Boîte de Joseph */
+.vl-box-seeds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 10px 0 4px; }
+.vl-box-seed { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 104px; padding: 6px 4px; text-align: center; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2); animation: vl-line-in 500ms var(--ease-out) both; animation-delay: calc(var(--cz-delay, 0) * 420ms); }
+.vl-box-seed b { font-size: 0.875rem; line-height: 1.2; }
+.vl-box-seed small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-box-seed .vl-trait { font-size: 0.875rem; max-width: 100%; flex-wrap: wrap; justify-content: center; }
+.vl-hedge { margin: 8px 0 0; }
+.vl-hedge small { display: block; font-style: normal; font-size: 0.875rem; color: var(--text-soft); }
+@keyframes vl-line-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* Observation d'une bête */
+.vl-observe { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.vl-observe .vl-big { width: 100%; }
+.vl-obs-title { margin: 2px 0; font-size: 1.25rem; color: var(--text); }
+.vl-service { margin: 4px 0; font-size: 0.9375rem; color: var(--text); }
+.vl-heart { color: #c8283a; font-weight: 700; }
+
+/* Confirmation (mode aménagement) */
+.vl-confirm-where { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1rem; font-weight: 700; color: var(--text); }
+
+/* ─── Barre du mode aménagement (remplace les onglets) ─── */
+.vl-placebar { display: none; }
+body.in-valley-place #tabbar { visibility: hidden; }
+body.in-valley-place #banner { display: none; }
+body.in-valley-place #toasts .toast-more { display: none; }
+body.in-valley-place .vl-placebar {
+  position: fixed;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 5px calc(var(--safe-r) + 6px) calc(var(--safe-b) + 5px) calc(var(--safe-l) + 6px);
+  background: var(--wood-dark);
+  border-top: var(--u) solid var(--outline);
+  box-shadow: inset 0 calc(var(--u) * 2) 0 var(--wood), 0 calc(var(--u) * -1) 0 rgba(0, 0, 0, 0.2);
+  animation: cz-bar-in 240ms var(--ease-out);
+}
+.vl-bar-info {
+  display: flex;
+  flex: 2.2 1 0;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 0 8px;
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  image-rendering: pixelated;
+  min-width: 0;
+}
+.vl-bar-ico .sprite { --sk: 2; }
+.vl-bar-text { display: flex; flex-direction: column; min-width: 0; }
+.vl-bar-text b { font-size: 1rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vl-bar-text small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-bar-btn { flex: 1 1 0; }
+.vl-bar-btn.is-done { border-image: var(--img-btn-red) 5 fill / calc(var(--u) * 5) stretch; }
+body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom: 12px; width: min(30rem, calc(100vw - 24px)); border: var(--u) solid var(--outline); }
+
+/* ─── Fiches existantes ─── */
+.vl-plot { display: grid; gap: 4px; margin: 4px 0; }
+.vl-plot-var, .vl-plot-fallow { display: flex; align-items: center; gap: 6px; }
+.vl-plot-hand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vl-seeds-sec { margin: 0 0 10px; padding: 0 0 8px; border-bottom: var(--u) dotted var(--parch-3); }
+.vl-seed-title { display: flex; align-items: center; gap: 6px; margin: 2px 0 6px; font-size: 1rem; color: var(--text); }
+.vl-seed-row .seed-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.vl-chip-trial { background: #fff8e8; }
+.vl-fallow-row { margin: 6px 0 0; width: 100%; }
+.vl-lot-row { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 2px 0; }
+.vl-lot-row + .vl-lot-row { border-top: var(--u) dotted var(--parch-3); }
+.vl-lot-name { flex: 1 1 auto; font-size: 0.9375rem; color: var(--text); }
+.vl-year { margin: 10px 0 0; }
+.vl-year .sum-title { display: flex; align-items: center; gap: 6px; }
+.vl-year-line { margin: 4px 0; font-size: 0.9375rem; color: var(--text); }
+
+/* Carnet › Ferme : carte « La Vallée » */
+.vl-jcard {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: #eef6dc;
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) var(--green-text), 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+.vl-jcard.is-soon { min-height: 0; background: transparent; box-shadow: none; padding: 0; cursor: default; }
+.vl-jcard-pic { display: grid; place-items: center; flex: none; width: 100px; height: 52px; background: #3a2a2f; }
+.vl-jcard-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1px; min-width: 0; }
+.vl-jcard-main b { font-size: 1.0625rem; }
+.vl-jcard-main span { font-size: 0.9375rem; }
+.vl-jcard-main small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-dot { position: absolute; top: 6px; right: 6px; width: 10px; height: 10px; border-radius: 50%; background: #e8483a; box-shadow: 0 0 0 2px var(--outline); }
+
+@media (max-width: 379px) {
+  .vl-row { gap: 8px; padding: 6px; }
+  .vl-row-ico { width: 46px; height: 46px; }
+  .vl-box-seeds { grid-template-columns: 1fr; }
+  .vl-box-seed { flex-direction: row; min-height: 56px; justify-content: flex-start; gap: 8px; text-align: left; }
+  .vl-jcard-pic { width: 72px; }
+}
+
+/* Mouvements réduits : rien n'apparaît en glissant. */
+.reduced-motion .vl-box-seed, .reduced-motion .vl-jar-pop, .reduced-motion body.in-valley-place .vl-placebar { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vl-box-seed, .vl-jar-pop, body.in-valley-place .vl-placebar { animation: none; }
+}
+.seg.vl-seg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vl-fallow-row .seed-facts { flex-wrap: wrap; white-space: normal; }
+.vl-fallow-row .seed-facts > span { white-space: normal; display: inline; }
+@media (max-width: 379px), (max-height: 780px) {
+  .sprite--vl-vignette { --sk: 2; }
+  .vl-head { margin-bottom: 6px; }
+}
+
+/* (Intégration V1) Texte à 150 % sur 360 px : rien ne déborde — les puces de la feuille des graines vont à la ligne,
+   les cartes d'aménagement restent dans la feuille (le bouton passe dessous si la place manque). */
+.seed-warns .warn-chip { white-space: normal; max-width: 100%; }
+.vl-cards { grid-template-columns: minmax(0, 1fr); }
+.vl-card { min-width: 0; flex-wrap: wrap; }
+.vl-card > .btn { margin-left: auto; }
+.vl-rows { grid-template-columns: minmax(0, 1fr); }
+.vl-row { min-width: 0; }
+.vl-recipe li, .vl-row-name { overflow-wrap: anywhere; }
+.c-plan-value .vl-plan-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

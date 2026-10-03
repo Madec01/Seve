@@ -32,6 +32,12 @@ const traitText = (s) => s.traitText || TRAIT_TEXT[s.trait] || '';
 const moodName = (s) => s.moodName || (isF(s) ? MOOD_NAMES_F : MOOD_NAMES)[s.mood] || '';
 const wageOf = (s) => s.wage ?? 8 + 3 * ((s.level || 1) - 1);
 
+/** (Lot 4, F1) Avec « aider sans remplacer », le jardinier fait les corvées et laisse la récolte au joueur. */
+function jobText(ui, job) {
+  if (job === 'gardener' && ui?.game?.state?.cozy?.parts?.helpers) return 'Arrose, désherbe, sème et chasse les corbeaux ; récolte ce qui vous attend depuis 4 jours.';
+  return JOB_TEXT[job];
+}
+
 function traitIcon(trait) {
   return cIcon(`trait.${trait}`, 'sprite--sm', 'star');
 }
@@ -170,7 +176,7 @@ export function employeeContent(ui, staffId) {
         ),
       ),
     ),
-    s.job ? el('p.stats-note', JOB_TEXT[s.job]) : el('p.stats-note', 'Choisissez un métier : le métier conseillé est une simple suggestion.'),
+    s.job ? el('p.stats-note', jobText(ui, s.job)) : el('p.stats-note', 'Choisissez un métier : le métier conseillé est une simple suggestion.'),
     s.job ? el('h3.stats-title', 'Affectation') : null,
     s.job
       ? targets.length

@@ -17,6 +17,17 @@
 //   node tools/simulate.js --surprises off      (lot 2) sans les surprises (qualité, géants, fée, météos spéciales…) ;
 //                                               défaut : celui du mode (détente : avec, classique : sans)
 //   node tools/simulate.js --compare-surprises  (lot 2) tableau côte à côte : sans / avec les surprises (revenus, ★)
+//   node tools/simulate.js --variety off        (lot 3) sans la variété (tableau, cadeaux, charrette, défis, colporteur) ;
+//                                               --variety board,cards : seulement ces parties ; défaut : celui du mode
+//   node tools/simulate.js --compare-variety    (lot 3) sans → avec la variété (même graine, surprises actives des deux côtés) :
+//                                               revenu, argent final, victoires, ★★★ et gain par partie de chaque partie du lot
+//   node tools/simulate.js --stars              (lot 3) seuils d'étoiles Détente suggérés (règle du § 13.3 : ★★ = argent final
+//                                               médian du joueur tranquille, ★★★ = ses 12 % meilleures parties)
+//   node tools/simulate.js --cozy off           (lot 4) sans fêtes, hiver ni lanternes (--cozy fetes,winter : seulement ces
+//                                               parties) ; défaut : celui du mode (détente : avec, classique : sans)
+//   node tools/simulate.js --compare-cozy       (lot 4) sans → avec (même graine ; surprises et variété actives des deux
+//                                               côtés) : revenu, argent final, victoires, ★★★, gains des fêtes et de l'hiver, écus
+//   node tools/simulate.js --lanterns           (lot 4) répartition 1 / 2 / 3 / 4 lanternes par critère et total médian, par robot
 //
 // Les robots passent uniquement par l'API publique du jeu (actions / query), comme l'interface.
 // Chaque jour, juste après l'aube, ils récoltent, achètent, plantent et arrosent, puis la journée s'écoule.
@@ -40,6 +51,12 @@
 //               un jour en retard, choisit ses graines un peu au hasard, suit le tutoriel).
 //   novice    : débutant (arrose 20 à 40 %, carottes et navets, achète sans regarder le fermage).
 //   idle      : sème une fois le 1er jour puis ne fait plus rien (doit faire faillite).
+// Variété (lot 3, § 16.10 du game design) : le casual regarde le tableau un jour sur deux, garde une commande sur deux
+//   quand il peut la semer, pondère son « semer partout » × 2 vers les cultures demandées, choisit une carte au hasard,
+//   garde 2 défis au hasard, achète un sachet de graines rares 40 % du temps s'il a la marge (et sème ses graines rares) ;
+//   le novice ne garde rien, prend la première carte, ignore les défis, achète au colporteur 20 % du temps ; l'optimal
+//   choisit au mieux (carte, défis, commandes faisables, graines rares) ; careless / balanced / investor : première carte,
+//   deux premiers défis, rien au colporteur. Tout passe par l'API publique, avec le tirage propre au joueur.
 //
 // Parité : sans bonus, sur les niveaux 1 à 8, les robots prennent exactement les mêmes décisions qu'en v2
 // (tests/parity.test.js) : tout ce qui est propre à la v3 ne s'active qu'avec un arbre, un atelier, une
@@ -81,6 +98,32 @@ const DIFFICULTY = String(arg('difficulty', 'detente'));
 const SURPRISES_ARG = arg('surprises', null);
 const SURPRISES = SURPRISES_ARG === null ? undefined : !['off', 'false', '0', 'non'].includes(String(SURPRISES_ARG));
 const COMPARE_SURPRISES = !!arg('compare-surprises', false);
+const VARIETY_ARG = arg('variety', null);
+const VARIETY = VARIETY_ARG === null ? undefined : parseVariety(VARIETY_ARG);
+const COMPARE_VARIETY = !!arg('compare-variety', false);
+const STARS = !!arg('stars', false);
+const COZY_ARG = arg('cozy', null);
+const COZY = COZY_ARG === null ? undefined : parseCozy(COZY_ARG);
+const COMPARE_COZY = !!arg('compare-cozy', false);
+const LANTERNS = !!arg('lanterns', false);
+
+/** --cozy : 'off' → false, 'on' → true, 'fetes,winter' → { fetes: true, winter: true, … autres : false }. */
+export function parseCozy(v) {
+  const t = String(v);
+  if (['off', 'false', '0', 'non'].includes(t)) return false;
+  if (['on', 'true', '1', 'oui'].includes(t)) return true;
+  const want = t.split(',').map((x) => x.trim()).filter(Boolean);
+  return Object.fromEntries(['lanterns', 'fetes', 'winter', 'helpers'].map((k) => [k, want.includes(k)]));
+}
+
+/** --variety : 'off' → false, 'on' → true, 'board,cards' → { board: true, cards: true, … autres : false }. */
+export function parseVariety(v) {
+  const t = String(v);
+  if (['off', 'false', '0', 'non'].includes(t)) return false;
+  if (['on', 'true', '1', 'oui'].includes(t)) return true;
+  const want = t.split(',').map((x) => x.trim()).filter(Boolean);
+  return Object.fromEntries(['board', 'cards', 'cart', 'challenges', 'merchant', 'themes'].map((k) => [k, want.includes(k)]));
+}
 // Réglages de la stratégie « optimal » (fonds de roulement gardé, rentabilité minimale d'un achat).
 const OPT_CAPITAL = Number(arg('opt-capital', 0.6));
 const OPT_RATIO = Number(arg('opt-ratio', 0.15));
@@ -632,6 +675,15 @@ export const HUMAN_PROFILES = {
     tutorialCoop: 0.8, // achète le poulailler conseillé par le tutoriel dès 70 pièces
     plotProb: 0.08, // achète une parcelle (s'il reste de quoi)
     cropBias: 'cheapFast',
+    // (lot 3) Variété
+    boardLook: 0.5, // regarde le tableau un jour sur deux
+    keepOrder: 0.25, // garde à la main une commande sur quatre qu'il peut semer (QA du lot 3 : semer sa culture la garde d'office)
+    requestBias: 2, // « semer partout » : × 2 vers les cultures demandées
+    cardPick: 'random',
+    challengePick: 'random',
+    rareBuy: 0.4, // achète un sachet de graines rares s'il a la marge
+    merchantAny: 0,
+    cozy: null, // (lot 4) COZY_STYLES.casual (posé plus bas)
   },
   novice: {
     skipDay: 0.15,
@@ -648,8 +700,304 @@ export const HUMAN_PROFILES = {
     plotProb: 0,
     cropBias: 'starter',
     wishes: 'novice',
+    // (lot 3) Variété : ne garde rien, première carte, ignore les défis, achète au colporteur 20 % du temps.
+    boardLook: 0,
+    keepOrder: 0,
+    requestBias: 1,
+    cardPick: 'first',
+    challengePick: 'none',
+    rareBuy: 0,
+    merchantAny: 0.2,
+    cozy: null, // (lot 4) COZY_STYLES.novice (posé plus bas)
   },
 };
+
+// ── Variété (lot 3) : décisions des joueurs simulés ─────────────────────────────────────
+
+/** Valeur estimée d'une carte (choix de l'optimal). */
+function cardScore(game, card) {
+  const fin = game.query.finance();
+  switch (card.id) {
+    case 'purse':
+      return card.value || 25;
+    case 'bees':
+      return 55;
+    case 'clearing':
+      return 35;
+    case 'landlord':
+      return Math.round(fin.nextBill.amount * 0.2);
+    case 'cartHorse':
+      return (game.query.cart()?.premiumFull || 60) * 0.5;
+    case 'seedBag':
+      return 40;
+    case 'hen':
+      return 28;
+    case 'fertilizer':
+      return 26;
+    case 'poster':
+      return 18;
+    case 'recipe':
+      return game.query.processing().length ? 22 : 0;
+    case 'seedFair':
+      return 15;
+    case 'watering':
+      return 14;
+    case 'hay':
+      return 14;
+    case 'crier':
+      return 12;
+    case 'clover':
+      return 8;
+    default:
+      return 4;
+  }
+}
+
+/** Ordre de préférence des défis (optimal : les plus sûrs d'abord). */
+const CHALLENGE_PREF = ['harvests', 'orders', 'sales', 'crates', 'variety', 'sowing', 'products', 'animals', 'care', 'apples', 'quality', 'collect'];
+
+/** Cadeau de la saison et défis (fenêtre de fin de saison) : le joueur choisit, sans geste compté. */
+export function varietyChoices(game, me, style) {
+  const q = game.query;
+  if (!q.variety || !game.state.variety) return;
+  const cards = q.cards();
+  if (cards?.offer && style.cardPick !== 'none') {
+    const opts = cards.offer.options;
+    let pick = opts[0];
+    if (style.cardPick === 'random') pick = opts[Math.floor(me.rnd() * opts.length)];
+    else if (style.cardPick === 'best') pick = opts.reduce((a, b) => (cardScore(game, b) > cardScore(game, a) ? b : a));
+    if (!game.actions.pickCard(pick.id).ok) {
+      const other = opts.find((o) => o.id !== pick.id);
+      if (other) game.actions.pickCard(other.id);
+    }
+  }
+  const ch = q.challenges();
+  if (ch && ch.options.length && ch.kept.length === 0 && style.challengePick !== 'none' && me.challengeSeason !== ch.season) {
+    me.challengeSeason = ch.season;
+    let ids = ch.options.map((o) => o.id);
+    if (style.challengePick === 'random') {
+      ids = [...ids];
+      for (let i = ids.length - 1; i > 0; i--) {
+        const j = Math.floor(me.rnd() * (i + 1));
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+      }
+    } else if (style.challengePick === 'best') ids.sort((a, b) => CHALLENGE_PREF.indexOf(a) - CHALLENGE_PREF.indexOf(b));
+    for (const id of ids.slice(0, 2)) game.actions.keepChallenge(id);
+  }
+}
+
+/**
+ * Tableau du village et colporteur (gestes d'un jour). spend(n) : gestes ; keep : argent gardé pour le fermage.
+ */
+export function varietyDay(game, me, style, spend, keep = 0) {
+  const q = game.query;
+  if (!game.state.variety) return;
+  // Tableau : un regard (1 geste), garder les commandes qu'on peut semer.
+  if (style.boardLook > 0 && q.orders() && me.rnd() < style.boardLook && spend(1)) {
+    const board = q.orders();
+    const sowable = new Set(q.plantableCrops().map((o) => o.id));
+    // Il retient les cultures demandées (son « semer partout » des deux jours suivants les préfère).
+    me.wanted = { day: q.calendar().day, crops: new Set((board?.slots || []).filter((o) => !o.empty).flatMap((o) => o.lines.filter((l) => l.left > 0).map((l) => l.cropId))) };
+    for (const o of board?.slots || []) {
+      if (o.empty || o.kept) continue;
+      const can = o.lines.every((l) => sowable.has(l.cropId) || l.inStock >= l.left);
+      if (can && me.rnd() < style.keepOrder) game.actions.keepOrder(o.id, true);
+    }
+    if (game.mode === 'career') {
+      for (const o of q.orders()?.slots || []) if (!o.empty && o.canDeliver) game.actions.deliverOrder(o.id);
+      const cart = q.cart();
+      if (cart) cart.crates.forEach((c, k) => c.canLoad && game.actions.loadCart(k));
+    }
+  }
+  // Colporteur.
+  const m = q.merchant();
+  if (m && m.here && me.merchantSeen !== m.arriveDay) {
+    me.merchantSeen = m.arriveDay;
+    if (style.rareBuy > 0 && me.rnd() < style.rareBuy) {
+      const bag = m.stall.find((it) => it.itemId.startsWith('seeds.') && it.canBuy);
+      if (bag && game.state.money - bag.price >= keep && spend(1)) game.actions.buyFromMerchant(bag.itemId);
+    }
+    if (style.merchantAny > 0 && me.rnd() < style.merchantAny) {
+      // Le débutant achète un objet au hasard parmi ceux qu'il peut payer (sans regarder le fermage).
+      const can = m.stall.filter((x) => x.canBuy);
+      const it = can.length ? can[Math.floor(me.rnd() * can.length)] : null;
+      if (it && spend(1)) game.actions.buyFromMerchant(it.itemId);
+    }
+  }
+}
+
+/** Sème d'abord les graines rares possédées (de saison, qui ne gèleront pas) sur les parcelles vides. → parcelles semées */
+export function sowRare(game, plots) {
+  if (!game.state.variety) return 0;
+  let n = 0;
+  for (const i of plots) {
+    if (game.state.plots[i].cropId) continue;
+    const rare = game.query.plantableCrops(i).find((o) => o.rare && o.seedsLeft > 0 && !o.willFreeze);
+    if (!rare) break;
+    if (game.actions.plant(i, rare.id).ok) n++;
+  }
+  return n;
+}
+
+/** Choix « au mieux » de l'optimal : commandes faisables gardées, graines rares achetées si elles rapportent. */
+function optimalVariety(game, me) {
+  const q = game.query;
+  if (!game.state.variety) return;
+  const board = q.orders();
+  const sowable = new Map(q.plantableCrops().map((o) => [o.id, o]));
+  for (const o of board?.slots || []) {
+    if (o.empty || o.kept) continue;
+    if (o.lines.every((l) => sowable.has(l.cropId) && !sowable.get(l.cropId).willFreeze)) game.actions.keepOrder(o.id, true);
+  }
+  const m = q.merchant();
+  if (m && m.here) {
+    for (const it of m.stall) {
+      if (!it.canBuy) continue;
+      if (it.itemId.startsWith('seeds.')) {
+        const crop = q.plantableCrops().find((o) => o.id === it.cropId) || null;
+        const days = getCrop(it.cropId).growDays;
+        if (q.calendar().daysLeftInSeason < days && it.cropId !== 'leek') continue;
+        const value = (crop?.sellPrice || getCrop(it.cropId).sellPrice) * it.seeds;
+        if (value > it.price * 1.5 && game.state.money - it.price > 150) game.actions.buyFromMerchant(it.itemId);
+      } else if (it.itemId === 'copperCan' && game.state.money - it.price > 250) game.actions.buyFromMerchant(it.itemId);
+    }
+  }
+}
+
+// ── Lot 4 : fêtes participatives et hiver vivant (décisions des joueurs simulés, § 17.8 du game design) ──────
+//
+// Leur propre tirage (me.cozyRnd), distinct des autres décisions : avec ou sans le lot, le joueur prend exactement les
+// mêmes décisions pour le reste (comparaisons --compare-cozy à graine égale). Le mini-jeu met le jeu en pause : pas de
+// geste compté. Le tranquille joue une fête sur ses jours de jeu avec 60 % de chances (choix au hasard : 2 légumes,
+// 3 à 5 cagettes, paniers au hasard), trouve 5 à 8 œufs, ramasse une trouvaille d'hiver une fois sur deux, remplit la
+// mangeoire un jour sur deux, écoute la veillée ; le débutant joue 30 % des fêtes ; l'appliqué joue tout, au mieux.
+export const COZY_STYLES = {
+  casual: { fete: 0.6, eggs: [5, 8], soup: [2, 2], stand: [3, 5], finds: 0.5, feeder: 0.5, story: 1, pick: 'random', seedFair: 0.5 },
+  novice: { fete: 0.3, eggs: [3, 6], soup: [1, 2], stand: [2, 4], finds: 0.3, feeder: 0.3, story: 0.6, pick: 'random', seedFair: 0.3 },
+  optimal: { fete: 1, eggs: [8, 8], soup: [3, 3], stand: [5, 6], finds: 1, feeder: 1, story: 1, pick: 'best', seedFair: 1 },
+};
+
+/** Décor posé par le joueur simulé (écus des parties précédentes) : critère « beauté » des lanternes. */
+export const SIM_DECOR = { casual: { placed: 3, path: false, fence: false }, novice: { placed: 1, path: false, fence: false }, optimal: { placed: 6, path: true, fence: false } };
+
+HUMAN_PROFILES.casual.cozy = COZY_STYLES.casual;
+HUMAN_PROFILES.novice.cozy = COZY_STYLES.novice;
+
+function cozyRng(me) {
+  if (!me.cozyRnd) me.cozyRnd = humanRng((me.seedBase ?? 1) ^ 0x5bd1e995);
+  return me.cozyRnd;
+}
+
+function shuffled(rnd, list) {
+  const a = [...list];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const itemOf = (c) => ({ kind: c.kind, id: c.id });
+
+/** Points estimés d'un produit au stand (choix de l'appliqué). */
+function standGuess(c) {
+  return 1 + (c.quality === 'gold' ? 2 : c.quality === 'fine' ? 1 : 0) + (c.giant ? 2 : 0) + (c.homemade ? 1 : 0) + (c.star ? 1 : 0);
+}
+
+/** Joue le mini-jeu de la fête du jour (si le joueur y va). → true si joué. */
+function playFete(game, me, P, keep = 0) {
+  const q = game.query;
+  const f = q.fete();
+  if (!f || f.done) return false;
+  const rnd = cozyRng(me);
+  const key = `${game.state.mode === 'career' ? game.state.time.year : 0}/${f.day}`;
+  if (me.cozyFete !== key) {
+    me.cozyFete = key;
+    me.cozyGo = rnd() < P.fete;
+  }
+  if (!me.cozyGo) return false;
+  const between2 = ([a, b]) => Math.round(a + (b - a) * rnd());
+  const A = game.actions;
+  if (f.engine === 'chasse') {
+    if (me.cozyHunted === key) return false;
+    me.cozyHunted = key;
+    const want = between2(P.eggs);
+    const todo = shuffled(rnd, f.hidden.items.filter((h) => !h.found)).slice(0, Math.max(0, want - f.hidden.foundByPlayer));
+    for (const h of todo) A.feteFind(h.index);
+    return true;
+  }
+  const choices = f.choices || [];
+  if (f.engine === 'marmite') {
+    if (!choices.length) return false;
+    const n = Math.min(choices.length, between2(P.soup), f.max);
+    let pick;
+    if (P.pick === 'best') {
+      const beau = choices.filter((c) => c.quality !== 'normal' || c.giant);
+      pick = [...beau.slice(0, 1), ...choices.filter((c) => !beau.slice(0, 1).includes(c))].slice(0, n);
+      if (f.themeId === 'bread' && !pick.some((c) => c.id === 'wheat')) {
+        const w = choices.find((c) => c.id === 'wheat');
+        if (w) pick = [w, ...pick.filter((c) => c.id !== 'wheat')].slice(0, n);
+      }
+    } else pick = shuffled(rnd, choices).slice(0, n);
+    let r = A.cookSoup(pick.map(itemOf));
+    if (!r.ok && choices.some((c) => c.id === 'wheat')) r = A.cookSoup([{ kind: 'crop', id: 'wheat' }]);
+    return r.ok;
+  }
+  if (f.engine === 'etal') {
+    if (!choices.length) return false;
+    const n = Math.min(choices.length, between2(P.stand), f.max);
+    const pick = P.pick === 'best' ? [...choices].sort((a, b) => standGuess(b) - standGuess(a)).slice(0, n) : shuffled(rnd, choices).slice(0, n);
+    return A.presentStand(pick.map(itemOf)).ok;
+  }
+  if (f.engine === 'paniers') {
+    if (choices.length < 3) return false;
+    let pool = P.pick === 'best' ? [...choices] : shuffled(rnd, choices);
+    const baskets = f.villagers.map((v) => {
+      const b = [];
+      if (P.pick === 'best') {
+        for (const like of v.likes) {
+          const k = pool.findIndex((c) => c.kind === like.kind && c.id === like.id);
+          if (k >= 0 && b.length < 2) b.push(pool.splice(k, 1)[0]);
+        }
+      }
+      return b;
+    });
+    for (const b of baskets) while (b.length < (P.pick === 'best' ? 2 : 1 + Math.floor(rnd() * 2)) && pool.length) b.push(pool.shift());
+    if (baskets.some((b) => !b.length)) return false;
+    return A.giveBaskets(baskets.map((b) => b.map(itemOf))).ok;
+  }
+  if (f.engine === 'foire') {
+    // Foire aux graines (carrière) : quelques sachets des cultures de printemps, en gardant de quoi payer les charges.
+    const packs = (f.stalls || []).flatMap((st) => st.packs).filter((x) => x.canBuy);
+    const want = P.pick === 'best' ? (me.springPlan || []).filter(Boolean) : shuffled(rnd, packs).slice(0, 2).map((x) => x.cropId);
+    let bought = 0;
+    for (const cropId of want) {
+      for (let k = 0; k < (P.pick === 'best' ? 4 : 1 + Math.floor(rnd() * 2)); k++) {
+        const pk = (game.query.fete()?.stalls || []).flatMap((st) => st.packs).find((x) => x.cropId === cropId && x.canBuy);
+        if (!pk || game.state.money - pk.price < keep) break;
+        if (A.buySeedPack(cropId).ok) bought++;
+      }
+    }
+    return bought > 0;
+  }
+  return false;
+}
+
+/**
+ * Lot 4 : la journée « douce » d'un joueur simulé (fête du jour, trouvailles d'hiver, mangeoire, veillée). Exportée pour
+ * tools/simulate-career.js. P : COZY_STYLES[…] ; spend(n) : gestes (facultatif) ; keep : argent gardé (foire).
+ */
+export function cozyDay(game, me, P, spend = () => true, keep = 0) {
+  if (!game.state.cozy || !P) return;
+  const q = game.query;
+  playFete(game, me, P, keep);
+  const w = q.winter();
+  if (!w) return;
+  const rnd = cozyRng(me);
+  for (const x of w.finds) if (rnd() < P.finds && spend(0.25)) game.actions.pickWinterFind(x.id);
+  if (w.feeder.canFill && rnd() < P.feeder && spend(0.25)) game.actions.fillFeeder();
+  if (w.story.available && rnd() < P.story) game.actions.hearStory();
+}
 
 /**
  * Envies d'achats par niveau : ce que suggère la description du niveau (le novice : surtout des
@@ -693,7 +1041,8 @@ function humanSeed(levelId, seed, strategy) {
 
 /** Mémoire du joueur simulé (une par partie). */
 export function createHuman(strategy, levelId, seed) {
-  return { rnd: humanRng(humanSeed(levelId, seed, strategy)), matureSince: {}, tutorial: levelId === 1 ? 'plant' : null, wishIndex: 0 };
+  const base = humanSeed(levelId, seed, strategy);
+  return { rnd: humanRng(base), seedBase: base, matureSince: {}, tutorial: levelId === 1 ? 'plant' : null, wishIndex: 0 };
 }
 
 const between = (me, [a, b]) => a + (b - a) * me.rnd();
@@ -702,7 +1051,7 @@ function humanPickCrop(game, me, profile, plotIndex, budgetMoney) {
   const c = ctx(game);
   const cal = c.cal;
   const avoid = me.rnd() < profile.avoidFreeze;
-  let options = c.q.plantableCrops(plotIndex).filter((o) => o.kind !== 'tree' && o.seedCost <= budgetMoney);
+  let options = c.q.plantableCrops(plotIndex).filter((o) => o.kind !== 'tree' && !o.rare && o.seedCost <= budgetMoney);
   if (avoid) options = options.filter((o) => !o.willFreeze);
   // Personne ne sème le dernier jour de l'année.
   options = options.filter((o) => cal.day < cal.totalDays);
@@ -712,8 +1061,10 @@ function humanPickCrop(game, me, profile, plotIndex, budgetMoney) {
     if (starters.length) return starters[Math.floor(me.rnd() * starters.length)];
     return options.reduce((a, b) => (b.seedCost < a.seedCost ? b : a));
   }
-  // Au hasard, surtout les cultures bon marché et rapides ; un peu plus celles que l'atelier transforme.
-  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? 2 : 1);
+  // Au hasard, surtout les cultures bon marché et rapides ; un peu plus celles que l'atelier transforme ;
+  // (lot 3) × 2 les cultures demandées au tableau ou à la charrette (le casual a regardé le tableau).
+  const wanted = me.wanted && me.wanted.day >= cal.day - 1 ? me.wanted.crops : null;
+  const weight = (o) => (1 / Math.sqrt(o.seedCost * o.daysToMature)) * (o.product?.owned ? 2 : 1) * (wanted && wanted.has(o.id) && profile.requestBias ? profile.requestBias : 1);
   const total = options.reduce((sum, o) => sum + weight(o), 0);
   let r = me.rnd() * total;
   for (const o of options) {
@@ -751,7 +1102,11 @@ function humanDay(game, me, profile) {
     me.tutorial = 'harvest';
     return;
   }
+  // (lot 3) Fenêtre de fin de saison : cadeau et défis (la fenêtre s'ouvre toute seule).
+  if (game.state.variety) varietyChoices(game, me, profile);
   if (me.rnd() < profile.skipDay && cal.daysLeftInSeason > 0) return;
+  // (lot 4) Fête du jour, trouvailles d'hiver, mangeoire, veillée (tirage propre : rien d'autre ne change).
+  if (game.state.cozy) cozyDay(game, me, profile.cozy);
 
   // Récolte (glisser) : le jour même avec harvestProb, au plus tard après maxDelay jours.
   const toHarvest = [];
@@ -803,9 +1158,15 @@ function humanDay(game, me, profile) {
     }
   }
 
+  // (lot 3) Tableau du village (un jour sur deux) et colporteur.
+  // « S'il a la marge » : le sachet ne doit pas entamer le fermage de la saison (+ 40 pièces pour ressemer).
+  if (game.state.variety) varietyDay(game, me, profile, spend, game.query.finance().nextBill.amount + 40);
+
   // Plantation (« semer partout ») certains jours.
   const empty = () => game.state.plots.map((p, i) => (p.unlocked && !p.cropId ? i : -1)).filter((i) => i >= 0);
   if (empty().length && me.rnd() < profile.plantProb && spend(3)) {
+    // (lot 3) Les graines rares d'abord (« semer partout » les utilise jusqu'au bout du sachet).
+    sowRare(game, empty());
     const keep = humanKeep(game, me, profile);
     const first = empty()[0];
     const pick = humanPickCrop(game, me, profile, first, game.state.money - keep);
@@ -908,8 +1269,14 @@ const STRATEGIES = {
     for (const p of game.query.plots()) if (p.action === 'water') game.actions.water(p.index);
   },
 
-  optimal(game) {
+  optimal(game, me) {
     const budget = makeBudget();
+    if (game.state.variety) {
+      varietyChoices(game, me, { cardPick: 'best', challengePick: 'best' });
+      optimalVariety(game, me);
+    }
+    // (lot 4) L'appliqué joue toutes les fêtes, au mieux, et tout l'hiver.
+    if (game.state.cozy) cozyDay(game, me, COZY_STYLES.optimal);
     harvestAll(game, budget, OPT_MARKET);
     if (OPT_PLANT_FIRST) plantAll(game, budget, 'best', true);
     for (let guard = 0; guard < 40; guard++) {
@@ -927,10 +1294,14 @@ const STRATEGIES = {
     }
     plantTrees(game, budget, { maxShare: 0.34, minBaskets: 3, springOnly: false, weigh: true });
     waterAll(game, budget);
+    if (game.state.variety) sowRare(game, game.state.plots.map((p, i) => (p.unlocked && !p.cropId ? i : -1)).filter((i) => i >= 0));
     plantAll(game, budget, 'best', true);
     waterAll(game, budget);
   },
 };
+
+/** Robots appliqués d'avant le lot 3 (careless, balanced, investor) : première carte, deux premiers défis. */
+const ROBOT_VARIETY = { cardPick: 'first', challengePick: 'first' };
 
 // ── Boucle de simulation ────────────────────────────────────────────────────────────────
 
@@ -939,8 +1310,15 @@ const STRATEGIES = {
  * income : revenus par origine { crops, apples, products, investments, contest, raw, refund, total } (disjoints),
  *   et, pour les parts, trees = pommes vendues brutes + jus, milk = lait vendu + fromages.
  */
-export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFICULTY, surprises = SURPRISES) {
-  const game = surprises === undefined ? createGame({ levelId, seed, perks, difficulty }) : createGame({ levelId, seed, perks, difficulty, surprises });
+export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFICULTY, surprises = SURPRISES, variety = VARIETY, cozy = COZY) {
+  const opts = { levelId, seed, perks, difficulty };
+  if (surprises !== undefined) opts.surprises = surprises;
+  if (variety !== undefined) opts.variety = variety;
+  // (lot 4) Le décor posé dans la progression (critère « beauté ») : quelques décorations pour le tranquille.
+  const cz = cozy === undefined ? (difficulty !== 'classique' ? true : undefined) : cozy;
+  if (cz) opts.cozy = { ...(typeof cz === 'object' ? cz : {}), decor: SIM_DECOR[strategy] || null };
+  else if (cz === false) opts.cozy = false;
+  const game = createGame(opts);
   const me = createHuman(strategy, levelId, seed);
   const total = game.query.calendar().totalDays;
   let result = null;
@@ -949,6 +1327,49 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
   const income = { crops: 0, apples: 0, products: 0, investments: 0, contest: 0, raw: 0, refund: 0, trees: 0, milk: 0, surprises: 0, quality: 0, giants: 0 };
   // (lot 2) argent des surprises (coffres, champignons, vœux) ; part « qualité » et « géants » des récoltes.
   const lot2 = { fine: 0, gold: 0, giants: 0, surprises: 0, specials: 0, wishes: 0 };
+  // (lot 3) Variété : primes du tableau et de la charrette, cartes, médailles (pièces) ; dépenses au colporteur ; écus.
+  const lot3 = { orders: 0, cart: 0, cards: 0, medals: 0, merchant: 0, ecus: 0, ordersDone: 0, cratesFull: 0, medalsN: 0, rareSown: 0 };
+  const medalsBy = {};
+  // (lot 4) Fêtes (pièces, écus, jouées), hiver (pièces), veillée, lanternes de l'année.
+  const lot4 = { fetes: 0, winter: 0, ecus: 0, played: 0, helped: 0, lanterns: null, stories: 0 };
+  game.on('feteDone', (e) => {
+    lot4.ecus += e.ecus || 0;
+  });
+  game.on('feteFound', (e) => (lot4.fetes += e.amount || 0));
+  game.on('feteEnded', (e) => {
+    lot4.fetes += e.helped?.amount || 0;
+    lot4.helped += e.helped?.amount || 0;
+  });
+  game.on('winterPicked', (e) => (lot4.winter += e.amount || 0));
+  game.on('storyHeard', () => {
+    lot4.stories++;
+    lot4.ecus += 1;
+  });
+  game.on('lanternsLit', (e) => {
+    lot4.lanterns = { values: [...e.values], total: e.total };
+    lot4.crit = e.criteria.map((c) => ({ value: c.value, k: c.k }));
+  });
+  game.on('orderDone', (e) => {
+    lot3.orders += e.premium;
+    lot3.ordersDone++;
+  });
+  game.on('orderRemoved', (e) => (lot3.orders += e.premium || 0));
+  game.on('cartDeparted', (e) => {
+    lot3.cart += e.premium;
+    lot3.ecus += e.ecus || 0;
+  });
+  game.on('crateFull', () => lot3.cratesFull++);
+  game.on('cardPicked', (e) => (lot3.cards += e.amount || 0));
+  game.on('challengeMedal', (e) => {
+    lot3.medals += e.coins || 0;
+    lot3.ecus += e.ecus || 0;
+    lot3.medalsN++;
+    medalsBy[`${e.challengeId}.${e.medal}`] = (medalsBy[`${e.challengeId}.${e.medal}`] || 0) + 1;
+  });
+  game.on('merchantBought', (e) => (lot3.merchant += e.price || 0));
+  game.on('planted', (e) => {
+    if (e.rare) lot3.rareSown++;
+  });
   game.on('surprise', (e) => {
     lot2.surprises++;
     if (e.amount) income.surprises += e.amount;
@@ -984,6 +1405,7 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
         income.investments += i.amount;
         if (i.source === 'cow' || i.source === 'goat') income.milk += i.amount;
       } else if (i.kind === 'refund') income.refund += i.amount;
+      else if (i.kind === 'card') lot3.cards += i.amount;
     }
   });
   game.on('processingSoldRaw', (e) => (income.raw += e.amount));
@@ -998,13 +1420,19 @@ export function playOne(levelId, seed, strategy, perks = {}, difficulty = DIFFIC
     // (lot 2) Vœu de l'étoile filante : un joueur choisit la bourse si elle est proposée, sinon le premier vœu.
     const wish = game.query.surprises?.()?.wish;
     if (wish) game.actions.makeWish((wish.options.find((o) => o.id === 'coins') || wish.options[0]).id);
+    if (game.state.variety && ['careless', 'balanced', 'investor'].includes(strategy)) varietyChoices(game, me, ROBOT_VARIETY);
     STRATEGIES[strategy](game, me);
     if (TRACE) traceDay(game, before);
     game.update(DAY_SECONDS);
   }
   if (!result) throw new Error(`Partie non terminée (niveau ${levelId}, graine ${seed})`);
-  income.total = income.crops + income.apples + income.products + income.investments + income.contest + income.raw + income.refund + income.surprises;
-  return { ...result, income, contest, lot2 };
+  income.variety = lot3.orders + lot3.cart + lot3.cards + lot3.medals;
+  // (lot 4) pièces des fêtes (cookSoup, presentStand, giveBaskets ne passent pas par feteFound : summary.cozyIncome)
+  income.cozy = result.summary?.cozyIncome || 0;
+  lot4.fetes = Math.max(0, income.cozy - lot4.winter);
+  lot4.played = Object.keys(game.state.cozy?.year?.fetes || {}).length;
+  income.total = income.crops + income.apples + income.products + income.investments + income.contest + income.raw + income.refund + income.surprises + income.variety + income.cozy;
+  return { ...result, income, contest, lot2, lot3, lot4, medalsBy };
 }
 
 function traceDay(game, before) {
@@ -1053,9 +1481,9 @@ function selectedLevels() {
 }
 
 /** Statistiques d'un niveau pour une stratégie. */
-function simulateRow(level, strategy, perks, difficulty = DIFFICULTY, surprises = SURPRISES) {
+function simulateRow(level, strategy, perks, difficulty = DIFFICULTY, surprises = SURPRISES, variety = VARIETY, cozy = COZY) {
   const results = [];
-  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks, difficulty, surprises));
+  for (let seed = 1; seed <= SEEDS; seed++) results.push(playOne(level.id, seed, strategy, perks, difficulty, surprises, variety, cozy));
   const wins = results.filter((r) => r.win);
   const stars = [0, 1, 2, 3].map((s) => results.filter((r) => r.stars === s).length);
   const lossSeasons = {};
@@ -1084,6 +1512,13 @@ function simulateRow(level, strategy, perks, difficulty = DIFFICULTY, surprises 
     avgMoney: Math.round(results.reduce((s, r) => s + r.money, 0) / results.length),
     lot2: Object.fromEntries(['fine', 'gold', 'giants', 'surprises', 'specials', 'wishes'].map((k) => [k, +(results.reduce((s, r) => s + r.lot2[k], 0) / results.length).toFixed(2)])),
     lot2Income: { quality: Math.round(sum('quality') / results.length), giants: Math.round(sum('giants') / results.length), surprises: Math.round(sum('surprises') / results.length) },
+    // (lot 3) gain moyen par partie de chaque partie de la variété, écus, compteurs.
+    lot3: Object.fromEntries(['orders', 'cart', 'cards', 'medals', 'merchant', 'ecus', 'ordersDone', 'cratesFull', 'medalsN', 'rareSown'].map((k) => [k, +(results.reduce((s, r) => s + r.lot3[k], 0) / results.length).toFixed(1)])),
+    moneys: results.map((r) => r.money),
+    // (lot 4) gain moyen des fêtes et de l'hiver, écus, fêtes jouées, lanternes (par critère : parts 1 / 2 / 3 / 4).
+    lot4: Object.fromEntries(['fetes', 'winter', 'ecus', 'played', 'stories'].map((k) => [k, +(results.reduce((s, r) => s + (r.lot4?.[k] || 0), 0) / results.length).toFixed(1)])),
+    lanterns: lanternStats(results),
+    loanAny: results.filter((r) => r.summary.neighbourLoan?.loans > 0).length,
     // v3 : part du revenu par origine, prix du concours.
     share: {
       products: sum('products') / totalIncome,
@@ -1099,7 +1534,7 @@ function simulateRow(level, strategy, perks, difficulty = DIFFICULTY, surprises 
   };
 }
 
-export function simulate(levels, strategies, perks, difficulty = DIFFICULTY, surprises = SURPRISES) {
+export function simulate(levels, strategies, perks, difficulty = DIFFICULTY, surprises = SURPRISES, variety = VARIETY, cozy = COZY) {
   return levels.map((base) => {
     const level = levelFor(base.id, difficulty);
     return {
@@ -1107,9 +1542,18 @@ export function simulate(levels, strategies, perks, difficulty = DIFFICULTY, sur
       name: level.name,
       difficulty,
       thresholds: level.starThresholds,
-      rows: strategies.map((s) => simulateRow(level, s, perks, difficulty, surprises)),
+      rows: strategies.map((s) => simulateRow(level, s, perks, difficulty, surprises, variety, cozy)),
     };
   });
+}
+
+/** (lot 4) Lanternes de toutes les parties : par critère, parts des parties à 1, 2, 3, 4 lanternes ; totaux. */
+export function lanternStats(results) {
+  const lit = results.map((r) => r.lot4?.lanterns).filter(Boolean);
+  if (!lit.length) return null;
+  const per = [0, 1, 2, 3, 4].map((k) => [1, 2, 3, 4].map((n) => lit.filter((l) => l.values[k] === n).length / lit.length));
+  const totals = lit.map((l) => l.total);
+  return { n: lit.length, per, totals, median: median(totals) };
 }
 
 function printTable(out, title) {
@@ -1178,9 +1622,128 @@ function printCompareSurprises(off, on) {
   for (const [s, ds] of Object.entries(totals)) console.log(`  ${s.padEnd(10)} ${(ds.reduce((a, b) => a + b, 0) / ds.length).toFixed(1)} %`);
 }
 
+/** (lot 3) Sans → avec la variété : revenu de l'année, argent final, victoires, ★★★, gain par partie. */
+function printCompareVariety(off, on) {
+  console.log(`Variété du lot 3 (mode ${DIFFICULTY}) : sans → avec, ${SEEDS} graines par niveau et par stratégie (surprises : défaut du mode)\n`);
+  console.log('niveau  stratégie   revenu moyen (sans → avec, écart)   argent médian (écart)   victoires     ★★★ (sans → avec)   gain par partie : tableau cartes charrette médailles · colporteur (dépense) · écus · commandes caisses médailles');
+  const totals = {};
+  const money = {};
+  off.forEach((lv, k) => {
+    lv.rows.forEach((r, j) => {
+      const a = on[k].rows[j];
+      const d = r.avgIncome ? (100 * (a.avgIncome - r.avgIncome)) / r.avgIncome : 0;
+      const dm = r.medianMoney ? (100 * (a.medianMoney - r.medianMoney)) / Math.abs(r.medianMoney) : 0;
+      (totals[r.strategy] = totals[r.strategy] || []).push(d);
+      (money[r.strategy] = money[r.strategy] || []).push(dm);
+      const l = a.lot3;
+      console.log(
+        `${String(lv.level).padStart(4)}    ${r.strategy.padEnd(10)}  ${String(r.avgIncome).padStart(6)} → ${String(a.avgIncome).padStart(6)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)} %)        ${String(r.medianMoney).padStart(5)} → ${String(a.medianMoney).padStart(5)} (${dm >= 0 ? '+' : ''}${dm.toFixed(0)} %)   ${pct(r.winRate * 100, 100).padStart(4)} → ${pct(a.winRate * 100, 100).padStart(4)}   ${pct(r.stars[3], SEEDS).padStart(4)} → ${pct(a.stars[3], SEEDS).padStart(4)}          ${String(l.orders).padStart(6)} ${String(l.cards).padStart(6)} ${String(l.cart).padStart(6)} ${String(l.medals).padStart(6)} · ${String(l.merchant).padStart(5)} · ${String(l.ecus).padStart(4)} · ${l.ordersDone} ${l.cratesFull} ${l.medalsN}`,
+      );
+    });
+  });
+  console.log('\nÉcart moyen, tous niveaux : revenu de l\'année · argent final médian');
+  for (const [s, ds] of Object.entries(totals)) console.log(`  ${s.padEnd(10)} ${(ds.reduce((a, b) => a + b, 0) / ds.length).toFixed(1)} % · ${(money[s].reduce((a, b) => a + b, 0) / money[s].length).toFixed(1)} %`);
+}
+
+/** (lot 4) Sans → avec les fêtes, l'hiver et les lanternes : revenu de l'année, argent final, victoires, ★★★, gains. */
+function printCompareCozy(off, on) {
+  console.log(`Lot 4 (mode ${DIFFICULTY}) : sans → avec fêtes, hiver et lanternes, ${SEEDS} graines par niveau et par stratégie (surprises et variété : défaut du mode)\n`);
+  console.log('niveau  stratégie   revenu moyen (sans → avec, écart)   argent médian (écart)   victoires     ★★★ (sans → avec)   par partie : fêtes hiver (pièces) · écus · fêtes jouées · veillées · lanternes (méd.)');
+  const totals = {};
+  const money = {};
+  off.forEach((lv, k) => {
+    lv.rows.forEach((r, j) => {
+      const a = on[k].rows[j];
+      const d = r.avgIncome ? (100 * (a.avgIncome - r.avgIncome)) / r.avgIncome : 0;
+      const dm = r.medianMoney ? (100 * (a.medianMoney - r.medianMoney)) / Math.abs(r.medianMoney) : 0;
+      (totals[r.strategy] = totals[r.strategy] || []).push(d);
+      (money[r.strategy] = money[r.strategy] || []).push(dm);
+      const l = a.lot4;
+      console.log(
+        `${String(lv.level).padStart(4)}    ${r.strategy.padEnd(10)}  ${String(r.avgIncome).padStart(6)} → ${String(a.avgIncome).padStart(6)}  (${d >= 0 ? '+' : ''}${d.toFixed(1)} %)        ${String(r.medianMoney).padStart(5)} → ${String(a.medianMoney).padStart(5)} (${dm >= 0 ? '+' : ''}${dm.toFixed(0)} %)   ${pct(r.winRate * 100, 100).padStart(4)} → ${pct(a.winRate * 100, 100).padStart(4)}   ${pct(r.stars[3], SEEDS).padStart(4)} → ${pct(a.stars[3], SEEDS).padStart(4)}          ${String(l.fetes).padStart(6)} ${String(l.winter).padStart(5)} · ${String(l.ecus).padStart(4)} · ${l.played} · ${l.stories} · ${a.lanterns ? a.lanterns.median : '—'}`,
+      );
+    });
+  });
+  console.log('\nÉcart moyen, tous niveaux : revenu de l\'année · argent final médian');
+  for (const [s, ds] of Object.entries(totals)) console.log(`  ${s.padEnd(10)} ${(ds.reduce((a, b) => a + b, 0) / ds.length).toFixed(1)} % · ${(money[s].reduce((a, b) => a + b, 0) / money[s].length).toFixed(1)} %`);
+}
+
+/** (lot 4) Répartition des lanternes par critère (parts 1 / 2 / 3 / 4) et total médian, par robot (tous niveaux confondus). */
+function printLanterns(out) {
+  const names = ['variété', 'soin', 'voisinage', 'beauté', 'prospérité'];
+  console.log(`Lanternes (mode ${DIFFICULTY}, ${SEEDS} graines) : par critère, parts des années à 1 / 2 / 3 / 4 lanternes ; total médian\n`);
+  const by = {};
+  for (const lv of out) {
+    for (const r of lv.rows) {
+      if (!r.lanterns) continue;
+      const b = (by[r.strategy] = by[r.strategy] || { n: 0, per: names.map(() => [0, 0, 0, 0]), totals: [] });
+      b.n += r.lanterns.n;
+      r.lanterns.per.forEach((row, k) => row.forEach((x, n) => (b.per[k][n] += x * r.lanterns.n)));
+      b.totals.push(...r.lanterns.totals);
+      if (VERBOSE) console.log(`  niveau ${String(lv.level).padStart(2)} ${r.strategy.padEnd(9)} total méd. ${r.lanterns.median} · ${r.lanterns.per.map((row, k) => `${names[k]} ${row.map((x) => Math.round(x * 100)).join('/')}`).join(' · ')}`);
+    }
+  }
+  for (const [s, b] of Object.entries(by)) {
+    console.log(`  ${s.padEnd(10)} total médian ${median(b.totals)} / 20 (${b.n} années)`);
+    names.forEach((nm, k) => console.log(`             ${nm.padEnd(11)} ${b.per[k].map((x) => `${String(Math.round((100 * x) / b.n)).padStart(3)} %`).join('  ')}`));
+  }
+}
+
+/** Quantile (0..1) d'une liste de nombres. */
+function quantile(xs, q) {
+  const s = [...xs].sort((a, b) => a - b);
+  if (!s.length) return 0;
+  const pos = (s.length - 1) * q;
+  const lo = Math.floor(pos);
+  const hi = Math.ceil(pos);
+  return s[lo] + (s[hi] - s[lo]) * (pos - lo);
+}
+
+/**
+ * (lot 3) Seuils d'étoiles Détente suggérés (règle du § 13.3) : ★★ ≈ argent final médian du joueur tranquille,
+ * ★★★ ≈ ses 12 % meilleures parties (faillites comptées à 0), arrondis à la dizaine.
+ */
+function printStars(out) {
+  console.log(`Seuils d'étoiles suggérés (mode ${DIFFICULTY}, ${SEEDS} graines, casual / novice) : ★★ = médiane casual, ★★★ = 88e centile casual\n`);
+  console.log('niveau  actuels (★★ / ★★★)   suggérés (★★ / ★★★)   casual : ★★+ / ★★★ avec les suggérés   novice : ★★★ avec les suggérés');
+  for (const lv of out) {
+    const casual = lv.rows.find((r) => r.strategy === 'casual');
+    const novice = lv.rows.find((r) => r.strategy === 'novice');
+    if (!casual) continue;
+    const t2 = Math.round(quantile(casual.moneys, 0.5) / 10) * 10;
+    const t3 = Math.round(quantile(casual.moneys, 0.88) / 10) * 10;
+    const share = (r, t) => (r ? pct(r.moneys.filter((m) => m >= t).length, r.moneys.length) : '—');
+    console.log(`${String(lv.level).padStart(4)}    ${String(lv.thresholds[0]).padStart(5)} / ${String(lv.thresholds[1]).padStart(5)}        ${String(t2).padStart(5)} / ${String(t3).padStart(5)}          ${share(casual, t2)} / ${share(casual, t3)}                     ${share(novice, t3)}`);
+  }
+}
+
 function run() {
   const levels = selectedLevels();
   const strategies = Object.keys(STRATEGIES).filter((s) => !STRATEGY_FILTER || s === STRATEGY_FILTER);
+  if (COMPARE_COZY) {
+    const off = simulate(levels, strategies, {}, DIFFICULTY, SURPRISES, VARIETY, false);
+    const on = simulate(levels, strategies, {}, DIFFICULTY, SURPRISES, VARIETY, COZY === undefined || COZY === false ? true : COZY);
+    if (JSON_OUT) console.log(JSON.stringify({ off, on }, (k, v) => (k === 'moneys' || k === 'totals' ? undefined : v), 2));
+    else printCompareCozy(off, on);
+    return;
+  }
+  if (LANTERNS) {
+    const out = simulate(levels, strategies.filter((s) => s !== 'idle'), {}, DIFFICULTY, SURPRISES, VARIETY, COZY);
+    printLanterns(out);
+    return;
+  }
+  if (COMPARE_VARIETY) {
+    const off = simulate(levels, strategies, {}, DIFFICULTY, SURPRISES, false);
+    const on = simulate(levels, strategies, {}, DIFFICULTY, SURPRISES, VARIETY === undefined || VARIETY === false ? true : VARIETY);
+    if (JSON_OUT) console.log(JSON.stringify({ off, on }, (k, v) => (k === 'moneys' ? undefined : v), 2));
+    else printCompareVariety(off, on);
+    return;
+  }
+  if (STARS) {
+    const out = simulate(levels, strategies.filter((s) => s === 'casual' || s === 'novice'), {}, DIFFICULTY, SURPRISES, VARIETY);
+    printStars(out);
+    return;
+  }
   if (COMPARE_SURPRISES) {
     const off = simulate(levels, strategies, {}, DIFFICULTY, false);
     const on = simulate(levels, strategies, {}, DIFFICULTY, true);
@@ -1205,7 +1768,7 @@ function run() {
   const perks = resolvePerks(PERKS_ARG);
   const out = simulate(levels, strategies, perks);
   if (JSON_OUT) {
-    console.log(JSON.stringify(out, null, 2));
+    console.log(JSON.stringify(out, (k, v) => (k === 'moneys' ? undefined : v), 2));
     return;
   }
   const perkText = Object.keys(perks).length ? `, bonus : ${PERKS_ARG}` : '';

@@ -15,6 +15,9 @@ import {
 } from '../data/surprises.js';
 import { hashSeed, stream } from './rng.js';
 import { inGreenhouse, isMature, needsWaterToday } from './farm.js';
+import { cloverFactor, horseshoeBonus, themeGiantFactor, themeGoldenHourFactor } from './variety-effects.js';
+import { F1 } from '../data/cozy.js';
+import { giantBonusOf, giantFactorOf, qualityBonusOf } from './career/heirlooms.js';
 
 export const SURPRISES_VERSION = 1;
 export const SPECIAL_IDS = SPECIAL_WEATHERS.map((w) => w.id);
@@ -234,9 +237,18 @@ export function qualityChances(state, plot, byHand = true) {
   if (care.bees) add(QUALITY.bees);
   if (care.rotation) add(QUALITY.rotation);
   if ((state.perks?.greenThumb || 0) > 0) add(QUALITY.greenThumb);
-  if (luckActive(state)) {
-    fine *= QUALITY.luckFactor;
-    gold *= QUALITY.luckFactor;
+  // (lot 3) Fer à cheval du colporteur : + 1 point (belle), + 0,3 point (dorée).
+  const shoe = state.variety ? horseshoeBonus(state) : null;
+  if (shoe) add(shoe);
+  // (lot 4, F1) Culture désherbée par un jardinier : + 1 point (belle), + 0,3 point (dorée), à la main seulement.
+  if (byHand && plot.weeded && state.cozy?.parts?.helpers) add({ fine: F1.weedFine, gold: F1.weedGold });
+  // (Vallée vivante, carrière) Variété généreuse, hérisson (à la main), coccinelles et pollinisation (étape 3).
+  if (state.career?.valley) add(qualityBonusOf(state, plot, byHand));
+  // Vœu « chance » × 2 ; (lot 3) carte « Trèfle à quatre feuilles » × 2 (cumulables : × 4 au plus).
+  const luck = (luckActive(state) ? QUALITY.luckFactor : 1) * (state.variety ? cloverFactor(state) : 1);
+  if (luck !== 1) {
+    fine *= luck;
+    gold *= luck;
   }
   if (!byHand) gold = 0;
   return { fine: round4(fine), gold: round4(gold) };
@@ -351,8 +363,20 @@ export function tryGiant(state, level) {
   const cands = giantCandidates(state, level);
   if (!cands.length) return null;
   const rng = stream(state.rng, 'surprise');
-  if (!rng.chance(GIANT.chance)) return null;
-  const sq = cands[rng.int(0, cands.length - 1)];
+  // (Vallée vivante, carrière) Lièvre : + 1,5 point ; un carré d'une variété géante : × 2 (et c'est lui qui grossit).
+  let pool = cands;
+  let valleyF = 1;
+  if (state.career?.valley) {
+    const giantSquares = cands.filter((sq) => giantFactorOf(state, sq.map((k) => state.plots[k])) > 1);
+    if (giantSquares.length) {
+      pool = giantSquares;
+      valleyF = giantFactorOf(state, giantSquares[0].map((k) => state.plots[k]));
+    }
+  }
+  const base = GIANT.chance + (state.career?.valley ? giantBonusOf(state) : 0);
+  // (lot 3) Année des géants (carrière) : chance × 2 (toujours un seul tirage).
+  if (!rng.chance(base * valleyF * (state.variety ? themeGiantFactor(state) : 1))) return null;
+  const sq = pool[rng.int(0, pool.length - 1)];
   const g = mergeGiant(state, sq);
   bump(state.surprises.stats.giants, g.cropId);
   return g;
@@ -435,7 +459,8 @@ export function drawSpecial(state, base, before, seasonId) {
     if (career && w.career === false) continue;
     if (!w.on.includes(base) || !w.seasons.includes(seasonId)) continue;
     if (w.after && !w.after.includes(before)) continue;
-    acc += w.chance;
+    // (lot 3) Année des grenouilles (carrière) : heure dorée 2 fois plus rare (même tirage, seuil plus bas).
+    acc += w.id === 'goldenhour' && state.variety ? w.chance * themeGoldenHourFactor(state) : w.chance;
     if (u < acc) return w.id;
   }
   return null;

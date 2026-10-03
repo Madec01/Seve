@@ -115,8 +115,9 @@ export const LOT_TYPES = [
   { id: 'meadow', name: 'Pré', cost: 120, rank: 1, max: 4, plots: null, slots: 2 },
   { id: 'orchard', name: 'Verger', cost: 100, rank: 2, max: 2, plots: { env: 'orchard', count: 9, cols: 3 }, slots: 0 },
   { id: 'workshops', name: 'Cour des ateliers', cost: 100, rank: 2, max: 3, plots: null, slots: 2 },
-  { id: 'pond', name: 'Mare', cost: 400, rank: 4, max: 1, plots: null, slots: 0, building: 'duckPond', phase: 'B' },
-  { id: 'greenhouse', name: 'Serre', cost: 800, rank: 3, max: 1, plots: { env: 'greenhouse', count: 4, cols: 4 }, slots: 0, building: 'greenhouse', phase: 'B' },
+  // (lot 4, § 17.5.4) Mare au rang 3 (300) et serre au rang 2 (500), sans « bientôt » : l'hiver vit plus tôt.
+  { id: 'pond', name: 'Mare', cost: 300, rank: 3, max: 1, plots: null, slots: 0, building: 'duckPond' },
+  { id: 'greenhouse', name: 'Serre', cost: 500, rank: 2, max: 1, plots: { env: 'greenhouse', count: 4, cols: 4 }, slots: 0, building: 'greenhouse' },
 ];
 
 export const LOT_TYPES_BY_ID = Object.fromEntries(LOT_TYPES.map((t) => [t.id, t]));

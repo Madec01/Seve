@@ -102,7 +102,8 @@ import { createGame, loadGame } from './core/game.js';
 const game = createGame({ levelId: 1, seed: 12345 });   // nouvelle partie (mode « détente » par défaut, voir plus bas)
 const game2 = loadGame(savedObject);                     // reprise (objet issu de game.serialize())
 
-game.update(dtSeconds);        // fait avancer le temps selon la vitesse ; déclenche les aubes, fermages, etc.
+game.update(dtSeconds);        // fait avancer le temps (secondes DE JEU × vitesse) ; déclenche les aubes, fermages, etc.
+                               // l'interface passe dt réel × GAME_SECONDS_PER_REAL_SECOND (rythme : 1 jour = 36 s réelles à ×1)
 game.on(type, handler);        // abonnement aux événements ; renvoie une fonction de désabonnement
 game.state;                    // état complet, objet JSON pur (lecture seule pour le reste du code)
 game.serialize();              // copie JSON de l'état (sauvegarde)
@@ -169,7 +170,7 @@ Mise en page : la scène (`#stage`, canvas) occupe **tout l'écran** ; par-dessu
 - **Grand écran en paysage** (largeur ≥ 900 px et plus large que haut) : `body.layout-wide` ; les onglets sont déplacés dans la barre du haut, les feuilles « Acheter » / « Bilan » (et les fiches) se rangent à droite sans fond (`insets.right` transmis à la scène) ; souris : survol = infobulle, clic = action, molette = défilement ; clavier : Espace, 1/2/3, B (acheter), N (bilan), F (ferme), M (son), Échap, 1..9 dans les graines.
 - **Feuilles du bas** (`sheets.js`) : une seule à la fois (`app.sheets.open({ id, title, icon, content, kind: 'panel'|'popup', tall })`), fermeture par ✕, glissement vers le bas (poignée, en-tête, ou contenu déjà en haut), toucher sur le fond (ce toucher ne fait rien d'autre), Échap. Les fiches de parcelle / bâtiment / barre du haut ne sont reconstruites que si leur contenu change (un toucher en cours ne tombe jamais sur un bouton remplacé). **La parcelle touchée reste visible** : `main.js` passe la hauteur de la feuille à `scene.setOverlay(px)` (la scène peut alors défiler au-delà du bas du monde, dans la forêt) puis appelle `scene.focusPlot(i, { animate: true })` (défilement animé) ; à la fermeture (`setOverlay(0)`), la vue revient en douceur là où elle était. Une feuille « popup » laisse toujours ~150 px de scène au-dessus d'elle. Le tutoriel fait de même pour la parcelle entourée.
 - **Champ en portrait** (`layout-portrait.js`, `placeVisualCells`) : les index des parcelles sont ceux du cœur ; seule leur case à l'écran change. Les parcelles ouvertes au départ forment un bloc compact centré (4 × 3 au niveau 1, dans l'ordre de lecture du cœur), les parcelles à acheter l'entourent : herbe plus sombre, pointillés clairs, et une pièce (« à vendre ») sur celles qui touchent le potager ouvert.
-- **Messages** (`toasts.js`) : au-dessus des onglets et de la feuille ouverte, jamais sur la barre du haut ; ils ne captent pas les touchers (sauf ceux qui proposent une action, ex. « Nouvelle version… »). Le **bandeau** (titre du niveau, saison, avertissements) se pose sous la barre du haut, en dessous d'elle et des feuilles (z-index), et s'efface dès qu'une bulle ou un rappel du tutoriel s'affiche en haut (`toasts.hideBanner()`).
+- **Messages** (`toasts.js`) : au-dessus des onglets et de la feuille ouverte, jamais sur la barre du haut ; ils ne captent **jamais** les touchers : un message qui propose une action (`onClick`) porte un bouton « Voir » (`actionLabel` : « Répondre », « Recharger »…), seul élément touchable. **Au plus deux messages à la fois** (`MAX_VISIBLE`) : les plus anciens (d'abord ceux qui ne proposent rien d'important) s'effacent et restent dans l'historique ; une pastille « +N messages » (`#toast-more`, ≥ 48 px) ouvre la feuille « Messages » (`toasts.setMoreHandler(fn)`, branché par `main.js` ; mesures : `toasts.stats()`). *(QA du lot 3, 2026-10-02 : au début d'une saison de carrière, quatre messages couvraient la bande de la maison et captaient le toucher.)* *(2026-10-03)* Tri « important / info » et réglage « Messages à l'écran » : voir « Rythme, personnages et messages ». Le **bandeau** (titre du niveau, saison, avertissements) se pose sous la barre du haut, en dessous d'elle et des feuilles (z-index), et s'efface dès qu'une bulle ou un rappel du tutoriel s'affiche en haut (`toasts.hideBanner()`).
 - **Fenêtres** (`dialogs.js`) : en portrait, hautes feuilles qui montent du bas (ruban de titre, ✕ à sa droite, boutons pleine largeur en bas, défilement interne) ; fermables aussi par glissement et par un toucher sur le fond sombre ; centrées sur grand écran.
 - **Politique des gestes** (`gestures.js`) : toucher bref sur une parcelle = action immédiate selon son état (vide → graines ; semée non arrosée → arroser ; mûre → récolter ; friche → ouvrir ; déjà arrosée → fiche) ; toucher un bâtiment → sa fiche ; appui long (450 ms) → fiche de la parcelle ou du bâtiment ; glisser en partant d'une parcelle → arroser / récolter en série (le trajet est échantillonné) ; glisser ailleurs → `scene.scrollBy` puis `scene.fling` (élan) ; deuxième doigt → geste annulé. Cible tolérante : `scene.hitTest(x, y, { touch: true })`. Le bandeau de saison ne capte pas les touchers.
 - **Règles tactiles** : cibles ≥ 48 × 48 px, texte ≥ 14 px (12 px pour les mentions secondaires), argent 20 px, `touch-action: manipulation` partout (none sur le canvas), pas de sélection ni de menu contextuel, `overscroll-behavior: none`, `user-scalable=no`, retour `:active`, vibration courte optionnelle (`app.vibrate`, option « Vibrer au toucher »).
@@ -187,7 +188,7 @@ Mise en page : la scène (`#stage`, canvas) occupe **tout l'écran** ; par-dessu
 - `src/core` et `src/data` n'importent jamais le DOM ni `window` ; tout l'aléatoire passe par `rng.js` (graine dans l'état → parties reproductibles, tests déterministes).
 - L'état est **uniquement** modifié par `game.update()` et `game.actions.*`.
 - Les textes affichés au joueur sont en français ; les identifiants (`carrot`, `chickenCoop`…) en anglais.
-- Rendu pixel art : `imageSmoothingEnabled = false`, zoom entier, canvas redimensionné à la fenêtre.
+- Rendu pixel art : `imageSmoothingEnabled = false`, zoom entier (seul un pincement en cours passe par un zoom fractionnaire, sans flou : voir « Zoom de la scène »), canvas redimensionné à la fenêtre.
 - Chemins relatifs uniquement (le jeu doit fonctionner dans un sous-dossier, ex. GitHub Pages).
 
 ---
@@ -1088,8 +1089,8 @@ tools/sim-career-staff.js     robots : staffDecisions(game, me) (utilisé par si
 ### Tâches et animation (lu par RENDER)
 
 - `task = { kind, target, from, startAt, doneAt, lotId }` en secondes écoulées dans la journée (`state.time.elapsed`).
-  Le rendu fait marcher le personnage de `from` vers `target` (par exemple pendant les 60 premiers % de la tâche) puis
-  joue l'action jusqu'à `doneAt` ; à ×4 le temps de jeu va 4 fois plus vite, rien à faire de plus.
+  Le rendu fait marcher le personnage vers `target` **au pas, en temps réel**, puis joue l'action jusqu'à `doneAt` ; s'il
+  ne peut pas y arriver à temps sans courir, il coupe par un fondu (voir « Rythme et personnages », 2026-10-03).
 - `kind` : `harvest | pick | water | sow | chase` (jardinier), `collect` (soigneur), `craft` (artisan), `sell` (vendeur),
   `idle` (attente sur place : flâner près de la cible), `home` (retour à la maison) ; `task: null` : à la maison.
 - `target` / `from` : `{ type: 'plot', plotIndex, lotId }` · `{ type: 'building', buildingId, lotId }` ·
@@ -1625,7 +1626,8 @@ Feuille de route : `docs/analyse/0-SYNTHESE.md` (A2, A6, A7, F2 et bugs de l'ann
 
 ### Vitesse douce ×½ (A2)
 
-- `SPEEDS = [0, 0.5, 1, 2, 4]` (`src/data/balance.js`) ; `game.actions.setSpeed(0.5)` → un jour dure 40 s.
+- `SPEEDS = [0, 0.5, 1, 2, 4]` (`src/data/balance.js`) ; `game.actions.setSpeed(0.5)` → un jour dure 40 s de jeu, soit 72 s
+  réelles (rythme 2026-10-03 : `REAL_DAY_SECONDS` = 36).
   Sauvegardé / rechargé comme les autres vitesses (niveaux et carrière). `loadSettings` (UI) doit accepter 0.5.
 
 ### Option « pause chaque matin » (A2)
@@ -1742,8 +1744,11 @@ src/ui/guide-prefs.js readPrefs() / writePrefs(patch) : localStorage `une-annee-
   du cœur (`ev.text`, accordé) ; la ligne « À faire » les met en tête.
 - **Résumé du matin** (E5) : à chaque aube (sauf la première), « Bonjour ! Jour N » + « Hier : +46 pièces.
   Aujourd'hui : 3 parcelles à récolter, une proposition (M. Garnier). » (3 choses au plus, ni objectif ni étoiles).
-  Montré après les fenêtres (bilan de saison), au plus un toutes les 25 s à l'écran (à ×4 une journée dure 5 s), toujours
-  noté dans les messages ; interrupteur « Résumé du matin » dans la feuille Messages. Option « pause chaque matin »
+  Montré après les fenêtres (bilan de saison), au plus un toutes les 25 s à l'écran (à ×4 une journée dure 9 s), toujours
+  noté dans les messages ; interrupteur « Résumé du matin » dans la feuille Messages. *(2026-10-03)* Affiché seulement
+  avec « Messages à l'écran : Tous » (ou quand le jeu attend en pause) ; sinon il attend derrière la cloche. Il regroupe
+  les nouvelles de la veille qui ne se sont pas affichées : « Hier aussi : 12 récoltes de l'équipe (+46), 3 produits
+  vendus, 1 naissance. 2 autres nouvelles dans les messages. » (`todo.digest(e)`, branché par `toasts.setDigest`). Option « pause chaque matin »
   (`autoPaused`) : le résumé le dit et reste 7 s (sinon un petit message « Pause du matin »).
 - **« Où en étais-je ? »** (E6) : `app.todo.showResume(game)` à la reprise depuis le menu (« Continuer le niveau »,
   « Ma ferme » → Continuer) : ferme / niveau, date, argent, fermage ou charges (couvert ou manque), état du champ, les
@@ -1751,8 +1756,9 @@ src/ui/guide-prefs.js readPrefs() / writePrefs(patch) : localStorage `une-annee-
   « Partie reprise » (`careerUI.bind(game, { quiet })`).
 - **Messages** (A9) : `toasts.setLogger(fn)` (main.js → `app.messages.add`) : chaque message montré et chaque bandeau
   sont notés (50 derniers, jour de jeu et heure) ; `show({ log: false })` pour les refus d'action (« Il manque… ») ;
-  un message mis à jour (`key`) remplace sa ligne. Messages importants (alerte, gel, action à toucher, succès, erreur)
-  ≥ 5 s à l'écran. Feuille `messages` : depuis la cloche, le menu Pause (`#pause-messages`) et le Carnet
+  un message mis à jour (`key`) remplace sa ligne ; *(2026-10-03)* une répétition (même titre, même jour, parmi les 5
+  dernières lignes) devient « Titre ×N ». Messages importants (alerte, gel, action à toucher, erreur) ≥ 5 s à l'écran,
+  infos 3 s (4,2 s au plus). Feuille `messages` : depuis la cloche, le menu Pause (`#pause-messages`) et le Carnet
   (`#c-j-messages`) ; un message qui proposait une action garde un bouton « Voir ». Effacés à chaque partie.
 - **Guide de la ferme** (E5, A10) : feuille `guide`, sections repliables (gestes, temps, ligne « À faire », cultures,
   argent et fermage / ma ferme, animaux, équipe et machines, visiteurs et Joseph, **mots de la ferme** : fermage =
@@ -1822,10 +1828,11 @@ src/ui/dialogs.js section « Accessibilité » des options (textSizePicker, a11y
 | `plotHints` | `true` | `scene.setPlotHints` (goutte « à arroser », coche « mûre ») |
 | `controlsBottom` | `false` | `html.controls-bottom`, vitesse dans la barre d'onglets |
 | `leftHanded` | `false` | `html.left-handed` : vitesse à gauche (en haut comme en bas), ligne « À faire » en miroir |
-| `pinchZoom` | `true` | viewport sans `user-scalable=no` (la scène garde `touch-action: none`) |
+| `pinchZoom` | `true` | « Loupe de l'interface » : viewport sans `user-scalable=no` (zoom de la PAGE sur les barres et les fiches ; la scène garde `touch-action: none` et son propre zoom, voir « Zoom de la scène ») |
 | `vibration` | `true` | `app.vibrate` ; motifs : toucher 8–12 ms, erreur `[30,40,30]`, alerte de saison `[15,80,15,80,15]` |
 | `a11yOffered` | `false` | la fenêtre du premier lancement a été montrée (ou fermée par le joueur) |
 | `speed` | `1` | vitesse préférée (0,5 accepté) |
+| `messages` | `'important'` | « Messages à l'écran » : `'all'` · `'important'` · `'none'` → `toasts.setMode` (voir « Rythme, personnages et messages ») |
 
 - **Application** : au démarrage (`createHud` → `initA11y`, avant « Commencer »), à chaque `app.updateSettings`,
   à chaque partie (`hud.bind` → `applyGameA11y` + `applySceneA11y`) et à chaque nouvelle scène (`resizeScene`).
@@ -2045,3 +2052,2352 @@ src/ui/todo.js         morningNote(text) : ligne en tête du prochain résumé d
   disent le gain réel (déjà possédé → « +5 écus à la place ») ; résumé du matin : gain de la surprise.
 - **Mesures** (Pixel 7 émulé) : glissé de 12–24 parcelles à 60 i/s (médiane 16,7 ms, 95e centile 16,8 ms), aucune
   erreur de console ; carrière : glissé, surprises et 10 jours sans erreur.
+
+## Lot 3 — contrats (CORE · ART · UI/RENDER, conception 2026-10-02)
+
+Tableau du village (C1), cadeau de fin de saison (C2), charrette du marché (C3), défis de saison (C4), années à thème
+de la carrière (C5), jour du colporteur et graines rares (C7). Règles chiffrées : `docs/GAME_DESIGN.md` § 16. Ce qui
+suit fixe les **noms, formes et comportements** que les trois paquets se promettent ; tout est **ajouté** (rien du
+contrat existant n'est retiré ni renommé). Tant que CORE n'a pas livré, UI/RENDER simulent les requêtes avec des objets
+factices de la même forme ; tant qu'ART n'a pas livré, RENDER/UI dessinent un repli (`canDraw`, comme au lot 2).
+
+### Règles communes
+
+- **Parité Classique** : `createGame` en Classique sans option `variety` ne crée **ni** `state.variety` (clé absente,
+  pas `null`), **ni** flux aléatoire, **ni** événement, **ni** champ de requête nouveau (`plantableCrops`, `plot`,
+  `forecast`, `summary` identiques) : `tests/parity.test.js` et `tools/capture-parity.js` inchangés et verts. Toute règle
+  du lot est gardée par `state.variety` (et par `state.variety.parts.<partie>`).
+- **Aléatoire** : deux flux **nouveaux**, créés seulement quand la variété est active : `state.rng.orders`
+  (`hashSeed(seed, 'orders')` : commandes du tableau et relances) et `state.rng.variety` (`hashSeed(seed, 'variety')` :
+  charrette, cartes, défis, étal du colporteur, thèmes, averses de l'année des grenouilles). Météo, marché, maladie,
+  `career`, `staff`, `events`, `quality`, `surprise`, `sky` tirent **le même nombre** de nombres qu'avant à chaque étape
+  (les seuils de certains tirages changent avec un thème ou une carte, jamais le nombre de tirages).
+- **Pur** : `src/data/variety.js`, `src/data/career/themes.js`, `src/core/requests.js`, `src/core/variety.js`,
+  `src/core/career/{variety,themes}.js` n'importent ni DOM ni horloge.
+- **Jour absolu** : `absDay(state)` de `src/core/surprises.js` (niveaux : `time.day` ; carrière : `(année − 1) × 4 ×
+  durée + jour`). **Saison absolue** : `seasonAbs(state)` = `(année − 1) × 4 + seasonIndex` (niveaux : `seasonIndex`).
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (texte français). Textes des données en français.
+
+### Fichiers
+
+```
+src/data/variety.js          (nouveau, pur) VARIETY_VERSION, VARIETY_PARTS, BOARD, ORDER_RATES, ORDER_SIZES, ORDER_TWO_LINES,
+                             FEASIBLE_WEIGHTS, CLIENTS (12), CART, CARDS (16), CHALLENGES (12), MEDALS, MERCHANT,
+                             MERCHANT_ITEMS, VARIETY_HINTS, textes
+src/data/career/themes.js    (nouveau, pur) THEME_RULES, THEMES (9) : vedette, effets, fête, visiteur, rang, textes
+src/data/crops.js            + RARE_CROPS (pea, melon, leek ; champ rare: true), isRareCrop(id) ; getCrop(id) les trouve aussi.
+                             ⚠ CROPS, BASE_CROPS et l'ordre des cultures NE CHANGENT PAS (le marché de carrière, les
+                             trouvailles et « Herbier complet » parcourent CROPS : y ajouter une culture changerait leurs tirages)
+src/data/cosmetics.js        + 'lantern.peddler', 'weathervane.rooster', 'sign.magazine' (category 'small', price 0, found: true)
+src/core/requests.js         (nouveau, partagé niveaux / carrière) générateur « faisable cette saison », tableau, charrette,
+                             récoltes comptées, livraison depuis le grenier
+src/core/variety.js          (nouveau, partagé) état, activation, migration, vérification ; étapes de l'aube et du soir ;
+                             cartes, défis, colporteur, graines rares ; effets (varietyEffect) ; requêtes
+src/core/career/variety.js   (nouveau) extension de carrière id 'variety' (points d'accroche, fournisseurs, actions de grenier)
+src/core/career/themes.js    (nouveau) années à thème : tirage, effets (themeFactor), fête, visiteur
+src/core/career/extensions.js  + import './variety.js';
+tests/requests.test.js, tests/variety.test.js, tests/variety-career.test.js, tests/variety-migration.test.js  (nouveaux)
+assets/sprites/generate-lot3.py → assets/sprites/lot3.png + bloc « // <lot3:auto> » d'atlas.js  (ART)
+src/ui/variety.js, css/variety.css  (UI ; css/variety.css ajoutée à CSS_FILES de tools/build.js)
+src/render/variety-actors.js  (RENDER : charrette, roulotte, colporteur, visiteur du thème, poule voyageuse)
+```
+
+### Activation et options
+
+```js
+createGame({ levelId, seed, perks, difficulty, surprises, variety })
+//   variety : undefined → activée si difficulty !== 'classique' (clé ABSENTE en Classique)
+//             true → toutes les parties ; false → state.variety = null (gardé tel quel à la reprise)
+//             { board, cards, cart, challenges, merchant } → seulement les parties à true (absentes = true)
+createCareer({ …, surprises, variety })   // défaut true ; même forme ; partie en plus : themes
+game.variety            // booléen (accesseur, comme game.surprises)
+```
+
+`VARIETY_PARTS = ['board', 'cards', 'cart', 'challenges', 'merchant', 'themes']` (`themes` : carrière seulement).
+
+### État (`state.variety`, `null` ou absent quand c'est désactivé)
+
+```js
+state.variety = {
+  v: 1,
+  parts: { board: true, cards: true, cart: true, challenges: true, merchant: true, themes: true },
+  nextId: 1,                                   // identifiants 'o7' (commandes), 'c3' (charrettes)
+  board: {
+    slots: [order | null, order | null, order | null],
+    startDay: 1,                               // jour absolu du premier remplissage (niveau 1 : 5)
+    rerollDay: 0,                              // jour absolu de la dernière relance (une par jour)
+    yesterday: [cropId],                       // cultures demandées hier (poids × 0,5)
+  },
+  // order = { id, clientId, day /* jour absolu d'affichage */, lines: [{ cropId, n, got }], rate /* 1.2..1.6 */,
+  //           kept: false, base: 0 /* Σ valeur de base des unités comptées */, fromStock: 0 }
+  cart: null | { id, season /* saison absolue */, crates: [{ cropId, n, got }], base: 0, departDay, horse: false },
+  cards: {
+    offer: null | { season /* saison où l'effet s'applique */, options: [cardId, cardId] },
+    active: [{ id, season, until /* jour absolu inclus */, data? }],   // cartes « saison » en cours ou à venir
+    last: null | [cardId, cardId],
+    pending: { freePlot: false, clearingHalf: false, rentFactor: 1, chargeFactor: 1, cartFactor: 1 },   // cartes « prochaine fois »
+  },
+  challenges: {
+    season: null | seasonAbs,                  // saison des défis proposés
+    options: [challengeId × 3], kept: [challengeId],   // 2 au plus
+    targets: { [challengeId]: [bronze, silver, gold] },
+    medals: { [challengeId]: 0 | 1 | 2 | 3 },
+    next: null | { season, options, targets }, // défis proposés le soir pour la saison suivante
+    last: null | [challengeId × 3],
+  },
+  season: { abs, harvests: 0, sales: 0, harvested: {}, sown: {}, care: 0, quality: 0, orders: 0, crates: 0,
+            products: 0, apples: 0, animals: 0, collect: 0 },   // compteurs de la saison en cours (défis)
+  merchant: null | { season, soonDay, arriveDay, leaveDay, announced: false, stall: [{ itemId, price, sold: false, data? }] },
+  rare: { pea: 0, melon: 0, leek: 0 },         // graines rares restantes (semis gratuits)
+  freeSows: { [cropId]: n },                   // semis offerts d'une culture ordinaire (visiteurs de thème)
+  owned: { copperCan: false, almanac: false, horseshoe: false },
+  stats: { ordersDone: 0, ordersPremium: 0, ordersByClient: {}, carts: 0, cartsFull: 0, cratesFull: 0, cartPremium: 0,
+           cardsPicked: {}, cardIncome: 0, medals: { bronze: 0, silver: 0, gold: 0 }, medalCoins: 0, medalEcus: 0,
+           merchantSpent: 0, merchantBought: {}, rareSown: {}, rareHarvested: {} },   // pour l'album (lot 4)
+}
+// Carrière seulement (extension 'variety', partie themes) :
+state.career.theme = { year /* année du thème en cours */, id: null | themeId, next: null | themeId, bag: [themeId],
+  festivalDone: false, visitor: null | { offerId, done: false }, history: [{ year, id }] }
+// Parcelles : aucun champ nouveau. Plantation d'une graine rare : p.cropId = 'pea' | 'melon' | 'leek' (getCrop les connaît).
+```
+
+`checkVariety(state) → null | 'problème'` (appelé par `checkState` des niveaux et par `check` de l'extension) : version,
+identifiants connus (clients, cultures, cartes, défis, objets, thèmes), `0 ≤ got ≤ n`, 3 places, 2 défis gardés au plus,
+jours entiers ≥ 0, `rare`/`freeSows` entiers ≥ 0.
+
+### Déroulé (niveaux : `src/core/game.js` ; carrière : extension + `runtime.js`)
+
+**Aube** (niveaux), après l'étape 6 (marché) et la fin des surprises du lot 2 (`surprisesDawnEnd`) :
+`varietyDawn(state, ctx) → events` :
+1. effets des cartes échus (`until < aujourd'hui`) retirés (`cardEnded`) ;
+2. nouvelle saison : `season` remis à zéro ; défis : `next` devient la saison courante (sinon tirage, 1re saison) ;
+   **charrette** (`cartArrived`) ; commandes gardées devenues impossibles retirées (`orderRemoved { reason: 'withdrawn' }`,
+   prime des unités données) ;
+3. **colporteur** : veille → `merchantSoon` ; jour d'arrivée → étal tiré, `merchantArrived` ;
+4. **tableau** : à partir de `board.startDay`, commandes non gardées et pas commencées remplacées, places vides remplies
+   (`ordersRenewed { reason: 'dawn' }`).
+Étape 7 : après l'arrosage automatique, `varietyWater(state, level, today) → [plotIndex]` (arrosoir magique : 4 ;
+arrosoir de cuivre : 3 ; parcelles semées, non mûres, non arrosées, qui en ont besoin aujourd'hui, les moins avancées
+d'abord) → `dawn.varietyWatered`. Étape 9 : revenu `{ source: 'cardHen', amount: 4, owned: 1, kind: 'card' }` (carte
+`hen`) ; revenus quotidiens des animaux × 1,15 (carte `hay`, arrondi, pas la tonte). Les événements du lot sont émis
+après `dawn` (après ceux du lot 2).
+
+**Soir** (niveaux), dans `endOfDay` :
+- jour de départ du colporteur : `merchantLeft` (étal vidé) ;
+- dernier jour de la saison, **avant** la vente en l'état et le fermage : **départ de la charrette** (prime payée,
+  `cartDeparted`) ;
+- fermage : montant × `cards.pending.rentFactor` (0,8 avec la carte `landlord`, puis remis à 1) — `rentFor` le lit,
+  `query.finance().nextBill.amount` aussi ;
+- après `billPaid` (pas de faillite) : défis jugés (`challengesJudged`) ; si ce n'est pas la dernière saison :
+  `cardsOffered` puis `challengesOffered` (saison suivante) ; dernière saison : `challengesJudged` avant `victory`.
+
+**Pendant la journée** : récolte (ci-dessous), plantation (graines rares, semis offerts), compteurs des défis (`season`)
+mis à jour par les actions et l'aube ; médaille atteinte → `challengeMedal` tout de suite (pièces versées par le cœur,
+écus par l'interface).
+
+**Carrière** (extension `variety`, ordre d'enregistrement après `events`, `quests`, `surprises`) :
+`seasonStart` (étape 2 de l'aube) → points 1 et 2 ci-dessus, fête et visiteur du thème du jour ; `dawnEvents` → points 3
+et 4, averse de l'année des grenouilles ; `water` → arrosoirs (6 / 4 parcelles) ; `incomes` → `hay` (+15 % de la
+production des abris, poste `animals`), thème des abeilles (+50 % des ruches) et du tourisme (+25 % chambre d'hôte) ;
+`harvest` → récolte comptée (ci-dessous) ; `evening` → départ du colporteur, et le **dernier jour de la saison** : départ
+de la charrette, défis jugés, `cardsOffered` et `challengesOffered` (avant les charges de saison) ; `yearEnd` → tirage du
+thème suivant (`themeAnnounced`), `report.variety` ; nouveau `seasonStart` du printemps → `themeStarted`.
+
+### Récolte comptée (commandes, charrette)
+
+`claimHarvest(state, level, { plotIndex, cropId, units = 1, by }) → null | { kind: 'order' | 'cart', id, label, … }` :
+seulement si `by === 'player'` (niveaux : toujours) ; ordre (1) quête de Joseph (carrière, son point d'accroche, inchangé)
+→ (2) commandes du tableau (la plus avancée, puis la plus ancienne) → (3) caisse de la charrette. Un géant compte pour
+4 unités (réparties dans cet ordre, le reste est vendu normalement).
+
+- **Niveaux** (`game.js`, action `harvest`) : après le tirage de qualité, avant `tryProcessHarvest` : si la récolte est
+  comptée, elle n'est **pas** transformée ; `amount = raw + qualityBonus` (payée tout de suite) ; `harvested.claimed = {
+  kind, id, label }` ; puis `orderProgress` / `cartProgress` (et `orderDone`, `crateFull`).
+- **Carrière** : le point d'accroche `harvest` peut renvoyer **`{ divert: true, sell: true, label }`** (nouveau champ
+  `sell`) : `runtime.js` saute alors l'atelier et le grenier **et paie** la valeur (prime « à la main » et qualité
+  comprises) comme une vente ; sans `sell`, comportement d'avant (rien payé : visiteurs, quêtes). `harvested.diverted`
+  = label (« → Lili ») et `harvested.claimed`.
+- Valeur de base d'une unité (prime) : `baseUnitValue(state, level, cropId)` = `round2(sellPrice × level.cropPriceFactor ×
+  modifiers.rawPriceFactor)` (sans étal, cours, fête, « à la main », qualité). `order.base += …` à chaque unité ; prime à
+  la livraison = `round(base × (rate − 1))` ; charrette : `round(base × 0,10)` (+ `round(base × 0,10)` et 2 écus si tout
+  est plein ; × 2 avec `horse`).
+- Argent du lot (niveaux) : statistique `varietyIncome` (année et saison, créée seulement quand il y en a ; comptée dans
+  `summary.net`) ; `summary.variety = { orderPremium, cartPremium, cardIncome, medalCoins, merchantSpent, ordersDone,
+  cratesFull, medals }`. Carrière : postes du bilan `orders`, `cart`, `cards`, `medals` (revenus) et `merchant` (dépenses ;
+  achats d'animaux et de ruches comptés aussi au patrimoine comme d'habitude).
+
+### Actions (`game.actions.*`, les deux modes)
+
+```js
+keepOrder(orderId, keep = true)      → { ok, order: orderInfo }
+    // refus : 'Commande inconnue.' ; keep = false sur une commande commencée : 'Une commande commencée reste gardée.'
+    // (QA du lot 3) semer À LA MAIN la culture d'une commande non gardée la garde d'office (orderKept { auto: true },
+    // champ d'état facultatif `order.autoKept = true`, `orderInfo.autoKept`) ; keepOrder(id, false) l'efface.
+declineOrder(orderId)                → { ok, premium }        // orderRemoved { reason: 'declined', premium } ; prime des unités données
+rerollOrders()                       → { ok, replaced }       // ordersRenewed { reason: 'reroll' }
+    // refus : 'Une seule relance par jour : revenez demain.' ; 'Toutes les commandes sont gardées.'
+deliverOrder(orderId)                → { ok, delivered, done, amount, premium? }   // CARRIÈRE : depuis le grenier
+    // niveaux : 'Les commandes se remplissent quand vous récoltez.' ; 'Rien au grenier pour cette commande.'
+loadCart(crateIndex)                 → { ok, loaded, full, amount }               // CARRIÈRE : depuis le grenier
+pickCard(cardId)                     → { ok, card: cardInfo, amount?, gift? }     // cardPicked
+    // refus : 'Pas de cadeau à choisir.' ; 'Cette carte n'est pas proposée.' ; carte devenue impossible (plus de place
+    // pour la ruche…) : 'Plus possible : choisissez l'autre carte.'
+keepChallenge(challengeId, keep = true) → { ok, kept: [ids] }
+    // refus : 'Défi inconnu.' ; 'Deux défis au plus.' ; keep = false : 'Ce défi a déjà une médaille.'
+buyFromMerchant(itemId, arg?)        → { ok, item, cost, cosmeticId?, ecusIfOwned?, heirloom? }   // merchantBought
+    // arg : carrière, engrais → lotId (sinon le champ le plus semé) ; refus : 'Le colporteur n'est pas là.' ;
+    // 'Déjà vendu.' ; notEnoughMoney(n) ; 'Le poulailler est plein.' ; 'Plus de place pour une ruche.'
+triggerVariety(kind, arg?)           → { ok, … }   // DÉBOGAGE / tests : 'cart' | 'merchant' | 'cards' | 'challenges' | 'board' | 'theme'
+// Modifiées :
+plant(i, cropId)   // graine rare : il faut rare[cropId] > 0 (sinon 'Plus de graines rares : le colporteur en vend.'),
+                   // coût 0, rare[cropId]−1 ; semis offert (freeSows) : coût 0 ; planted + { rare?, free?, seedsLeft }
+harvest(i)         // + claimed (voir plus haut)
+// Carrière : setPlan(lotId, seasonId, cropId rare) → 'Les graines rares se sèment à la main.' ; semoir et jardiniers
+// ne sèment jamais une graine rare ni un semis offert. acceptOffer(offerId) accepte aussi le visiteur du thème
+// (offer.kind = 'themeVisitor') : cadeau appliqué, offerResolved { outcome: 'accepted', gift }.
+```
+
+### Requêtes
+
+```js
+query.variety() → null | { enabled: true, parts, board: query.orders(), cart: query.cart(), cards: query.cards(),
+  challenges: query.challenges(), merchant: query.merchant(), rare: [{ cropId, name, seeds, sowable }],
+  owned, effects: [{ id, name, icon, text, until, daysLeft }], stats,
+  calendar: [{ kind: 'merchant' | 'cartDeparture' | 'themeFestival' | 'themeVisitor', day, daysUntil, text }] }
+query.orders() → { slots: [orderInfo | { empty: true, text }], canReroll, rerollReason, startsIn /* jours avant le début, niveau 1 */ }
+  orderInfo = { id, clientId, clientName, clientTitle, portrait /* 'portrait.client.<id>' */, text, thanks,
+    lines: [{ cropId, cropName, icon /* 'crop.<id>.icon' */, n, got, left, inStock /* carrière */ }],
+    rate, ratePct, premium /* si complète */, premiumSoFar, kept, started, canDeliver, deliverCount, note }
+query.cart() → null | { id, crates: [{ cropId, cropName, icon, n, got, full, inStock, canLoad }], departDay, daysLeft
+  /* 0 = ce soir */, departText /* « Part ce soir » / « Part le soir du 7ᵉ jour » */, premiumNow, premiumFull, ecusFull, horse }
+query.cards() → { offer: null | { season, seasonName, options: [cardInfo, cardInfo] }, active: [cardInfo + { until, daysLeft }] }
+  cardInfo = { id, name, icon /* 'icon.card.<id>' */, text, kind: 'now' | 'season' | 'next', value? }
+query.challenges() → null | { season, seasonName, options: [challengeInfo × 3], kept, canKeepMore,
+  next: null | { season, seasonName, options: [challengeInfo × 3] } }
+  challengeInfo = { id, name, icon /* 'icon.challenge.<id>' */, text, progress, targets: [b, s, g], medal: 0..3, kept,
+    locked /* a une médaille */, rewards: [{ medal, ecus, coins }] }
+query.merchant() → null | { here, soon, arriveDay, leaveDay, daysLeft, name: 'Basile le colporteur',
+  portrait: 'portrait.merchant', line, stall: [{ itemId, name, icon /* 'item.<id>' ou 'seedbag.<crop>' */, text, price,
+  sold, canBuy, reason, unique, cosmeticId? }] }
+query.plot(i)          // + claim: null | { kind: 'order' | 'cart' | 'quest', id, label: '→ Lili', got, n }
+query.plantableCrops() // + lignes des graines rares possédées : { …, rare: true, seedsLeft, seedCost: 0 } ;
+                       //   + free: n (semis offerts) ; + requested: true (culture demandée au tableau ou à la charrette)
+query.forecast()       // afterTomorrow aussi avec la carte almanac ou l'almanach du colporteur (même champ que le bonus)
+query.finance()        // nextBill.amount tient compte de la carte landlord ; nextBill.reduced: true
+query.summary()        // + variety (voir plus haut)
+query.achievementContext()   // + variety: { ordersDone, cartsFull, medals, rareHarvested }
+// Carrière :
+query.career.theme() → null | { year, id, name, icon /* 'icon.theme.<id>' */, text, star: { kind: 'crop' | 'product',
+  ids, names, factor: 1.25 }, effects: [texte], festival: { name, seasonId, day, daysUntil, done },
+  visitor: { name, portrait /* 'portrait.theme.<id>' */, seasonId, day, done, offerId }, next: null | { id, name } }
+query.career.events()  // calendar : + { kind: 'themeFestival' | 'merchant', … } ; offers : + kind 'themeVisitor'
+query.career.yearReport()  // + variety (compteurs de l'année) et nextTheme
+```
+
+### Événements (seulement quand c'est activé)
+
+| Type | Données | Pour |
+|---|---|---|
+| `ordersRenewed` | `{ reason: 'dawn' \| 'reroll' \| 'start', slots: [orderInfo \| null], added }` | feuilles du panneau, résumé du matin |
+| `orderProgress` | `{ orderId, clientName, cropId, got, n, label, plotIndex?, fromStock? }` | texte flottant « → Lili », bruit de papier |
+| `orderKept` | `{ orderId, clientId, clientName, cropId, auto: true, plotIndex? }` | *(QA du lot 3)* gardée d'office au semis de sa culture : étiquette « Gardée : Lili » sur la parcelle, punaise rouge, mention dans la feuille |
+| `orderDone` | `{ orderId, clientId, clientName, thanks, premium, units }` | pièces vers le compteur, message du client, coche sur le panneau |
+| `orderRemoved` | `{ orderId, clientName, reason: 'declined' \| 'withdrawn', premium }` | message doux |
+| `cartArrived` | `{ cart: cartInfo, text }` | charrette qui arrive, message, conseil `variety.cart` |
+| `cartProgress` / `crateFull` | `{ crateIndex, cropId, got, n, plotIndex?, fromStock? }` / `{ crateIndex, cropId }` | caisse qui se remplit |
+| `cartDeparted` | `{ units, base, premium, allFull, ecus, crates: [{ cropId, n, got }], text }` | charrette qui s'en va, ligne de la fin de saison ; écus → progression |
+| `cardsOffered` | `{ season, seasonName, options: [cardInfo, cardInfo] }` | page « Un cadeau pour la saison » de la fin de saison |
+| `cardPicked` / `cardEnded` | `{ card, amount?, gift? }` / `{ id, name }` | son, animation ; message de fin d'effet discret |
+| `challengesOffered` | `{ season, seasonName, options: [challengeInfo × 3] }` | page « Les défis de … » |
+| `challengeMedal` | `{ challengeId, name, medal: 'bronze' \| 'silver' \| 'gold', ecus, coins }` | message doré, médaille ; écus → progression |
+| `challengesJudged` | `{ season, results: [{ challengeId, medal }] }` | fin de saison |
+| `merchantSoon` / `merchantArrived` / `merchantLeft` | `{ arriveDay, text }` / `{ merchant: merchantInfo, text }` / `{ sold }` | annonce, roulotte, toast « Voir » |
+| `merchantBought` | `{ itemId, name, price, cosmeticId?, ecusIfOwned?, heirloom? }` | décor → `unlockCosmetic` (sinon `ecusIfOwned` écus) |
+| `themeAnnounced` / `themeStarted` | `{ year, theme: themeInfo }` | bilan annuel (« L'an prochain… »), bandeau du printemps |
+| `festival` | + `theme: true` (fête de l'année à thème) | comme les autres fêtes |
+| `offer` / `offerResolved` | `kind: 'themeVisitor'` | visiteur unique du thème |
+| `harvested` | + `claimed: { kind, id, label }` | |
+| `planted` | + `rare`, `free`, `seedsLeft` | badge « Rare » |
+| `dawn` | + `varietyWatered: [index]` ; `incomes[]` : `source: 'cardHen'` | gouttes, texte flottant |
+
+### Migration et sauvegardes
+
+- **Niveaux** : `STATE_VERSION` reste 2. `migrateState` : `s.variety === undefined && s.difficulty === 'detente' &&
+  s.rng` → `newVarietyState()` + flux (`completeVariety`) ; le tableau se remplit à l'aube suivante (`board.startDay` =
+  jour suivant), pas de charrette ni de défis avant la saison suivante, cartes à la fin de la saison en cours. Classique :
+  rien. `s.variety` présent → `completeVariety` (champs ajoutés plus tard).
+- **Carrière** : extension `variety` — `init` (création) et `migrate` (chargement) : `state.variety` absent → activé (comme
+  les surprises) ; `state.career.theme = { year: année en cours, id: null, … }` (pas de thème pour l'année en cours) ;
+  offres `visitor` et `merchant` en cours gardées jusqu'à leur fin (le tirage ne les propose plus). `CAREER_VERSION` ne
+  change pas (champs ajoutés, vérifiés par `check`).
+- **Progression** (`progression.js`, `normalizeProgress`) : `progress.lifetime.variety = { orders: 0, cartsFull: 0,
+  medals: { bronze: 0, silver: 0, gold: 0 }, rare: {} }`, ajouté par `recordRunEnd` (depuis `summary.variety`) et
+  `recordCareerYear` (depuis `report.variety`) ; aucune autre clé, pas de changement de `schema`.
+- Tests : `tests/career-helpers.js` crée ses carrières avec `variety: false` par défaut (comme `surprises`) : les tests
+  existants de carrière restent valables tels quels ; `tests/variety-migration.test.js` vérifie les aller-retours, la
+  migration Détente / Classique / carrière et `checkVariety`.
+
+### Points d'accroche et fournisseurs de carrière (ajouts à `registry.js` / `runtime.js`, CORE)
+
+- Résultat du point d'accroche `harvest` : `{ divert: true, sell: true, label }` (voir « Récolte comptée »).
+- Nouveau fournisseur `seasonChargeFactor(state) → number` (produit) : charges de saison × 0,8 (carte `landlord` en
+  carrière, une fois).
+- Fournisseurs existants utilisés : `priceFactor` (vedette du thème × 1,25 ; carte `poster` récoltes × 1,05 ; carte
+  `recipe` produits × 1,15 ; fêtes du thème ; année des lumières : produits × 1,15 en hiver), `seedFactor` (carte
+  `seedFair` × 0,5 les 3 premiers jours ; thème des géants : citrouille × 0,8 ; thème du pain : blé × 0,8),
+  `effects('growthBonus')` (carte `fertilizer` + 0,1), `extraPlaces(state, 'dairy')` (+1 : visiteur du thème du fromage).
+- Lus directement (gardés par `state.variety` / `state.career.theme`) : `src/core/surprises.js` (chances de qualité × 2
+  avec `clover`, + 1 point / 0,3 point avec `horseshoe` ; chance des géants × 2 année des géants ; heure dorée × 0,5
+  année des grenouilles) ; `src/core/career/events.js` (avec `parts.board` : poids du visiteur 0 ; `parts.merchant` :
+  poids du marchand 0 ; tirage du jour `RANDOM_EVENT_RULES.chanceWithVariety = 0.10` ; thème du tourisme : touristes
+  poids × 2 et × 1,5 par passage ; grenouilles : corbeaux poids × 0,5 ; pêche × 1,5 avec la canne de Firmin) ;
+  `src/core/career/market.js` (année des grands marchés : bornes 0,7 – 1,45) ; `src/core/trees.js` (année des vergers :
+  fruits × 1,2 par aube, carrière seulement) ; `src/core/economy.js` (niveaux : `rentFor` × `rentFactor`, revenus des
+  animaux × 1,15, revenu de la poule voyageuse) ; `src/core/farm.js` (niveaux : récoltes × 1,05 avec `poster`, pousse
+  + 0,1 avec `fertilizer`, prix des graines × 0,5 avec `seedFair`, `plotUnlockCost` = 0 avec `clearing`) ;
+  `src/core/career/land.js` (aménagement suivant × 0,5 avec `clearing`) ; `src/core/career/buildings.js` / `animals.js`
+  (ruche ou poules offertes : mêmes règles de place que l'achat, sans le prix).
+
+### Simulation
+
+- `tools/simulate.js` : `--variety on | off | board,cards,cart,challenges,merchant` (défaut : selon le mode) et
+  `--compare-variety` (sans → avec, même graine ; colonnes : revenu, argent final, victoires, ★★★, et gain par partie :
+  tableau, cartes, charrette, médailles, colporteur). Robots humains (`casual`, `novice`) et `optimal` : comportements du
+  § 16.10 du game design, **par l'API publique** et avec leur propre tirage (jamais les flux du jeu) ; robots scriptés
+  de la parité (Classique) : inchangés. Les robots `careless` / `balanced` / `investor` en Détente : première carte,
+  deux premiers défis, n'achètent rien au colporteur.
+- `tools/simulate-career.js` : mêmes options (+ `themes`), `--compare-variety` (revenu par année, rang médian, Domaine,
+  sollicitations par semaine).
+- Après réglage : seuils d'étoiles Détente recalculés (`src/data/difficulty.js`, tableau du § 13.3 et note « Lot 3 »),
+  tableaux du § 16.10 remplis avec les résultats.
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- Disposition : `layout.variety = { board: rect, cart: rect, crates: [rect × 4], merchant: rect, merchantNpc: point }`
+  (portrait des niveaux : panneau au bord du chemin sous le portail du champ, charrette sur le chemin, roulotte près de
+  la maison ; paysage : mêmes repères autour de la maison et du chemin ; carrière : bande de la maison, près de la boîte
+  aux lettres et de la route). Absents si la variété est désactivée (rien dessiné en Classique).
+- `scene.hitTest` : + `{ type: 'villageBoard' }`, `{ type: 'cart' }`, `{ type: 'merchant' }` (cibles tolérantes ≥ 48 px).
+- Scène : panneau avec 0 à 3 feuilles (`board.note`, `board.note.kept` si gardée, `board.note.done` le jour d'une
+  livraison) lues dans `query.orders()` ; charrette présente tant que `state.variety.cart` existe, caisses devant elle
+  (`crate.empty` ou `crate.<cropId>` quand pleine) ; roulotte et Basile entre `arriveDay` et `leaveDay` ; animations sur
+  `cartArrived` (la charrette arrive par le chemin, ~2 s), `cartDeparted` (elle part), `merchantArrived` / `merchantLeft`
+  (la roulotte arrive / repart), `orderDone` (petite coche qui saute sur le panneau) ; poule voyageuse (carte `hen`, sprite
+  de poule existant) dans la cour ; décor de la fête du thème (`fair.theme.<id>` + guirlandes existantes) ; visiteur du
+  thème qui marche jusqu'au portail (`npc.visitor.*` existants) ; graines rares : `crop.<id>.0..4` et géants. Mouvements
+  réduits : apparitions en fondu, aucun trajet.
+- Nouvelle planche `lot3` dans `SHEETS` et `assets.js` ; `DECOR_SPRITES` : `lantern.peddler`, `weathervane.rooster`,
+  `sign.magazine`.
+
+**UI** (`src/ui/*`, `css/variety.css`, `src/main.js`) :
+- `src/ui/variety.js` : `createVariety(app) → app.variety = { onEvent, openBoard(), openCart(), openMerchant(),
+  openCards(), openChallenges(), seasonPages(ev), reset() }` ; feuilles « Le tableau du village », « La charrette du
+  marché », « Basile le colporteur », « Un cadeau pour la saison », « Les défis de … » (formes au § 16 du game design ;
+  cartes ≥ 72 px, boutons ≥ 48 px, textes ≥ 14 px, portraits 48 px).
+- Fenêtre de fin de saison (`dialogs.js`) en pages : Bilan (existant) + ligne de la charrette + médailles → « Un cadeau
+  pour la saison » (2 cartes) → « Les défis de … » (3 défis, garder 1 ou 2) ; « Plus tard » sur chaque page (pastilles
+  ensuite). Le soir du dernier jour, l'ordre des événements est `cartDeparted`, `billPaid`, `challengesJudged`,
+  `cardsOffered`, `challengesOffered` : la fenêtre se construit à partir de `billPaid` et des événements du même soir.
+- Bilan (niveaux, `panel.js`) et Carnet (carrière, Agenda) : sections Tableau, Charrette, Défis, Cadeau en attente,
+  Effets en cours, Colporteur (date), Thème de l'année (carrière).
+- Feuille des graines (`field.js`) : lignes des graines rares (« Rare · 4 graines », coût 0), badges « Commande » et
+  « Offert » ; fiche de parcelle : `claim` (« À la récolte : → Lili (3 / 5) »).
+- Ligne « À faire maintenant » et résumé du matin (`todo.js`) : commande la plus avancée, arrivée de la charrette,
+  colporteur (veille et jour), cadeau ou défis à choisir.
+- Barre du haut : après-demain (`forecast().afterTomorrow`) avec l'almanach ; fermage réduit (« −20 % »).
+- Récompenses : `cartDeparted.ecus`, `challengeMedal.ecus` → `app.progression.careerEcus(n)` (vaut pour les deux modes,
+  comme au lot 2) ; `merchantBought.cosmeticId` (et `offerResolved.gift.cosmeticId` du thème du tourisme) →
+  `unlockCosmetic` ou `ecusIfOwned`.
+- Conseils « première fois » (`hints.js`) : `variety.board`, `variety.cart`, `variety.cards`, `variety.challenges`,
+  `variety.merchant`, `variety.rare`, `career.theme` (textes dans `VARIETY_HINTS`).
+- Sons : `synth.js` existant (`chime` livraison, `fanfare` charrette pleine et or, `pop` caisse pleine, `reveal` cartes,
+  `magic` colporteur) ; aucun nouveau fichier son requis.
+- Débogage (`?debug=1`) : `__debug.variety.{ state(), board(), fill(slot), cart(), merchant(), cards(), challenges(),
+  theme(id), medal(id, n) }` (passent par `actions.triggerVariety` et les actions publiques).
+
+### Sprites (paquet ART : planche `assets/sprites/lot3.png`, `assets/sprites/generate-lot3.py`, bloc `// <lot3:auto>`)
+
+Même méthode que `generate-lot2.py` (palette Kenney, contour sombre 2 px, lumière en haut à gauche ; tuiles de 16 px).
+Tailles : **16 × 16** sauf mention **32 × 32** (2 × 2 tuiles).
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `board.village` | 32 × 32 | panneau d'affichage du village : deux poteaux, petit toit de bardeaux, planche claire |
+| `board.note`, `board.note.kept`, `board.note.done` | 16 × 16 | feuille de commande épinglée (à poser sur le panneau, 3 places) ; avec punaise rouge ; avec tampon vert « ✓ » |
+| `cart.market`, `cart.market.1` | 32 × 32 | charrette du marché à ridelles tirée par un âne gris, de profil ; 2e image (roues et pattes décalées) pour le trajet |
+| `crate.apple`, `crate.pea`, `crate.melon`, `crate.leek` | 16 × 16 | cagettes pleines manquantes (les autres `crate.<culture>` existent ; `crate.apple` seulement si absente) |
+| `merchant.wagon`, `merchant.wagon.1` | 32 × 32 | roulotte du colporteur (bois peint, auvent rayé rouge et crème, lanterne) ; 2e image : auvent ouvert avec l'étal |
+| `npc.merchant`, `npc.merchant.walk` | 16 × 16 | Basile : grand chapeau, gilet, sac à dos ; debout, en marche |
+| `crop.pea.1` … `crop.pea.4`, `crop.melon.1` … `.4`, `crop.leek.1` … `.4` | 16 × 16 | étapes de pousse (l'étape 0 = graines semées communes) : petits pois (rames et gousses), melon (feuilles rampantes, melon jaune-vert), poireau (fût blanc, feuilles bleu-vert) |
+| `crop.<id>.icon`, `crop.<id>.dead`, `crop.<id>.icon.gold`, `seedbag.<id>`, `sack.<id>` (id = pea, melon, leek) | 16 × 16 | icône de récolte, plant fané, icône dorée (lot 2), sachet de graines, grand sac |
+| `crop.pea.giant`, `crop.melon.giant`, `crop.leek.giant` | 32 × 32 | légumes géants (lot 2) |
+| `portrait.client.<id>` (rose, paulo, lili, garnier, chevalier, fabre, perrin, maire, odette, leon, morel, twins) | 32 × 32 | portraits des 12 clients (style `portrait.joseph`) : fleuriste à fleur au chapeau, boulanger enfariné, fillette à couettes et lapin, instituteur à lunettes, aubergiste au tablier, vieux pêcheur à casquette, musicienne au violon, maire à écharpe tricolore, grand-mère au chignon, facteur à casquette et sacoche, couturière au mètre ruban, jumeaux côte à côte |
+| `portrait.merchant` | 32 × 32 | Basile le colporteur, souriant, chapeau à plume |
+| `portrait.theme.<id>` (margot, anselme, journalist, gaspard, firmin, mathis, jeanne, wholesaler, northpeddler) | 32 × 32 | visiteurs uniques des thèmes : apicultrice voilée, fromager à béret, journaliste à appareil photo, jardinier à médaille, vieux pêcheur barbu, pépiniériste au plant, meunière enfarinée, grossiste à chapeau melon, colporteur du Nord en manteau de fourrure |
+| `icon.board`, `icon.cart`, `icon.cards`, `icon.challenge`, `icon.merchant`, `icon.theme`, `icon.rare` | 16 × 16 | icônes d'onglets et de sections (style de `assets/sprites/ui/icons.png`) |
+| `icon.card.<id>` (purse, seedFair, fertilizer, hen, watering, clover, poster, landlord, bees, crier, cartHorse, clearing, seedBag, recipe, hay, almanac) | 16 × 16 | bourse, sachets « −50 % », sac d'engrais, poule, arrosoir étoilé, trèfle, affiche, clé et pièce, essaim, crieur à cloche, fer et cheval, pelle et souche, sachet doré, livre de recettes, botte de foin, almanach |
+| `icon.challenge.<id>` (harvests, sales, variety, sowing, care, quality, orders, crates, products, apples, animals, collect) | 16 × 16 | panier, pièces, trois légumes, graine, goutte et cœur, étincelle, feuille épinglée, cagette, pot de confiture, panier de pommes, poule, œufs |
+| `medal.bronze`, `medal.silver`, `medal.gold`, `medal.empty` | 16 × 16 | médailles à ruban ; emplacement vide (contour pointillé) |
+| `item.<id>` (fertilizer, usedCoop, hens, usedHive, copperCan, almanac, horseshoe, lantern, weathervane, heirloom) | 16 × 16 | objets du colporteur (les sachets de graines utilisent `seedbag.<culture>`) |
+| `icon.theme.<id>` (bees, cheese, tourism, giants, frogs, orchard, bread, markets, lights) | 16 × 16 | abeille, meule, appareil photo, citrouille géante, grenouille, pomme, pain, balance, lampion |
+| `fair.theme.<id>` (mêmes id) | 16 × 16 | petit stand de la fête du thème (pots de miel, meules, lampions, etc.) posé près de la maison |
+| `lantern.peddler`, `weathervane.rooster`, `sign.magazine` | 16 × 16 | décors trouvés : lanterne de colporteur sur poteau, girouette au coq, panneau « Vu dans le magazine » |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `lot2.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/variety.js`, `src/data/career/themes.js`, `src/data/crops.js` (RARE_CROPS), `src/data/cosmetics.js` (3 décors), `src/data/difficulty.js` (seuils), `src/core/{requests,variety}.js`, `src/core/career/{variety,themes}.js`, `src/core/career/extensions.js` (1 ligne), modifications de `src/core/{game,economy,farm,surprises,trees,stats,progression}.js` et `src/core/career/{runtime,registry,events,market,machines,work,land,buildings,animals}.js`, `tools/simulate.js`, `tools/simulate-career.js`, `tests/*` (nouveaux et `career-helpers.js`) | état, actions, requêtes, événements ci-dessus ; simulation et réglage ; tableaux du § 16.10 et seuils du § 13.3 | rien (commence par un `createGame({ variety })` qui ne fait rien, parité verte, puis ajoute chaque partie) |
+| **ART** | `assets/sprites/generate-lot3.py`, `assets/sprites/lot3.png`, bloc `// <lot3:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau des sprites ; planche de contrôle ×6 | rien |
+| **UI/RENDER** | `src/ui/*` (nouveau `variety.js`), `css/variety.css`, `tools/build.js` (ligne `CSS_FILES` seulement), `src/main.js`, `src/index.template.html`, `src/render/*` (hors bloc `lot3:auto`), nouveau `src/render/variety-actors.js` | feuilles, pages de fin de saison, sections, scène, hit-test, animations, conseils, débogage ; vérification au doigt | CORE : API (factices de même forme en attendant) ; ART : sprites (repli `canDraw`) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `orderInfo`, `cartInfo`, `cardInfo`, `challengeInfo`,
+`merchantInfo`, `themeInfo` et l'ordre des événements du soir (figés ici ; tout écart est noté par CORE dans une section
+« Écarts » sous ce contrat) ; (2) **ART → RENDER/UI** : noms du tableau des sprites (aucun renommage sans prévenir) ;
+(3) **CORE ↔ ART** : identifiants des cultures rares, clients, cartes, défis, objets, thèmes (figés ici) ; (4) intégration
+par le chef de projet : `node --test tests/` (parité comprise), `node tools/simulate.js --compare-variety`,
+`node tools/simulate-career.js --compare-variety`, `node tools/build.js`, vérification au doigt (Pixel 7, 360 × 740 :
+cibles ≥ 48 px, textes ≥ 14 px, aucun débordement ; une année de niveau Détente et une année de carrière avec tableau,
+charrette, cadeau, défis, colporteur et thème), `JOURNAL.md`, sauvegarde `backup/…` avant et après le lot.
+
+### Écarts et précisions (livraison CORE, 2026-10-02)
+
+Tout le contrat est livré ; ce qui suit précise ou s'écarte de ce qui est écrit plus haut (aucun nom ni forme du contrat
+n'est retiré, seulement des champs **ajoutés**).
+
+- **Fichiers en plus** : `src/core/variety-effects.js` (lecture pure des effets en cours : cartes, objets du colporteur,
+  thème ; aucune dépendance vers le cœur, pour que `farm.js`, `economy.js`, `trees.js`, `surprises.js`, `processing.js`
+  et les modules de carrière le lisent sans cycle d'imports) ; `src/core/career/variety-host.js` (hôte de carrière,
+  livraisons depuis le grenier, compteurs de l'année, **sans** enregistrement : `runtime.js` et `game.js` l'importent
+  sans changer l'ordre des extensions). L'extension `variety` est enregistrée explicitement par `extensions.js`, en
+  **dernier** (ordre : surprises, staff, events, quests, animals, machines, work, variety) : la quête de Joseph passe
+  avant le tableau pour les récoltes. Modifiés en plus de la liste : `src/core/processing.js` (carte « recette » des
+  niveaux), `src/core/career/storage.js` (ventes du grenier comptées pour le défi « Bon marché »),
+  `src/data/career/events.js` (`RANDOM_EVENT_RULES.chanceWithVariety = 0.1`).
+- **Atelier d'abord** (§ 16.2.4 du game design) : une récolte qu'un atelier **allumé avec une place libre** transforme
+  part à l'atelier, même si une commande ou une caisse l'attend (le contrat disait « comptée avant `tryProcessHarvest` »).
+  `query.plot(i).claim` vaut alors `null` et `orderInfo.note` = « L'atelier passe d'abord ». Sinon, ordre du contrat.
+- **Point d'accroche `harvest`** : le résultat `{ divert, sell, label }` porte aussi `claimed` (copié dans `harvested`) et
+  `after()`, appelé par `runtime.js` **après** l'événement `harvested` (ordre : `harvested`, puis `orderProgress` /
+  `cartProgress`, `orderDone`, `crateFull`). Les géants (niveaux et carrière) comptent 4 unités, à la main seulement.
+- **Requêtes (champs ajoutés)** : place vide de `query.orders()` : `{ empty, text, delivered?, clientId?, clientName? }`
+  (coche du jour) ; `orderInfo.day` ; `cartInfo.base` ; `query.cards()` : `pending` (cartes « prochaine fois ») et, pour
+  chaque carte en cours, `season` et `current` (effet actif maintenant) ; `query.challenges().next.kept` ;
+  `merchantInfo.daysUntil` et, pour un sachet, `cropId` et `seeds` ; `query.variety()` : `freeSows`, `theme`.
+  `query.career.charges().season` et `finance().nextBill` : `reduced` (ristourne).
+- **État (champs ajoutés)** : `variety.board.done` (livraisons du jour, vidé à l'aube), `variety.fertilizer` (engrais du
+  colporteur des niveaux : `{ left, growth }`), `variety.yearBase` (carrière : compteurs au dernier bilan),
+  `variety.challenges.next.kept`, `variety.season.medals` ; carte « almanach » : `{ id: 'almanac', season: null, until }`.
+  `state.career.theme` : `dairyPlace` et `rod` (cadeaux de l'année) quand ils existent.
+- **Événements (ajouts)** : `themeShower { plots, text }` (averse de l'année des grenouilles) ; `purchased` avec
+  `gift: true` (ruche, poules offertes) ou `used: true` (poulailler, ruche d'occasion) ; `orderRemoved.clientId` et
+  `text` (retrait de saison) ; `billPaid.reduced` ; `cartDeparted.horse` ; `merchantLeft.text`. Carrière : l'ordre du soir
+  est `cartDeparted`, `challengesJudged`, `cardsOffered`, `challengesOffered`, puis `billPaid` (tout se passe dans
+  `evening`, avant les charges de saison) ; niveaux : ordre du contrat.
+- **Le choix d'une carte se fait après l'aube** de la nouvelle saison (la fenêtre de fin de saison s'ouvre quand le jour
+  suivant a commencé) : une carte « saison » vaut donc pour la saison en cours ; « Un cheval de renfort » double la
+  charrette **déjà arrivée** (sinon la prochaine) ; la bourse vaut 12 + 4 × saisons jouées (niveaux).
+- **Carrière** : la carte `hen` donne deux poules tout de suite (`kind: 'now'`, pas de revenu `cardHen`) ;
+  `dawn.varietyWatered` est rempli par `runtime.js` (après le point d'accroche `water`) ; aucun événement au hasard le jour
+  de la fête du thème ; « Plus tard » sur le visiteur du thème = `declineOffer` (il repart sans cadeau) — l'interface peut
+  aussi simplement fermer la fiche (l'offre attend jusqu'à la fin de la saison). La pêche (canne de Firmin) est × 1,5.
+- **Générateur** : « se sème aujourd'hui » = hors serre (saison du jour) ; une charrette n'a que des caisses de cultures
+  différentes (moins de caisses s'il y a moins de cultures faisables) ; caisse ou commande de fruits : au plus 2 paniers
+  par arbre adulte. Défi « Aux petits soins » : pas les arbres ; défi « Bon marché » : ventes de récoltes **et** du
+  grenier (carrière).
+- **Réglages après simulation** (`src/data/variety.js` et `src/data/career/themes.js` font foi ; tableau complet :
+  game design § 16.10.1) : taux des commandes × 1,05 (poids 6), × 1,1 (3), × 1,15 (1) ; plafond de taille
+  ⌊parcelles / 2⌋ ; charrette 5 % + 5 % ; cartes : bourse 12 + 4 × saison (carrière 20 + 10 × rang), engrais + 8 %, poule
+  3 pièces, arrosoir magique 3 parcelles (carrière 4), affiche + 4 %, recette et foin + 10 %, sachet 3 graines (carrière 6),
+  défrichage de carrière − 25 % (`CARD_VALUES.clearing.careerFactor` ; le champ d'état garde son nom `clearingHalf`) ;
+  défis plus exigeants (voir `CHALLENGES`) ; médailles de carrière `careerCoins` 4 / 8 × rang (`MEDALS`) ; sachets de
+  graines rares de carrière : 8 semis ; averse de l'année des grenouilles : 15 %. Seuils d'étoiles Détente recalculés
+  (`src/data/difficulty.js`, § 13.3).
+- **Simulation** : `tools/simulate.js --variety …`, `--compare-variety`, `--stars` (seuils suggérés) ; les décisions des
+  joueurs simulés sont exportées (`varietyChoices`, `varietyDay`, `sowRare`) et réutilisées par
+  `tools/simulate-career.js` (`--variety …`, `--compare-variety`).
+
+## Lot 3 — rendu et interface (UI/RENDER, 2026-10-02)
+
+Code contre le contrat ci-dessus (« Lot 3 — contrats »). Tout est gardé par `state.variety` : en Classique (clé
+absente) rien n'est dessiné, aucune ligne « À faire », aucune section, aucun badge. Un sprite du lot 3 absent → repli
+dessiné (canvas) ou icône de la planche de l'interface (`spriteAny`). Mouvements réduits respectés partout.
+Styles : **`css/variety.css`** (ajoutée à `CSS_FILES`). Tests : `tests/lot3-render.test.js`.
+
+```
+src/ui/variety.js          createVariety(app) → app.variety : onEvent, frame, reset, openBoard, openCart, openMerchant,
+                           openCards, openChallenges, openTheme, onHit(hit), seasonPages(ev), seasonSummary(ev),
+                           todoItems(game), statsSection(game), agendaSections(ui), yearLines(report), pendingChoice(game),
+                           plotRows(plot), seedChips(crop), enabled(game), debugState()
+src/render/variety-actors.js  varietySpots(layout) (pur) ; createVarietyActors(effects) : sync, onEvent, update,
+                           collect(push) (objets triés par profondeur avec la scène), hitTest(wx, wy, slop), clear, shift
+src/render/scene.js        acteurs du lot 3 dans les deux modes ; layout.variety posé à la première synchronisation ;
+                           hitTest + { type: 'villageBoard' | 'cart' | 'merchant' | 'themeVisitor', offerId } ;
+                           scene.varietySpots(), scene.varietyStats() ; images de repli (entrée e.img : alpha, miroir)
+src/main.js                app.variety ; onGameEvent → app.variety.onEvent ; planche « lot3 » facultative au chargement
+                           (OPTIONAL_SHEETS : le jeu démarre sans elle) ; __debug.variety (alias __debug.lot3)
+```
+
+- **Scène** : panneau du village (2 × 2 tuiles) au bord du chemin sous le portail du champ (portrait et paysage : à
+  droite du portail, sinon à gauche ; la ligne du haut peut chevaucher la clôture ; jamais sur une parcelle, un chemin,
+  un bâtiment ni un emplacement de décor — vérifié pour les 12 niveaux et la carrière) ; carrière : bande de la maison,
+  à droite du chemin du champ de départ. 0 à 3 feuilles (`board.note`, `.kept`, `.done` le jour de la livraison, d'après
+  `query.orders()` et `slot.delivered`), petit saut de la feuille sur `orderProgress` / `orderDone` (+ étincelles,
+  « +N »). Charrette garée sur la route à droite (l'âne regarde à droite : elle arrive par la gauche en ~2 s, repart à
+  droite), caisses devant elle (`crate.empty`, `crate.<culture>` quand pleine, étincelles sur `crateFull`). Roulotte de
+  Basile sur la route à gauche (`merchant.wagon.1` auvent ouvert une fois garée), Basile debout à côté. Visiteur unique
+  du thème (carrière) près du panneau tant que son offre est ouverte (toucher → sa fiche) ; stand `fair.theme.<id>` le
+  jour de la fête du thème ; poule voyageuse (carte `hen`, sprite `animal.chicken`) dans la cour ; gouttes sur les
+  parcelles arrosées par l'arrosoir (`dawn.varietyWatered`). Textes flottants « → Lili » / « → charrette » au-dessus
+  de la parcelle récoltée. Mouvements réduits : fondus, aucun trajet, la poule ne marche pas. Toucher : en plein d'abord,
+  la tolérance du doigt (≥ 48 px) seulement après les parcelles et les bâtiments.
+- **Feuilles** (pause pendant la lecture, contenus « vivants » reconstruits seulement si la requête a changé) :
+  « Le tableau du village » (3 cartes ≥ 96 px : portrait 48 px, prénom et métier, phrase, lignes « 2 / 5 carottes » avec
+  barre lue, prime « +19 », « Garder » (punaise, `aria-pressed`), « ✕ » 48 × 48 lu « Pas pour moi », « Livrer depuis le
+  grenier (3) » en carrière ; carte « merci » d'une commande livrée ; « ↻ Autres demandes (gratuit) » / « … : demain ») ;
+  « La charrette du marché » (une rangée par caisse, « Charger (2) » en carrière, primes au départ) ; « Basile le
+  colporteur » (tuiles ≥ 72 px, confirmation au-delà de la moitié de l'argent, « Vendu ») ; « Un cadeau pour la saison »
+  (2 grandes cartes, effets en cours) ; « Les défis de … » (cartes ≥ 72 px, 3 pastilles de médaille, « Garder ») ;
+  thème de l'année (carrière).
+- **Fin de saison** : niveaux — `dialogs.seasonEnd` affiche la ligne de la charrette et les médailles de la saison,
+  puis enchaîne (fenêtre remplacée, `replace`) les pages `app.variety.seasonPages()` : « Un cadeau pour la saison » puis
+  « Les défis de … », chacune avec « Plus tard » (le choix attend : pastille sur l'onglet Bilan, ligne « À faire »
+  discrète). Victoire : même résumé. Carrière (pas de fenêtre de fin de saison) : fenêtre courte « Fin de … » ouverte par
+  `app.variety.frame()` après `cardsOffered` / `challengesOffered`, quand aucune autre fenêtre n'est ouverte.
+- **Ailleurs** : section « Le village » en tête du Bilan (niveaux) et de l'Agenda du Carnet (carrière) : thème,
+  cadeau en attente, tableau, charrette, défis, colporteur, effets en cours, graines rares ; « À faire maintenant » :
+  la commande la plus avancée (« Lili attend 2 carottes »), livraison / chargement depuis le grenier, charrette,
+  Basile (veille et jours de passage), cadeau et défis à choisir (priorités basses : jamais de relance insistante) ;
+  résumé du matin : nouvelles commandes, charrette arrivée, Basile (veille, arrivée), arrosoir ; feuille des graines :
+  « Rare · 4 graines », « Offert », « Commande » ; fiche de parcelle : « À la récolte : → Lili (3 / 5) » ; barre du
+  haut : « −20 % » sur le fermage réduit (`nextBill.reduced`) ; bilans : postes « Surprises » et « Le village ».
+  Bilan annuel de la carrière : compteurs du village et « L'an prochain : … ! ».
+- **Récompenses** : `cartDeparted.ecus`, `challengeMedal.ecus` → `progression.careerEcus` ; `merchantBought.cosmeticId`,
+  `cardPicked.gift`, `offerResolved.gift` (thème) → `unlockCosmetic` (ou `ecusIfOwned`). `DECOR_SPRITES` : les trois
+  décors du lot ; `decor.js` dit où les trouver.
+- **Sons** (synth existant) : `chime` commande livrée, `fanfare` charrette pleine et médaille d'or, `pop` caisse pleine,
+  `reveal` carte gardée, `magic` Basile ; bruit de papier (`page`) quand une récolte part à une commande.
+- **Débogage** (`?debug=1`) : `__debug.variety` (= `__debug.lot3`) `.{ on(), state(), trigger(kind, arg), board(), cart(),
+  merchant(), cards(), challenges(), theme(id), medal(id, n), fill(slot), open(kind), seasonEnd(), point(kind), ui(),
+  stats() }` — `trigger` et ses raccourcis passent par `actions.triggerVariety` du cœur ; `fill(slot)` remplit une
+  commande par de vraies récoltes à la main.
+
+### Corrections après la QA (2026-10-02)
+
+- **Défis** (`src/core/variety.js`) : `challengePossible` = condition du défi **et** `challengeTargets(...) !== null` ;
+  `challengeTargets` rend des paliers strictement croissants, ou `null` quand un plafond (`challengeCap` : cultures
+  récoltables / semables de la saison, nombre de caisses) les écraserait ; `minTarget` (données) : bronze minimal
+  (2 pour « Potager varié » et « Semeur curieux »). Règle : game design § 16.5.
+- **Gardée d'office** : `autoKeepOrders(host, cropId, plotIndex)` appelé par `plant` (niveaux) et `runtime.plant`
+  (carrière, `by === 'player'` seulement) ; événement `orderKept`.
+- **Messages** : deux au plus, pastille « +N », boutons d'action seuls touchables (voir « Messages (`toasts.js`) »).
+- **Visiteur du thème** : `varietySpots().visitor` à **gauche** du panneau (le stand de fête recule d'une tuile) ; ligne
+  « À faire » « Un visiteur vous attend : … » qui amène la vue sur lui (`scene.focusWorld`) et l'entoure ;
+  `app.worldPageRect(r)` (main.js).
+
+### Intégration CORE ↔ UI/RENDER (2026-10-02)
+
+- `triggerVariety('medal', { challengeId, medal })` (débogage, cœur) : défi proposé de la saison en cours, gardé s'il
+  reste une place, compteurs amenés au palier `medal` (1 à 3), puis `checkMedals` (récompense, statistiques,
+  `challengeMedal`). Refus : `'Pas de défis cette saison.'`, `'Ce défi n'est pas proposé.'`, `'Deux défis au plus.'`.
+  C'est le chemin de `__debug.variety.medal(id, n)`.
+- Textes des défis : `{s}` = marque du pluriel selon `{n}` (« Remplir 1 caisse », « Remplir 2 caisses »).
+- `harvested` : avec `claimed` (lot 3), `src/render/effects.js` montre les pièces (récolte vendue) et laisse l'étiquette
+  « → Lili » / « → charrette » à `variety-actors.js` (une par destination toutes les 0,9 s) ; sans `claimed`,
+  `diverted` (texte du cœur, « → Joseph ») est affiché tel quel.
+- Interface : `themeShower` → résumé du matin, gouttes sur `plots` ; `purchased.gift` / `used` → « offerte » /
+  « d'occasion » ; la roulotte, la charrette et le visiteur du thème se touchent dès leur apparition (aussi pendant
+  leur trajet) ; fenêtre courte de la carrière titrée d'après la saison qui se termine (connue le soir).
+- Débogage : `__debug.variety.point('visitor')` (visiteur du thème).
+
+## Lot 4 — contrats (CORE · ART · UI/RENDER, conception 2026-10-03)
+
+Album de la ferme (D1), lanternes de fin d'année (D3), « aider sans remplacer » en carrière (F1), fêtes participatives
+(C6), hiver vivant (C8). Règles chiffrées et contenus (cases, anecdotes, histoires, barèmes) : `docs/GAME_DESIGN.md`
+§ 17. Ce qui suit fixe les **noms, formes et comportements** que les trois paquets se promettent ; tout est **ajouté**
+(rien du contrat existant n'est retiré ni renommé, sauf les quelques chiffres de carrière listés au § « Données »). Tant
+que CORE n'a pas livré, UI/RENDER simulent les requêtes avec des objets factices de la même forme ; tant qu'ART n'a pas
+livré, RENDER/UI dessinent un repli (`canDraw`, `spriteAny`, comme aux lots 2 et 3).
+
+### Règles communes
+
+- **Parité Classique** : `createGame` en Classique sans option `cozy` ne crée **ni** `state.cozy` (clé absente), **ni**
+  flux aléatoire, **ni** événement, **ni** champ de requête nouveau — **sauf** `query.achievementContext().weather`
+  (lecture de `state.weather.today`, sans effet ; sert à l'album). `tests/parity.test.js` et `tools/capture-parity.js`
+  inchangés et verts. Toute règle du lot est gardée par `state.cozy` (et `state.cozy.parts.<partie>`).
+- **L'album n'est pas dans l'état de la partie** : il vit dans la progression (`progress.album`), calculé par
+  `src/core/album.js` à partir du contexte de la partie (`query.achievementContext()`, `query.summary()`,
+  `query.career.yearReport()`) et de la progression. Il se remplit donc aussi en Classique sans toucher à la partie.
+- **Aléatoire** : un flux **nouveau**, `state.rng.cozy` (`hashSeed(seed, 'cozy')`), créé seulement quand le lot est actif :
+  cachettes et objet doré de la chasse (9 nombres par chasse), trouvaille d'hiver (5 nombres à **chaque** aube d'hiver,
+  qu'il y ait de la place ou non), oiseau de la mangeoire (1 nombre à chaque aube qui suit un remplissage), villageois des
+  paniers (3 nombres). Météo, marché, maladie, `career`, `staff`, `events`, `quality`, `surprise`, `sky`, `orders`,
+  `variety` tirent **le même nombre** de nombres qu'avant. Les règles F1 ne tirent rien.
+- **Pur** : `src/data/{album,cozy}.js`, `src/core/{album,lanterns,cozy}.js`, `src/core/career/{cozy,handwork}.js`
+  n'importent ni DOM ni horloge (`now` passé en argument dans la progression, comme `unlockAchievements`).
+- **Jour absolu** : `absDay(state)` de `src/core/surprises.js` ; **produit cette année** : compteurs `state.cozy.year`
+  (niveaux : depuis le début de la partie ; carrière : depuis le dernier bilan annuel).
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (texte français). Identifiants en anglais, textes en français.
+
+### Fichiers
+
+```
+src/data/album.js           (nouveau, pur) ALBUM_VERSION, ALBUM_PAGES (11 pages, 124 cases : id, name, icon, mode
+                            'all' | 'dc' | 'career', hint, text, stamps, check), ALBUM_EXTRA_REWARDS (page dorée, page des
+                            géants, page des grandes années), ALBUM_COMPLETE_REWARD, STORIES (12 : id, title, lines[3]),
+                            RESERVED_PAGE_IDS = ['heirlooms', 'wildlife'] (lot 5), textes
+src/data/cozy.js            (nouveau, pur) COZY_VERSION, COZY_PARTS, LANTERN_CRITERIA (5 : id, name, color, icon),
+                            LANTERN_RULES { levels, career } (mesures, points, paliers), LANTERN_REWARDS,
+                            FETES (calendrier niveaux / carrière : id, engine, seasonId, day | 'last', rank, levels, career,
+                            name, texts), FETE_ENGINES (chasse : count 8 ; marmite : max 3 ; etal : slots 5 ; paniers : 3 × 2),
+                            FETE_REWARDS (niveaux ; carrière × careerFactor(rang) = 1 + 0,5 × (rang − 1)), SOUP_CROPS,
+                            STAND_POINTS, RIBBONS, BASKET_LIKES (produit aimé de chaque client), THEME_FETE_GAMES (9),
+                            SEED_FAIR (pack 8, discount 0,25, perCrop 4, max 20), WINTER_FINDS, TRACES (chance 0,4),
+                            BIRDS (8 : poids, minFills), FEEDER, STORY (day 3, ecus 1), F1 { handBonus 1.25,
+                            machineDelay 2, staffDelay 4, weedFine 0.01, weedGold 0.003, migrateRipeBack 4 }, COZY_HINTS
+src/data/achievements.js    + COZY_ACHIEVEMENTS (12, category 'cozy', écus seulement) ; ALL_ACHIEVEMENTS les inclut
+src/data/cosmetics.js       + 21 décors `found: true`, price 0 : 15 de l'album (scarecrow.flower, can.golden, barrow.giant,
+                            jam.shelf, weathervane.pig, sundial, lantern.fairy, pump.village, bunting.post, arch.fete,
+                            woodpile, heron.wood, rocking.chair : 'small' ; herbarium : 'large') et 6 des lanternes
+                            (lantern.green, lantern.blue, lantern.pink, lantern.yellow, lantern.orange : 'small' ;
+                            lantern.grand : 'large')
+src/data/career/career.js   HAND_BONUS 1.1 → 1.25 (lu aussi par F1.handBonus : une seule source, career.js fait foi)
+src/data/career/lots.js     greenhouse : rank 3 → 2, cost 800 → 500, sans `phase` ; pond : rank 4 → 3, cost 400 → 300, sans `phase`
+src/data/career/buildings.js, animals.js   duckPond et duck : rang 4 → 3
+src/data/career/events.js   CALENDAR_EVENTS : `seedFair` passe au **dernier jour de l'hiver** (`seasonId: 'winter',
+                            day: 'last'`, plus de `seedFactor` : c'est la foire du lot 4) ; nouvelle entrée `springFete`
+                            (printemps, jour 3, rang 1, sans facteur) ; `christmasMarket` : rang 2 → 1 (facteurs gardés au rang 2)
+src/data/career/staff.js, machines.js, descriptions.js   textes du jardinier, de la moissonneuse, de la cueilleuse, de la serre
+src/data/difficulty.js      seuils d'étoiles Détente recalculés après simulation (§ 13.3)
+src/core/album.js           (nouveau, pur, côté progression) faits, vérification, pages, récompenses, rattrapage
+src/core/lanterns.js        (nouveau, pur) lanternsFor(facts, mode, level?) → valeurs des 5 critères
+src/core/cozy.js            (nouveau, partagé niveaux / carrière) état, activation, migration, vérification ; aube et soir ;
+                            moteurs des fêtes ; hiver ; compteurs de l'année ; faits des lanternes ; requêtes
+src/core/career/handwork.js (nouveau, pur, sans enregistrement) F1 : ripeAt, helpersMayHarvest, désherbage, prime
+src/core/career/cozy.js     (nouveau) extension de carrière id 'cozy' (points d'accroche ci-dessous), enregistrée en
+                            DERNIER par extensions.js (après variety)
+src/core/career/extensions.js  + l'enregistrement de cozyExtension (après varietyExtension)
+tests/album.test.js, tests/lanterns.test.js, tests/cozy.test.js, tests/cozy-career.test.js, tests/f1.test.js,
+tests/cozy-migration.test.js  (nouveaux)
+assets/sprites/generate-lot4.py → assets/sprites/lot4.png + bloc « // <lot4:auto> » d'atlas.js  (ART)
+src/ui/album.js, src/ui/cozy.js, css/cozy.css  (UI ; css/cozy.css ajoutée à CSS_FILES de tools/build.js)
+src/render/cozy-actors.js   (RENDER : objets cachés, trouvailles d'hiver, traces, mangeoire et oiseau, porte-lanternes,
+                            fenêtre de la veillée, stands des fêtes, maire et Lili)
+```
+
+Modifiés (CORE) : `src/core/{game,stats,progression,surprises,variety}.js`, `src/storage.js`,
+`src/core/career/{runtime,work,machines,events,save,land}.js`, `tools/{simulate,simulate-career,sim-career-staff}.js`,
+`tests/career-helpers.js` (carrières de test créées avec `cozy: false` par défaut, comme `surprises` et `variety`).
+
+### Activation et options
+
+```js
+createGame({ levelId, seed, perks, difficulty, surprises, variety, cozy })
+//   cozy : undefined → activé si difficulty !== 'classique' (clé ABSENTE en Classique)
+//          true → toutes les parties ; false → state.cozy = null (gardé tel quel à la reprise)
+//          { lanterns, fetes, winter, decor } → parties à true (absentes = true) ;
+//          decor = { placed: n, path: bool, fence: bool } : résumé du décor de la progression AU LANCEMENT
+//          (critère « beauté » des niveaux ; copié dans state.cozy.decor comme les bonus permanents)
+createCareer({ …, cozy })   // défaut true ; même forme + partie helpers (F1) ; le décor est lu dans state.career.cosmetics
+game.cozy                   // booléen (accesseur, comme game.surprises / game.variety)
+```
+
+`COZY_PARTS = ['lanterns', 'fetes', 'winter', 'helpers']` (`helpers` : carrière seulement).
+
+### État (`state.cozy`, `null` ou absent quand c'est désactivé)
+
+```js
+state.cozy = {
+  v: 1,
+  parts: { lanterns: true, fetes: true, winter: true, helpers: true },
+  decor: { placed: 0, path: false, fence: false },     // niveaux : copie au lancement ; carrière : non utilisé
+  year: {                                   // compteurs de l'année (lanternes, fêtes)
+    since: 1,                               // jour absolu du début du comptage
+    partial: false,                         // l'année a commencé avant le lot 4 (migration)
+    harvests: 0, hand: 0, cared: 0, handBonus: 0,       // carrière : hand = à la main ; niveaux : hand = harvests
+    produced: { crops: {}, products: {}, animal: {} },  // id → n : « ce que la ferme a produit cette année »
+    fine: {}, gold: {}, giants: {},                     // cropId → n (badges de qualité des fêtes)
+    fetes: {},                              // feteId → { engine, score, ribbon?, ladles?, eggs?, hearts?, day }
+    hearts: 0, story: false, feederDays: 0, birds: {}, finds: 0,
+    quests: 0, visitor: false, patrimonyStart: 0,       // carrière
+    animalCollected: 0,                     // carrière : valeur ramassée (abris) ; la perte est work.year.lostAnimals
+  },
+  fete: null | {                            // fête du jour (null hors fête)
+    id, engine: 'chasse' | 'marmite' | 'etal' | 'paniers' | 'foire', themeId: null | themeId, day,
+    hidden: null | [{ u /* 0..1, cachette */, gold: bool, found: null | 'player' | 'village' }],   // chasse (8)
+    villagers: null | [clientId, clientId, clientId],   // paniers
+    done: false, result: null | { score, ribbon?, ladles?, hearts?, amount, ecus, items },
+  },
+  stand: null | { year, ribbon, score },    // carrière : stand de la fête des récoltes, gardé pour le comice
+  winter: {
+    finds: [{ id, kind, u, day }],          // 3 au plus
+    traces: [{ kind, u, day }],             // traces du jour (jour de neige)
+    feeder: { filledDay: 0, bird: null | { id, day } },
+    storyDay: 0,                            // jour absolu où la veillée devient possible (0 : pas cet hiver)
+    nextId: 1,
+  },
+  seedBank: {},                             // carrière : cropId → semis prépayés (foire aux graines)
+  lanterns: null | { history: [{ year, values: [5], total, partial }] },   // carrière : 10 dernières années
+  stats: {                                  // cumul de la partie (niveaux) ou de la carrière : album, succès
+    eggs: 0, eggsGold: 0, eggsAll: 0, fetes: {}, ribbons: { green: 0, blue: 0, gold: 0 }, ladles3: 0, hearts: 0,
+    finds: {}, traces: {}, birds: {}, fish: {}, seedPacks: 0, handPicked: 0, handBonus: 0, weeded: 0,
+    themesPlayed: {},                       // themeId → fêtes de thème jouées (tampon 🎪 de l'album)
+  },                                        // (les histoires de Joseph se comptent dans la progression : progress.album.stories)
+}
+// Carrière, parcelles (seulement avec parts.helpers) : ripeAt (jour absolu de la maturité, sur une parcelle mûre ;
+// effacé quand elle ne l'est plus) ; weeded: true (culture en pousse désherbée ; effacé par clearPlot).
+```
+
+`checkCozy(state) → null | 'problème'` (appelé par `checkState` des niveaux et par `check` de l'extension) : version,
+identifiants connus (fêtes, moteurs, trouvailles, oiseaux, clients, cultures, produits), entiers ≥ 0, `0 ≤ u < 1`,
+8 objets cachés au plus, 3 trouvailles au plus, 3 villageois, `seedBank` entiers ≥ 0, `ripeAt` ≤ jour absolu.
+
+### Déroulé (niveaux : `src/core/game.js` ; carrière : extension `cozy` + `runtime.js`)
+
+**Aube** (niveaux), après les étapes du lot 3 (`varietyDawn`) : `cozyDawn(host, { newSeason }) → events` :
+1. nouvelle saison d'hiver : mangeoire posée, `winter.storyDay` = jour absolu du 3ᵉ jour d'hiver ; fin de l'hiver (niveaux :
+   sans objet ; carrière : printemps) : trouvailles et traces effacées ;
+2. **fêtes** : veille d'une fête du calendrier → `feteSoon` ; jour d'une fête → `state.cozy.fete` créée (chasse : 9 tirages
+   `cozy`), `feteStarted` ;
+3. **hiver** (parts.winter, saison d'hiver) : 5 tirages `cozy` ; une trouvaille ajoutée s'il y a moins de 3 trouvailles ;
+   un jour de neige, une trace avec 40 % ; `winterFind` ; si la mangeoire a été remplie la veille : 1 tirage, oiseau du
+   jour, `feederBird` ; au 3ᵉ jour d'hiver : `storyReady`.
+Les événements du lot sont émis après ceux du lot 3.
+
+**Soir** (niveaux), dans `endOfDay`, avant la charrette et le fermage : jour de fête → objets cachés non trouvés
+« trouvés par le village » (pièces versées), `feteEnded` ; `state.cozy.fete = null` à l'aube suivante. **Dernier soir de
+l'année** : après `billPaid` et `challengesJudged`, **avant** `victory` : `lanternsLit` (valeurs dans
+`state.result.lanterns` et `summary.cozy.lanterns`). Faillite (Détente, rare) : `lanternsLit` avant `bankrupt` aussi.
+
+**Pendant la journée** : récolte (compteurs `year.harvests`, `hand`, `cared`, `produced`, `fine`/`gold`/`giants`) ; produits
+vendus et revenus des animaux (`produced.products` / `produced.animal` : niveaux : `eggs` si un poulailler a rapporté,
+`milk` si une vache ou une chèvre, `wool` à la tonte) ; actions des fêtes et de l'hiver.
+
+**Carrière** (extension `cozy`, enregistrée après `variety`) :
+- `seasonStart` → point 1 ; `springFete` / fêtes du calendrier et du thème (lues dans `CALENDAR_EVENTS` et le thème du
+  lot 3) → point 2 ; `dawnEvents` → point 3 ;
+- `dawn` (fin de l'aube) → **F1** : `ripeAt` posé sur chaque parcelle qui vient de mûrir (`handwork.markRipe(state)`),
+  effacé sur les autres ;
+- `evening` → fin de fête (`feteEnded`) ; **dernier jour de l'automne** : le comice (extension `events`) lit
+  `state.cozy.stand` (bonus + 25 % / + 50 % d'un prix d'épreuve) ;
+- `yearEnd` → lanternes de l'année (`lanternsFor(cozyFacts(state), 'career')`), `report.cozy = { lanterns, fetes,
+  winter, handPicked, handBonus }`, `lanternsLit` (avant l'événement `yearEnd`), historique, compteurs remis à zéro,
+  `year.patrimonyStart` = patrimoine du bilan.
+- Ordre du dernier soir d'hiver (carrière) : `feteEnded` (foire), lot 3 (charrette, défis, cartes), charges, puis le bilan
+  (`lanternsLit`, `yearEnd`).
+
+### F1 — aider sans remplacer (carrière, `src/core/career/handwork.js`)
+
+```js
+markRipe(state)                              // aube : ripeAt = absDay pour toute parcelle mûre qui n'en a pas ; efface sinon
+helpersMayHarvest(state, i, who)             // who : 'machine' | 'staff' → bool
+//   true si : pas de parts.helpers (ancien comportement) ; ou absDay − ripeAt ≥ F1.machineDelay (3) / F1.staffDelay (4) ;
+//   ou dernier jour de l'automne et la culture gèlerait demain (hors serre) ; le géant garde la règle du lot 2
+//   (giantOpenToHelpers, 3 aubes) et n'est pas concerné par ripeAt.
+weedable(state, i) / weed(api, i, staff)     // culture en pousse, pas un arbre, pas encore désherbée → weeded = true
+weedQualityBonus(plot) → { fine: 0.01, gold: 0.003 } | null   // lu par rollQuality (src/core/surprises.js), à la main seulement
+```
+
+- `src/core/career/machines.js` (`eligible`, `harvest` et `pick`) et `src/core/career/work.js` (`gardenAction`,
+  `harvest`) appellent `helpersMayHarvest`. Ordre des passes du jardinier : `['chase', 'water', 'weed', 'sow',
+  'harvest']` ; tâche `weed` (même durée qu'une action, 1 XP, événement `weeded { plotIndex, by }`, `taskDone { kind:
+  'weed' }`).
+- `runtime.js` : `HAND_BONUS` (1,25) ; `harvested` gagne `handBonus` (pièces de la prime à la main, comprises dans
+  `amount`) et `waited` (aubes depuis la maturité) ; compteurs `cozy.year.hand`, `handBonus`, `cozy.stats.handPicked`.
+- Comice (`src/core/career/events.js`) : les épreuves `harvest` / `harvests` ne comptent que les récoltes `by ===
+  'player'` quand `state.cozy?.parts.helpers` ; prix : + 25 % (ruban bleu) / + 50 % (rosette d'or) d'un prix d'épreuve si
+  `state.cozy.stand.year` = année du comice ; `contestAwarded` gagne `standBonus`.
+- Migration : à `migrate`, parcelles déjà mûres → `ripeAt = absDay − F1.migrateRipeBack` (4).
+
+### Actions (`game.actions.*`, les deux modes, seulement quand c'est activé)
+
+```js
+feteFind(index)               → { ok, index, gold, amount, found /* par le joueur */, total }      // chasse (œufs, lampions…)
+    // refus : 'Pas de chasse aujourd'hui.' ; 'Objet inconnu.' ; 'Déjà trouvé !'
+cookSoup(items)               → { ok, ladles, amount, ecus, text }        // items : [{ kind: 'crop', id }] × 1..3
+    // refus : 'Pas de soupe aujourd'hui.' ; 'Déjà goûtée : merci !' ; 'De 1 à 3 légumes différents.' ;
+    //         '{Nom} : pas récolté cette année.' ; '{Nom} : pas dans cette soupe.'
+presentStand(items)           → { ok, score, ribbon: 'green' | 'blue' | 'gold', amount, ecus, detail: [{ item, points }] }
+    // items : [{ kind: 'crop' | 'product' | 'animal', id }] × 1..5 (6 au Grand marché), tous différents
+    // refus : 'Pas de stand aujourd'hui.' ; 'Déjà présenté : bravo !' ; 'De 1 à 5 produits différents.' ;
+    //         '{Nom} : pas produit cette année.'
+giveBaskets(baskets)          → { ok, hearts, perBasket: [n, n, n], amount, ecus }   // [[item, item?] × 3]
+    // refus : 'Pas de paniers aujourd'hui.' ; 'Déjà offerts : merci !' ; 'Un produit au moins dans chaque panier.' ;
+    //         'Un même produit une seule fois.' ; '{Nom} : pas produit cette année.'
+buySeedPack(cropId)           → { ok, cropId, seeds, cost, bank }        // CARRIÈRE, foire aux graines
+    // refus : 'La foire aux graines n'est pas aujourd'hui.' ; 'Ce sachet n'est pas proposé.' ;
+    //         '4 sachets au plus par culture.' ; '20 sachets au plus.' ; notEnoughMoney(n)
+pickWinterFind(findId)        → { ok, kind, name, amount }               // refus : 'Rien à ramasser ici.'
+fillFeeder()                  → { ok }                                    // refus : 'La mangeoire sort en hiver.' ; 'Déjà remplie aujourd'hui.'
+hearStory()                   → { ok }                                    // refus : 'Pas de veillée en ce moment.' ; 'Déjà écoutée cet hiver.'
+triggerCozy(kind, arg?)       → { ok, … }   // DÉBOGAGE / tests : 'fete' (id), 'winter', 'bird' (id), 'trace' (kind),
+                                            //   'story', 'lanterns', 'ripe' (carrière : ripeAt reculé de arg aubes)
+// Modifiées :
+plant(i, cropId)   // carrière : la réserve de graines d'abord (coût 0) → planted + { fromBank: true, bankLeft }
+harvest(i)         // carrière : + handBonus, waited
+```
+
+Les récompenses en **pièces** sont versées par le cœur (niveaux : statistique `cozyIncome`, année et saison, créée
+seulement quand il y en a, comptée dans `summary.net` ; carrière : poste `fetes` du bilan, et `other` pour l'hiver) ; les
+**écus** et l'histoire sont versés par l'interface via la progression (comme les médailles du lot 3).
+
+### Requêtes
+
+```js
+query.cozy() → null | { enabled: true, parts, fete: query.fete(), upcoming: [{ id, name, engine, seasonId, day, daysUntil, text }],
+  winter: query.winter(), lanterns: query.lanterns(), seedBank: [{ cropId, name, icon, n }], stats }
+query.fete() → null | feteInfo
+  feteInfo = { id, name, engine, themeId, icon /* 'icon.fete' ou 'icon.theme.<id>' */, text, rules: [texte], day, done, result,
+    hidden: null | { kind: 'egg' | 'lampion' | 'frog' | 'lantern', items: [{ index, u, gold, found }], foundByPlayer, total },
+    choices: null | [itemInfo],       // marmite, etal, paniers : ce que la ferme a produit cette année (filtré par le moteur)
+    max: null | n,                    // 3 (marmite), 5 ou 6 (etal), 2 par panier
+    villagers: null | [{ clientId, name, portrait /* 'portrait.client.<id>' */, likes: [{ kind, id, icon }] }],
+    stalls: null | [{ id, name, packs: [{ cropId, name, icon, seeds, price, bought, canBuy, reason }] }] }   // foire
+  itemInfo = { kind: 'crop' | 'product' | 'animal', id, name, icon, quality: 'normal' | 'fine' | 'gold', giant, star, homemade }
+query.fetePreview(items) → { score?, ladles?, ribbon?, hearts?, amount }   // pur : aperçu en direct avant de valider
+query.winter() → null | { finds: [{ id, kind, name, icon, u }], traces: [{ kind, name, icon, u }],
+  feeder: { here, canFill, filledToday, bird: null | { id, name, icon } }, story: { available, heard } }
+query.lanterns() → null | { criteria: [{ id, name, icon, color, measure /* texte court */, value, lit /* 1..4 */,
+  next: null | { need, text } }], total, partial }          // l'année en cours (aperçu « Bilan », Carnet)
+query.plot(i)            // carrière : + ripeAt, wait: null | { machineIn, staffIn } (aubes avant l'équipe ; 0 = déjà),
+                         //   handValue, helperValue, weeded
+query.plantableCrops()   // carrière : + bank (semis prépayés)
+query.summary()          // + cozy : { year (compteurs), stats, lanterns? }
+query.achievementContext()   // + weather (TOUS modes) ; + surprisesStats (state.surprises.stats) ; + cozy (stats, year) ;
+                             //   carrière : career + { pets, species: [id], animalProducts: { id: n }, fish: { id: n } }
+query.career.yearReport()    // + cozy (voir « Déroulé »)
+```
+
+### Événements (seulement quand c'est activé)
+
+| Type | Données | Pour |
+|---|---|---|
+| `feteSoon` | `{ id, name, engine, day, text }` | veille : bandeau, résumé du matin, conseil `cozy.fete` |
+| `feteStarted` | `{ fete: feteInfo, text }` | décor de fête, objets cachés, ligne « À faire » |
+| `feteFound` | `{ index, kind, gold, amount, found, total }` | saut de l'objet, confettis, note qui monte |
+| `feteDone` | `{ id, engine, score?, ladles?, ribbon?, hearts?, amount, ecus, text }` | pièces vers le compteur, ruban, maire ; écus → progression |
+| `feteEnded` | `{ id, helped: { n, amount }, text }` | soir : « Lili a trouvé les 3 derniers œufs pour vous ! » |
+| `seedPackBought` | `{ cropId, seeds, cost, bank }` | sachet qui saute dans la boîte |
+| `winterFind` | `{ finds: [{ id, kind, u }], trace: null \| { kind, u } }` | aube d'hiver : étincelle en lisière, trace sur la neige |
+| `winterPicked` | `{ id, kind, name, amount }` | trouvaille qui saute dans le panier |
+| `feederFilled` / `feederBird` | `{}` / `{ bird: { id, name }, first }` | graines qui tombent / oiseau sur la mangeoire |
+| `storyReady` / `storyHeard` | `{ text }` / `{}` | fenêtre éclairée ; l'interface choisit l'histoire (progression) |
+| `lanternsLit` | `{ year, values: [5], total, criteria: [lanternCriterion], partial }` | page « Les lanternes de l'année » ; porte-lanternes ; progression |
+| `weeded` | `{ plotIndex, by }` | touffe arrachée (jardinier) |
+| `harvested` | + `handBonus`, `waited` (carrière) | texte flottant « +31 ♥ » (prime en vert) |
+| `contestAwarded` | + `standBonus` (carrière) | ligne « Stand du comice : +150 » |
+
+### Progression (`src/core/progression.js` + `src/core/album.js`, purs)
+
+```js
+progress.album = { found: { [caseId]: { at, src: 'levels' | 'career' | 'retro' } }, stamps: { [caseId]: [stamp] },
+                   claimed: [rewardId], seen: [caseId], stories: 0, retroDone: false }
+//   caseId = '<pageId>.<id>' (ex. 'garden.carrot', 'sky.fog') ; stamp : 'gold' | 'giant' | 'fete' | 'visitor' | 'best'
+//   rewardId = pageId, 'garden.gold', 'garden.giant', 'years.stamps', 'complete'
+progress.lanterns = { levels: { [levelId]: { best: [5], total, at } }, career: { best: [5], total, years }, firsts: [criterionId], grand: false }
+progress.lifetime.cozy = { handPicked: 0, eggsAll: 0, ribbonsGold: 0, birds: {}, fetes: 0 }
+
+albumFacts(ctx, progress) → facts                 // contexte de partie (ou null) + progression → faits lisibles par les cases
+checkAlbum(progress, ctx) → { cases: [caseId], stamps: [{ caseId, stamp }] }   // nouveautés (rien d'écrit)
+recordAlbum(progress, found, now, src) → { progress, cases, stamps }
+albumPages(progress, mode?) → [{ id, name, icon, found, total, done, cases: [{ id, caseId, name, icon, found, at, stamps,
+  text /* si trouvée */, hint /* sinon */, modeNote, isNew }], rewards: [{ id, ecus, cosmeticId, ready, claimed }] }]
+claimAlbumReward(progress, rewardId) → { ok, progress, rewards: { ecus, cosmeticId, already } } | { ok: false, reason }
+    // refus : 'Page pas encore complète.' ; 'Déjà reçu.'
+markAlbumSeen(progress, caseIds) → progress
+albumRetro(progress, { levelSave, careerSave }) → { progress, cases }   // § 17.1.4 ; une seule fois (retroDone)
+recordLanterns(progress, { mode, levelId?, values, total, partial }, now)
+  → { progress, rewards: { ecus, cosmetics: [id], newBest }, achievements: [id] }
+recordStory(progress, now) → { progress, story: { id, title, lines }, first, ecus }
+// recordRunEnd : summary.cozy → lifetime.cozy, puis checkAlbum / recordAlbum (src 'levels') ;
+// recordCareerYear : report.cozy idem (src 'career') ; checkAchievements évalue aussi les succès 'cozy'.
+```
+
+Types de condition des cases (`check.type`, lus dans `facts`) : `cropHarvested`, `cropGold`, `cropGiant`, `productSold`,
+`animalProduct`, `animalOwned`, `pet`, `weather`, `specialWeather`, `surprise`, `find`, `forage`, `wish`, `client`,
+`merchantMet`, `theme`, `themeFete`, `themeVisitor`, `fete`, `feteBest`, `comice`, `contest`, `cartFull`, `goldMedal`,
+`winterFind`, `trace`, `bird`, `fish`, `story`. Le lot 3 ajoute **un compteur** : `variety.stats.merchantVisits` (passages
+de Basile, pour `merchantMet`).
+
+`storage.js` : `loadProgress()` normalise (album, lanternes, `lifetime.cozy`) ; au premier chargement sans `album`, il
+lit les sauvegardes de la partie de niveau et de la carrière (sans les modifier) et appelle `albumRetro` ;
+`albumMigration()` renvoie une seule fois `{ cases: [caseId] }` (message « N cases retrouvées »), sinon `null`.
+
+### Migration et sauvegardes
+
+- **Niveaux** : `STATE_VERSION` reste 2. `migrateState` : `s.cozy === undefined && s.difficulty === 'detente' && s.rng` →
+  `newCozyState({ partial: true })` + flux `cozy` ; fête du jour : seulement si l'aube de reprise la crée ; Classique : rien.
+  `s.cozy` présent → `completeCozy` (champs ajoutés plus tard).
+- **Carrière** : extension `cozy` — `init` (création) et `migrate` (chargement) : `state.cozy` absent → activé (comme les
+  surprises et la variété) avec `year.partial = true`, `ripeAt` des parcelles mûres reculé de 4 aubes, réserve vide ;
+  `CAREER_VERSION` inchangée (champs ajoutés, vérifiés par `check` et `save.js` pour `ripeAt` / `weeded`).
+- **Progression** : pas de changement de `schema` (champs ajoutés par `normalizeProgress`) ; rattrapage une fois.
+- Tests : `tests/career-helpers.js` crée ses carrières avec `cozy: false` par défaut ; `tests/cozy-migration.test.js` :
+  aller-retours, Détente / Classique / carrière, `checkCozy`, rattrapage de l'album depuis une progression et des
+  sauvegardes réelles du lot 3 (fixtures).
+
+### Points d'accroche et fournisseurs de carrière (ajouts, CORE)
+
+- `CALENDAR_EVENTS[].day` accepte `'last'` (dernier jour de la saison, quelle que soit sa durée).
+- L'extension `cozy` utilise : `seasonStart`, `dawnEvents`, `dawn`, `evening`, `yearEnd`, `actions`, `queries`,
+  `init` / `migrate` / `check` ; fournisseur existant `seedFactor` **non** utilisé (la foire est une boutique).
+- Lus directement (gardés par `state.cozy?.parts.helpers`) : `handwork.helpersMayHarvest` dans `machines.js` et
+  `work.js` ; `weedQualityBonus` dans `surprises.js` (`rollQuality`) ; `HAND_BONUS` dans `runtime.js`.
+- `src/core/career/events.js` : pêche → `state.cozy.stats.fish[fishId]` (album) ; comice → récoltes à la main et
+  `standBonus` ; `christmasMarket` dès le rang 1 pour la fête, facteurs de prix au rang 2 comme avant.
+
+### Simulation
+
+- `tools/simulate.js` : `--cozy on | off | lanterns,fetes,winter` (défaut : selon le mode), `--compare-cozy` (sans → avec,
+  même graine : revenu, argent final, victoires, ★★★, gains des fêtes et de l'hiver, écus), `--lanterns` (répartition
+  1 / 2 / 3 / 4 par critère et total médian, par robot). Robots humains et `optimal` : comportements du § 17.8 du game
+  design, par l'API publique et leurs propres tirages ; exporter `cozyDay(game, me, P, spend)` pour la carrière. Robots
+  scriptés de la parité (Classique) inchangés.
+- `tools/simulate-career.js` : `--cozy …`, `--compare-cozy`, **`--compare-f1`** (tableau : `handsOff` bénéfice des ans 4 à
+  7 ; tranquille : revenu par année, rang médian, Domaine, part à la main, gestes par jour ; `automator` : Domaine et
+  patrimoine à l'an 10 ; débutant : rang 3 à l'an 5) ; nouvelle stratégie **`handsOff`** (= `idle` avec `idleFrom: 4`) ;
+  le tranquille récolte d'abord à la main ce qui est mûr (terrain le plus mûr d'abord) et fait ses achats sans dépenser
+  ses gestes de champ ; le débutant suit la ligne « À faire » des champs mûrs. `tools/sim-career-staff.js` : serre au rang
+  2 dans la liste d'envies du tranquille, mare au rang 3.
+- Après réglage : seuils d'étoiles Détente (`src/data/difficulty.js`, § 13.3), paliers des lanternes (`src/data/cozy.js`),
+  tableaux du § 17.8 remplis avec les résultats.
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- Disposition : `layout.cozy = { hideSpots: [{ x, y, w, h }] (≥ 16 cachettes : pieds de buissons et d'arbres, coins de
+  clôture, arrière des bâtiments, bord de forêt, panneau, puits ; jamais sur une parcelle ni un chemin), edgeSpots: [{ x,
+  y }] (≥ 8 en lisière, haies, fossés), traceSpots: [{ x, y }], feeder: rect (cour / bande de la maison), lanternRack:
+  rect (perron), storyWindow: rect (fenêtre de la maison), feteStall: rect (près du panneau du village) }`. Absent si le
+  lot est désactivé (rien n'est dessiné en Classique, porte-lanternes compris). Carrière : cachettes dans la bande de la maison, le champ de départ et les terrains achetés voisins.
+- `cozySpot(u, spots, taken) → index` (pur, exporté, testé) : la cachette d'un objet = `⌊u × spots.length⌋`, puis la
+  suivante libre ; même résultat pour un même `layout` (déterministe).
+- `scene.hitTest` : + `{ type: 'feteItem', index }`, `{ type: 'winterFind', id }`, `{ type: 'feeder' }`, `{ type:
+  'storyWindow' }`, `{ type: 'lanternRack' }` (cibles tolérantes ≥ 48 px ; en **mode fête**, seuls `feteItem` et le
+  défilement répondent : `scene.setFeteMode(on)`).
+- Scène : objets cachés (`fete.egg.*`, `fete.lampion*`, `fete.frog*`, `fete.lantern*`) qui dépassent de leur cachette et
+  se dandinent toutes les ~4 s ; `scene.focusWorld` pour l'indice ; le soir de la chasse, Lili (`npc.lili`) passe
+  ramasser les derniers ; stand du jour (`fete.pot`, `fete.stand`, `fete.basket`, `fete.seedstall`) près du panneau ;
+  le maire (`npc.mayor`) marche jusqu'au stand sur `feteDone` (étal) ; trouvailles d'hiver en lisière (étincelle),
+  traces sur la neige (jusqu'au soir) ; mangeoire (`feeder`, `feeder.full` après remplissage) et oiseau du jour
+  (`bird.<id>`, 2 images) ; fenêtre éclairée (`window.lit`) tant que la veillée est possible ; porte-lanternes
+  (`lantern.rack` + `lantern.<critère>.on/off`, brillent le soir) : niveaux → meilleur résultat du niveau
+  (`scene.setLanterns(values)` appelé par l'UI depuis la progression), carrière → `state.cozy.lanterns.history` (dernière
+  année) ; carrière F1 : badge `badge.waiting` sur les parcelles mûres qui attendent, jardinier accroupi + `fx.weeds` sur
+  `weeded`. Mouvements réduits : pas de dandinement (étincelle fixe), apparitions en fondu, aucun trajet.
+- Nouvelle planche `lot4` dans `SHEETS` et `assets.js` (facultative, comme `lot3`) ; `DECOR_SPRITES` : les 21 décors.
+
+**UI** (`src/ui/*`, `css/cozy.css`, `src/main.js`) :
+- `src/ui/album.js` : `createAlbum(app) → app.album = { open(pageId?), onDawn(game), onRunEnd(res), badge(), reset() }` :
+  4ᵉ onglet « Album » de la grange (`grange.js`), entrée « L'album » du menu de partie (pause), feuille haute des pages
+  (grille 3 colonnes, cases 104 × 120 px, ‹ › 48 × 48, points de page), fiche d'une case, bouton « Recevoir », message
+  « Album : … ✓ » (un par aube), pastille, rattrapage au démarrage (« N cases retrouvées »).
+- `src/ui/cozy.js` : `createCozy(app) → app.cozy = { onEvent, frame, reset, openFete(), enterFeteMode(), leaveFeteMode(),
+  openWinter(), openStory(), lanternPage(ev), todoItems(game), morningLines(ev), plotRows(plot), seedChips(crop),
+  onHit(hit), enabled(game) }` : feuilles « La chasse aux œufs » (et variantes), « La soupe du village », « Le stand de la
+  ferme », « Les paniers de Noël », « La foire aux graines », « La veillée » ; **mode fête** (pause `fete`, barre
+  « 🥚 3 / 8 · Indice · Terminer » à la place des onglets, `scene.setFeteMode(true)`) ; aperçu en direct
+  (`query.fetePreview`) ; page « Les lanternes de l'année » de la victoire et du bilan annuel (`dialogs.js`) ; cartes du
+  choix du niveau « 🏮 13 / 20 » ; section « Les lanternes » du Carnet et aperçu `query.lanterns()` dans le Bilan.
+- F1 : fiche de parcelle (`field.js`) « À la main : 31 · par l'équipe : 25 », « Vous attend · la moissonneuse passera
+  dans 1 jour », « Désherbée par Lucie » ; ligne « À faire » « Le Haut-Champ : 12 parcelles mûres vous attendent (+25 %
+  à la main) » ; résumé du matin « Hier : 34 récoltes à la main (+86 de prime) » ; feuille des graines « Réserve : 16 ».
+- Récompenses : `feteDone.ecus` → `progression.careerEcus` ; `lanternsLit` → `progression.recordLanterns` (écus,
+  décors) ; `storyHeard` → `progression.recordStory` (histoire affichée, écu) ; album à chaque aube (`checkAlbum` /
+  `recordAlbum`, même règle que les succès : partie en cours seulement) et à la fin (`recordRunEnd` / `recordCareerYear`).
+- `createGame({ cozy: { decor: app.progression.decorSummary() } })` (niveaux).
+- Conseils « première fois » : `cozy.album`, `cozy.fete`, `cozy.winter`, `cozy.lanterns`, `cozy.helpers`, `cozy.seedFair`
+  (textes dans `COZY_HINTS`).
+- Sons (synth existant) : `pop` objet trouvé, `chime` soupe et paniers, `fanfare` rosette d'or et 8 œufs, `reveal` lanterne,
+  `magic` veillée ; gazouillis : `synth.play('chirp')` (nouveau son synthétisé, 3 notes aiguës brèves) ; aucun fichier son.
+- Débogage (`?debug=1`) : `__debug.cozy.{ on(), state(), fete(id), find(i), soup(ids), stand(items), baskets(b), winter(),
+  bird(id), story(), lanterns(), ripe(n), album(), albumAll() }` (passent par `actions.triggerCozy` et les actions
+  publiques ; `albumAll` remplit l'album de la progression de test).
+
+### Sprites (paquet ART : planche `assets/sprites/lot4.png`, `assets/sprites/generate-lot4.py`, bloc `// <lot4:auto>`)
+
+Même méthode que `generate-lot3.py` (palette Kenney, contour sombre, lumière en haut à gauche ; tuiles de 16 px).
+Tailles : **16 × 16** sauf mention. Les cases d'album réutilisent les sprites existants (cultures `crop.<id>.icon`,
+produits `product.<id>`, animaux, `icon.weather.<id>`, surprises et trouvailles du lot 2, portraits du lot 3) : seuls
+les manquants sont dessinés ici.
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `album.cover` | 32 × 32 | couverture de l'album : cuir vert, coins dorés, fleur séchée pressée |
+| `icon.album` | 16 × 16 | petit livre vert à feuille pressée (menu, onglet) |
+| `album.page.<id>` (garden, homemade, animals, sky, luck, village, years, fetes, edge, feeder, stories) | 16 × 16 | onglets de page : carotte, pot de confiture, poule, soleil et nuage, trèfle, maisonnette, calendrier, fanion, branche de houx, mésange, bougie |
+| `album.empty` | 16 × 16 | cadre pointillé crème avec « ? » (repli d'une silhouette) |
+| `album.stamp.gold`, `album.stamp.giant`, `album.stamp.fete`, `album.stamp.visitor`, `album.stamp.best` | 16 × 16 | tampons ronds encrés : étoile dorée, losange vert, chapiteau, enveloppe, médaille |
+| `album.ribbon` | 16 × 16 | ruban « page complète » (rouge, queue fourchue) |
+| `product.wool`, `product.milk` (si absents) | 16 × 16 | pelote de laine blanche ; bidon de lait |
+| `fish.gudgeon`, `fish.roach`, `fish.perch`, `fish.trout`, `fish.pike` (si absents) | 16 × 16 | goujon gris tacheté, gardon aux yeux rouges, perche rayée, truite tachetée, brochet allongé |
+| `winter.deadwood`, `winter.pinecone`, `winter.holly`, `winter.chestnut`, `winter.blewit`, `winter.mistletoe` | 16 × 16 | fagot de bois mort, pommes de pin, branche de houx à boules rouges, bogue ouverte et châtaignes, pieds-bleus (champignons violets), touffe de gui à baies blanches ; dessinés posés sur la neige (ombre bleutée) |
+| `track.hare`, `track.deer`, `track.fox` | 16 × 16 | empreintes dans la neige (gris-bleu, semi-transparentes) : lièvre (2 grandes devant, 2 petites), chevreuil (2 sabots en cœur), renard (ligne droite) |
+| `bird.<id>`, `bird.<id>.1` (greatTit, blueTit, robin, sparrow, chaffinch, bullfinch, nuthatch, woodpecker) | 16 × 16 | 8 oiseaux de profil, posés ; 2ᵉ image : tête baissée (il picore) |
+| `feeder`, `feeder.full` | 16 × 32 | mangeoire en bois sur poteau, petit toit enneigé ; avec graines visibles |
+| `window.lit` | 16 × 16 | fenêtre éclairée, lueur chaude orangée, rideaux (posée sur la maison) |
+| `story.vignette` | 48 × 32 | Joseph au coin du feu dans son fauteuil, chat roulé en boule, bouilloire |
+| `icon.story`, `icon.winter`, `icon.feeder`, `icon.seedbank`, `icon.fete`, `icon.hand` | 16 × 16 | bougie et livre ; flocon et brin de houx ; mangeoire ; boîte en fer à biscuits ; fanion ; main et petit cœur vert |
+| `fete.egg.0` … `fete.egg.3`, `fete.egg.gold`, `fete.egg.shell` | 16 × 16 | œufs peints (rose rayé, bleu à pois, jaune zigzag, vert à fleurs), œuf doré brillant, coquilles éclatées (effet) |
+| `fete.lampion`, `fete.lampion.lit`, `fete.lantern`, `fete.lantern.lit`, `fete.frog`, `fete.frog.1` | 16 × 16 | lampion de papier éteint / allumé ; lanterne d'hiver éteinte / allumée ; grenouille verte assise / en saut |
+| `fete.pot`, `fete.pot.1` | 32 × 32 | grande marmite noire sur trépied et feu de bois ; 2ᵉ image : vapeur et bulles |
+| `icon.ladle` | 16 × 16 | louche en bois |
+| `fete.stand` | 32 × 32 | étal en bois à auvent rayé vert et blanc, 5 cagettes vides |
+| `ribbon.green`, `ribbon.blue`, `ribbon.gold` | 16 × 16 | rubans de concours : vert, bleu, rosette dorée à deux queues |
+| `fete.basket`, `fete.basket.full` | 16 × 16 | panier d'osier vide à nœud rouge ; plein (légumes qui dépassent) |
+| `fete.seedstall` | 32 × 32 | étal de la foire aux graines : sachets kraft suspendus à une ficelle, ardoise « −25 % » |
+| `seedpack.generic` | 16 × 16 | sachet de graines kraft à étiquette blanche (icône d'un sachet de la foire) |
+| `npc.mayor`, `npc.mayor.walk` | 16 × 16 | M. le maire, écharpe tricolore, carnet ; debout, en marche |
+| `npc.lili`, `npc.lili.walk` | 16 × 16 | la petite Lili, couettes, panier ; debout, en marche |
+| `lantern.rack` | 32 × 32 | porte-lanternes en bois sur le perron : 5 montants, 4 crochets chacun |
+| `lantern.<crit>.on`, `lantern.<crit>.off` (variety, care, neighbours, beauty, prosperity) | 8 × 8 | petite lanterne accrochée, verre vert / bleu / rose / jaune / orange, allumée (halo) ou éteinte |
+| `icon.crit.<crit>` (mêmes id), `icon.lantern.on`, `icon.lantern.off` | 16 × 16 | pictos des critères (trois feuilles, goutte et cœur, deux maisons et cœur, fleur, pile de pièces) ; lanterne allumée / éteinte pour les lignes de l'interface |
+| `fx.weeds`, `fx.weeds.1` | 16 × 16 | touffe d'herbe folle ; arrachée qui s'envole (désherbage) |
+| `badge.waiting` | 8 × 8 | petit cœur vert « vous attend » (parcelle mûre que l'équipe laisse au joueur) |
+| `decor.scarecrow.flower`, `decor.can.golden`, `decor.barrow.giant`, `decor.jam.shelf`, `decor.weathervane.pig`, `decor.sundial`, `decor.lantern.fairy`, `decor.pump.village`, `decor.bunting.post`, `decor.arch.fete`, `decor.woodpile`, `decor.heron.wood`, `decor.rocking.chair` | 16 × 16 | décors de l'album : épouvantail couronné de fleurs, arrosoir doré, brouette portant une citrouille géante, étagère de pots de confiture, girouette au cochon, cadran solaire de pierre, lanterne des fées (lueur verte), pompe à eau en fonte, mât à guirlandes, petite arche de fête fleurie, tas de bûches, héron en bois sculpté, fauteuil à bascule |
+| `decor.herbarium` | 32 × 32 | le grand herbier : petit kiosque vitré, plantes séchées en cadres |
+| `decor.lantern.green`, `.blue`, `.pink`, `.yellow`, `.orange` | 16 × 16 | lanternes de critère sur poteau (couleur du verre) |
+| `decor.lantern.grand` | 32 × 32 | le grand lampion : lanterne de papier à cinq couleurs sur un mât |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `lot3.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/{album,cozy}.js`, `src/data/achievements.js` (succès du lot), `src/data/cosmetics.js` (21 décors), `src/data/career/{career,lots,buildings,animals,events,staff,machines,descriptions}.js` (chiffres et textes ci-dessus), `src/data/difficulty.js` (seuils), `src/core/{album,lanterns,cozy}.js`, `src/core/career/{cozy,handwork}.js`, `src/core/career/extensions.js` (1 ligne), modifications de `src/core/{game,stats,progression,surprises,variety}.js`, `src/storage.js`, `src/core/career/{runtime,work,machines,events,save,land}.js`, `tools/{simulate,simulate-career,sim-career-staff}.js`, `tests/*` (nouveaux et `career-helpers.js`) | état, actions, requêtes, événements, progression et album ci-dessus ; simulation et réglage (F1, fêtes, hiver, lanternes, étoiles) ; tableaux du § 17.8 et seuils du § 13.3 | rien (commence par un `createGame({ cozy })` qui ne fait rien, parité verte, puis ajoute chaque partie ; F1 en premier pour lancer la simulation de carrière) |
+| **ART** | `assets/sprites/generate-lot4.py`, `assets/sprites/lot4.png`, bloc `// <lot4:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau des sprites ; planche de contrôle × 6 | rien |
+| **UI/RENDER** | `src/ui/*` (nouveaux `album.js`, `cozy.js`), `css/cozy.css`, `tools/build.js` (ligne `CSS_FILES` seulement), `src/main.js`, `src/index.template.html`, `src/render/*` (hors bloc `lot4:auto`), nouveau `src/render/cozy-actors.js` | album, feuilles et mode fête, hiver, pages des lanternes, lignes F1, scène, hit-test, animations, conseils, débogage ; vérification au doigt | CORE : API (factices de même forme en attendant) ; ART : sprites (repli `canDraw` / `spriteAny`) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `feteInfo`, `itemInfo`, `query.winter()`, `query.lanterns()`,
+`albumPages()`, l'ordre des événements de l'aube et du soir (`feteEnded` avant le fermage ; `lanternsLit` avant
+`victory` / `yearEnd`), les types de `hitTest` (figés ici ; tout écart est noté par CORE dans une section « Écarts »
+sous ce contrat) ; (2) **ART → RENDER/UI** : noms du tableau des sprites (aucun renommage sans prévenir) ; (3) **CORE ↔
+ART** : identifiants des pages et cases, oiseaux, trouvailles, traces, fêtes, objets cachés, décors, critères (figés ici
+et dans le § 17 du game design) ; (4) **RENDER ↔ CORE** : `u` (0..1) → cachette par `cozySpot` (RENDER seul connaît les
+cachettes ; le cœur ne vérifie que l'index) ; (5) intégration par le chef de projet : `node --test tests/` (parité
+comprise), `node tools/simulate.js --compare-cozy` et `--lanterns`, `node tools/simulate-career.js --compare-f1` et
+`--compare-cozy`, `node tools/build.js`, vérification au doigt (Pixel 7, 360 × 740 : cibles ≥ 48 px, textes ≥ 14 px,
+aucun débordement ; un niveau Détente joué en entier avec les 4 fêtes, l'hiver et les lanternes ; une année de carrière
+avec la foire, F1 visible, comice et stand ; l'album ouvert dans la grange et en partie ; une partie Classique qui
+remplit l'album sans rien changer d'autre), `JOURNAL.md`, sauvegarde `backup/…` avant et après le lot.
+
+### Écarts et précisions (livraison CORE, 2026-10-03)
+
+Section tenue par le paquet CORE **pendant** la livraison (UI/RENDER et ART travaillent en parallèle) : tout ce qui
+précise ou s'écarte du contrat ci-dessus. Aucun nom ni forme du contrat n'est retiré ; seulement des champs **ajoutés**,
+sauf mention contraire.
+
+- **Récompenses déjà dans la progression renvoyée** : `claimAlbumReward`, `recordLanterns` et `recordStory` ajoutent
+  eux-mêmes les écus (et débloquent les décors) dans la progression qu'ils renvoient, comme `unlockAchievements` et
+  `recordRunEnd` : l'interface enregistre la progression renvoyée et **n'ajoute pas** les écus une seconde fois
+  (`rewards.ecus` sert à l'affichage). Seuls `feteDone.ecus` (fêtes) passent par `progression.careerEcus` (ou
+  `recordCareerEcus`), comme au lot 3.
+- **Progression** (`src/core/progression.js`, ré-exporte `src/core/album.js`) : `checkAlbum`, `recordAlbum`, `albumPages`,
+  `claimAlbumReward`, `markAlbumSeen`, `albumRetro`, `recordStory`, `recordLanterns` (contrat) ; en plus :
+  `recordAlbumDawn(progress, ctx, now, src)` (aube : nouveautés écrites + succès « Album et fêtes » → `{ progress, cases,
+  stamps, achievements, rewards: { ecus } }`), `albumOverview(progress)` (`{ found, total, pagesDone, pages, complete:
+  { id, name, ready, claimed, ecus, cosmeticId }, newCount, claimable, stories }` — la récompense « album complet » n'est
+  dans aucune page), `albumClaimable(progress)` (récompenses prêtes), `retroText(n)` (« 23 cases de l'album retrouvées
+  dans vos anciennes parties »), `levelLanterns(progress, levelId)` (`{ best, total }` | null, cartes « 🏮 13 / 20 »),
+  `decorSummary(progress)` (`{ placed, path, fence }` pour `createGame({ cozy: { decor } })`), `cozyAchievementList(p, ctx)`
+  (catégorie « Album et fêtes », même forme que `careerAchievementList`), `defaultLanterns()`.
+  `recordRunEnd(p, run)` et `recordCareerYear(p, run)` acceptent `run.context` (= `query.achievementContext()` de la fin)
+  pour l'album et renvoient en plus `album: { cases, stamps }`. Une progression **neuve** a `album.retroDone = true` ; une
+  progression lue **sans** `album` a `retroDone = false` (rattrapage au chargement, `src/storage.js`, `albumMigration()`).
+- **`albumPages(progress, mode)`** : `mode` = `'classique' | 'detente' | 'career'` ; chaque case a en plus `src`,
+  `stampsPossible` ; `hint` est l'indice **sans** suffixe, `modeNote` le suffixe à afficher (« À découvrir dans Ma ferme »,
+  « En Détente ou dans Ma ferme ») ; chaque récompense a `name` (et `stamps` pour les pages en plus).
+- **Décors** : **20** décors `found: true` (le contrat dit 21 mais en nomme 20) : les 14 de l'album (13 petits +
+  `herbarium`, grand) et les 6 des lanternes (5 petits + `lantern.grand`, grand).
+- **`query.achievementContext()`** : `weather` (tous modes, contrat) ; avec les surprises : `surprisesStats`,
+  `specialWeather` (météo spéciale du jour ; carrière : l'arc-en-ciel de l'événement) ; avec le lot 4 : `cozy = { stats
+  (cumul de la partie / de la carrière), pending (pas encore compté dans la progression), year, contestGoals (épreuves du
+  concours du niveau 12 réussies) }` ; avec la variété : `variety.ordersByClient`, `variety.merchantVisits`,
+  `variety.pending` (`{ ordersDone, cartsFull, gold }` pas encore comptés). Carrière (avec le lot 4) : `career.pets`,
+  **`career.speciesIds`** (le contrat disait `species`, mais `career.species` existe déjà : c'est le **nombre** d'espèces lu
+  par le succès « L'arche »), `animalProducts`, `fish`, `themes`, `themeVisitors`, `themesPlayed`, `contestGoalsMet`.
+- **État** (ajouts) : `state.cozy.lit` (niveaux : lanternes allumées au dernier soir, aussi dans `state.result.lanterns`) ;
+  `state.cozy.statsBase` (carrière : cumuls au dernier bilan) ; `year.animalLost` (perte dans les abris pleins : la
+  perte de `work.year` est remise à zéro par l'extension des employés avant le bilan du lot 4) ; `year.base = { orders,
+  crates, quests }` (compteurs au début de l'année) ; `winter.feeder.fills` (remplissages de l'hiver, oiseaux rares) et
+  `winter.feeder.here` (mangeoire sortie) ; `stats.best` (tampon 🏅), `stats.giants` (géants récoltés à la main),
+  `stats.animal`, `stats.themeVisitors`, `stats.handCrops` (carrière : récoltes à la main par culture, comice F1-5) ;
+  `fete.ended` (soir passé) ; parcelle `weededBy` (nom du jardinier, fiche « Désherbée par Lucie »). `state.career.cosmetics`
+  accepte `path` / `fence` (`createCareer({ cosmetics: { decor, path, fence } })`, critère « beauté »).
+- **Prime à la main** : `HAND_BONUS` = 1,25 dans `src/data/career/career.js` ; une carrière **sans** le lot 4
+  (`cozy: false`, tests) garde `HAND_BONUS_LEGACY` = 1,1 (`handBonusOf(state)` de `handwork.js`).
+- **Événements** : `feteDone` d'une chasse seulement quand les 8 objets sont trouvés par le joueur (sinon `feteFound` puis
+  `feteEnded` le soir) ; `weeded { plotIndex, by: staffId, name }` ; `lanternsLit` (niveaux) porte `levelId` ;
+  `contestAwarded.ribbon` en plus de `standBonus` ; `planted.fromBank` / `bankLeft` (réserve de la foire).
+  **Carrière, dernier soir d'hiver** : l'extension `cozy` étant enregistrée après `variety`, `feteEnded` (foire) arrive
+  **après** les événements du lot 3 (charrette, défis, cartes), puis charges, `lanternsLit`, `yearEnd`.
+- **Requêtes** : `query.cozy()` a en plus `lit` (niveaux) et `history` (carrière, 10 dernières années) ;
+  `query.plantableCrops()` (carrière, lot 4 actif) a **toujours** `bank` (0 sans réserve) ; `query.plot(i)` (carrière, F1)
+  a `ripeAt`, `wait`, `helperValue`, `weeded`, `weededBy` (et `handValue`, `handBonus` existants : 1,25) ;
+  `feteInfo.icon` d'une fête de thème : `icon.theme.<id>` ; `query.winter().story.day`.
+- **Fêtes des thèmes** : `id` = `theme.<themeId>`, nom et texte dans `THEME_FETE_GAMES` (`src/data/cozy.js`) ; si une
+  fête du calendrier et la fête du thème tombaient le même jour, celle du calendrier passe d'abord (jamais avec les dates
+  actuelles). La foire aux graines n'existe qu'en carrière ; le sachet de Basile (petits pois) va dans
+  `state.variety.rare` (semis à la main), les autres sachets dans `state.cozy.seedBank`.
+- **Beauté (carrière)** : « embellissement » = au moins un décor posé au coin d'un terrain acheté (emplacements
+  `lotN.corner`) : 2 points.
+- **Calendrier de carrière** : `CALENDAR_EVENTS[].day` peut valoir `'last'` (`festivalDay(state, f)` de
+  `src/core/career/events.js` le résout) ; `factorsRank` (marché de Noël : la fête dès le rang 1, ses facteurs de prix au
+  rang 2) ; nouvelle entrée `springFete`. Les tests de carrière d'avant le lot 4 suivent ce calendrier (fichiers de test
+  mis à jour).
+
+## Lot 4 — rendu et interface (UI/RENDER, 2026-10-03)
+
+Code contre le contrat ci-dessus (« Lot 4 — contrats ») et ses « Écarts et précisions ». Tout ce qui vient de la
+partie est gardé par `state.cozy` : en Classique (clé absente) rien n'est dessiné (ni porte-lanternes, ni mangeoire),
+aucune ligne « À faire », aucune section ; **seul l'album** (progression permanente) se remplit et se consulte. Un
+sprite du lot 4 absent → repli dessiné (canvas) ou petit dessin de remplacement (`czIcon` : emoji décoratif, caché aux
+lecteurs d'écran). Styles : **`css/cozy.css`** (ajoutée à `CSS_FILES`). Tests : `tests/lot4-render.test.js`.
+
+```
+src/render/cozy-actors.js  cozySpots(layout), cozySpot(u, spots, taken), placeItems(items, spots), waitingPlots(state)
+                           (purs) ; createCozyActors(effects) : sync, onEvent, update, collect(push), drawOverlay(c,
+                           layout), drawGlow(c, ox, oy, dayProgress, weather), hitTest(wx, wy, slop, { feteMode,
+                           minWorld }), itemRect(kind, id), setFeteMode, setLanterns, sing, clear, shift, spots, stats
+src/render/scene.js        acteurs du lot 4 dans les deux modes (layout.cozy posé à la première synchronisation) ;
+                           hitTest + feteItem | winterFind | feeder | storyWindow | lanternRack | feteStall ; mode fête
+                           exclusif ; scene.setFeteMode, feteMode, setLanterns, cozySpots, cozyStats, cozyItemRect,
+                           cozySing ; décors « grands » (2 × 2) hors mare ; repli des décors sans planche ; mare gelée
+src/render/atlas.js        DECOR_SPRITES : les 20 décors « trouvés » (alias decor.<id> seulement si le sprite existe)
+src/ui/cozy.js             createCozy(app) → app.cozy (voir l'en-tête du fichier)
+src/ui/album.js            createAlbum(app) → app.album : available, open(pageId), tabContent, onDawn, snapshot,
+                           announceSince, announce, badge, boot, pages, fillAll
+src/main.js                app.album, app.cozy, app.storage ; onGameEvent → app.cozy.onEvent ; aube → app.album.onDawn ;
+                           planche « lot4 » facultative ; createGame({ cozy: { decor } }) en Détente seulement ;
+                           recordRunEnd({ context }) ; « L'album » dans le menu de pause ; __debug.cozy (= __debug.lot4)
+```
+
+- **Repères** (px du monde, déterministes) : cachettes au pied des buissons et des arbres (le décor est dans la couche
+  fixe : l'objet dépasse à son pied), coins de la clôture du champ, puits, panneau de la ferme, côté de la maison, bord
+  de forêt (≥ 16) ; lisière (tuiles libres voisines de la forêt, ≥ 8) ; traces (en plein pré) ; mangeoire 16 × 32
+  (deux tuiles libres près de la maison) ; porte-lanternes 32 × 32 (perron : contre la façade, sans couvrir la porte
+  ni un chemin ; lanternes à x = 1 + 6 m, y = 3 + 7 r) ; fenêtre de la veillée (sur la maison, hors de la colonne de
+  la porte) ; stand 32 × 32 près du panneau du village (la ligne du haut peut chevaucher la clôture du champ, comme le
+  panneau). Carrière : bande de la maison et champ de départ.
+- **Dessin** : objets cachés triés par profondeur, dandinement toutes les ~4 s (mouvements réduits : immobiles),
+  saut + confettis + « +2 » à la trouvaille (doré : couronne d'étincelles) ; lampions et lanternes allumés restent et
+  brillent le soir ; stand du jour (sauf fête de thème : le stand `fair.theme.<id>` du lot 3) ; maire sur `feteDone`
+  (étal), Lili sur `feteEnded` (aidé) ; trouvailles avec étincelle toutes les ~3 s ; traces (`icon` de la requête) ;
+  mangeoire (pleine le jour du remplissage, graines qui tombent), oiseau qui picore et saute quand il chante ; porte-
+  lanternes **dès qu'il y a un résultat** (niveaux : `progress.lanterns.levels[id].best`, donné par l'interface ;
+  carrière : `state.cozy.lanterns.history`) ; badge `badge.waiting` sur les parcelles qui ont `ripeAt` (F1).
+- **Toucher** : en plein d'abord, puis la tolérance du doigt après les parcelles ; cibles agrandies jusqu'à 48 px CSS
+  (`minWorld = 48 × dpr / zoom`) ; en mode fête, seuls les objets pas encore trouvés (le plus proche du doigt).
+- **Mode fête** (`app.cozy.enterFeteMode`) : feuilles fermées, pause `fete`, `body.in-fete` (onglets cachés, ligne
+  « À faire » cachée), barre `#cz-fetebar` (compteur lu, « Indice », « Terminer »), annonce de la fête retirée
+  (`toasts.hide(node)`, nouveau) ; sortie quand une fenêtre s'ouvre, quand la fête change, quand tout est trouvé.
+- **Feuilles** (`openLive` : contenu reconstruit quand la requête change ; choix locaux gardés par fête) : chasse,
+  soupe, stand, paniers, foire, hiver, veillée, lanternes ; aperçu `fetePreview` ; refus du cœur en message sans
+  historique. Phrase des villageois : `result.text` du cœur, sinon une phrase selon le résultat.
+- **Lanternes** : `lanternsLit` → `recordLanterns` (sauf `preview` du débogage : la page s'ouvre seule, rien n'est
+  enregistré) ; victoire / faillite : bouton « Les lanternes » → page (remplace la fenêtre) avec les mêmes boutons de
+  fin ; carrière : bloc dans la fenêtre du bilan annuel (`app.cozy.yearBlock`) ; Bilan (aperçu `query.lanterns()`),
+  Carnet › Bilan (`lanternSection` : colonnes des années), cartes de niveaux (`levelBadge`).
+- **Album** : vérifié à chaque aube d'une partie en cours (`recordAlbumDawn`, succès compris), et au bilan de fin
+  (diff des cases trouvées avant / après `recordRunEnd` / `recordCareerYear`, qui reçoivent `context`) ; un message
+  « Album : … ✓ » par aube, les autres dans l'historique ; `markAlbumSeen` à l'affichage d'une page (le badge
+  « Nouveau » reste pendant cette ouverture) ; récompense « album complet » d'après `albumOverview` ; rattrapage :
+  `storage.albumMigration()` au démarrage (message « N cases retrouvées… », bouton « Voir » → grange › Album).
+- **F1** : `plotRows` (valeur à la main / par l'équipe ; « Vous attend » avec l'aide qui travaille vraiment sur le
+  terrain : moissonneuse ou cueilleuse allumée, jardinier — `query.career.machines()` / `staff()`) ; ligne « À faire »
+  `cz-ripe` (`replaces: 'harvest'`, nouveau dans `todo.js`) ; résumé du matin (récoltes à la main de la veille, comptées
+  sur `harvested.handBonus`) ; texte du jardinier dans la fiche d'un employé ; « Stand du comice : +N »
+  (`contestAwarded.standBonus`).
+- **Sons** : `pop` (objet, trouvaille), `gold` (œuf doré), `fanfare` (8 œufs, rosette d'or, récompense de page),
+  `chime` (soupe, paniers), `reveal` (lanternes), `magic` (veillée), **`chirp`** (nouveau, `src/audio/synth.js`).
+- **Débogage** (`?debug=1`) : `__debug.cozy` / `__debug.lot4` `.{ on(), state(), trigger(kind, arg), fete(id),
+  winter(), bird(id), trace(kind), story(), lanterns(), ripe(n), find(i), soup(ids), stand(items), baskets(b),
+  open(kind), feteMode(on), hint(), album(), albumAll(), point(kind, id), ui(), stats() }`.
+- **F1 (réglage)** : `F1.machineDelay` = **3** (moissonneuse et cueilleuse à la 3ᵉ aube ; le contrat disait 2 — levier
+  n° 2 du § 17.8 du game design, voir § 17.3.3), `F1.staffDelay` = 4. Les textes (descriptions des machines et du
+  jardinier, conseil `cozy.helpers`) sont **calculés** à partir de `F1` et `HAND_BONUS` : l'interface doit lire
+  `query.plot(i).wait` / `F1` / `handBonus` plutôt qu'écrire « 2 jours » ou « +25 % » en dur. La **prime à la main est
+  payée tout de suite même quand la récolte part au grenier, à l'atelier ou à une commande non vendue**
+  (`harvested.amount` = la prime + la qualité dans ces cas, `harvested.handBonus` = la prime).
+- **Lanternes** : chaque critère a en plus `steps` (les 3 paliers) ; la variété des niveaux a `k`. Barèmes finaux :
+  `LANTERN_RULES` de `src/data/cozy.js` (game design § 17.2.1).
+- **Simulation** : `tools/simulate.js` exporte `COZY_STYLES`, `SIM_DECOR`, `parseCozy`, `cozyDay(game, me, P, spend?,
+  keep?)` (tirage propre `me.cozyRnd`, pour que les autres décisions restent identiques avec ou sans le lot),
+  `lanternStats` ; `--cozy`, `--compare-cozy`, `--lanterns`. `tools/simulate-career.js` : stratégie `handsOff`,
+  `--cozy`, `--compare-cozy`, `--compare-f1` (+ « même ferme laissée seule » : `handsOffSameFarm()`), `--lanterns` ;
+  `playCareer({ cozy, keepGame })` ; robot tranquille corrigé (achats avant les champs, sans gestes de champ ; récolte à la
+  main d'abord avec F1) ; serre (rang 2), mare (rang 3) et 2 canards dans les envies du tranquille et de l'appliqué ;
+  décor des robots `SIM_CAREER_DECOR`.
+- **Seuils d'étoiles Détente** recalculés (`src/data/difficulty.js`, game design § 13.3).
+
+### Intégration CORE ↔ UI/RENDER et QA au doigt (2026-10-03)
+
+Écarts finaux du cœur vérifiés dans l'interface (moissonneuse et cueilleuse à 3 aubes lues dans `query.plot(i).wait`,
+prime à la main payée aussi vers le grenier / l'atelier, `HAND_BONUS_LEGACY`, `career.speciesIds`, récompenses déjà
+créditées par `claimAlbumReward` / `recordLanterns` / `recordStory`, ordre du dernier soir d'hiver, 20 décors,
+pièces des fêtes × `careerFactor(rang)`, récolte immédiate du dernier jour d'automne). Changements de contrat :
+
+- **`query.plot(i).wait`** (carrière, F1) = `{ machineIn, staffIn, machine, freeze }` : `machineIn` est `null` sans
+  moissonneuse (cueilleuse pour un arbre) **allumée sur ce terrain**, `staffIn` est `null` sans jardinier qui couvre le
+  terrain (`lotId` du terrain ou `'all'`) ; `machine` : `'harvester' | 'fruitPicker' | null` ; `freeze` : dernier jour de
+  l'automne, la culture gèlerait demain (l'équipe la rentre aujourd'hui). Aides : `harvestHelpers(state, i)` de `handwork.js` (pur). La fiche « Vous attend · la moissonneuse passera dans N jours » n'apparaît que
+  s'il y a une aide ; le conseil `cozy.helpers` aussi.
+- **`fete.result`** : + `text` (phrase des villageois : chasse complète, soupe, stand, paniers), `perBasket` (paniers),
+  `detail` (stand ; `query.fete().result.detail[].item` a `name` et `icon`). Le résultat d'une action garde sa forme
+  (+ `text` pour `presentStand` et `giveBaskets`).
+- **Paniers d'une petite ferme** : il faut autant de paniers garnis que de produits différents de l'année (3 au plus) ;
+  un panier vide reçoit « Joyeux Noël ! » (0 ♥, pas de pièces pour lui). Refus : « Récoltez ou produisez quelque chose,
+  et revenez faire les paniers ! », « 2 paniers garnis au moins. », « Deux produits au plus par panier. ».
+- **Accords** : refus « Carotte : pas récoltée cette année. », « Confiture de fraises : pas produite… », « Œufs : pas
+  produits… » ; chasse des grenouilles / lanternes : « cachées », « les 8 dernières grenouilles », lampions et lanternes
+  « allumés » ; lanternes : « Encore 1 culture ou produit / 2 cultures ou produits », « 1 382 pièces » ; soin de
+  carrière « 21 % de soin cette année » ; « Pommes » (et non « Pommier ») sur les étals et dans les paniers.
+- **Messages** : sur une feuille haute, la pastille « +N messages » est masquée et les « Voir » ne captent plus le doigt
+  (ils couvraient « Chercher les œufs », « Goûter la soupe ») ; sur les feuilles des fêtes et de l'hiver, seuls les refus
+  s'affichent ; pendant le mode fête, pas de pastille ; sur les fenêtres de fin (saison, bilan annuel, rang, victoire,
+  faillite : `body[data-dialog]`), les messages attendent dans l'historique. Option `toasts.show({ keepTouch })` (mise à
+  jour du jeu) pour rester touchable partout. Pastille au singulier : « +1 message ».
+- Feuilles des fêtes : le nom n'est plus répété sous le titre ; boutons `.cz-go` sans `min-width` (débordaient à 150 %
+  sur 360 px) ; badges de qualité, « Nouveau » et tampons vides de l'album à 14 px.
+
+## Zoom de la scène (pincer, boutons + / −, 2026-10-03)
+
+Seule la ferme (le canevas) grossit. Trois zooms à ne pas confondre : **taille du texte** (`textScale`, 100–150 %,
+`src/ui/a11y.js`), **loupe de l'interface** (`pinchZoom` : zoom de la page par le navigateur, sur les barres et les
+fiches), **zoom de la scène** (ici, sur le canevas seulement).
+
+```
+src/render/camera-zoom.js  PUR (testé : tests/zoom.test.js)
+  zoomBounds({ base, bandW, bandH, worldW, worldH, career }) → { min, max, base }
+      min = « toute la ferme visible » mais ≥ ⌈40 %⌉ du défaut (Niveaux) / ⌈50 %⌉ (Carrière), ≤ défaut ;
+      max = max(défaut + 1, ⌊défaut × 2,5⌋) — Pixel 7 : 2…12 (défaut 5), carrière 3…12
+  clampZoom, snapZoom (entier), stepZoom(z, ±1), pinchZoom(z0, d0, d) (élastique 5 % aux bornes),
+  anchorScroll(base, zoom, w, s), zoomRatio / zoomFromRatio (préférence = rapport au défaut),
+  staticRegion({ worldX0, worldX1, worldH, minZoom, devW, devH, bandCx }) → couche fixe indépendante du zoom
+src/render/scene.js
+  setZoom(z | null | 'in' | 'out', { x, y, animate }), beginZoomGesture(), zoomGestureTo(z0, d0, d, x, y, wx, wy),
+  endZoomGesture({ x, y, animate }), zoomInfo() → { zoom, base, min, max, isDefault, ratio, gesture, animating,
+  canIn, canOut }, setZoomRatio(r)
+src/ui/gestures.js   pincement (pointeurs tactiles suivis : 2 doigts → geste d'un doigt annulé, zoom autour du milieu
+                     des doigts qui suit les doigts), double toucher sans cible (≤ 320 ms, ≤ 36 px) → zoom par défaut,
+                     Ctrl + molette → un cran au pointeur (≤ 1 / 110 ms)
+src/ui/zoom.js       createZoomControls(app) → { frame(), changed(), root, stored(mode) } = app.zoomUI ; frame() dans la
+                     boucle de main.js après careerUI.frame()
+```
+
+- **Caméra** : `computeCamera` calcule le zoom par défaut comme avant (`zoomBase`), puis `zoom = userZ` (entier hors
+  geste ; fractionnaire pendant le pincement et l'animation de pose de 0,2 s). `userZ = null` = défaut : **rendu
+  identique à avant**. Changement d'écran : `userZ` suit le rapport au nouveau défaut.
+- **Défilement** : zoomé, le centre de la vue va de `x0 + demi-vue` à `x1 − demi-vue` (bords du monde), en plus de
+  la plage de la carte 2D ; vertical inchangé (monde centré s'il tient). Le défilement reste dans la ferme.
+- **Tampons** : zoomé en Niveaux, la vue passe en **mode fenêtré** (comme la carrière : vue = l'écran, couche fixe =
+  tout le monde) ; en mode fenêtré la couche fixe est `staticRegion(...)` (monde + marges pour le plus petit zoom
+  permis), la vue est dimensionnée par le zoom entier inférieur. La couche fixe n'est redessinée que si sa géométrie
+  change (`staticGeo`) : un pincement ne reconstruit rien (60 i/s mesurées) ; `buildStatic` (Niveaux) sait dessiner
+  en mode fenêtré.
+- **Exactitude** : `hitTest` → `screenToWorld` au zoom courant ; tolérances du doigt en px CSS (`TOUCH_SLOP_CSS × dpr /
+  zoom`, `minWorld = 48 × dpr / zoom`) ; tout ce qui se place sur la scène lit `worldToScreen` / `viewRect`
+  (`app.plotPageRect`, anneaux, pièces volantes, tutoriel, mini-carte `getMinimap` → cadre de la vue).
+- **Boutons** `#zoom-controls` (`#zoom-in`, `#zoom-out`, `#zoom-reset` « 1:1 » seulement hors défaut), 48 × 48 px,
+  `z-index` 18 ; à droite au-dessus de `--inset-bottom + --todo-h` ; `[data-minimap=shown|collapsed]` : à gauche de la
+  mini-carte (et de son bouton « Cacher ») ; `html.left-handed` : à gauche ; grand écran : en bas à droite de la
+  scène, à gauche du panneau ouvert. Cachés sous une feuille (téléphone), une fenêtre, une bulle, au menu.
+- **Place des messages** : `frame()` publie la hauteur occupée depuis le bas de l'écran par la colonne de zoom (comptée
+  avec « 1:1 », 3 × 48 + 2 × 4 px) et la mini-carte (cadre, boutons, ou bouton « Carte ») : `--float-reserve` sur
+  `<html>` et `body.has-float-ui` ; `#toasts` se pose au-dessus (`css/guidance.css`), plafonné sous la barre du haut.
+  Les messages ne recouvrent ni les boutons, ni la mini-carte, ni la ligne « À faire » (droitier comme gaucher).
+- **Mouvement réduit** (`reducedMotion` ou `html.reduced-motion`) : `setZoom` et la fin du pincement posent le zoom
+  sans animation.
+- **Préférence** : `localStorage` `une-annee-a-la-ferme.zoom` = `{ levels?: r, career?: r }` (rapport au défaut ; absent =
+  défaut), enregistrée quand le zoom se pose, appliquée (`setZoomRatio`) une fois par partie et par mode après le
+  premier `scene.render` ; au menu (ferme de démonstration), zoom par défaut.
+- **Débogage** : `__app.scene.zoomInfo()`, `__app.scene.setZoom(8)`.
+
+## Vallée vivante — contrats du lot V1 (CORE · ART · UI/RENDER, conception 2026-10-03)
+
+« La boîte en fer » : variétés anciennes (graines, planches d'essai, fixation, traits), aménagements nature, habitants
+(recettes, venue, observation, services), étapes de la vallée, chapitres de Joseph, cueillette des haies, étal de la
+foire, 2 pages d'album. Règles chiffrées et contenus : **`docs/VALLEE.md`** (§ 2 à § 10 ; résumé : `docs/GAME_DESIGN.md`
+§ 18). Ce qui suit fixe les **noms, formes et comportements** que les trois paquets se promettent ; tout est **ajouté**
+(rien du contrat existant n'est retiré ni renommé). Tant que CORE n'a pas livré, UI/RENDER simulent les requêtes avec
+des objets factices de la même forme ; tant qu'ART n'a pas livré, RENDER/UI dessinent un repli (`canDraw`, `spriteAny`).
+
+### Règles communes
+
+- **Carrière seulement.** Tout est gardé par `state.career?.valley` (et `state.career.valley.parts.<partie>`). Une partie
+  de niveau n'a pas `state.career` : **aucun** code nouveau n'y passe, aucun flux, aucun champ de requête ; les fichiers
+  partagés touchés (`farm.js`, `surprises.js`, `cozy.js`) ne lisent la Vallée que derrière ce garde. `tests/parity.test.js`,
+  `tools/capture-parity.js` et `node tools/simulate.js` inchangés et verts.
+- **Aléatoire** : un flux **nouveau**, `state.rng.valley` (`hashSeed(seed, 'valley')`), créé par l'extension (`init` /
+  `migrate`). Tirages fixes : **à chaque aube** une fois la Vallée commencée, 1 nombre par espèce de `SPECIES` (12, dans
+  l'ordre des données, qu'elle soit candidate ou non) ; en été et en automne à partir de l'étape 2, **3 nombres** pour la
+  cueillette des haies (chance, sorte, emplacement), qu'il y ait de la place ou non ; **1 nombre** par bocal ouvert
+  (`openJar`) ; **1 nombre** à l'aube de la foire aux graines (sachet de l'étal). Météo, marché, `career`, `staff`,
+  `events`, `quality`, `surprise`, `sky`, `orders`, `variety`, `cozy` tirent **le même nombre** de nombres qu'avant (les
+  services changent des seuils ou des poids, jamais le nombre de tirages).
+- **Pur** : `src/data/career/valley.js`, `src/core/career/{valley,heirlooms,habitat}.js` n'importent ni DOM ni horloge.
+- **Jour absolu** `absDay(state)` et **saison absolue** `seasonAbs(state)` (lot 3). Durée des saisons 7, 10 ou 14 : les
+  temps de la Vallée sont exprimés en saisons ou en aubes (jamais en jours de 7).
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (texte français). Identifiants en anglais, textes en français.
+
+### Fichiers
+
+```
+src/data/career/valley.js    (nouveau, pur) VALLEY_VERSION, VALLEY_PARTS ['seeds', 'wildlife'], VALLEY_START { rank: 2 },
+                             SEED_RULES { jarSeeds 3, boxSeeds 3, handSeeds 2, fixHand 6, fixedSeedFactor 1.25, graftPerBasket 1 },
+                             TRAITS (7 : id, name, icon, text, effet chiffré : early 0.15, dry { dry: 1, heat: 0.75 },
+                               hardy { winterGrowth: 0.5 }, fine { fine: 0.04, gold: 0.01 }, tasty 0.10, bee { minPlots: 2,
+                               perHive: 1 }, giant 2), VARIETIES (12 : id, cropId, name, trait, label, anecdote, icon, ripe,
+                               tint), JOSEPH_BOX { varieties: ['bouleDOr', 'coeurDeBoeuf', 'rougeVifDEtampes'], seeds 3,
+                               freeHedge: 'start.hedgeL', lines[3] }, NATURE_ITEMS (8 : id, name, icon, price { base, step,
+                               max? }, rank, needs?, text, beauty 1), NATURE_SPOTS (par type de terrain → genres
+                               d'emplacement), FALLOW { growth 0.10, growthStage4 0.20 }, SPECIES (12 : id, name, icon,
+                               seasons, recipe [{ kind, n }], spotKind, service { kind, value, seasons? }, hint, anecdote,
+                               firstMet?), ARRIVAL { visibleChance 0.5, maxWait 3, onePerDawn: true }, STAGES (6 : n, id,
+                               name, signs, reward { ecus, boon?, cosmeticId? }, chapter { title, lines[3] }), HEDGE_FINDS (4 :
+                               id, name, icon, seasons, coins, weight ; chance 0.5, max 3), FAIR_STALL { base 60, perRank 30 },
+                               VALLEY_HINTS, textes
+src/core/career/heirlooms.js (nouveau, pur, sans enregistrement) varietyOf(plot), traitOf(plot), isTrial(state, plot),
+                             growthFactorOf(state, plot), dryGrowthOf(state, plot, crop, heat), survivesFrost(state, plot),
+                             winterGrowthOf(state, plot), qualityBonusOf(state, plot, byHand), giantFactorOf(state, plots),
+                             priceFactorOf(plot), seedCostOf(state, varietyId), canHelpersSow(state, varietyId),
+                             planVariety(plan value) — lus par farm.js, surprises.js, runtime.js, work.js, machines.js
+src/core/career/habitat.js   (nouveau, pur) habitatCounts(state), recipeStatus(state, speciesId), speciesSpot(state, id),
+                             valleyServices(state), signsOfLife(state), stageFor(signs), nextHint(state), naturePrice(state, kind),
+                             spotsOf(state, kind?) (identifiants d'emplacements des terrains possédés, cf. NATURE_SPOTS)
+src/core/career/valley.js    (nouveau) extension de carrière id 'valley' (points d'accroche ci-dessous), enregistrée en
+                             DERNIER par extensions.js (après cozy)
+src/core/career/extensions.js  + registerCareerExtension(valleyExtension) (après cozyExtension)
+src/data/album.js            + pages `heirlooms` « Graines anciennes » (12 cases, mode 'career', check { type: 'heirloomFixed',
+                             id }) et `wildlife` « Les habitants de la ferme » (12, { type: 'wildlifeInstalled', id }) ;
+                             RESERVED_PAGE_IDS garde ses deux identifiants (pages maintenant remplies)
+src/core/album.js            + faits `heirloomFixed`, `wildlifeInstalled` (lus dans ctx.career.valley)
+src/data/achievements.js     + VALLEY_ACHIEVEMENTS (7, category 'career', écus seulement) ; ALL_ACHIEVEMENTS les inclut
+src/data/cosmetics.js        + 3 décors found: true, price 0 : seed.cabinet, nestbox.painted ('small'), valley.linden ('large')
+src/data/cozy.js             LANTERN_RULES.career.beautyPoints + { nature: 1, natureMax: 6 } ; paliers de beauté recalibrés
+tests/valley.test.js, tests/valley-seeds.test.js, tests/valley-habitat.test.js, tests/valley-migration.test.js (nouveaux)
+assets/sprites/generate-valley1.py → assets/sprites/valley1.png + bloc « // <valley1:auto> » d'atlas.js   (ART)
+src/ui/career/valley.js, css/valley.css   (UI ; css/valley.css ajoutée à CSS_FILES de tools/build.js)
+src/render/valley-actors.js  (RENDER : aménagements, bêtes, indices, cueillette, boîte, planches d'essai, jachères, lisière)
+```
+
+Modifiés (CORE, branches gardées par `state.career?.valley`) : `src/core/farm.js` (pousse par parcelle : précoce, sobre,
+rustique, sol reposé ; gel ; `clearPlot` efface `variety`, `rested`), `src/core/surprises.js` (`qualityChances` +
+`qualityBonusOf` + services ; chance de géant + lièvre et trait géante), `src/core/cozy.js` (trouvailles d'hiver : 4 à la
+fois avec le rouge-gorge, pièces × 2 avec l'écureuil), `src/core/career/{runtime,work,machines,events,animals,land,save}.js`,
+`tools/{simulate-career,sim-career-staff}.js`, `tests/career-helpers.js` (carrières de test avec `valley: false` par
+défaut, comme `surprises`, `variety`, `cozy`).
+
+### Activation et options
+
+```js
+createCareer({ …, valley })   // défaut true ; false → state.career.valley = null (gardé tel quel à la reprise)
+                              // { seeds, wildlife } → parties à true (absentes = true) — tests et simulation
+game.valley                   // booléen (accesseur, comme game.cozy)
+```
+
+La Vallée **commence** (`started`) à la première aube où `state.career.rank ≥ VALLEY_START.rank` (2). Avant, l'état existe
+(`started: null`) mais rien ne se passe ni ne s'affiche (requête `valley()` → `{ started: null, startsAtRank: 2 }`).
+
+### État (`state.career.valley`, `null` quand c'est désactivé)
+
+```js
+state.career.valley = {
+  v: 1,
+  parts: { seeds: true, wildlife: true },
+  started: null | { year, day, abs },        // boîte de Joseph reçue
+  stage: 0,                                  // 0..5, jamais en baisse
+  chapters: { read: [stageN] },              // chapitres lus (0 = la boîte) ; non lus → ligne « À faire »
+  spent: 0,                                  // pièces dépensées (patrimoine : 100 %, fournisseur patrimony)
+  jars: { opened: 0 },                       // nombre de bocaux de state.career.heirlooms déjà ouverts (dans l'ordre)
+  seeds: { [varietyId]: n },                 // graines gardées (gratuites), avant comme après fixation
+  varieties: { [varietyId]: { from: 'box'|'jar'|'fair'|'jay', got: abs, hand: 0, fixedAt: null | abs } },
+  nature: { [spotId]: { kind, at: abs } },   // aménagements posés (spotId = '<lotId>.<slot>', ex. 'lot3.hedgeL')
+  reserve: { [kind]: n },                    // aménagements retirés par un réaménagement, à replacer gratuitement
+  bought: { [kind]: n },                     // nombre ACHETÉ (prix croissants ; la haie offerte n'y compte pas)
+  species: { [speciesId]: { state: 'hint' | 'visible' | 'installed', since: abs, spotId: null | spotId, at?: abs } },
+  finds: [{ id, kind, spotId, day }],        // cueillette des haies, 3 au plus
+  jayYear: 0,                                // année du dernier bocal du geai
+  fair: null | { year, varietyId, price, bought: false },   // étal « La grainothèque du pays » de la foire de l'année
+  year: { hand: 0, seedsSaved: 0, fixed: 0, installed: 0, placed: 0, finds: 0, jars: 0, base?: … },   // bilan de l'année
+  stats: { hand: 0, seedsSaved: 0, observed: 0, placed: 0, jars: 0, fallows: 0, finds: {} },        // cumul : album, succès
+  nextId: 1,
+}
+// Parcelles (carrière, Vallée active) :
+//   variety: varietyId      culture semée d'une variété ancienne (p.cropId = la culture) ; effacé par clearPlot
+//   lastVariety: varietyId  variété de la dernière récolte (plan « même culture ») ; gardé
+//   fallow: seasonAbs       jachère fleurie jusqu'au soir du dernier jour de cette saison (p.cropId = null)
+//   rested: true            sol reposé (après une jachère) : la prochaine culture pousse + FALLOW.growth ; effacé à sa récolte
+// Arbre isolé : nature['lot5.tree'] = { kind: 'loneTree', at } — adulte quand seasonAbs − saison(at) ≥ 2 (jeune à 1).
+```
+
+`check(state) → null | 'problème'` (extension ; `save.js` vérifie les champs de parcelle) : version, identifiants connus
+(variétés, traits, aménagements, emplacements ↔ terrains possédés et genre compatible, espèces, trouvailles), entiers ≥ 0,
+`jars.opened ≤ heirlooms.length`, `stage` = au plus `stageFor(signsOfLife)`, 3 trouvailles au plus, `variety` sur une
+parcelle dont `cropId` = la culture de la variété, `fallow` sur une parcelle sans culture.
+
+### Emplacements (`NATURE_SPOTS`, le cœur ne connaît que les identifiants)
+
+| Terrain (type) | Emplacements (`<lotId>.<slot>`) |
+|---|---|
+| tout terrain possédé sauf `home` (champ de départ `start` et basse-cour `yard` compris) | `hedgeL`, `hedgeR` (genre `hedge`) |
+| `field` (dont `start`) | `strip` (`strip`) ; `start` seulement : `hotel` (`insectHotel`) |
+| `meadow` | `nest` (`nestbox`), `pile` (`woodpile`), `tree` (`loneTree`) |
+| `orchard` | `nest`, `pile`, `hotel` |
+| `workshops` | `hotel` |
+| `wild` (friche) | `pile`, `tree` |
+| `pond` | `reeds` (`reeds`) |
+| `yard` | `nest`, `pile` |
+| `home` | `nest` ; `owl` (`owlbox`, seulement si le grenier est construit) |
+| `greenhouse` | (les haies seulement) |
+
+Un réaménagement (`developLot`) garde `hedgeL` / `hedgeR` ; les autres aménagements du terrain passent dans `reserve`
+(événement `natureReserved`). Les recettes comptent aussi : `pond` (terrain mare), `orchard` (un verger), `wildGround`
+(terrain en friche ou parcelle en jachère), `bigShelter` (étable, écurie, bergerie ou chèvrerie construite), `treeAdult`
+(chêne isolé adulte ou pommier adulte), `flowers` (bandes fleuries + jachères + parcelles mellifères en pousse),
+`cropsGrowing` (cultures différentes en pousse dans les champs).
+
+### Déroulé (extension `valley`, enregistrée après `cozy`)
+
+- **`dawnEvents`** (après la météo, flux `valley`) :
+  1. pas commencée et rang ≥ 2 → **début** : `started`, graines de la boîte, haie offerte (`start.hedgeL`, si libre ;
+     sinon le premier emplacement de haie libre), `valleyStarted` ;
+  2. **saison nouvelle** : jachères échues (`fallow < seasonAbs`) → `fallow` effacé, `rested = true` (`fallowEnded`) ;
+     1ᵉʳ jour d'automne : geai installé et `jayYear < année` → un bocal ajouté à `state.career.heirlooms` (`{ cropId, lotId:
+     'home', year, day, from: 'jay' }`, culture tirée au moment de l'ouverture), `jayYear = année`, `jayGift` ;
+     dernier jour d'hiver (foire aux graines, `seedFair` du lot 4) : étal tiré (1 nombre) → `fair` ;
+  3. **espèces** (12 nombres) : pour chaque espèce non installée, dans l'ordre des données — `visible` : rien ;
+     `hint` : nombre < 0,5 ou `abs − since ≥ maxWait − 1` → `visible` (emplacement `speciesSpot`), `speciesVisible` ;
+     sans état : recette remplie et saison d'arrivée, et aucune autre espèce passée à `hint` cette aube → `hint`
+     (`speciesHint { id, spotId, text }`) ;
+  4. **cueillette des haies** (étape ≥ 2, été ou automne ; 3 nombres) : si moins de 3 trouvailles et une haie posée,
+     chance 0,5 → une trouvaille de saison sur une haie (`hedgeFinds`).
+- **`dawn`** (fin de l'aube) : étape (`stageFor(signsOfLife)`, jamais en baisse) → `valleyStage { n, name, reward,
+  chapter }` (écus versés par l'interface ; décor de l'étape 5 débloqué par la progression).
+- **`incomes`** : trait mellifère (≥ 2 parcelles mellifères en pousse, hors hiver) → `{ source: 'valleyBees', amount: min(
+  ruches, …) × 1, kind: 'valley', key: 'honey' }`.
+- **`evening`** : dernier soir d'une saison : rien ne part (les bêtes `visible` attendent, les trouvailles des haies restent
+  jusqu'à la fin de l'automne, effacées au 1ᵉʳ jour d'hiver).
+- **`yearEnd`** : `report.valley = { stage, year: {…}, installed: [id], fixed: [id] }`, compteurs `year` remis à zéro.
+- **Fournisseurs** : `effects(state, 'growthBonus')` (bourdons 0,03 hors hiver ; grenouilles 0,10 les jours de pluie ou
+  d'orage) ; `effects(state, 'animalBonus')` (hirondelles 0,05 au printemps et en été ; **clé nouvelle**, lue par
+  `animals.js`) ; `effects(state, 'touristBonus')` (paon-du-jour 0,15 ; **clé nouvelle**, lue par `events.js`) ;
+  `patrimony(state)` → `valley.spent` (100 %) ; `unlocks(rank)` → aménagements du rang (rang 2 : haie, bande, nichoir, tas,
+  hôtel, nichoir à chouette ; rang 3 : chêne, berges).
+- **Lus directement** (gardés par `state.career?.valley`) :
+  - `runtime.js` — récolte (normale et géant) : `harvestAmount` × `priceFactorOf(p)` (savoureuse) ; une parcelle à
+    `variety` ne va **jamais au grenier** (`wouldStore` faux) ; **avant `clearPlot`**, `valleyHarvest(api, plotIndex, by)`
+    (exporté par `valley.js`) : à la main → `seeds[v] += handSeeds`, `hand += 1`, fixation à `fixHand` (`heirloomFixed`),
+    événement `heirloomHarvest` ; `p.lastVariety = v` ; arbre : un greffon par panier. Plantation : action `sowHeirloom` ;
+    `plant` (culture ordinaire) sur une jachère l'arrête, sans sol reposé (`fallowCancelled`). `plantableCrops(i)` : + `heirlooms` ; `query.plot(i)` : + `variety`, `fallow`, `rested`.
+  - `work.js`, `machines.js` (semis) : jamais sur une parcelle en `fallow` ; plan `'heirloom:<id>'` ou `'same'` avec
+    `lastVariety` **fixée** → semis de la variété (prix `seedCostOf`, graines gardées d'abord) ; une variété **non fixée**
+    n'est jamais semée par l'équipe ni le semoir (plan `'same'` → la culture ordinaire).
+  - `farm.js` : pousse × `growthFactorOf(p)` (précoce 1,15 ; sol reposé 1,10 / 1,20) ; pousse sans arrosage
+    `dryGrowthOf` (sobre) ; `applyFrost` épargne `survivesFrost(p)` (rustique, hors serre) ; en hiver, pousse ×
+    `winterGrowthOf(p)` (0,5) ; `clearPlot` efface `variety` et `rested`.
+  - `surprises.js` : `qualityChances` + `qualityBonusOf(state, p, byHand)` (généreuse ; hérisson à la main ; coccinelles,
+    étape 3 pour tous) ; chance de géant + 0,015 (lièvre) et × 2 si les 4 parcelles sont d'une variété géante.
+  - `events.js` (carrière) : poids des corbeaux × 0,5 (chouette) ; valeur des poissons × 1,25 (libellules) ; touristes ×
+    (1 + `touristBonus`).
+  - `cozy.js` : trouvailles d'hiver : 4 à la fois (rouge-gorge), pièces × 2 (écureuil).
+  - Lanternes (beauté, carrière) : `nature` = aménagements posés (6 au plus).
+
+### Actions (`game.actions.career.*`, seulement quand la Vallée est commencée)
+
+```js
+openJar()                          → { ok, index, varietyId, name, trait, seeds, isNew, label, cropId }
+    // le plus ancien bocal pas encore ouvert ; refus : 'Aucun bocal à ouvrir.'
+sowHeirloom(plotIndex, varietyId)  → { ok, plotIndex, varietyId, cropId, cost, fromSeeds, seedsLeft, fallowCancelled }
+    // refus : 'Variété inconnue.' ; 'Parcelle inexistante.' ; 'Cette parcelle n'est pas libre.' ;
+    //   '{Culture} ne se sème pas en {saison}.' ; 'Plus de graines de {nom} : récoltez-en une à la main.' (non fixée) ;
+    //   notEnoughMoney(n) (fixée) ; pommier : 'Un greffon se plante dans un verger.'
+sowFallow(plotIndex)               → { ok, plotIndex, until /* seasonAbs */ }
+    // refus : 'Une jachère se fait sur une parcelle de champ vide.' ; 'Déjà en jachère.'
+placeNature(spotId, kind?)         → { ok, spotId, kind, cost, fromReserve }
+    // refus : 'Emplacement inconnu.' ; 'Déjà aménagé.' ; 'Cet aménagement ne va pas ici.' ; 'Rang N requis' ;
+    //   'Construisez d'abord le grenier.' ; notEnoughMoney(n)
+observe(speciesId)                 → { ok, speciesId, name, service: { kind, value, text }, first: true }
+    // refus : 'Rien à observer ici.' (pas visible) ; 'Déjà installé.'
+pickHedgeFind(findId)              → { ok, kind, name, amount }               // refus : 'Rien à cueillir ici.'
+buyFairHeirloom()                  → { ok, varietyId, seeds, cost }           // dernier jour d'hiver
+    // refus : 'La foire aux graines n'est pas aujourd'hui.' ; 'Déjà acheté cette année.' ; 'Toutes les variétés du pays sont
+    //   déjà chez vous.' ; notEnoughMoney(n)
+readChapter(n)                     → { ok, chapter: { n, title, lines } }     // refus : 'Chapitre inconnu.'
+triggerValley(kind, arg?)          → { ok, … }   // DÉBOGAGE / tests : 'start', 'jar' (cropId), 'seeds' (varietyId, n),
+                                                 //   'fix' (varietyId), 'visible' (speciesId), 'install' (id), 'stage' (n),
+                                                 //   'finds', 'fair', 'tree' (spotId → adulte)
+// Modifiées : plant(i, cropId) sur une jachère l'arrête (→ planted + fallowCancelled: true) ;
+//   setPlan(lotId, seasonId, 'heirloom:<id>') accepté pour une variété fixée ; developLot → natureReserved.
+```
+
+Dépenses : `api.spend('valley', cost)` (poste « La Vallée » du bilan, `SPENT_LABELS.valley`) et `valley.spent += cost` ;
+cueillette : `api.earn('valley', amount)` (`INCOME_LABELS.valley`), × `careerFactor(rang)` comme les fêtes.
+
+### Requêtes (`game.query.career.*`)
+
+```js
+valley() → null | { started: null, startsAtRank: 2 } | {
+  started, parts,
+  stage: { n, name, signs, next: null | { n, name, signs }, vignette: 'valley.stage.<n>', reward },
+  hint: null | { kind: 'observe' | 'jar' | 'trial' | 'recipe' | 'seeds' | 'stage' | 'chapter', text, icon,
+                 target: null | { type: 'species' | 'plot' | 'spot' | 'lot' | 'nature', id } },
+  chapters: [{ n, title, lines, read, available }],
+  jars: { pending, list: [{ index, cropId, label, from }] },
+  varieties: [varietyInfo], species: [speciesInfo], nature: { items: [natureInfo], free: n },
+  finds: [{ id, kind, name, icon, spotId }],
+  fair: null | { varietyId, name, icon, trait, seeds, price, canBuy, reason },
+  services: [{ id /* espèce, étape ou trait */, text }],
+  year, stats, spent }
+  varietyInfo = { id, cropId, name, icon, ripeIcon, trait: { id, name, icon, text }, state: 'unknown' | 'seeds' | 'fixed',
+                  seeds, hand, need, label, anecdote /* connue */, hint /* inconnue */, growing, seedCost /* fixée */ }
+  speciesInfo = { id, name, icon, seasons, state: 'unknown' | 'hint' | 'visible' | 'installed', inSeason,
+                  recipe: [{ kind, n, have, ok, text }], service: { kind, value, text }, spotId, where /* « près de la haie
+                  du Haut-Champ » */, hint, anecdote /* installée */, firstMet /* « Déjà vu à la mangeoire » */ }
+  natureInfo  = { kind, name, icon, text, price, rank, locked, reason, placed, freeSpots, reserve }
+valleySpots(kind?) → [{ spotId, lotId, lotName, slot, kind, placed: null | kind, free, price, canPlace, reason }]   // mode aménagement
+valleyAnimals() → [{ id, spotId, state: 'hint' | 'visible' | 'resident' }]   // rendu : indices, bêtes à voir, habitants du jour
+    // 'resident' : installée, en saison, présente aujourd'hui = hachage pur (absDay, id) — sans flux aléatoire, 6 au plus
+query.plot(i)          // carrière : + variety: null | { id, name, icon, trait, trial, hand, need, seedsOnHand: 2 },
+                       //   fallow: null | { until, text }, rested
+query.plantableCrops(i?)   // carrière : + heirlooms: [{ varietyId, cropId, name, icon, trait, seeds, fixed, cost, canSow, reason }]
+                           //   + fallow: { canSow, reason } (ligne « Jachère fleurie »)
+query.achievementContext() // carrière : career.valley = { fixed: [id], installed: [id], stage, jars, hand }
+query.career.yearReport()  // + valley
+query.career.lot(id)       // + nature: [{ spotId, slot, kind, placed }]
+```
+
+### Événements (seulement quand la Vallée est active)
+
+| Type | Données | Pour |
+|---|---|---|
+| `valleyStarted` | `{ box: [{ varietyId, name, seeds }], hedge: spotId, chapter: { lines } }` | fenêtre « La boîte en fer », boîte sur le perron, haie qui pousse, conseil `valley.box` |
+| `jarOpened` | `{ index, varietyId, name, trait, seeds, isNew, label }` | couvercle qui saute, étiquette complétée |
+| `heirloomSown` | `{ plotIndex, varietyId, fromSeeds, seedsLeft }` | étiquette de la planche d'essai |
+| `heirloomHarvest` | `{ plotIndex, varietyId, seeds, hand, need, by }` | « + 2 graines » (texte flottant), barre de fixation |
+| `heirloomFixed` | `{ varietyId, name, trait }` | message « … est sauvée ! », album, conseil `valley.fixed` |
+| `naturePlaced` / `natureReserved` | `{ spotId, kind, cost, fromReserve }` / `{ lotId, kinds: [kind] }` | l'aménagement pousse (fondu) / message |
+| `fallowSown` / `fallowEnded` | `{ plotIndex, until }` / `{ plots: [index] }` | fleurs sur la parcelle / « sol reposé » |
+| `speciesHint` | `{ id, spotId, text }` | résumé du matin, indice dessiné à l'emplacement |
+| `speciesVisible` | `{ id, spotId, where }` | bête + étincelle, ligne « À faire » |
+| `speciesInstalled` | `{ id, name, service, first }` | fenêtre d'observation, album, succès |
+| `valleyStage` | `{ n, name, reward, chapter: { title, lines } }` | lisière, ambiance, écus et décor (progression), chapitre à lire |
+| `hedgeFinds` / `hedgePicked` | `{ finds: [{ id, kind, spotId }] }` / `{ id, kind, name, amount }` | étincelle sur la haie / panier |
+| `jayGift` | `{ index }` | message « Le geai a oublié un bocal au pied du chêne » |
+| `fairHeirloomBought` | `{ varietyId, seeds, cost }` | sachet qui saute |
+| `harvested` | + `variety`, `seeds` (carrière) | texte flottant |
+| `planted` | + `variety`, `fallowCancelled` | — |
+
+### Progression (album et succès)
+
+- `albumFacts` lit `ctx.career.valley.fixed` / `installed` (types `heirloomFixed`, `wildlifeInstalled`). Les deux pages
+  sont en mode `'career'` (« À découvrir dans Ma ferme » dans les niveaux) ; récompenses : 30 écus + `seed.cabinet` /
+  30 écus + `nestbox.painted`. Rien à rattraper.
+- `VALLEY_ACHIEVEMENTS` : `valleyBox`, `firstSaved`, `seedKeeper`, `firstNeighbour`, `welcomingFarm`, `valleySings`,
+  `seedHands` (conditions : `careerValley { key, n }` sur `ctx.career.valley` ; 155 écus).
+- Écus des étapes (`valleyStage.reward.ecus`) → `progression.careerEcus` (comme `feteDone`) ; décor de l'étape 5
+  (`valley.linden`) débloqué par `recordValleyStage(progress, n)` (nouveau, pur) qui renvoie la progression à jour.
+
+### Migration et sauvegardes
+
+- Extension `valley` — `init` (création) et `migrate` (chargement) : `state.career.valley` absent → créé (`started:
+  null`, `jars.opened: 0`) + flux `valley` ; carrière au rang ≥ 2 : la boîte à la première aube ; bocaux déjà trouvés à
+  ouvrir. `CAREER_VERSION` inchangée ; `save.js` accepte `variety`, `lastVariety`, `fallow`, `rested` sur les parcelles.
+- `v` de `state.career.valley` : 1 (le V2 complète en 2, etc. ; rien n'est retiré).
+- Progression : pages et succès ajoutés par `normalizeProgress` (schéma inchangé).
+- Tests : `tests/career-helpers.js` crée ses carrières avec `valley: false` par défaut ; `tests/valley-migration.test.js` :
+  aller-retours, carrière d'avant la Vallée (lots 3 et 4, avec bocaux), rang 1 / rang 3, `check`, parité des niveaux.
+
+### Simulation
+
+- `tools/simulate-career.js` : `--valley on | off | seeds,wildlife` (défaut : on), **`--compare-valley`** (sans → avec, même
+  graine : revenu par année, rang médian, Domaine, dépenses de la Vallée, nouveautés par saison, collection par année
+  (variétés fixées, habitants, étape), gestes par jour, part à la main, `handsOff`, `automator`, débutant), `--years 20`
+  pour les cibles d'ensemble ; comportements des robots : `docs/VALLEE.md` § 12.4, par l'API publique et un tirage propre
+  (`me.valleyRnd`) pour que les autres décisions restent identiques avec ou sans la Vallée ; `--lanterns` (beauté).
+- Après réglage : `SEED_RULES`, services, prix, paliers de beauté, tableaux de `docs/VALLEE.md` § 12 remplis.
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- Disposition : `layout.valley = { spots: { [spotId]: { x, y, w, h, kind } } (un rectangle pour **chaque** identifiant que
+  `valleySpots()` peut renvoyer : haies = colonne x 0 / x 13 du bloc, lignes 0 à 9 ; bande fleurie = la ligne sous les
+  parcelles, dans la clôture ; nichoir, tas, hôtel, chêne, berges, nichoir à chouette = tuiles libres du gabarit), box:
+  rect (perron, sans couvrir la porte ni le porte-lanternes), animalAnchors: { [spotId]: { x, y } } }`. Test : aucun
+  emplacement ne chevauche une parcelle, un chemin, un bâtiment, une ruche, un emplacement de décor (`lotN.corner`) ni l'aire
+  des machines ; tous ≥ 48 px CSS une fois agrandis pour le doigt.
+- Scène : haies en autotuile par saison (fleurs au printemps, baies à l'automne, nues en hiver) ; bandes fleuries par saison ;
+  aménagements ; chêne selon son âge ; parcelles en jachère (`nature.fallow.<saison>`) ; étiquette `valley.label` sur les
+  planches d'essai ; dessin mûr et icône des variétés (`heirloom.<id>.4`, repli : la culture teintée par `tint`) ; bêtes
+  (`wild.<id>`, 2 images) : `visible` avec étincelle « ? », `resident` en promenade douce (6 au plus) ; indices
+  (`wild.hint.*`) le jour de `speciesHint` ; trouvailles des haies (étincelle) ; boîte en fer sur le perron.
+- **Lisière selon l'étape** : `scene.setValleyStage(n)` — fleurs sur les tuiles de forêt qui bordent la ferme (étapes 2 et
+  4), oiseaux qui traversent le ciel (`fx.birds` : 0, 1, 2, 3, 4, 5 vols par minute de l'étape 0 à 5), papillons l'été
+  (étape ≥ 3) ; mouvements réduits : rien ne traverse, fleurs fixes.
+- `scene.hitTest` : + `{ type: 'wildlife', id }` (bête `visible`), `{ type: 'hedgeFind', id }`, `{ type: 'valleyBox' }`,
+  `{ type: 'natureSpot', spotId }` (seulement en mode aménagement : `scene.setValleyPlacing(kind | null)`, qui fait pulser
+  les emplacements libres du genre ; seuls ces cibles et le défilement répondent).
+- `getMinimap` : en mode aménagement, point sur les terrains qui ont un emplacement libre.
+- **Zoom de la scène** (section « Zoom de la scène » ci-dessus) : bêtes, trouvailles, boîte et emplacements passent par
+  `screenToWorld` / `worldToScreen` au zoom courant, cibles agrandies à `minWorld = 48 × dpr / zoom` ; en mode aménagement,
+  les boutons + / − restent utiles (dézoomer pour voir tous les emplacements, zoomer pour viser).
+- Nouvelle planche `valley1` dans `SHEETS` et `assets.js` (facultative, comme `lot4`) ; `DECOR_SPRITES` : les 3 décors.
+
+**UI** (`src/ui/career/valley.js`, `css/valley.css`, `src/main.js`) :
+- `createValley(app) → app.valley = { open(tab?), openJar(), enterPlacing(kind), leavePlacing(), onEvent, onHit(hit),
+  todoItems(game), morningLines(ev), plotRows(plot), seedRows(crops), lotSection(lot), yearBlock(report), frame(), reset() }`.
+- Fiche « La Vallée » (feuille haute, pause pendant la lecture) : en-tête (vignette, étape, signes de vie lus), carte « Le
+  prochain indice », segments **Graines · Habitants · Aménager** (maquettes : `docs/VALLEE.md` § 10). Entrées : boîte du
+  perron, carte « La Vallée » en tête du Carnet › Ferme, ligne « À faire », menu de partie.
+- Mode aménagement (comme le mode décoration : `body.in-valley-place`, barre `#vl-placebar` « 🌿 Haie champêtre · 280 ·
+  Touchez un emplacement · Terminer » à la place des onglets) ; petite feuille de confirmation.
+- Fenêtres : « La boîte en fer » (`valleyStarted`), ouverture d'un bocal, observation (`speciesInstalled`), chapitre
+  (`readChapter`) ; section « Nature » de la fiche d'un terrain ; lignes de la fiche de parcelle ; section « Graines
+  anciennes » et ligne « Jachère fleurie » de la feuille des graines (« Semer partout » avec un stock) ; choix d'une variété
+  fixée dans le plan de culture ; étal « La grainothèque du pays » dans la feuille de la foire (lot 4) ; bloc du bilan
+  annuel.
+- Ligne « À faire » (`vl-observe`, `vl-jar`, `vl-trial`, `vl-chapter`) ; résumé du matin (indices, graines gardées hier).
+- Récompenses : `valleyStage.reward.ecus` → `progression.careerEcus` ; `recordValleyStage` ; album à chaque aube (règle du
+  lot 4).
+- Conseils « première fois » : `valley.box`, `valley.jar`, `valley.trial`, `valley.nature`, `valley.species`,
+  `valley.fixed`, `valley.fallow`, `valley.stage` (textes dans `VALLEY_HINTS`).
+- Sons (synth existant) : `pop` bocal et cueillette, `chime` variété sauvée, `magic` chapitre, `reveal` étape, **`chirp`**
+  (lot 4) bête observée ; aucun fichier son en V1.
+- Débogage (`?debug=1`) : `__debug.valley.{ on(), state(), start(), jar(cropId), seeds(id, n), fix(id), visible(id),
+  install(id), stage(n), finds(), fair(), tree(spotId), place(kind), point(kind, id) }` (passent par `triggerValley` et les
+  actions publiques).
+
+### Sprites (paquet ART : planche `assets/sprites/valley1.png`, `assets/sprites/generate-valley1.py`, bloc `// <valley1:auto>`)
+
+Même méthode que `generate-lot4.py` (palette Kenney, contour sombre (63, 38, 49), lumière en haut à gauche ; tuiles de
+16 px). Tailles : **16 × 16** sauf mention. Les cultures de base, Joseph (`portrait.joseph`), le bocal (`item.heirloom`,
+`find.seedjar`), le hérisson et le renard du lot 2, le rouge-gorge du lot 4 (`bird.robin`) sont **réutilisés** quand ils
+conviennent ; seuls les manquants sont dessinés ici.
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `heirloom.<id>.icon` (jauneDuDoubs, bouleDOr, rougeDeBordeaux, milanDePontoise, coeurDeBoeuf, grandRouxBasque, soleilDOr, vitelotte, reineDesVallees, rondeDeNice, rougeVifDEtampes, calvilleBlanc) | 16 × 16 | icônes : carotte jaune pâle ; navet doré ; gerbe de blé roux ; chou de Milan vert sombre cloqué ; grosse tomate côtelée rouge sombre ; épi de maïs roux-orangé ; tournesol à cœur brun et pétales or vif ; pomme de terre violette allongée ; petites fraises des bois coniques ; courgette ronde vert pâle ; citrouille aplatie rouge-orangé côtelée ; pomme jaune-vert côtelée |
+| `heirloom.<id>.4` (les 11 cultures) | 16 × 16 | stade mûr sur la parcelle (même cadrage que `crop.<id>.4`, couleurs de la variété) |
+| `heirloom.rougeVifDEtampes.giant` | 32 × 32 | citrouille géante rouge vif, côtes marquées |
+| `heirloom.calvilleBlanc.fruit` | 16 × 16 | pommes jaune-vert côtelées, posées par-dessus le pommier adulte (`tree.apple.*`) |
+| `wild.<id>`, `wild.<id>.1` (robin, hedgehog, ladybird, bumblebee, butterfly, swallow, tawnyOwl, frog, dragonfly, hare, squirrel, jay) | 16 × 16 | 2 images, regard vers la gauche : rouge-gorge (si `bird.robin` ne suffit pas), hérisson qui trottine, trio de coccinelles sur une feuille, bourdon rayé ailes floues, paon-du-jour ailes ouvertes / fermées, hirondelle en vol (ailes en faux), chouette hulotte brune aux yeux noirs (yeux ouverts / clignés), grenouille rousse assise / sautant, libellule bleue ailes en croix, lièvre aux longues oreilles assis / bondissant, écureuil roux queue en panache, geai à la tache bleue sur l'aile |
+| `wild.hint.tracks`, `wild.hint.feather`, `wild.hint.eggs`, `wild.hint.nuts`, `wild.hint.note` | 16 × 16 | indices : empreintes dans l'herbe ; plume bleue ; grappe d'œufs de grenouille dans l'eau ; noisettes rongées ; petite note de musique (chant, hululement, bourdonnement) |
+| `nature.hedge.<saison>.top`, `.mid`, `.bot` (spring, summer, autumn, winter) | 16 × 16 | haie champêtre verticale (aubépine, noisetier, églantier) : fleurs blanches et roses au printemps, vert dense l'été, baies rouges et noires à l'automne, branches nues givrées l'hiver ; 3 tuiles qui se raccordent (haut, milieu répétable, bas) |
+| `nature.strip.<saison>`, `nature.strip.<saison>.1` | 16 × 16 | bande fleurie horizontale répétable (2 variantes) : coquelicots et bleuets ; marguerites ; asters mauves ; graines sèches dorées |
+| `nature.nestbox` | 16 × 16 | nichoir en bois sur poteau, trou rond, petit toit |
+| `nature.owlbox` | 16 × 16 | grande caisse-nichoir accrochée sous un pignon, ouverture carrée |
+| `nature.woodpile` | 16 × 16 | bûches moussues et pierres sèches empilées |
+| `nature.insectHotel` | 16 × 32 | petite maison à toit de bois, tiroirs de tiges creuses, pommes de pin et briques percées |
+| `nature.reeds`, `.reeds.1`, `.reeds.2` | 16 × 16 | roseaux et iris jaunes en bord d'eau (3 variantes à poser sur l'autotuile de la mare) |
+| `nature.oak.sapling`, `nature.oak.young` | 16 × 16 · 16 × 32 | jeune plant tuteuré ; jeune chêne |
+| `nature.oak.<saison>` (spring, summer, autumn, winter) | 32 × 48 | chêne adulte isolé : vert tendre, vert profond, roux et glands, nu sous la neige |
+| `nature.fallow.<saison>` | 32 × 32 | parcelle en jachère fleurie (dessinée sur la terre labourée) : coquelicots ; phacélie bleue ; trèfle et marguerites ; couvert vert sous le givre |
+| `nature.edge.flowers.0` … `.2` | 16 × 16 | fleurs sauvages à poser sur les tuiles de lisière de la forêt (étapes 2 et 4) |
+| `hedgefind.blackberry`, `.elderflower`, `.sloe`, `.hazelnut` | 16 × 16 | grappe de mûres ; ombelle de fleurs de sureau ; prunelles bleu-noir ; noisettes dans leur collerette |
+| `valley.box`, `valley.box.open` | 16 × 16 | boîte à biscuits en fer cabossée, peinte de fleurs passées ; ouverte, sachets de papier dedans |
+| `valley.label` | 8 × 8 | petite étiquette de bois plantée (planche d'essai) |
+| `seedpack.heirloom` | 16 × 16 | sachet de papier kraft fermé d'une ficelle rouge, dessin de graine |
+| `story.box` | 48 × 32 | vignette : Joseph ouvre la boîte en fer sur la table de la cuisine, sachets et vieille photo |
+| `valley.stage.0` … `.5` | 96 × 48 | la même vallée vue de loin, du gris-brun (champs nus, ruisseau sec, arbres morts) au vert vivant (haies, fleurs, oiseaux) : une vignette par étape |
+| `icon.valley`, `icon.signs` | 16 × 16 | feuille de tilleul et petit oiseau ; jeune pousse dans un cercle (signes de vie) |
+| `icon.trait.<id>` (early, dry, hardy, fine, tasty, bee, giant) | 16 × 16 | horloge ; goutte barrée ; flocon ; étoile ; cœur ; abeille ; losange (lisibles en niveaux de gris) |
+| `icon.nature.<kind>` (hedge, strip, nestbox, owlbox, woodpile, insectHotel, loneTree, reeds, fallow) | 16 × 16 | pictos des aménagements pour l'interface |
+| `fx.birds`, `fx.birds.1` · `fx.butterfly`, `fx.butterfly.1` | 16 × 16 · 8 × 8 | vol de 3 oiseaux en silhouette (2 images) ; papillon (2 images) |
+| `album.page.heirlooms`, `album.page.wildlife` | 16 × 16 | onglets de page : sachet de graines ; empreinte de hérisson |
+| `decor.seed.cabinet`, `decor.nestbox.painted` | 16 × 16 | semainier à graines (petit meuble à tiroirs étiquetés) ; nichoir peint de fleurs |
+| `decor.valley.linden` | 32 × 32 | le tilleul de la vallée : grand tilleul en fleurs, banc à son pied |
+| `icon.ach.<id>` (valleyBox, firstSaved, seedKeeper, firstNeighbour, welcomingFarm, valleySings, seedHands) | 16 × 16 | icônes des 7 succès (+ versions grisées par le code) |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `lot4.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/career/valley.js`, `src/core/career/{valley,heirlooms,habitat}.js`, `src/core/career/extensions.js` (1 ligne), `src/data/{album,achievements,cosmetics,cozy}.js` (ajouts ci-dessus), `src/core/album.js`, `src/core/progression.js` (`recordValleyStage`), modifications de `src/core/{farm,surprises,cozy}.js` et `src/core/career/{runtime,work,machines,events,animals,land,save}.js`, `tools/{simulate-career,sim-career-staff}.js`, `tests/*` (nouveaux et `career-helpers.js`) | état, actions, requêtes, événements, progression ; simulation et réglage ; tableaux de `docs/VALLEE.md` § 12 | rien (commence par une extension qui ne fait rien, parité verte, puis : graines → traits → aménagements → espèces → étapes) |
+| **ART** | `assets/sprites/generate-valley1.py`, `assets/sprites/valley1.png`, bloc `// <valley1:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau des sprites ; planche de contrôle × 6 | rien |
+| **UI/RENDER** | `src/ui/*` (nouveau `src/ui/career/valley.js`), `css/valley.css`, `tools/build.js` (ligne `CSS_FILES` seulement), `src/main.js`, `src/index.template.html`, `src/render/*` (hors bloc `valley1:auto`), nouveau `src/render/valley-actors.js` | fiche « La Vallée », mode aménagement, fenêtres, lignes des fiches existantes, scène, lisière, hit-test, conseils, débogage ; vérification au doigt | CORE : API (factices de même forme en attendant) ; ART : sprites (repli `canDraw` / `spriteAny`) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `varietyInfo`, `speciesInfo`, `natureInfo`, `valleySpots()`,
+`valleyAnimals()`, `query.plot(i).variety` / `.fallow`, l'ordre des événements de l'aube (`valleyStarted`, `fallowEnded`,
+`jayGift`, `speciesHint` / `speciesVisible`, `hedgeFinds`, puis `valleyStage` en fin d'aube), les types de `hitTest` (figés
+ici ; tout écart est noté par CORE dans une section « Écarts » sous ce contrat) ; (2) **ART → RENDER/UI** : noms du
+tableau des sprites ; (3) **CORE ↔ ART** : identifiants des variétés, traits, aménagements, espèces, trouvailles, étapes,
+décors (figés ici et dans `docs/VALLEE.md`) ; (4) **RENDER ↔ CORE** : identifiants d'emplacements `<lotId>.<slot>` (le cœur
+les liste par `NATURE_SPOTS`, RENDER seul connaît leur position ; test commun : chaque identifiant a un rectangle) ;
+(5) intégration par le chef de projet : `node --test tests/` (parité comprise), `node tools/simulate-career.js
+--compare-valley` et `--lanterns`, `node tools/simulate.js` (identique), `node tools/build.js`, vérification au doigt
+(Pixel 7, 360 × 740 : cibles ≥ 48 px, textes ≥ 14 px ; une carrière d'avant la Vallée reprise au rang 3 avec des bocaux ;
+la boîte, un bocal ouvert, une planche d'essai fixée, une haie et un tas de bois posés, le rouge-gorge observé, une
+jachère, une étape et son chapitre ; une partie de niveau Classique identique), `JOURNAL.md`, sauvegarde `backup/…` avant
+et après le lot.
+
+### Aperçu des lots suivants (contrats à écrire au début de chaque lot)
+
+- **V2 « Le troc et les croisements »** — *contrats écrits : section « Vallée vivante — contrats du lot V2 » (plus bas),
+  qui remplace cet aperçu (Grainothèque dans la bande de la maison, croisements déterministes, flux `valley2`)* :
+  `state.career.valley.v = 2` ; bâtiment `seedLibrary` (5 niveaux, sur un
+  emplacement de pré, de basse-cour ou de cour des ateliers : `build(lotId, slot, 'seedLibrary')`) ; `swaps` (troc :
+  `actions.career.swapSeeds(clientId, varietyId)`), `CLIENT_VARIETIES` (12), `CROSSES` (table fixe, 11 variétés croisées
+  nommées d'après `farmName`, 2 traits), règle de voisinage dans le cœur (`crossCheck` à la récolte à la main, flux
+  `valley`), trait `scented` (l'atelier garde `variety` dans ses places), 4 habitants (`wildBee`, `blackbird`, `lizard`,
+  `bat`) et l'aménagement `batbox` ; pages d'album `swaps`, `crosses`, `wildlife2` ; épreuve du comice, point du stand,
+  quête de Joseph ; planche `valley2.png`.
+- **V3 « Le ruisseau »** : `state.career.valley.places = { [placeId]: { step, startedAt, readyAt } }` (6 lieux, 4 étapes),
+  `actions.career.startWorks(placeId)` ; `state.career.valley.wilds = { [cellId]: { kind: 'wood' | 'marsh' | 'meadow',
+  at } }` pour les **terres sauvages** (cases de forêt de `grid()`, seulement à 16 terrains), `actions.career.rewild(col,
+  row, kind)` ; nouvelle vue plein écran `src/ui/career/valley-view.js` + `src/render/valley-view.js` (canevas en portrait,
+  panorama en couches, défilement vertical, cibles des lieux) ; cultures-arbres `VALLEY_TREES` (cerisier, poirier, reinette)
+  **hors de `CROPS`** ; 10 habitants de la vallée ; étapes 6 et 7 ; thème `valley` (lot 3) ; pages `valleyWild`, `places` ;
+  planche `valley3.png`.
+- **V4 « Les cigognes »** : légendes (`LEGENDS`, 3ᵉ génération, melon de la mère de Joseph), visiteurs rarissimes, étape
+  8, forêt de la carte en 4 états (RENDER), ambiance sonore en couches (sons CC0), « avant / après » au bilan (vignettes
+  composées par RENDER), page `legends` ; aucun effet sur le revenu ; planche `valley4.png`.
+
+### Écarts et précisions (livraison CORE V1)
+
+Section tenue par le paquet CORE **pendant** la livraison (UI/RENDER et ART travaillent en parallèle) : tout ce qui
+précise ou s'écarte du contrat ci-dessus. Aucun nom ni forme du contrat n'est retiré ; seulement des champs **ajoutés**,
+sauf mention contraire. Chiffres réglés : `src/data/career/valley.js` et `docs/VALLEE.md` § 12.
+
+**Fichiers et enregistrement**
+- `src/core/career/valley.js` ne s'enregistre pas lui-même : `extensions.js` l'importe et l'enregistre **après** `cozy`
+  (comme `variety` et `cozy`). Exporte aussi `valleyHarvest`, `valleySow`, `heirloomSeedCost`, `valleyPlotExtras`,
+  `valleyPlantable`, `valleyAchievementContext`, `lotNature`, `careerValleyYear`, `enableCareerValley`, `checkValley`.
+- `src/core/career/heirlooms.js` : en plus du contrat, `valleyOf`, `valleyStarted`, `partOn`, `seasonAbs`,
+  `isFixed`, `speciesInstalled`, `stageOf`, `giantBonusOf`, `fixedSeedCost(prixDuJour)`, services lus par les modules
+  partagés (`winterFindsMax`, `winterCoinsFactor`, `crowWeightFactor`, `fishFactor`, `touristBonusOf`,
+  `animalBonusOf`, `growthBonusOf`). `priceFactorOf(state, plot)` prend l'état (contrat : `priceFactorOf(plot)`).
+  `seedCostOf` du contrat = `heirloomSeedCost(api, varietyId)` (valley.js : il lui faut le prix du jour de la culture).
+- `src/core/career/habitat.js` : en plus, `spotDef`, `whereText`, `spotLabel`, `ofLot`, `loneTreeStage`,
+  `reserveLotNature`, `fallowPlots`, `beePlotsGrowing`, `installedSpecies`, `fixedVarieties`, `natureBeauty`,
+  `seasonsText`, `inSeason`, `granaryBuilt`.
+- Fichiers partagés touchés en plus de la liste : `src/core/career/crew.js` (`sowChoice` : jamais sur une jachère ;
+  variété fixée → `'heirloom:<id>'`), `src/core/career/handwork.js` (une variété rustique ne « gèlerait » pas le dernier
+  jour d'automne), `src/core/game.js` (`game.valley`, lignes de `plantableCrops`, `achievementContext`).
+
+**Règles précisées**
+- **Semis** : `api.plant(i, 'heirloom:<id>', { by })` sème une variété (plan de culture, semoir, jardiniers) ; une
+  variété ancienne se sème **quel que soit le rang** de sa culture (la citrouille de la boîte au rang 2). Graines gardées
+  d'abord (gratuit, équipe comprise), sinon (fixée) prix de la culture × 1,25 (greffon : jeune plant × 1,25). Le semis
+  ne prend ni la réserve de la foire ni un semis offert.
+- **Récolte à la main après fixation** : ne rend **plus** de graine (une variété sauvée a des graines illimitées en
+  vente ; celles déjà gardées restent gratuites) mais compte toujours pour « Les mains dans les graines »
+  (`heirloomHarvest` n'est plus émis). L'équipe et les machines ne gardent **jamais** de graine. *(Lecture du § 3.4 :
+  « graines illimitées au prix × 1,25, les graines déjà gardées restent gratuites » ; sans cela, une variété sauvée
+  donnerait des semis gratuits à vie, contre la rareté voulue au § 12.3.)*
+- **Réglages de la simulation** (`src/data/career/valley.js`, détail : `docs/VALLEE.md` § 12.7) : fixation à **7**
+  récoltes à la main (`SEED_RULES.fixHand`) ; `ARRIVAL.hintChance` **0,2** : recette remplie et saison d'arrivée → 20 %
+  par aube que la bête s'annonce (le nombre de l'espèce, déjà tiré : aucun tirage de plus) ; recettes : bourdons 3 coins
+  fleuris, paon-du-jour **2** bandes fleuries, hirondelles + **2 nichoirs**, grenouille + **3** haies, lièvre + **4**
+  haies, écureuil + **5** haies, geai + **4** haies ; « cultures différentes » (paon-du-jour) : champs, serre **et
+  verger**, une variété ancienne comptant à part de sa culture. Lanternes (carrière) : variété 11 / 16 / 18, beauté
+  14 / 19 / 21.
+- **Rustique** : le « cours hors saison × 1,25 » d'hiver est déjà le `OFF_SEASON_FACTOR` de la carrière (le maïs ne se
+  sème pas l'hiver) : aucun facteur en plus.
+- **Sobre** : `query.plot(i)` d'une variété sobre (hors canicule) : `needsWater: false`, `action: null` au lieu de
+  `'water'`.
+- **Bocal du geai** : `cropId` choisi **sans tirage** à l'aube (première variété pas encore obtenue de la saison
+  suivante) ; l'ouverture tire comme les autres bocaux.
+- **Étal de la foire** : tiré au dernier jour d'hiver **même sans le lot 4** (fêtes désactivées) ; `fair.varietyId`
+  vaut `null` quand toutes les variétés sont chez vous ; l'achat est une dépense de la Vallée (patrimoine 100 %).
+- **Habitants** : avec `parts.wildlife === false`, aucun des 12 nombres n'est tiré. Une espèce passée à `hint` va
+  jusqu'à `visible` même si sa recette n'est plus remplie (jachère finie). `speciesSpot` peut renvoyer un emplacement
+  **libre** du terrain préféré (hirondelles près de l'abri, grenouille au bord de la mare) : RENDER a un ancrage pour
+  chaque identifiant de `valleySpots()`.
+- **Cueillette des haies** : effacée à l'aube du 1ᵉʳ jour d'hiver (dans `dawnEvents`, pas au soir).
+- **Beauté (lanternes)** : `beautyPoints.nature` 1 (`natureMax` 6) + `beautyPoints.butterfly` 1 (paon-du-jour).
+- **Album** : « L'album complet » reste les **11 pages du lot 4** (`ALBUM_COMPLETE_PAGES` ; succès « Album complet »
+  aussi) : les 2 pages de la Vallée ont leur propre récompense, rien de déjà prêt ne se perd. `albumOverview().pages`
+  = 13, `total` = 148.
+- **Succès** : `careerAchievementList` renvoie les 17 succès de carrière **puis** les 7 de la Vallée (24).
+- **Progression** : `recordValleyStage(progress, n)` → `{ progress, rewards: { cosmeticId, already } }` (décor de l'étape,
+  `progress.career.valleyStage` = meilleure étape) ; les écus de l'étape passent par `recordCareerEcus`.
+
+**Formes (champs ajoutés)**
+- `query.career.valley()` : `stage.total` (24), `nature.placed`, `fixed: [id]`, `installed: [id]` ; `hint.kind` peut
+  valoir `'chapter'` (ordre : bête à voir, chapitre, bocal, planche mûre, recette, graines, étape) ; `hint.target`
+  `{ type: 'nature', id: 'fallow' }` (jachère) ou `{ type: 'lot', id: null }` (il faut un terrain : mare, verger…).
+  `varietyInfo` : `tint`, `from`, `tree`, `unit` ('graine' | 'greffon') ; `name` d'une variété inconnue = le nom de la
+  culture (pas de révélation). `speciesInfo` : `seasonsText`, `recipeOk`, `hintIcon`. `natureInfo` : `bought` ; `locked`
+  n'est vrai que pour le rang, le grenier ou la mare (pas l'argent : `reason`). `fair` : `stall`, `bought`.
+- `query.career.valleySpots(kind)` : `label` (« Le Haut-Champ, côté gauche »), `stage` du chêne posé.
+- `query.career.valleyAnimals()` : `hintIcon` pour un indice.
+- `query.plot(i).variety` : `ripeIcon`, `tint`, `unit` ; `fallow.text` ; `query.plantableCrops(i)` : `heirlooms` et
+  `fallow` sont des **propriétés du tableau** renvoyé (pas copiées par `JSON.stringify`) ; lignes `icon`, `trial`, `tree` ;
+  `fallow.growth`.
+- `query.career.yearReport().valley` (et `report.valley`) : `{ started, stage, stageName, signs, year, installed, fixed,
+  natureTotal }`.
+- `query.achievementContext().career.valley` : `started` en plus.
+- Événements : `valleyStarted.hedgeLine` ; `heirloomHarvest.tree` ; `heirloomFixed.text` ; `heirloomSown.by` ;
+  `speciesHint.icon` ; `speciesVisible.name` ; `speciesInstalled.anecdote`, `.spotId` ; `hedgePicked.spotId` ;
+  `jayGift.text` ; `fairHeirloomBought.name` ; `harvest()` renvoie aussi `fixed`. Ordre à la récolte : `harvested`, puis
+  `heirloomHarvest`, puis `heirloomFixed`. `developLot` renvoie `natureReserved: [kind]` quand il y en a.
+- `triggerValley(kind, arg, arg2)` : `'seeds'` prend `(varietyId, n)` ; `'stage'` fixe des variétés puis installe des
+  habitants jusqu'au palier (l'étape reste cohérente avec les signes de vie).
+
+## Vallée V1 — rendu et interface (UI/RENDER, 2026-10-03)
+
+Code contre le contrat « Vallée vivante — contrats du lot V1 » et ses « Écarts et précisions (livraison CORE V1) ».
+Carrière seulement : tout est gardé par `state.career.valley` (et `started` pour la scène) ; en Niveaux, rien (seules
+les 2 pages d'album se voient dans la grange). Un sprite de `valley1` absent → repli dessiné (scène) ou emoji décoratif
+caché aux lecteurs d'écran (`vIcon`). Planche `valley1` facultative au démarrage (`OPTIONAL_SHEETS` de `main.js`).
+Styles : **`css/valley.css`** (dans `CSS_FILES`). Tests : `tests/valley-render.test.js`.
+
+```
+src/render/layout-career.js  careerValleySpots({ bands, house, storage, free, H }) (pur, exporté) →
+                             layout.valley = { spots: { [spotId]: { x, y, w, h, kind } }, box, animalAnchors, reserved }
+src/render/valley-actors.js  purs : oakStage, hedgeTileName, stripTileName, oakSpriteName, fallowSpriteName,
+                             edgeFlowersOn, birdsPerMinute, butterfliesOn, edgeTiles, findRect, growRect ;
+                             createValleyActors(effects) : sync, onEvent, update, drawGround, collect, drawOverlay,
+                             hitTest, itemRect, setStage, setPlacing, placingSpots, clear, shift, stats
+src/render/scene.js          setValleyStage(n), setValleyPlacing(kind | null), valleyPlacing, valleyItemRect(kind, id),
+                             valleySpots(), valleyStats() ; hitTest + wildlife | hedgeFind | valleyBox | natureSpot ;
+                             heirloom.<id>.<étape> pour une parcelle à variété ; points de la mini-carte en mode aménagement
+src/render/cozy-actors.js    occupation : emplacements et boîte de la Vallée (quand `layout.valley.reserved`)
+src/render/atlas.js          DECOR_SPRITES : seed.cabinet, nestbox.painted, valley.linden
+src/ui/career/valley.js      createValley(app) → app.valley (voir l'en-tête du fichier)
+src/main.js                  app.valley ; onGameEvent (carrière) → app.valley.onEvent ; frame, reset ; menu de pause
+                             « La Vallée » ; Échap quitte le mode aménagement ; __debug.valley
+src/ui/{field,gestures,todo,grange,album,cozy}.js, src/ui/career/{lots,journal,windows,util}.js   points d'accroche
+```
+
+- **Emplacements** (tuiles du bloc, `ox` = colonne du bloc, `y0` = sa première ligne) : haies `hedgeL` / `hedgeR` sur
+  les colonnes de lisière x 0 / x 13, lignes 0 à 9 (champ de départ : 12 lignes, toute la clôture) ; bande fleurie
+  (`strip`) au pied de la clôture du champ, x 2 à 6 (à gauche du portail, loin de la moissonneuse garée) ; champ de
+  départ : hôtel (1 × 2) en x 1, lignes 9-10 (sous les ruches) ; pré et basse-cour : tas en (1, 1), nichoir en (6, 1)
+  (entre les bâtiments) ; pré : chêne 2 × 2 « au milieu » de l'enclos de gauche (3 × 2 tuiles une fois adulte, la
+  couronne déborde vers le haut) ; verger : nichoir (4, 3), tas (10, 7), hôtel (10, 1) ; ateliers : hôtel (11, 1) ;
+  friche : tas (3, 7), chêne (7, 3) ; mare : berges = rangée du haut (3 à 10, ligne 1), roseaux dessinés aussi sur les
+  côtés ; maison : nichoir sur la première tuile libre à droite de l'allée du champ (la mangeoire et le porte-lanternes
+  du lot 4 restent à gauche, au-dessus du toit), nichoir à chouette sous le pignon du grenier (sur le bâtiment, par
+  conception), **boîte en fer** sur une tuile libre contre la façade, à droite de la maison. Les tuiles de la maison et
+  de la friche sont réservées avant le décor quand `career.valley` existe (`reserved`) : aucun arbre ne pousse dessus ;
+  les fermes sans Vallée gardent exactement leur décor.
+- **Ancrages des bêtes** : côté intérieur d'une haie (mi-hauteur), sur la bande ou la berge, à côté d'un nichoir, d'un
+  tas, d'un hôtel ou au pied du chêne ; plusieurs bêtes au même endroit se décalent. Habitant du jour : aller-retour de
+  ± 12 px avec des pauses (dessins regardant à gauche, retournés vers la droite) ; oiseaux et insectes un peu en l'air.
+- **Dessin** : au sol (après les parcelles) jachères (`nature.fallow.<saison>`), bandes, berges, indices du matin ;
+  triés avec la scène : haies (tuile par tuile), nichoirs, tas, hôtels, chênes, trouvailles, boîte, bêtes ; au-dessus :
+  lisière fleurie (`edgeTiles` : tuiles de forêt voisines du sol, une sur ~3, déterministe), étiquettes `valley.label`,
+  « ? » des bêtes qui attendent, cœurs à l'installation, emplacements du mode aménagement (contour pointillé épais + « + »,
+  remplissage clair qui pulse ; lisible sans la couleur), oiseaux (`fx.birds`), papillons (`fx.butterfly`). Pose d'un
+  aménagement : fondu de 0,9 s + étincelles + terre ; récolte à la main d'une variété : « +2 graines · 4/7 » ; variété
+  sauvée : gerbe dorée « Sauvée ! ». Seul ce qui est près de la vue est dessiné.
+- **Toucher** (au zoom courant, `screenToWorld`) : en carrière, après les personnages, la bête qui attend, la trouvaille
+  et la boîte sont cherchées avec leur cible agrandie (`minWorld = 48 × dpr / zoom`) **avant** les parcelles et les
+  enclos (une bête au bord d'un enclos reste touchable) ; mode aménagement : seuls les emplacements libres du genre choisi
+  répondent (le défilement, le pincement et les boutons + / − restent).
+- **Fiche « La Vallée »** (`openLive`, feuille haute, pause de lecture) : vignette `valley.stage.<n>` × 3 (× 2 sur petit
+  écran), « Étape n · nom », rangée de signes de vie lue (« 6 signes de vie sur 11 »), le prochain indice (un seul,
+  bouton : Aller voir · Écouter Joseph · Ouvrir · Voir · Semer · Aménager · Jachère · La carte), segments ; Graines :
+  bocaux à ouvrir, étal de la foire (dernier jour d'hiver), une ligne ≥ 72 px par variété (silhouette grise et « À
+  retrouver… », barre de fixation à segments lue, « Sauvée ✓ ») → fiche de la variété (grand dessin, anecdote, trait
+  expliqué, « Semer » vers la première parcelle libre qui convient) ; Habitants : recette en lignes cochées (✓ / ✗ et
+  « 1 / 2 »), saison, état (indice, « Vous attend près de… » + Aller voir, « Installé ✓ — service ») et « Ce que la
+  vallée vous rend » ; Aménager : une carte par aménagement (prix ou « gratuit (à replacer) », emplacements libres,
+  verrou « Rang 3 »…) → mode aménagement, et la jachère fleurie ; en bas, les récits de Joseph (relire).
+- **Fenêtres** : « La boîte en fer » (file d'attente : s'ouvre quand aucune fenêtre, feuille, conseil, tutoriel, mode
+  fête ou décoration n'est affiché ; trois lignes qui apparaissent, les trois variétés, la haie de Joseph ; « Merci,
+  Joseph » lit le chapitre 0 et montre la boîte du perron par un conseil) ; bocal (étiquette à demi effacée →
+  « Ouvrir le bocal » → la variété, son trait, ses graines → Semer / Bocal suivant / Plus tard) ; observation (feuille
+  basse, la bête recentrée au-dessus : « Le hérisson s'installe ! », anecdote, service, « ✓ Album », « Bienvenue, petit
+  hérisson ! » ≥ 56 px ; accords : les coccinelles s'installent…) ; chapitre (vignette de l'étape, trois lignes,
+  bienfait de l'étape, « Merci, Joseph »).
+- **Étapes** : `valleyStage` → écus (`careerEcus`), `recordValleyStage` (décor de l'étape 5), `scene.setValleyStage`,
+  message important « La vallée : … » avec « Écouter », note du matin, conseil `valley.stage`. L'étape de la scène suit
+  aussi l'état à chaque image (reprise d'une partie).
+- **Messages** : importants — bête venue (« Voir » ; retiré quand elle s'installe), variété sauvée (« Voir »), étape,
+  aménagements à replacer, geai, cueillette ramassée, sachet de la foire ; infos — planche d'essai semée (« il reste 2
+  graines »). Résumé du matin : indices (`speciesHint.text`), « Hier : 4 graines anciennes gardées », sol reposé,
+  cueillette des haies, boîte de Joseph.
+- **Fiches existantes** : parcelle (titre « Navet Boule d'or mûre », « Variété ancienne (planche d'essai) », trait en
+  pictogramme et en mot, « À la main : + 2 graines » + barre ; jachère : `fallow.text` ; sol reposé) ; feuille des
+  graines (section « Graines anciennes » en tête, badge « Planche d'essai : récoltez-la à la main », raison quand on ne
+  peut pas semer ; « Jachère fleurie (gratuit) » ; « Semer partout » sème la variété jusqu'au bout du stock — ou de
+  l'argent, une fois sauvée — puis s'arrête) ; terrain (section « Nature » : chaque emplacement, ✓ ou « Planter ·
+  280 ») ; plan de culture (rubrique « Variétés sauvées », valeur `heirloom:<id>`, libellé dans la fiche du terrain) ;
+  bilan annuel (« La vallée cette année ») ; Carnet › Ferme (carte « La Vallée », pastille quand quelque chose attend) ;
+  Carnet › Bilan (cumul, dépenses au patrimoine) ; grange › Succès (« La Vallée · n / 7 ») ; postes `valley` du bilan.
+- **Débogage** (`?debug=1`) : `__debug.valley.{ on(), state(), start(), jar(cropId), seeds(id, n), fix(id), visible(id),
+  install(id), stage(n), finds(), fair(), tree(spotId), place(kind, spotId?), open(tab), placing(kind | null),
+  point(kind, id), ui(), stats() }`.
+
+### Intégration et vérification du lot V1 (2026-10-03)
+
+- **Accords** (`src/data/career/valley.js`) : chaque variété porte `g` (genre du nom : `'m'` pour le navet, le blé, le
+  chou, le maïs, le tournesol ; `'f'` sinon), chaque habitant `the` (« Les coccinelles »), `g` et `pl` ;
+  `agreeWith(x, mot)` et `savedText(x)` (« Navet Boule d'or est sauvé ! »). Requêtes : `varietyInfo.g`,
+  `query.plot(i).variety.g`, `speciesInfo.{ the, g, pl, seasonsWhen }` ; `habitat.js` : `seasonsWhen(saisons)` (« du
+  printemps à l'automne »), `comesText(espèce)` (« elles viennent »). Indices, refus (« Déjà installées. »), fiche, scène
+  (« Sauvé ! ») et feuille des graines accordés. Hors Vallée, `src/ui/field.js` accorde aussi « mûr / mûre » avec la
+  culture (« Navet mûr », « Gèlera avant d'être mûr »).
+- **Rien ne se perd** (`heirlooms.js` `returnTrialSeed(state, p)`, appelé avant `clearPlot` par `applyFrost`,
+  `applyRot` (`farm.js`), `removeTree` (`game.js`) et `developLot` (`land.js`), gardé par `state.career?.valley`) : une
+  planche d'essai perdue sans récolte rend sa graine (ou son greffon) ; une variété sauvée, rien. Aucun tirage en plus ;
+  la simulation de carrière bouge un peu (§ 12.7 de `docs/VALLEE.md`), les niveaux pas du tout (parité 400 / 400).
+- **Bug corrigé** : réaménager un terrain dont une parcelle était en jachère fleurie laissait `fallow` sur une parcelle
+  sans terrain (`env: null`), sauvegarde refusée au chargement (« Vallée (jachère) ») ; `developLot` efface maintenant
+  `variety`, `fallow` et `rested` des parcelles retirées.
+- **Messages et feuilles** (`src/ui/toasts.js`, règle générale) : sur téléphone, pendant qu'une feuille est ouverte, les
+  messages (sauf refus et système) passent à l'historique et **attendent** ; ceux déjà affichés quand une feuille s'ouvre
+  se retirent et attendent aussi ; à la fermeture, les deux plus récents (moins de 45 s, ceux qui proposent une action
+  d'abord) s'affichent, la pastille « +N » signale le reste. `holdsOnSheet`, `pickHeld`, `HOLD_MAX_AGE` (purs, testés) ;
+  `toasts.forget(key)` (bête observée entre-temps). Même règle en mode aménagement (`body.in-valley-place`) et sur la
+  fenêtre de fin de saison à cartes (`v-season`, CSS). Écran large : inchangé.
+- **Le prochain indice** : tant que rien n'est semé (juste après la boîte de Joseph), « N graines de … attendent d'être
+  semées » passe avant les recettes ; l'onglet Graines montre d'abord les variétés en main, puis les sauvées, puis celles à
+  retrouver. Refus « Plus de graines de … pour l'instant : chaque récolte à la main d'une planche d'essai en rend 2. »
+- **Texte à 150 % sur 360 px** : puces de la feuille des graines, cartes d'aménagement, lignes des habitants, libellé du
+  plan de culture et boutons d'achat (`.btn--buy`) vont à la ligne ou s'abrègent au lieu de déborder.
+- **Étal de la foire** : un greffon pour le Calville (« 3 greffons »), sachet rangé « dans la boîte en fer » (la
+  grainothèque est un bâtiment du V2) ; fiche d'une parcelle sauvée sans la ligne « + 2 graines gardées » (plus de graine
+  après fixation).
+
+## Rythme, personnages et messages (2026-10-03)
+
+Retours du joueur (téléphone, surtout en carrière) : « les notifs prennent beaucoup de place, et même en ×1 les jours
+passent trop vite, ou du moins on reçoit beaucoup de notifs » ; « en ×1 les personnages semblent accélérés, comme déjà
+en ×4 ». Mesures et corrections : JOURNAL.md (2026-10-03).
+
+### Rythme en temps réel
+
+```
+src/data/balance.js   DAY_SECONDS = 20 (secondes DE JEU par jour, inchangé : règles, sauvegardes, simulateurs, parité)
+                      REAL_DAY_SECONDS = 36, GAME_SECONDS_PER_REAL_SECOND = 20 / 36
+src/main.js           frame() : g.update(dt réel × GAME_SECONDS_PER_REAL_SECOND) (partie et ferme du menu)
+```
+
+- ×½ : 72 s · ×1 : 36 s · ×2 : 18 s · ×4 : 9 s par jour (mesuré au doigt, Pixel 7). Le rendu reçoit toujours `dt` en
+  secondes réelles. `__debug.skipDays` (et tout code de test qui appelle `game.update(DAY_SECONDS)`) n'est pas concerné.
+- Textes : guide (« Le temps ») et tutoriel citent `REAL_DAY_SECONDS`.
+
+### Personnages
+
+- **Décor en temps réel** (animaux, chat et chien, promeneurs, visiteurs 26 px/s, Joseph 24 px/s, fermier 30 px/s) :
+  aucune dépendance à la vitesse du jeu. Cadence des pas liée à la distance parcourue (jamais « +x par image »).
+- **Fermier** (`scene.js`, `updateFarmer`) : pas de 30 px monde/s (avant 44, ×3 sur les longs trajets en carrière :
+  250 px CSS/s) ; ×1,25 sur les longs trajets ; au-delà de `FARMER_JUMP` (150 px) de chemin, **raccourci doux**
+  (`farmerShortcut` : fondu de 0,22 s, réapparition à 26 px du but, fondu d'entrée) ; il ne suit plus que les gestes
+  du joueur (`helperTouched` : les gestes `by` ≠ `'player'` — employés, machines, aides — sont ignorés ; avant, en
+  carrière, il courait après chaque geste de l'équipe).
+- **Employés** (`career-actors.js`, `walkToward`) : ils ne sont plus placés d'après l'horloge du jeu
+  (`startAt → doneAt`, 64 px par seconde de jeu, plus 0,6 px de « pas » par image : jusqu'à 20 bascules de pose par
+  seconde) mais **marchent vers leur cible** au pas (`STAFF_WALK` = 22 px monde/s réelles, ≈ 42 px CSS/s), un peu plus
+  vif quand l'heure presse (×`STAFF_HURRY` = 1,4 au plus), avec une accélération modérée aux vitesses rapides
+  (`paceFactor` : ×1,25 à ×2, ×1,5 à ×4). Cible trop loin (retard > `JUMP_DIST` = 64 px ; un employé un peu en retard continue au pas) :
+  **raccourci doux** (fondu, réapparition à `JUMP_LAND` px du but). La pose « travail » se joue une fois arrivé, tant que
+  la tâche dure. `env.speed` est passé par `scene.renderCareer` à `actors.update(dt, env)`.
+- Machines : passages toujours à l'heure du jeu (travail) ; cadence des roues plafonnée en temps réel.
+- **Mouvements réduits** : employés posés à leur tâche, fermier tout de suite à destination (sans trajet ni fondu).
+- Mesures : `scene.actorProbe()` (positions, poses, opacité, raccourcis ; `cssPerWorld`) et `actors.probe()`.
+
+### Messages
+
+```
+src/ui/toasts.js   priorityOf(o, kind) → 'always' | 'important' | 'info' ; visibleIn(mode, prio) ; MESSAGE_MODES
+                   show({ …, prio?, digest? 'vente|ventes', digestN? }) → nœud, ou null si non affiché
+                   setMode(mode, { active }) ; get mode ; setDigest(fn) ; stats() → { visible, hidden, quiet, mode }
+src/ui/messages.js modePicker() (options « Messages », feuille Messages) ; répétitions « Titre ×N »
+src/ui/todo.js     digest(e) ; résumé du matin : « Hier aussi : … » (récoltes de l'équipe comptées sur `harvested` by ≠ joueur)
+src/storage.js     settings.messages = 'important' (défaut) | 'all' | 'none'
+```
+
+- **Important** (à lire maintenant) : action ou choix (`onClick` : offres, quêtes, vœu…), refus (`log: false`),
+  alertes (`error`, `warn`, `frost` : corbeaux, abri plein, découvert, gel), conseil « fermage en danger »
+  (`maybeLowMoneyHint`), réponse à un geste du joueur (fête terminée, trouvaille, mangeoire, instructions).
+  **Info** (peut attendre) : ventes, récoltes au grenier, naissances, pêche, charges payées, mensualité, sol fatigué,
+  succès, cases d'album, commandes livrées, charrette, colporteur, carnet, comice annoncé, fête du jour (déjà annoncée
+  par le bandeau de la veille et la ligne « À faire »)… `prio` explicite aux points d'appel quand la règle automatique
+  ne suffit pas. **Always** : refus (`error` + `log: false`) et messages du système (`keepTouch` : mise à jour).
+- Réglage : **Tous** (tout s'affiche, comme avant) · **Importants** (défaut : les infos vont à l'historique et au résumé
+  du matin) · **Aucun** (seuls les refus et le système). Au menu (hors partie), tout s'affiche. Les bandeaux (saison,
+  avertissement du fermage, fête de demain) ne sont pas concernés. Lecteurs d'écran : les messages affichés gardent
+  `role=status` / `alert` ; les infos non affichées ne sont pas annoncées (elles sont dans l'historique).
+- Forme : une ligne pour une info (titre · texte, « … »), deux lignes au plus pour un message important ou une action ;
+  ≈ 40 px de haut (avant ≈ 63) ; police 14 px ; deux messages au plus (`MAX_VISIBLE`) ; info 3 s, important 5 s
+  (7 s au plus). Styles : `css/guidance.css` (« Messages compacts »).
+
+## Vallée vivante — contrats du lot V2 (CORE · ART · UI/RENDER, conception 2026-10-03)
+
+« Le troc et les croisements » : la Grainothèque (5 niveaux), le troc de graines avec les 12 clients du tableau, 12
+variétés du village, 11 variétés croisées au nom de la ferme, le trait Parfumée, 4 habitants et le nichoir à
+chauves-souris, 4 récits de Joseph, « Revoir la boîte », 3 pages d'album, 6 succès. Règles chiffrées et contenus :
+**`docs/VALLEE.md` § 16** (résumé : `docs/GAME_DESIGN.md` § 18). Ce contrat **s'ajoute** à « Vallée vivante — contrats du
+lot V1 » et à ses « Écarts et précisions » : rien n'y est retiré ni renommé ; seuls des champs, des données et des
+branches sont ajoutés. Tant que CORE n'a pas livré, UI/RENDER simulent les requêtes avec des objets factices de même
+forme ; tant qu'ART n'a pas livré, repli dessiné (`canDraw`, `spriteAny`, `vIcon`).
+
+### Règles communes (en plus de celles du V1)
+
+- **Carrière seulement**, gardé par `state.career?.valley` **et** `valley.parts.heritage` (nouvelle partie, absente = vraie).
+  Une partie de niveau n'a pas `state.career` : aucun code nouveau n'y passe. Fichiers partagés touchés (`cozy.js`,
+  `farm.js` via `heirlooms.js`) : seulement derrière ce garde. `tests/parity.test.js`, `tools/capture-parity.js --check`
+  (400 / 400) et `node tools/simulate.js` (sortie identique octet pour octet) inchangés.
+- **Aléatoire** : un flux **nouveau, `state.rng.valley2`** (`hashSeed(seed, 'valley2')`), créé par l'extension `valley`
+  (`init` / `migrate`). Tirages fixes : **à chaque aube** une fois la Vallée commencée, si `parts.heritage` et
+  `parts.wildlife` : **4 nombres**, un par espèce de `SPECIES_V2` (dans l'ordre des données, candidate ou non). **Rien
+  d'autre** : troc, croisements, Grainothèque, récits sont déterministes. Le flux `valley` du V1 tire **exactement** les
+  mêmes nombres qu'avant (12 espèces de `SPECIES`, 3 pour les haies, 1 par bocal, 1 pour l'étal) ; `orders`, `variety`,
+  `events`, `cozy`, `quality`, `surprise`, `sky`, `staff`, `career`, météo et marché : inchangés (les services du V2
+  changent des seuils, jamais un nombre de tirages ; le merle élargit le plafond de la cueillette après les 3 tirages
+  déjà faits).
+- **Ordre des données = ordre des tirages** : `VARIETIES` (12) et `SPECIES` (12) du V1 **ne changent pas** ; les nouvelles
+  données vivent à côté (`VILLAGE_VARIETIES`, `CROSSES`, `SPECIES_V2`) et sont réunies dans des tables `ALL_*` pour les
+  lectures (identifiant → définition).
+- **Pur** : `src/data/career/heritage.js` et `src/core/career/heritage.js` n'importent ni DOM ni horloge ;
+  `src/data/career/heritage.js` n'importe pas `valley.js` (pas d'import circulaire : c'est `valley.js` qui l'importe).
+- Temps en saisons ou en aubes (2ᵉ jour de la saison, dernier jour d'hiver), jamais en jours de 7.
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (français). Identifiants en anglais, textes en français, accords
+  par `g` / `pl` (règle du V1).
+
+### Fichiers
+
+```
+src/data/career/heritage.js  (nouveau, pur)
+    SEED_LIBRARY { name: 'La Grainothèque', siteRank: 3, levels: [5 × { level, name, price, rank, circle?, handSeeds?,
+      fixHand?, crossNeed?, fixedSeedFactor?, touristBonus?, vignette: 'library.<n>', unlocks: [texte] }] }
+      // 1 « La remise aux graines » 2000 r3 circle 1 · 2 « La petite grainothèque » 5000 r4 circle 2 handSeeds 3 ·
+      // 3 « La grainothèque » 10000 r5 circle 3 fixHand 5 · 4 « Le jardin d'essai » 16000 r5 crossNeed 2 ·
+      // 5 « La grainothèque vivante » 25000 r6 fixedSeedFactor 1, touristBonus 0.15
+    VILLAGE_VARIETIES (12 : id, cropId, name, g, trait, clientId, label « De la part de … », anecdote, icon
+      'heirloom.<id>.icon', ripe 'heirloom.<id>.4', tint, group 'village')
+    TROC { seeds: 3, favBonus: 1, seasonDay: 2, order: [12 × { clientId, varietyId, circle, needs?: 'orchard' }],
+      lines: { [clientId]: { offer, thanks, garden /* écho des mercis */ } }, crossThanks: '… {farm} …' }
+    CROSSES (11 : id 'cross<Culture>', cropId, parents: [paysId, villageId], traits: [t1, t2], text, tint, icon, ripe,
+      group 'cross')
+    CROSS_RULES { need: 3, wildBeeFactor: 2, seeds: 3 }      // need au niveau 4 : SEED_LIBRARY.levels[3].crossNeed
+    SPECIES_V2 (4 : wildBee, blackbird, lizard, bat — même forme que SPECIES : the, g, pl, seasons, recipe, spotKinds,
+      service { kind: 'crossFactor' | 'hedgeFindsMax' | 'heatGrowth' | 'staffSummer', value, seasons?, text }, hint,
+      hintIcon, anecdote, spotLot?)
+    STORIES (4 : id 'heritage0'…'heritage3', title, vignette, lines[3], when: 'rank3' | 'library1' | 'firstCross' |
+      'library5')
+    HERITAGE_HINTS (conseils : valley.library, valley.troc, valley.pair, valley.cross, valley.scented), HERITAGE_TEXTS
+    ofFarm(name) → « de la Ferme des Tilleuls » | « du Moulin » | « d'Arcy » | « de Chez Martin »
+    crossName(cross, farmName) → « Tomate de la Ferme des Tilleuls »
+src/data/career/valley.js    VALLEY_VERSION 2 ; VALLEY_PARTS ['seeds', 'wildlife', 'heritage'] ;
+    TRAITS + { id: 'scented', name: 'Parfumée', icon: 'icon.trait.scented', text, product: 0.15 } ;
+    NATURE_ITEMS + { id: 'batbox', name: 'Nichoir à chauves-souris', price { base 100, step 50 }, rank 4, beauty 1 } ;
+    NATURE_SPOTS + { slot: 'bat', kind: 'batbox' } sur home (« sous l'avant-toit de la maison »), orchard (« dans un
+      vieux pommier »), workshops (« sous l'avant-toit ») ; RECIPE_TEXTS / RECIPE_NATURE + batbox ;
+    ALL_VARIETIES (35 = VARIETIES + VILLAGE_VARIETIES + CROSSES, champ `group` 'pays' | 'village' | 'cross'),
+    ALL_VARIETIES_BY_ID, varietyTraits(x) → [traitId] (une variété du V1 : [trait] ; croisée : traits),
+    ALL_SPECIES (16), ALL_SPECIES_BY_ID, SIGNS_ALL (51) ; VARIETIES, SPECIES, SIGNS_V1, VARIETY_OF_CROP inchangés
+src/core/career/heritage.js  (nouveau, pur, sans enregistrement)
+    heritageOn(state), libraryLevel(state), libraryEffects(state) → { level, circle, handSeeds, fixHand, crossNeed,
+      fixedSeedFactor, touristBonus }, libraryInfo(state), nextTrocClient(state, from: 'season' | 'fair'),
+    trocGifts(state, clientId) → [{ varietyId, fav }], swapInfo(state), plotNeighbours(state, i) → [index] (même terrain,
+      même `env`, |Δcol| + |Δrow| = 1 ; col = cell % cols, cols 4 pour champ et serre), crossOfCrop(cropId),
+    partnerOf(varietyId) → { crossId, partnerId } | null, crossState(state, cropId), crossLinks(state) → [{ a, b, cropId,
+      meet, need }], pairPlots(state, cropId) → [{ plotIndex, partnerPlot }], boxInfo(state), storiesInfo(state),
+    farmDisplayName(state)
+src/core/career/heirlooms.js varietyOf / isFixed / planVariety lisent ALL_VARIETIES_BY_ID ; + traitsOf(plot) → [trait],
+    hasTrait(state, plot, id) ; traitOf(plot) gardé (= premier trait) ; toutes les règles de trait passent par hasTrait
+    (précoce, sobre, rustique, généreuse, savoureuse, mellifère, géante) ; + scentedFactorOf(state, plot) (1,15 | 1),
+    handSeedsOf(state), fixHandOf(state), fixedSeedCost(base, state) (facteur du niveau 5), hedgeFindsMaxOf(state, base)
+    (merle : 4), staffNeverTiredOf(state) (pipistrelle, été) ; growthBonusOf + lézard (canicule 0,10) ; touristBonusOf +
+    Grainothèque N5 (0,15) ; speciesInstalled lit ALL_SPECIES_BY_ID
+src/core/career/habitat.js   habitatCounts + batbox ; installedSpecies / fixedVarieties / signsOfLife sur ALL_* ;
+    speciesSpot pour SPECIES_V2 ; nextHint : ordre du § 16.9.4 (troc, paire, Grainothèque) ; natureBeauty + batbox
+src/core/career/valley.js    extension 'valley' (même id, même place : après cozy) : V2 dans dawnEvents, valleyHarvest,
+    valleySow, actions, requêtes, check, migrate (détail ci-dessous)
+src/core/career/runtime.js   récolte d'une variété partie à l'atelier : yieldFactor × scentedFactorOf(p)
+src/core/career/staff.js     moodOf : jamais 'tired' l'été si staffNeverTiredOf(state)
+src/core/cozy.js             standPointsOf (carrière, gardé) : + STAND_POINTS.heirloom (1) si item.kind 'crop' et
+                             item.id ∈ valley.year.heirloomCrops ; src/data/cozy.js : STAND_POINTS.heirloom = 1
+src/core/game.js             plantableCrops (lignes V2, `pair`), achievementContext (career.valley + swaps, crosses, library)
+src/data/album.js            + pages `swaps` « Le troc du village » (12, check { type: 'swapDone', id: clientId }, tampon
+                             '♥'), `crosses` « Les variétés de la ferme » (11, { type: 'heirloomFixed', id: crossId }),
+                             `wildlife2` « Les habitants (suite) » (4, { type: 'wildlifeInstalled', id }) — mode 'career'
+src/core/album.js            + fait `swapDone` (ctx.career.valley.swaps) ; heirloomFixed / wildlifeInstalled sur ALL_*
+src/data/achievements.js     + HERITAGE_ACHIEVEMENTS (6, catégorie 'career', écus) ; ALL_ACHIEVEMENTS les inclut
+src/data/cosmetics.js        + 3 décors found: true, price 0 : swap.basket (small), cross.sign (small), lizard.wall (small)
+tools/simulate-career.js     robots V2 (VALLEY_STYLES + champs V2), --valley seeds,wildlife (= V1 seul), --compare-valley2
+tests/valley2.test.js, tests/valley2-troc.test.js, tests/valley2-cross.test.js, tests/valley2-migration.test.js (nouveaux)
+assets/sprites/generate-valley2.py → assets/sprites/valley2.png + bloc « // <valley2:auto> » d'atlas.js   (ART)
+src/ui/career/heritage.js    (UI, nouveau) fiche « La Grainothèque », feuille du troc, popup du croisement, mode paire,
+                             récits, « Revoir la boîte » ; css/valley.css (règles V2 ajoutées, pas de fichier de plus)
+src/render/valley-actors.js  (RENDER) Grainothèque et panneau, sachet du tableau, abeille des paires, mode paire,
+                             nichoir à chauves-souris, habitants du V2
+```
+
+### Activation et options
+
+```js
+createCareer({ …, valley })   // défaut true ; { seeds, wildlife, heritage } → absentes = true
+                              // { heritage: false } : le V1 exactement (aucun tirage valley2, aucune règle V2)
+game.valley                   // inchangé (booléen)
+```
+
+Le V2 est « ouvert » dès que la Vallée est commencée (`started`) et `parts.heritage` ; le troc et les croisements
+demandent aussi `parts.seeds`, les 4 habitants `parts.wildlife`. Panneau de la Grainothèque et récit `heritage0` : première
+aube au rang ≥ `SEED_LIBRARY.siteRank` (3).
+
+### État (`state.career.valley`, champs ajoutés ; `v: 2`)
+
+```js
+state.career.valley = {
+  v: 2,
+  parts: { seeds: true, wildlife: true, heritage: true },
+  // … tous les champs du V1 …
+  library: null | { level: 1..5, builtAt: abs, levelAt: abs },   // Grainothèque
+  site: false,                     // panneau visible (rang 3 atteint une fois, Vallée commencée)
+  troc: null | { clientId, since: abs, from: 'season' | 'fair' },  // proposition en attente (une au plus, sans limite)
+  trocSeason: -1,                  // saison absolue de la dernière proposition « de saison » (une par saison)
+  trocFairYear: 0,                 // année de la dernière proposition « de la foire »
+  swaps: { [clientId]: { given: varietyId, got: varietyId, seeds, fav: bool, at: abs } },   // une fois par voisin
+  crosses: { [cropId]: { meet: n, foundAt: null | abs } },  // créé à la première rencontre ; jamais en baisse
+  stories: { available: [storyId], read: [storyId] },
+  // varieties / seeds : + variétés du village (from: 'swap') et croisées (from: 'cross') ; FROM + 'swap', 'cross'
+  // species : + wildBee, blackbird, lizard, bat (mêmes états 'hint' | 'visible' | 'installed')
+  // nature : + emplacements '<lotId>.bat' (kind 'batbox') ; bought / reserve : + batbox
+  year: { …, swaps: 0, meets: 0, crosses: 0, heirloomCrops: [cropId] },   // heirloomCrops : stand de la fête
+  stats: { …, swaps: 0, meets: 0, crosses: 0, pairs: 0 },
+}
+// Parcelles : variety / lastVariety peuvent valoir un identifiant de ALL_VARIETIES (cropId = celui de la variété).
+// Plan de culture : 'heirloom:<id>' accepté pour toute variété SAUVÉE de ALL_VARIETIES (pas pour le pommier).
+```
+
+`check(state)` (V2) : `v` entier 1..2 ; `parts.heritage` booléen ; `library` (niveau 1..5, entiers) ; `troc.clientId`
+connu, pas déjà échangé ; `swaps` : clients connus, `given` sauvée (variété connue), `got` = la variété du voisin ;
+`crosses` : cultures de `CROSSES`, `meet` entier ≥ 0, `foundAt` null ou entier, et variété croisée présente dans
+`varieties` si `foundAt` ; `stories` : identifiants connus, `read ⊂ available` ; identifiants de variétés et d'espèces
+sur les tables `ALL_*` ; `year.heirloomCrops` cultures connues ; `finds` : au plus `hedgeFindsMaxOf(state, 3)` (4 avec le merle). Une
+sauvegarde V1 (`v: 1`) reste valide.
+
+### Déroulé (extension `valley`)
+
+- **`dawnEvents`** — après les étapes du V1 (`valleyStarted`, `fallowEnded`, `jayGift`, étal, espèces du V1, cueillette),
+  dans cet ordre :
+  1. **site** : rang ≥ 3 et `site` faux → `site = true`, récit `heritage0` disponible → `storyAvailable { id }` ;
+  2. **troc** (si `parts.seeds`, aucun `troc` en attente, au moins une variété sauvée, et un voisin restant) — dernier jour
+     d'hiver et `trocFairYear < année` → `nextTrocClient(state, 'fair')`, `trocFairYear = année` ; sinon 2ᵉ jour de la
+     saison, `library` et `trocSeason < seasonAbs` → `nextTrocClient(state, 'season')`, `trocSeason = seasonAbs` ;
+     → `troc = { clientId, since, from }`, `trocOffered` ;
+  3. **habitants du V2** (si `parts.wildlife`) : 4 nombres `valley2` ; même automate que le V1 (`hint` → `visible` → on
+     touche) ; une seule venue annoncée par aube **toutes espèces confondues** (aucune si une espèce du V1 s'est annoncée
+     ce matin) ; événements `speciesHint`, `speciesVisible` (mêmes formes).
+- **`dawn`** (fin de l'aube) : étape (`stageFor(signsOfLife)` sur les 51 signes, paliers du V1 inchangés) → `valleyStage`.
+- **`yearEnd`** : `report.valley` + `swaps`, `crosses`, `libraryLevel`, `meets` de l'année ; `year` remis à zéro.
+- **Fournisseurs** : `effects('touristBonus')` + 0,15 au niveau 5 ; `patrimony` → `valley.spent` (Grainothèque et
+  nichoirs compris, 100 %) ; `unlocks(rank)` + `{ kind: 'valley', id: 'seedLibrary', name: 'La Grainothèque' }` au rang 3,
+  `{ kind: 'nature', id: 'batbox' }` au rang 4.
+- **`valleyHarvest(api, plotIndex, by)`** (avant `clearPlot`, comme au V1) :
+  - toutes récoltes : `year.heirloomCrops` ∪ cropId ;
+  - à la main : graines `handSeedsOf(state)` (2, 3 au niveau 2 ; greffon : 1), fixation à `fixHandOf(state)` (7, 5 au
+    niveau 3) — une variété qui atteint le nouveau seuil **par un achat de niveau** est sauvée à sa prochaine récolte à la
+    main (aucune fixation « en silence ») ;
+  - **rencontre** (à la main, `parts.seeds`, culture de `CROSSES`, croisée pas encore trouvée) : si une voisine
+    (`plotNeighbours`) porte l'autre parent (`p.variety === partnerId`, `cropId` présent) → `meet += 1 × (osmie ? 2 :
+    1)` → `crossMeeting` ; `meet ≥ libraryEffects.crossNeed` (3, 2 au niveau 4) → `foundAt`, variété croisée ajoutée
+    (`from: 'cross'`), `seeds += CROSS_RULES.seeds`, récit `heritage2` disponible la première fois → `crossFound` ;
+  - ordre des événements à la récolte : `harvested`, `heirloomHarvest`, `heirloomFixed`, `crossMeeting`, `crossFound`.
+- **Lus directement** (gardés) : `farm.js` / `surprises.js` par `heirlooms.js` (traits en liste) ; `runtime.js` (Parfumée :
+  `tryProcessHarvest(…, yieldFactor × scentedFactorOf(p))`) ; `staff.js` (pipistrelle) ; `events.js` (touristes via
+  `touristBonusOf`) ; `cozy.js` (stand : `heirloomCrops`) ; `valley.js` lui-même (cueillette des haies : plafond
+  `hedgeFindsMaxOf(state, HEDGE_FIND_RULES.max)`, après les 3 tirages habituels).
+
+### Actions (`game.actions.career.*`, Vallée commencée)
+
+```js
+buildSeedLibrary()                 → { ok, level, name, cost, unlocks: [texte], story: null | storyId }
+    // construit (niveau 1) ou agrandit d'un niveau ; refus : 'La Vallée commence au rang 2.' ; 'Rang N requis' ;
+    //   'La grainothèque est déjà au plus haut.' ; notEnoughMoney(n) ; 'Grainothèque désactivée.' (heritage ou seeds off)
+swapSeeds(varietyId)               → { ok, clientId, clientName, given: { varietyId, name }, got: { varietyId, name,
+                                       seeds, unit }, fav, thanks }
+    // refus : 'Aucun troc en attente.' ; 'Variété inconnue.' ; 'Cette variété n'est pas encore sauvée.' ;
+    //   '{Voisin} a déjà cette variété : c'est la sienne.'  (aucun coût, aucune graine retirée)
+sowPair(plotIndex, cropId)         → { ok, plots: [plotIndex, partnerPlot], varieties: [villageId, paysId], cost,
+                                       fromSeeds: [bool, bool] }
+    // parent du village sur plotIndex, parent du pays sur la première voisine vide (droite, gauche, dessous, dessus) ;
+    //   chaque semis suit valleySow (graines gardées d'abord, sinon variété sauvée au prix de la graine) ; ATOMIQUE
+    //   (tout est vérifié avant de semer) ; refus : 'Culture sans croisement.' ; 'Ce croisement est déjà trouvé.' ;
+    //   'Cette parcelle n'est pas libre.' ; 'Il faut une parcelle libre juste à côté.' ; refus de valleySow
+    //   (« Plus de graines de … pour l'instant… », saison, argent)
+readStory(id)                      → { ok, story: { id, title, lines, vignette } }   // refus : 'Récit inconnu.'
+triggerValley(kind, arg, arg2)     // + 'site', 'library' (n), 'troc' (clientId), 'swap' (clientId : troc fait avec la
+                                   //   première variété sauvée), 'meet' (cropId, n), 'cross' (cropId : trouvée) ;
+                                   //   'visible' / 'install' / 'seeds' / 'fix' acceptent les identifiants du V2
+// Modifiées : sowHeirloom(i, id) et setPlan(lot, saison, 'heirloom:<id>') acceptent ALL_VARIETIES ;
+//   placeNature(spotId, 'batbox') ; observe(id) accepte SPECIES_V2.
+```
+
+Dépenses : `spendValley(api, cost)` (poste « La Vallée », `valley.spent`, patrimoine 100 %). Le troc et les récits ne
+coûtent ni ne rapportent rien.
+
+### Requêtes (`game.query.career.*`)
+
+```js
+valley() → V1 + {
+  heritage: bool,
+  library: { level /* 0 = pas construite */, name, site, vignette, effects: [texte], next: null | { level, name, price,
+             rank, canBuild, reason, unlocks: [texte] } },
+  troc: null | trocInfo,
+  swaps: { done, total: 12, list: [{ clientId, clientName, clientTitle, portrait, varietyId, varietyName, icon, done,
+           given: null | { varietyId, name }, fav, circle, locked: null | texte }] },
+  crosses: [{ cropId, id, name /* « ? » tant qu'elle n'est pas trouvée */, icon, parents: [{ varietyId, name, icon, have,
+              fixed }], traits: [traitInfo], meet, need, found, fixed, linked /* une paire pousse */, canPair, reason }],
+  box: { title, vignette, lines: [3], hedgeLine, hedge: null | { spotId, label }, varieties: [{ varietyId, name, icon,
+         trait, state, seeds, hand, need }] },
+  stories: [{ id, title, vignette, lines, available, read }],
+  // varieties : 35 entrées, + group, traits: [traitInfo] (trait = traits[0]), clientId (village), cross: null |
+  //   { cropId, partnerId, partnerName, meet, need, found } ; name d'une croisée trouvée = crossName(…) ; inconnue : '?'
+  // species : 16 entrées, + group 'v1' | 'v2' ; stage.total = 51
+}
+trocInfo = { clientId, clientName, clientTitle, portrait, from, text /* sa proposition */, varietyId, varietyName, icon,
+             traits, seeds, unit, gifts: [{ varietyId, name, icon, traits, group, fav, seedsBack }], favText }
+valleyCrossLinks() → [{ a, b, cropId, meet, need }]      // rendu : abeille entre deux parents voisins (au plus 12)
+valleyPairPlots(cropId) → [{ plotIndex, partnerPlot }]  // mode paire : parcelles vides avec une voisine vide
+valleyAnimals()          // + habitants du V2 (6 dessinés au plus au total, règle du V1)
+valleySpots(kind?)       // + emplacements 'bat'
+query.plot(i).variety    // + group, traits: [traitInfo], cross: null | { partnerId, partnerName, meet, need, linked }
+query.plantableCrops(i).heirlooms   // lignes des 35 variétés obtenues ; + group, traits, pair: null | { canPair, reason }
+query.achievementContext().career.valley   // + swaps: [clientId], crossesFound: [id], library: n, installed (16)
+query.career.yearReport().valley           // + swaps, crosses, libraryLevel, meets
+```
+
+### Événements (Vallée active, V2 ouvert)
+
+| Type | Données | Pour |
+|---|---|---|
+| `storyAvailable` | `{ id, title }` | ligne « À faire », message « Joseph a quelque chose à vous dire » |
+| `seedLibraryBuilt` | `{ level, name, cost, unlocks, story }` | le bâtiment change (fondu), son `reveal`, conseil `valley.library` |
+| `trocOffered` | `{ clientId, clientName, varietyId, varietyName, text, from }` | sachet épinglé au tableau, message important « Voir », résumé du matin, conseil `valley.troc` |
+| `seedSwapped` | `{ clientId, clientName, given, got, fav, thanks }` | sachet qui glisse, merci du voisin, album |
+| `crossMeeting` | `{ cropId, plotIndex, partnerPlot, meet, need }` | texte flottant « + 1 rencontre · 2 / 3 » |
+| `crossFound` | `{ varietyId, cropId, name, traits, parents, seeds, story }` | sachet doré, popup, son `chime`, conseil `valley.cross` |
+| `pairSown` | `{ plots, varieties, cost }` | étiquettes des deux planches, conseil `valley.pair` |
+| `speciesHint` / `speciesVisible` / `speciesInstalled` | formes du V1, identifiants du V2 | comme au V1 |
+| `heirloomFixed`, `heirloomHarvest`, `heirloomSown`, `naturePlaced` | formes du V1, identifiants du V2 | comme au V1 |
+
+### Progression (album et succès)
+
+- Pages `swaps` (récompense 25 écus + `swap.basket`), `crosses` (40 écus + `cross.sign`), `wildlife2` (20 écus +
+  `lizard.wall`) ; « L'album complet » reste les 11 pages du lot 4 ; `albumOverview().pages` = 16, `total` = 175.
+- `HERITAGE_ACHIEVEMENTS` (catégorie « Carrière », `careerValley { key, n }`) : `firstSwap` Premier troc (10),
+  `villageSeeds` Les graines du village — 12 trocs (30), `firstCross` Un nom pour une graine (15), `farmHeritage`
+  L'héritage de la ferme — 11 croisées sauvées (40), `livingLibrary` La grainothèque vivante — niveau 5 (30),
+  `valleyFriends` Les habitants (suite) — les 4 du V2 (20) ; 145 écus. `careerAchievementList` : 17 + 7 + 6 = 30.
+- Pages et succès ajoutés par `normalizeProgress` (schéma inchangé, rien à rattraper).
+
+### Migration et sauvegardes
+
+- `migrate` : `state.career.valley` en `v: 1` → `completeValley` ajoute `library: null`, `site: false`, `troc: null`,
+  `trocSeason: -1`, `trocFairYear: 0`, `swaps: {}`, `crosses: {}`, `stories: { available: [], read: [] }`, compteurs
+  `year` / `stats` ; `parts.heritage = true` ; `v = 2` ; `state.rng.valley2` créé. Rien n'est retiré ni réinterprété.
+- Ancienne carrière au rang ≥ 3 : panneau et récit `heritage0` à la première aube ; troc de la foire au prochain dernier
+  jour d'hiver (dès une variété sauvée). `state.career.valley === null` : reste `null`.
+- `CAREER_VERSION` inchangée ; `save.js` (via `checkValley`) accepte les identifiants du V2 sur les parcelles.
+- Tests : aller-retour V1 → V2 → sauvegarde → chargement ; carrière V1 de l'intégration (`090ec5c`) reprise ;
+  `{ heritage: false }` donne exactement les tirages et l'état du V1 sur 10 ans (empreinte de l'état comparée) ;
+  parité des niveaux.
+
+### Simulation
+
+- `tools/simulate-career.js` : `--valley seeds,wildlife` (V1 seul), **`--compare-valley2`** (V1 seul → V1 + V2, même
+  graine : revenu, rangs, Domaine, dépenses du V2, argent en caisse aux ans 10 et 14, nouveautés par saison (ans 2 à 10
+  et 6 à 10), collection par année (trocs, croisements trouvés, variétés sauvées par groupe, niveau de Grainothèque,
+  habitants), gestes par jour, part à la main, `handsOff`, `automator`, débutant, part des semis de l'appliqué) ;
+  `--compare-valley` garde son sens (sans la Vallée → avec toute la Vallée).
+- Nouveautés comptées : celles du V1 + `seedLibraryBuilt`, `trocOffered`, `seedSwapped`, `crossFound` (les habitants et
+  les variétés du V2 passent par `speciesHint`, `speciesInstalled`, `heirloomFixed`).
+- Robots : `docs/VALLEE.md` § 16.12.5, par l'API publique et `me.valleyRnd`.
+- Après réglage : `SEED_LIBRARY`, `CROSS_RULES`, `TROC`, recettes du V2, et les tableaux de `docs/VALLEE.md` § 16.12
+  remplis (section « Résultats », comme le § 12.7).
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- Disposition : `layout.valley.library = { x, y, w, h }` (2 × 2 tuiles de la bande de la maison, **réservées** avant le
+  décor quand `career.valley` existe, comme la boîte en fer) ; `layout.valley.spots` + les emplacements `bat` (un
+  rectangle pour chaque identifiant de `valleySpots()`) ; ancrages des 4 habitants. Test : aucun chevauchement (maison,
+  grenier, étal, puits, panneaux, mangeoire, porte-lanternes, boîte, nichoirs, aire des machines), cibles ≥ 48 px CSS.
+- Scène : Grainothèque `library.<n>` (ou panneau `library.site` si `site` et niveau 0 ; rien avant) ; sachet `troc.pin`
+  sur le tableau du village quand `valley().troc` ; abeille `fx.pollen` entre les paires de `valleyCrossLinks()` (au plus
+  12 ; mouvements réduits : point fixe) ; sachet doré `seedpack.cross` qui saute au `crossFound` ; dessins mûrs et icônes
+  des 23 variétés (`heirloom.<id>.4`, repli : la culture teintée par `tint`) ; géants `heirloom.<id>.giant` (chou du
+  village, chou et citrouille croisés) ; `nature.batbox` ; `wild.<id>` des 4 habitants ; visiteurs devant la porte au
+  niveau 5 (décor).
+- `scene.hitTest` : + `{ type: 'seedLibrary' }` (bâtiment ou panneau), `{ type: 'pairPlot', plotIndex }` (seulement en
+  mode paire : `scene.setPairPlacing(cropId | null)`, qui fait pulser les parcelles de `valleyPairPlots(cropId)` ; seuls
+  ces cibles, le défilement, le pincement et les boutons + / − répondent). Le sachet du tableau garde le hit
+  `villageBoard` existant.
+- Nouvelle planche `valley2` dans `SHEETS` et `assets.js` (facultative, `OPTIONAL_SHEETS`) ; `DECOR_SPRITES` : 3 décors.
+
+**UI** (`src/ui/career/heritage.js`, `src/ui/career/valley.js`, `src/ui/variety.js`, `css/valley.css`) :
+- `createHeritage(app) → app.heritage = { openLibrary(tab?), openTroc(), openCross(cropId), enterPair(cropId),
+  leavePair(), pairing, openStory(id), openBox(), onEvent, onHit(hit), todoItems(game), boardCard(game) /* carte « Troc »
+  du tableau */, plotRows(plot), seedRows(rows), yearLines(report), frame(), reset() }` ; `app.valley` appelle
+  `app.heritage` pour la carte de l'onglet Graines, les groupes, « Revoir la boîte » et les récits.
+- Écrans : `docs/VALLEE.md` § 16.9 (fiche de la Grainothèque à segments L'étagère · Croisements · Troc ; feuille du troc ;
+  popup du croisement ; mode paire avec barre `#vl-pairbar` « Semer la paire · Tomate · Touchez une parcelle ·
+  Terminer » ; fenêtre de la boîte reconstruite par `valley().box`, qui ne se ferme plus d'un toucher dehors).
+- Tableau du village (`src/ui/variety.js`, `openBoard`) : carte `app.heritage.boardCard(game)` en tête quand un troc
+  attend (rien sinon ; aucune autre modification du tableau) ; écho des mercis (`TROC.lines[clientId].garden`, une fois
+  sur trois par hachage de l'identifiant de la commande).
+- Ligne « À faire » : `vl-troc`, `vl-story` ; résumé du matin ; messages (`trocOffered` important avec « Voir » ;
+  `crossFound` et `seedLibraryBuilt` importants ; `crossMeeting`, `pairSown` infos) ; conseils « première fois »
+  `HERITAGE_HINTS` ; sons existants (`pop` troc, `chime` croisement, `reveal` niveau, `magic` récit, `chirp` habitant).
+- Débogage (`?debug=1`) : `__debug.valley` + `site()`, `library(n)`, `troc(clientId)`, `swap(clientId)`, `meet(cropId,
+  n)`, `cross(cropId)`, `pair(cropId)`, `box()`, `story(id)`.
+
+### Sprites (paquet ART : planche `assets/sprites/valley2.png`, `assets/sprites/generate-valley2.py`, bloc `// <valley2:auto>`)
+
+Même méthode que `generate-valley1.py` (palette Kenney, contour sombre (63, 38, 49), lumière en haut à gauche, tuiles de
+16 px). **16 × 16** sauf mention. Réutilisés : portraits des clients (`portrait.client.<id>`), `portrait.joseph`,
+`seedpack.heirloom`, `wild.hint.note` / `.feather` / `.tracks`, `valley.box`, `story.box`.
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `heirloom.<id>.icon` (carotteViolette, marteauDesVertus, barbuDuRoussillon, coeurDeBoeufDesVertus, noireDeCrimee, blancDesLandes, veloursRouge, bleueDArtois, madameMoutot, blancheDeVirginie, galeuseDEysines, apiEtoile) | 16 × 16 | carotte violette au cœur orange ; navet long blanc à collet violet ; gerbe de blé doré aux longues barbes ; chou pointu vert tendre ; tomate côtelée brun-noir à épaules vertes ; épi de maïs blanc crème ; tournesol à pétales rouge sombre veloutés ; pomme de terre bleu-violet coupée (chair bleue) ; grosse fraise ronde rouge vif ; courgette ronde blanc-vert pâle ; citrouille saumon couverte de petites bosses ; petite pomme rouge et jaune à cinq côtes en étoile |
+| `heirloom.<id>.4` (les 11 cultures du village) | 16 × 16 | stade mûr sur la parcelle (cadrage de `crop.<id>.4`, couleurs de la variété) |
+| `heirloom.apiEtoile.fruit` | 16 × 16 | petites pommes étoilées posées sur le pommier adulte |
+| `heirloom.<crossId>.icon`, `heirloom.<crossId>.4` (crossCarrot … crossPumpkin) | 16 × 16 | les 11 croisées, mélange visible des deux parents (carotte orangée au cœur pourpre ; navet doré allongé ; blé roux barbu ; chou cloqué pointu ; tomate côtelée presque noire ; épi roux et blanc mêlé ; tournesol or au cœur velours ; pomme de terre marbrée violet-bleu ; petite fraise conique très rouge ; courgette ronde pâle ; citrouille rouge vif galeuse) ; **petit sceau doré** dans le coin bas droit des icônes |
+| `heirloom.coeurDeBoeufDesVertus.giant`, `heirloom.crossCabbage.giant`, `heirloom.crossPumpkin.giant` | 32 × 32 | chou pointu géant ; chou croisé géant ; citrouille croisée géante |
+| `library.site` | 32 × 32 | coin d'herbe tondue, piquets et ficelle, panneau de bois « ? » (emplacement de la Grainothèque) |
+| `library.1` … `library.5` | 32 × 32 | remise de pierre sèche à porte bleue → + auvent, tresses de maïs, banc → maison de pierre, enseigne « Grainothèque » → + jardin d'essai clos, ruche en paille → + rosier grimpant, porte ouverte (lisibles à 2 × 2 tuiles) |
+| `library.window` | 16 × 16 | fenêtre aux bocaux qui brillent (superposée le soir, facultative) |
+| `troc.pin` | 16 × 16 | sachet kraft épinglé d'une punaise rouge (sur le tableau du village) |
+| `seedpack.village` · `seedpack.cross` | 16 × 16 | sachet à fleurs fermé d'une ficelle bleue ; sachet doré à l'étoile |
+| `jar.empty` · `jar.glass` | 16 × 16 | bocal vide (silhouette des variétés à trouver) ; reflet de verre posé sur une icône (l'étagère) |
+| `shelf.wood` | 16 × 16 | planche d'étagère (autotuile horizontale, fond de la vitrine) |
+| `wild.wildBee`, `.1` · `wild.blackbird`, `.1` · `wild.lizard`, `.1` · `wild.bat`, `.1` | 16 × 16 | osmie rousse et noire (posée / en vol) ; merle noir au bec jaune (chantant / sautillant) ; lézard gris-brun sur une pierre (immobile / queue qui bouge) ; pipistrelle brune (ailes ouvertes / repliée) |
+| `wild.hint.mud`, `wild.hint.tail`, `wild.hint.moon` | 16 × 16 | bouchons de terre au bout de tiges creuses ; petite queue qui file entre deux pierres ; croissant de lune et petite ombre ailée |
+| `nature.batbox`, `icon.nature.batbox` | 16 × 16 | caisse plate de bois sombre, fente en bas, sur un mur ; picto |
+| `icon.trait.scented` | 16 × 16 | petite fleur et trois traits ondulés (lisible en niveaux de gris) |
+| `icon.library`, `icon.swap`, `icon.cross` | 16 × 16 | petite maison de pierre à bocal ; deux sachets et deux flèches en rond ; deux fleurs reliées par une abeille |
+| `fx.pollen`, `fx.pollen.1` | 8 × 8 | petite abeille / points de pollen dorés (2 images) |
+| `story.library`, `story.cross`, `story.library5` | 48 × 32 | vignettes : Joseph montre un coin d'herbe derrière la maison ; deux fleurs côte à côte et une abeille au soleil ; la grainothèque fleurie et des visiteurs |
+| `album.page.swaps`, `album.page.crosses`, `album.page.wildlife2` | 16 × 16 | onglets : deux sachets ; sceau doré ; plume de merle |
+| `decor.swap.basket`, `decor.cross.sign`, `decor.lizard.wall` | 16 × 16 | panier d'osier plein de sachets ; enseigne de bois « Ferme semencière » ; muret de pierres sèches et son lézard |
+| `icon.ach.<id>` (firstSwap, villageSeeds, firstCross, farmHeritage, livingLibrary, valleyFriends) | 16 × 16 | icônes des 6 succès (versions grisées par le code) |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `valley1.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/career/{heritage,valley}.js`, `src/core/career/{heritage,heirlooms,habitat,valley,runtime,staff}.js`, `src/core/{cozy,game,album}.js` (ajouts gardés), `src/data/{album,achievements,cosmetics,cozy}.js`, `tools/{simulate-career,sim-career-staff}.js`, `tests/*` | état, actions, requêtes, événements, progression, migration ; simulation et réglage ; § 16.12 de `docs/VALLEE.md` rempli | rien (commence par `heritage: false` = V1 exact, empreinte vérifiée, puis : données → traits en liste → Grainothèque → troc → croisements → habitants → récits) |
+| **ART** | `assets/sprites/generate-valley2.py`, `assets/sprites/valley2.png`, bloc `// <valley2:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau ; planche de contrôle × 6 | rien |
+| **UI/RENDER** | `src/ui/*` (nouveau `src/ui/career/heritage.js`), `css/valley.css`, `src/main.js`, `src/index.template.html`, `src/render/*` (hors bloc `valley2:auto`) | fiche de la Grainothèque, troc, croisement, mode paire, récits, « Revoir la boîte », lignes des fiches existantes, carte du tableau, scène, hit-test, conseils, débogage ; vérification au doigt | CORE : API (factices en attendant) ; ART : sprites (repli) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `trocInfo`, `valley().library / swaps / crosses / box / stories`,
+`valleyCrossLinks()`, `valleyPairPlots()`, `query.plot(i).variety.cross`, `plantableCrops().heirlooms[].pair`, l'ordre
+des événements (aube : `storyAvailable`, `trocOffered`, habitants du V2 après ceux du V1 ; récolte : `harvested` →
+`heirloomHarvest` → `heirloomFixed` → `crossMeeting` → `crossFound`), les hits `seedLibrary` / `pairPlot` (figés ici ;
+écarts notés par CORE dans « Écarts et précisions (livraison CORE V2) ») ; (2) **ART → RENDER/UI** : noms du tableau des
+sprites ; (3) **CORE ↔ ART** : identifiants des 23 variétés, des 4 espèces, de `batbox`, des récits, décors, succès
+(figés ici et au § 16 de `docs/VALLEE.md`) ; (4) **RENDER ↔ CORE** : voisinage des parcelles (même règle col / row que
+`query.plot(i)` ; test commun : chaque paire de `valleyCrossLinks()` est dessinée côte à côte), emplacements `bat` et
+rectangle de la Grainothèque ; (5) intégration (chef de projet) : sauvegarde `backup/avant-vallee-v2-…` (faite), `node
+--test tests/`, `node tools/simulate-career.js --compare-valley2` et `--compare-valley`, `node tools/simulate.js`
+(identique), `node tools/capture-parity.js --check`, `node tools/build.js`, vérification au doigt (Pixel 7 et 360 × 740 :
+une carrière V1 reprise au rang 3 → récit et panneau, Grainothèque construite et agrandie, troc de la foire puis de
+saison au tableau, paire semée, deux rencontres et un croisement, variété du village sauvée, « Revoir la boîte », un
+habitant du V2 observé, nichoir à chauves-souris posé ; mouvements réduits, texte à 150 % ; une partie de niveau
+Classique identique), `JOURNAL.md`, sauvegarde `backup/vallee-v2-…` à la fin.

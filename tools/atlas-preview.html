@@ -35,12 +35,17 @@
   <label><input type="checkbox" id="onlyv3"> contenu v3 seulement</label>
   <label><input type="checkbox" id="onlycareer"> carrière seulement</label>
   <label><input type="checkbox" id="onlylot2"> lot 2 seulement</label>
+  <label><input type="checkbox" id="onlylot3"> lot 3 seulement</label>
+  <label><input type="checkbox" id="onlylot4"> lot 4 seulement</label>
+  <label><input type="checkbox" id="onlyvalley1"> Vallée V1 seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
 <div id="out"></div>
 <h2>Moulin animé (corps + ailes 0..3) et pommier au fil des saisons</h2>
 <div class="demo" style="align-items:flex-start"><canvas id="mill"></canvas><canvas id="trees"></canvas></div>
+<h2>Vallée vivante (V1) : haies et bandes fleuries raccordées, étapes des variétés, pommes de Calville</h2>
+<div class="demo" style="align-items:flex-start"><canvas id="valley"></canvas></div>
 <h2>Interface (UI pack, border-image)</h2>
 <div class="demo">
   <div class="panel">Panneau parchemin<br>(border-image 8 fill)</div>
@@ -66,6 +71,22 @@ const isCareer = (name) => {
 const isLot2 = (name) => {
   const s = SPRITES[name];
   return s.sheet === 'lot2' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot2'));
+};
+
+const isLot3 = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'lot3' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot3'));
+};
+
+const isLot4 = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'lot4' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot4'));
+};
+
+// Vallée vivante, lot V1 : planche valley1 (et les étapes des variétés, alias des cultures de base)
+const isValley1 = (name) => {
+  const s = SPRITES[name];
+  return name.startsWith('heirloom.') || s.sheet === 'valley1' || !!(s.layers && s.layers.some((l) => l.sheet === 'valley1'));
 };
 
 const out = document.getElementById('out');
@@ -101,6 +122,9 @@ function render() {
   const onlyV3 = document.getElementById('onlyv3').checked;
   const onlyCareer = document.getElementById('onlycareer').checked;
   const onlyLot2 = document.getElementById('onlylot2').checked;
+  const onlyLot3 = document.getElementById('onlylot3').checked;
+  const onlyLot4 = document.getElementById('onlylot4').checked;
+  const onlyValley1 = document.getElementById('onlyvalley1').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
@@ -109,6 +133,9 @@ function render() {
     if (onlyV3 && !isV3(name)) continue;
     if (onlyCareer && !isCareer(name)) continue;
     if (onlyLot2 && !isLot2(name)) continue;
+    if (onlyLot3 && !isLot3(name)) continue;
+    if (onlyLot4 && !isLot4(name)) continue;
+    if (onlyValley1 && !isValley1(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -170,6 +197,33 @@ treeList.forEach(([st, se], i) => {
   drawSprite(tctx, images, 'soil.dry', i * 48, 0, { scale: 3 });
   drawSprite(tctx, images, treeSprite(st, se, st >= 4), i * 48, -3, { scale: 3 });
 });
+// Vallée vivante (V1) : haies (haut + 3 milieux + bas) par saison, bandes fleuries en alternant les deux variantes,
+// étapes 0..4 de chaque variété sur la terre, et les pommes de Calville posées sur le pommier.
+{
+  const cv = document.getElementById('valley');
+  const VS = 3;
+  cv.width = 200 * VS; cv.height = 268 * VS;
+  const c = cv.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#84c669'; c.fillRect(0, 0, cv.width, cv.height);
+  const d = (name, x, y) => { if (SPRITES[name]) drawSprite(c, images, name, x * VS, y * VS, { scale: VS }); };
+  const seasons = ['spring', 'summer', 'autumn', 'winter'];
+  seasons.forEach((se, i) => {
+    ['top', 'mid', 'mid', 'mid', 'bot'].forEach((p, j) => d(`nature.hedge.${se}.${p}`, i * 20, j * 16));
+    for (let k = 0; k < 6; k++) d(`nature.strip.${se}${k % 3 === 1 ? '.1' : ''}`, 84 + k * 16, i * 20);
+  });
+  const ids = ['jauneDuDoubs', 'bouleDOr', 'rougeDeBordeaux', 'milanDePontoise', 'coeurDeBoeuf', 'grandRouxBasque',
+    'soleilDOr', 'vitelotte', 'reineDesVallees', 'rondeDeNice', 'rougeVifDEtampes'];
+  ids.forEach((id, j) => {
+    for (let st = 0; st <= 4; st++) { d('soil.dry', st * 16, 88 + j * 16); d(`heirloom.${id}.${st}`, st * 16, 88 + j * 16); }
+    d(`heirloom.${id}.icon`, 84, 88 + j * 16);
+  });
+  ['tree.apple.summer', 'tree.apple.autumn', 'tree.apple.winter'].forEach((t, i) => {
+    d(t, 110 + i * 18, 88); d('heirloom.calvilleBlanc.fruit', 110 + i * 18, 88);
+  });
+  d('heirloom.calvilleBlanc.icon', 164, 88);
+  d('heirloom.rougeVifDEtampes.giant', 110, 108);
+}
 let frame = 0;
 setInterval(() => {
   mctx.fillStyle = '#84c669'; mctx.fillRect(0, 0, mill.width, mill.height);
@@ -178,14 +232,21 @@ setInterval(() => {
   frame = (frame + 1) % WINDMILL_FRAMES;
 }, 180);
 
-// Préréglage par l'adresse : ?career=1 (carrière seulement), ?lot2=1 (lot 2 seulement), ?filter=staff.f
+// Préréglage par l'adresse : ?career=1 (carrière seulement), ?lot2=1 (lot 2 seulement), ?lot3=1 (lot 3 seulement),
+// ?lot4=1 (lot 4 seulement), ?valley1=1 (Vallée vivante V1 seulement),
+// ?scale=6, ?bg=%2384c669, ?filter=staff.f
 {
   const q = new URLSearchParams(location.search);
   if (q.get('career')) document.getElementById('onlycareer').checked = true;
   if (q.get('lot2')) document.getElementById('onlylot2').checked = true;
+  if (q.get('lot3')) document.getElementById('onlylot3').checked = true;
+  if (q.get('lot4')) document.getElementById('onlylot4').checked = true;
+  if (q.get('valley1')) document.getElementById('onlyvalley1').checked = true;
+  if (q.get('scale')) document.getElementById('scale').value = q.get('scale');
+  if (q.get('bg')) document.getElementById('bgsel').value = q.get('bg');
   if (q.get('filter')) document.getElementById('filter').value = q.get('filter');
 }
-for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2']) document.getElementById(id).addEventListener('input', render);
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2', 'onlylot3', 'onlylot4', 'onlyvalley1']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>

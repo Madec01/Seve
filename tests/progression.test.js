@@ -74,7 +74,7 @@ test('progression vide et normalisation (v1, abîmée, références inconnues)',
   assert.deepEqual(m.perks, { almanac: 1, startPurse: 2 });
   assert.equal(m.perksEnabled, true);
   assert.deepEqual(m.achievements, { firstHarvest: { at: 5 }, harvest100: { at: null } });
-  assert.deepEqual(m.lifetime, { harvests: 0, cropsHarvested: { carrot: 3 }, productsSold: { bread: 2 }, yearsWon: 0, yearsLost: 0, rentsPaid: 0 });
+  assert.deepEqual(m.lifetime, { harvests: 0, cropsHarvested: { carrot: 3 }, productsSold: { bread: 2 }, yearsWon: 0, yearsLost: 0, rentsPaid: 0, variety: { orders: 0, cartsFull: 0, medals: { bronze: 0, silver: 0, gold: 0 }, rare: {} }, cozy: { handPicked: 0, eggsAll: 0, ribbonsGold: 0, birds: {}, fetes: 0 } });
   assert.equal(m.ecus, 0);
   assert.equal(m.cosmetics.farmName, 'Ferme des Tilleuls');
   assert.equal(m.cosmetics.outfit, 'outfit.classic', 'tenue non possédée → défaut');
@@ -309,7 +309,7 @@ test('recordRunEnd : niveaux, cumuls, écus, succès (victoire, faillite, abando
   assert.equal(r.rewards.newStars, true);
   assert.equal(r.rewards.newBest, true);
   assert.equal(r.rewards.ecus, 10 + 15 + 9);
-  assert.deepEqual(r.progress.lifetime, { harvests: 123, cropsHarvested: { carrot: 120, pumpkin: 3 }, productsSold: { flour: 2 }, yearsWon: 1, yearsLost: 0, rentsPaid: 590 });
+  assert.deepEqual(r.progress.lifetime, { harvests: 123, cropsHarvested: { carrot: 120, pumpkin: 3 }, productsSold: { flour: 2 }, yearsWon: 1, yearsLost: 0, rentsPaid: 590, variety: { orders: 0, cartsFull: 0, medals: { bronze: 0, silver: 0, gold: 0 }, rare: {} }, cozy: { handPicked: 0, eggsAll: 0, ribbonsGold: 0, birds: {}, fetes: 0 } });
   assert.deepEqual(r.achievements.sort(), ['firstHarvest', 'firstProduct', 'firstYear', 'harvest100'].sort());
   assert.equal(r.rewards.achievementEcus, 5 + 5 + 10 + 10);
   assert.equal(r.rewards.achievementStars, 1);
@@ -419,7 +419,8 @@ test('cosmétiques : acheter, poser, retirer, allées, clôture, tenue, nom, con
 test('achievementContext d’une partie : forme', () => {
   const g = createGame({ levelId: 10, seed: 1 , difficulty: 'classique' });
   const c = g.query.achievementContext();
-  assert.deepEqual(Object.keys(c).sort(), ['adultTrees', 'availableInvestments', 'dailyCharges', 'day', 'investments', 'levelId', 'money', 'perksActive', 'seasonId', 'stars', 'stats', 'status'].sort());
+  // (lot 4) + weather (tous les modes : l'album lit le temps du jour, sans rien changer à la partie).
+  assert.deepEqual(Object.keys(c).sort(), ['adultTrees', 'availableInvestments', 'dailyCharges', 'day', 'investments', 'levelId', 'money', 'perksActive', 'seasonId', 'stars', 'stats', 'status', 'weather'].sort());
   assert.equal(c.adultTrees, 4);
   assert.equal(c.perksActive, false);
   assert.equal(createGame({ levelId: 10, seed: 1, perks: { almanac: 1 } }).query.achievementContext().perksActive, true);

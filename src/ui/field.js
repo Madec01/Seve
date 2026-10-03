@@ -94,13 +94,17 @@ export function createField(app) {
       }
       if (c.noWater) warnings.push(el('span.warn-chip.is-hardy', icon('water', 'xs'), 'Pousse sans arrosage'));
       if (c.product?.owned) warnings.push(el('span.warn-chip.is-product', productIcon(c.product.productId, 'sprite--xs'), `Atelier : ${fmt(c.product.value)}`));
-      if (c.willFreeze && !isTree) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), 'Gèlera avant d\'être mûre'));
+      if (c.willFreeze && !isTree) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), `Gèlera avant d'être ${agree(c.name, 1, 'mûr')}`));
       if (c.fatigue) warnings.push(el('span.warn-chip.is-fatigue', icon('info', 'xs'), `Sol fatigué −${Math.round(lvl.modifiers.soilFatigue * 100)} %`));
       if (c.frostHardy && !isTree && cal.seasonId !== 'winter') warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Résiste au gel'));
       if (lvl.modifiers.priceVolatility && Math.abs(c.marketMultiplier - 1) > 0.01) {
         warnings.push(el(`span.warn-chip.${c.marketMultiplier > 1 ? 'is-up' : 'is-down'}`, `Cours ×${dec(c.marketMultiplier)}`));
       }
       if (!c.canAfford) warnings.push(el('span.warn-chip.is-frost', `Il manque ${plural(c.seedCost - game.state.money, 'pièce')}`));
+      // (Lot 3) Graines rares (« Rare · 4 graines »), semis offerts, culture demandée au tableau ou à la charrette.
+      warnings.unshift(...(app.variety?.seedChips?.(c) || []));
+      // (Lot 4) Carrière : semis prépayés de la foire aux graines (« Réserve : 16 »).
+      warnings.unshift(...(app.cozy?.seedChips?.(c) || []));
       return el(
         `button.seed-row${c.canAfford ? '' : '.is-disabled'}${c.willFreeze ? '.will-freeze' : ''}`,
         {
@@ -157,15 +161,18 @@ export function createField(app) {
         )
       : null;
 
+    // (Vallée vivante) « Graines anciennes » en tête, « Jachère fleurie » (carrière, Vallée commencée).
+    const valley = app.valley?.seedRows?.(crops, index, { close: () => close(false) }) || null;
     return el(
       'div.seed-picker',
+      valley,
       crops.length
         ? [
             el('div.seed-list', rows),
             everywhere,
             el('p.sheet-hint', `Une culture arrosée pousse ${waterEffect(game.level).faster}. Gain par jour = bénéfice ÷ jours de pousse.`),
           ]
-        : el('p.sheet-empty', `Rien ne se plante ${season(cal.seasonId, 'in')}.`),
+        : valley && (crops.heirlooms || []).length ? null : el('p.sheet-empty', `Rien ne se plante ${season(cal.seasonId, 'in')}.`),
     );
   }
 
@@ -280,18 +287,20 @@ export function createField(app) {
 
   function plotTitle(p) {
     if (!p.unlocked) return 'Parcelle en friche';
+    const vt = app.valley?.plotTitle?.(p);
+    if (vt) return vt;
     if (!p.cropId && p.forage) return p.forage.kind === 'ring' ? 'Cercle de fées' : 'Champignons à cueillir';
     if (!p.cropId) return 'Parcelle libre';
     if (p.giant) return `${p.cropName} ${agree(p.cropName, 1, 'géant')} !`;
     if (p.kind === 'tree') return p.tree?.fruitReady ? 'Pommier : pommes mûres' : p.cropName || 'Pommier';
-    return p.mature ? `${p.cropName} mûre` : p.cropName;
+    return p.mature ? `${p.cropName} ${agree(p.cropName, 1, 'mûr')}` : p.cropName;
   }
 
   function openPlotInfo(index, silent = false) {
     const p = app.game?.query.plot(index);
     if (!p) return;
     if (!p.unlocked) return openUnlock(index, silent);
-    show('plot', { index }, { title: plotTitle(p), icon: p.cropId ? cropIcon(p.cropId, 'sprite--md') : icon('seed', 'md'), content: plotContent(index) }, silent);
+    show('plot', { index }, { title: plotTitle(p), icon: app.valley?.plotIcon?.(p) || (p.cropId ? cropIcon(p.cropId, 'sprite--md') : icon('seed', 'md')), content: plotContent(index) }, silent);
   }
 
   // ── Fiche d'un bâtiment ───────────────────────────────────────────────────────
@@ -366,7 +375,8 @@ export function createField(app) {
       if (verb) rows.push(el('div.tip-sub', `${verb} pour cueillir.`));
     } else if (!p.cropId) {
       if (!sheet) rows.push(el('div.tip-title', icon('seed', 'sm'), 'Parcelle libre'));
-      rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
+      if (!p.fallow) rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
+      valleyRows(rows, p);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : évitez de replanter la même culture.'));
     } else if (p.kind === 'tree' && p.tree) {
       const t = p.tree;
@@ -388,16 +398,18 @@ export function createField(app) {
       rows.push(el('div.tip-sub', 'Il se récolte à la main, en une fois.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else if (p.mature) {
-      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
+      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} ${agree(p.cropName, 1, 'mûr')} !`));
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
+      valleyRows(rows, p);
       qualityRows(rows, p, sheet);
       careerRows(rows, p);
+      claimRow(rows, p);
       processRow(rows, p, sheet);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), p.cropName));
-      rows.push(el('div.tip-progress', el('span.tip-bar', el('span.tip-bar-fill', { style: { width: `${Math.round(p.progress * 100)}%` } })), el('span', `mûre dans ${plural(p.daysLeft, 'jour')}`)));
+      rows.push(el('div.tip-progress', el('span.tip-bar', el('span.tip-bar-fill', { style: { width: `${Math.round(p.progress * 100)}%` } })), el('span', `${agree(p.cropName, 1, 'mûr')} dans ${plural(p.daysLeft, 'jour')}`)));
       rows.push(
         p.watered
           ? el('div.tip-ok', icon('water', 'xs'), 'Arrosée aujourd\'hui')
@@ -405,9 +417,11 @@ export function createField(app) {
             ? el('div.tip-ok', icon('water', 'xs'), 'Pousse sans arrosage (sauf en canicule)')
             : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? ((game.level.dryHeatwaveGrowth ?? 0) > 0 ? 'Pas arrosée : pousse à peine (canicule) !' : 'Pas arrosée : ne poussera pas (canicule) !') : `Pas arrosée : pousse ${waterEffect(game.level).slower}`),
       );
+      valleyRows(rows, p);
       qualityRows(rows, p, sheet);
+      claimRow(rows, p);
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
-      if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
+      if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), `Gèlera avant d'être ${agree(p.cropName, 1, 'mûr')} !`));
       if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (!p.watered && verb && p.needsWater !== false) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));
@@ -429,13 +443,28 @@ export function createField(app) {
     rows.push(el('div.tip-care', care(c.wateredEveryDay, 'arrosée chaque jour'), care(c.bees, 'ruche'), care(c.rotation, 'sol reposé')));
   }
 
+  /** (Vallée vivante) Variété ancienne (planche d'essai, « À la main : + 2 graines (4 / 6) »), jachère, sol reposé. */
+  function valleyRows(rows, p) {
+    const n = app.valley?.plotRows?.(p);
+    if (n) rows.push(n);
+  }
+
+  /** (Lot 3) « À la récolte : → Lili (3 / 5) » : la récolte à la main part à une commande ou à la charrette. */
+  function claimRow(rows, p) {
+    const n = app.variety?.plotRows?.(p);
+    if (n) rows.push(n);
+  }
+
   /** Carrière : cueillie à la main (+10 %), grenier, cours du jour, corbeau (docs/CARRIERE.md § 3). */
   function careerRows(rows, p) {
     if (p.lot === undefined) return;
     if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
     else if (p.crowPenalty) rows.push(el('div.tip-note.warn', 'Le corbeau a abîmé la récolte : −50 %.'));
     if (p.storeTarget) rows.push(el('div.tip-sub', 'Cours bas : la récolte attendra au grenier.'));
-    else if (p.handBonus && p.handBonus > 1) rows.push(el('div.tip-ok', `Cueillie à la main : +${Math.round((p.handBonus - 1) * 100)} %`));
+    else if (p.handValue === undefined && p.handBonus && p.handBonus > 1) rows.push(el('div.tip-ok', `Cueillie à la main : +${Math.round((p.handBonus - 1) * 100)} %`));
+    // (Lot 4, F1) « À la main : 31 · par l'équipe : 25 », « Vous attend · la moissonneuse passera dans 1 jour », désherbée.
+    const cz = app.cozy?.plotRows?.(p);
+    if (cz) rows.push(cz);
     if (p.marketMultiplier && Math.abs(p.marketMultiplier - 1) > 0.01) rows.push(el('div.tip-sub', `Cours du jour ×${dec(p.marketMultiplier, 2)}${p.offSeason ? ' · hors saison ×1,25' : ''}`));
     else if (p.offSeason) rows.push(el('div.tip-sub', 'Hors saison : ×1,25'));
   }
@@ -505,7 +534,8 @@ export function createField(app) {
     const p = g.query.plot(c.index);
     if (c.kind === 'seeds') {
       const free = g.query.plots().filter((q) => q.action === 'plant').length;
-      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd])]);
+      const pc = g.query.plantableCrops(c.index);
+      return JSON.stringify([p.cropId, p.unlocked, p.fallow, free, g.query.calendar().seasonId, pc.heirlooms || null, pc.fallow || null, pc.map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd, x.rare, x.seedsLeft, x.free, x.requested])]);
     }
     if (c.kind === 'unlock') {
       const can = g.state.money >= (p.unlockCost ?? Infinity);
@@ -546,7 +576,7 @@ export function createField(app) {
       close(false);
       return;
     }
-    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved'].includes(ev.type) && !refreshQueued) {
+    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'ordersRenewed', 'orderDone', 'orderRemoved', 'cartArrived', 'cartDeparted', 'merchantBought', 'cardPicked', 'heirloomSown', 'heirloomHarvest', 'fallowSown', 'fallowEnded', 'jarOpened', 'fairHeirloomBought'].includes(ev.type) && !refreshQueued) {
       // Une aube émet plusieurs événements : une seule reconstruction par image.
       refreshQueued = true;
       requestAnimationFrame(() => {

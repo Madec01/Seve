@@ -62,12 +62,11 @@ export const CAREER_ANIMALS = [
     price: { base: 45, step: 0 },
     income: every(3),
     upkeep: 0,
-    rank: 4,
+    rank: 3, // (lot 4) avec la mare, au rang 3
     effects: {},
     product: 'duckEgg',
     productName: 'Œufs de cane',
     collect: true,
-    phase: 'B',
   },
   {
     id: 'goat',

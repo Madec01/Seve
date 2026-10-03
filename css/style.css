@@ -285,7 +285,10 @@ body.is-loading #hud { transform: translateY(-110%); pointer-events: none; }
 
 .hud-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* Argent : toujours en entier (max-content). Météo : au moins 48 px (cible), elle prend la place qui reste ;
+     fermage : sa largeur s'il y a la place,
+     sinon il rétrécit DANS sa colonne (mot d'état effacé, src/ui/hud.js fitRow) au lieu de couvrir la météo. */
+  grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto;
   gap: 5px;
   align-items: stretch;
 }
@@ -364,6 +367,11 @@ body.is-loading #hud { transform: translateY(-110%); pointer-events: none; }
    dans une pastille au contour sombre, et un mot avant le délai (« couvert · dans 4 j »). */
 .bill-line { gap: 0; }
 .bill-word:not(:empty)::after { content: ' · '; white-space: pre; }
+/* Case trop étroite (src/ui/hud.js fitRow) : le mot d'état s'efface (symbole et couleur restent) ; ce qui
+   dépasse encore est coupé dans la case, jamais posé sur la météo voisine. */
+.hud-bill.is-tight .bill-word { display: none; }
+.hud-bill.is-tighter .hud-line--big > .ico { display: none; }
+.hud-bill.is-tight > .hud-line { overflow: hidden; }
 .bill-glyph {
   flex: none;
   display: inline-block;
@@ -675,7 +683,7 @@ body.layout-wide .sheet-head { padding-top: 6px; }
 .warn { color: var(--warn); }
 .mid { color: var(--text-soft); }
 .card-foot { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 4px; }
-.btn--buy { width: 100%; font-size: 1.0625rem; gap: 10px; }
+.btn--buy { width: 100%; font-size: 1.0625rem; gap: 10px; flex-wrap: wrap; row-gap: 0; }
 .buy-cost { display: inline-flex; align-items: center; gap: 4px; }
 .card-reason { margin: 0; font-size: 0.875rem; color: var(--neg); text-align: center; line-height: 1.3; }
 .card.is-maxed .btn--buy { filter: none; opacity: 0.8; border-image-source: var(--img-btn-slate); cursor: default; }
@@ -877,6 +885,22 @@ body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
 /* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
    sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
 body.has-tall-sheet:not(.layout-wide) #toasts { bottom: calc(var(--inset-bottom) + 10px); }
+/* (QA du lot 4) … et là, ils ne captent plus rien : la pastille « +N messages » et les « Voir » couvraient le bouton
+   principal de la feuille (« Chercher les œufs », « Goûter la soupe »). Les messages restent dans l'historique. */
+/* (QA du lot 4) Fenêtres de fin (saison, bilan annuel, victoire, faillite) : les messages du soir (cases d'album,
+   trouvailles, succès) ne se posent plus sur le bilan ni sur ses boutons ; ils restent dans l'historique. */
+body[data-dialog="victory"] #toasts .toast:not(.is-sticky), body[data-dialog="victory"] #toasts .toast-more,
+body[data-dialog="bankrupt"] #toasts .toast:not(.is-sticky), body[data-dialog="bankrupt"] #toasts .toast-more,
+body[data-dialog="season-end"] #toasts .toast:not(.is-sticky), body[data-dialog="season-end"] #toasts .toast-more,
+body[data-dialog="career-year"] #toasts .toast:not(.is-sticky), body[data-dialog="career-year"] #toasts .toast-more,
+body[data-dialog="career-rank"] #toasts .toast:not(.is-sticky), body[data-dialog="career-rank"] #toasts .toast-more,
+body[data-dialog="v-season"] #toasts .toast:not(.is-sticky), body[data-dialog="v-season"] #toasts .toast-more { display: none; }
+/* … et sur les feuilles des fêtes et de l'hiver (mini-jeux), les messages ne recouvrent plus le bouton principal :
+   seuls les refus (« De 1 à 3 légumes ») restent affichés. */
+body.has-tall-sheet:not(.layout-wide):has(.sheet.cz-sheet) #toasts .toast:not(.is-sticky):not(.toast--error) { display: none; }
+body.has-tall-sheet:not(.layout-wide) #toasts .toast-more,
+body.in-fete #toasts .toast-more { display: none; }
+body.has-tall-sheet:not(.layout-wide) #toasts .toast:not(.is-sticky) .toast-go { pointer-events: none; }
 body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); width: min(30rem, calc(100vw - var(--panel-w) - 16px)); }
 .toast {
   display: flex;
@@ -890,8 +914,8 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
   border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
   image-rendering: pixelated;
   font-size: 0.9375rem;
-  /* Les messages ne captent pas les touchers (la scène et les onglets dessous restent
-     utilisables), sauf ceux qui proposent une action (« Nouvelle version… Recharger »). */
+  /* Les messages ne captent jamais les touchers (la scène et les onglets dessous restent
+     utilisables) ; seul le bouton d'un message qui propose une action (.toast-go) se touche. */
   pointer-events: none;
   filter: drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35));
   animation: toast-in 280ms var(--ease-pop);
@@ -900,7 +924,14 @@ body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); w
 .toast--warn,
 .toast--frost,
 .toast--rot { border-image-source: var(--img-btn-slate); color: var(--parch); text-shadow: 0 var(--px1) 0 var(--slate-dark); }
-.toast.is-action { pointer-events: auto; cursor: pointer; border-image-source: var(--img-btn-red); color: var(--parch); text-shadow: 0 var(--px1) 0 var(--red-dark); }
+/* Message qui propose une action : seul son bouton (« Voir », « Recharger »…) se touche ; le reste du message
+   laisse passer le doigt vers la scène (QA du lot 3 : au début d'une saison de carrière, les messages couvraient
+   la bande de la maison et captaient les touchers). */
+.toast-go { flex: none; align-self: center; min-width: 64px; min-height: 48px; margin-left: auto; padding: 0 10px; pointer-events: auto; }
+/* Pastille « +2 messages » : les messages effacés faute de place (au plus 2 à la fois) ; ouvre l'historique. */
+.toast-more { min-height: 48px; min-width: 96px; gap: 6px; padding: 0 12px; pointer-events: auto; font-size: 0.9375rem; animation: toast-in 280ms var(--ease-pop); }
+.toast-more[hidden] { display: none; }
+.toast-more-n { font-size: 1rem; }
 .toast-body { display: flex; flex-direction: column; line-height: 1.2; }
 .toast-title { font-size: 1rem; }
 .toast.is-leaving { animation: toast-out 240ms ease forwards; }
@@ -2105,7 +2136,7 @@ body.layout-wide.in-decor .decorbar { left: 12px; right: auto; bottom: 12px; wid
 body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 
 /* ─── Barre du haut : année, rang ────────────────────────────────────────────── */
-#hud.is-career .hud-row { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 4px; }
+#hud.is-career .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto auto; gap: 4px; }
 /* La météo reste une cible d'au moins 48 px même quand l'argent s'allonge (« 19 750 ») ; nom coupé proprement. */
 #hud.is-career .hud-weather { min-width: 48px; }
 #hud.is-career .hud-weather .w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2253,6 +2284,7 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 .c-plan-row:active { transform: translateY(var(--u)); }
 .c-plan-season { font-weight: 700; }
 .c-plan-value { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-plan-value > span:not(.ico):not(.sprite) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .c-plan-pick.is-current { background: #e3f3d6; box-shadow: 0 0 0 var(--u) var(--green-dark); }
 .c-plan-pick { grid-template-columns: 44px minmax(0, 1fr) auto; }
 .c-slots { display: flex; flex-direction: column; gap: 6px; }
@@ -2445,7 +2477,7 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 .c-year-net b { font-size: 2.25rem; line-height: 1; }
 .c-year-net small { font-size: 0.875rem; color: var(--text-soft); }
 .c-best { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
-.c-best small { font-weight: 400; color: var(--text-soft); }
+.c-best small { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
 .c-year-cols { display: grid; grid-template-columns: 1fr; gap: 10px; width: 100%; text-align: left; }
 @media (min-width: 560px) { .c-year-cols { grid-template-columns: 1fr 1fr; } }
 .c-year-rank { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; }
@@ -2764,11 +2796,11 @@ html.font-readable .sheet-hint { line-height: 1.4; }
 #tabbar > .hud-speed .speed-label { font-size: min(0.875rem, 16px); }
 /* Disposition miroir, vitesse en haut : le bouton passe à gauche de la barre du haut. */
 html.left-handed #hud:not(.is-docked) .hud-row > .hud-speed { order: -1; }
-html.left-handed #hud:not(.is-docked) .hud-row { grid-template-columns: auto auto minmax(0, 1fr) auto; }
-html.left-handed #hud.is-career:not(.is-docked) .hud-row { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+html.left-handed #hud:not(.is-docked) .hud-row { grid-template-columns: auto max-content minmax(48px, 1fr) minmax(0, auto); }
+html.left-handed #hud.is-career:not(.is-docked) .hud-row { grid-template-columns: auto max-content minmax(48px, 1fr) minmax(0, auto) auto; }
 /* Vitesse en bas : la barre du haut n'a plus que trois cases. */
-#hud.is-docked .hud-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-#hud.is-docked.is-career .hud-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+#hud.is-docked .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto); }
+#hud.is-docked.is-career .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto; }
 
 /* ─── Contrastes renforcés ─────────────────────────────────────────────────────────────── */
 html.high-contrast {
@@ -2813,8 +2845,7 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 .toast--error,
 .toast--warn,
 .toast--frost,
-.toast--rot,
-.toast.is-action { text-shadow: var(--text-outline); }
+.toast--rot { text-shadow: var(--text-outline); }
 
 /* ─── Grandes tailles de texte sur téléphone (130 et 150 %) ───────────────────────────────
    La barre du haut garde ses quatre cases sur 360 px : les chiffres grandissent un peu moins
@@ -2847,15 +2878,89 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 #tabbar.has-dock.is-five .tabbar-label { font-size: 14px; }
 #tabbar.has-dock .tabbar-btn { padding-left: 0; padding-right: 0; }
 
-/* Grand texte (130–150 %) sur téléphone : le titre des fenêtres reste dans son ruban, à côté du ✕
+/* Téléphone (et grand texte 130–150 %) : le titre des fenêtres reste dans son ruban, à côté du ✕
    (« Où en étais-je ? » débordait à 150 % en 360 px de large). */
 @media (max-width: 439px) {
   html[data-text-scale='130'] .dialog-title,
   html[data-text-scale='150'] .dialog-title { font-size: min(1.25rem, 21px); }
-  html[data-text-scale='130'] .dialog.is-closable .dialog-ribbon,
-  html[data-text-scale='150'] .dialog.is-closable .dialog-ribbon { max-width: calc(100% - 112px); }
+  /* (2026-10-03) Ruban décalé à gauche du ✕ (au lieu d'être centré entre deux marges de 56 px) et bouts du ruban
+     à l'échelle 1 (32 px au lieu de 48) : à 150 % sur 360 px, « L'album de la ferme » débordait du ruban (96 px
+     de place pour 168) et touchait le ✕ (à 100 % : 6 px d'écart). Ce qui dépasserait encore est coupé (…) dans
+     le ruban. Toutes les tailles de texte : même dessin d'une fenêtre à l'autre. */
+  .dialog.is-closable .dialog-ribbon {
+    max-width: calc(100% - 56px);
+    margin-right: 56px;
+    border-left-width: calc(var(--u) * 16);
+    border-right-width: calc(var(--u) * 16);
+    border-image-width: 0 calc(var(--u) * 16);
+  }
+  .dialog.is-closable .dialog-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (max-width: 379px) {
   html[data-text-scale='130'] .dialog.is-closable .dialog-title,
   html[data-text-scale='150'] .dialog.is-closable .dialog-title { font-size: min(1.125rem, 17px); }
 }
+
+/* ─── Zoom de la scène : boutons + / − (src/ui/zoom.js) ──────────────────────────
+   À droite (à gauche pour gaucher), au-dessus de la ligne « À faire » et des onglets ; en carrière, à
+   gauche de la mini-carte. Cibles de 48 px, pastille de 40 px, discrète (un peu transparente au repos). */
+.zoom-controls {
+  position: fixed;
+  z-index: 18; /* comme la mini-carte : sous la barre du haut, les onglets, les feuilles et les messages */
+  right: calc(var(--safe-r) + 6px);
+  bottom: calc(var(--inset-bottom) + var(--todo-h, 0px) + 8px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.zoom-controls[hidden] { display: none; }
+.zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 10px + 96px + 24px + 4px); } /* + bouton « Cacher » qui déborde de 24 px */
+.zoom-controls[data-minimap='collapsed'] { right: calc(var(--safe-r) + 10px + 52px + 6px); }
+html.left-handed .zoom-controls,
+html.left-handed .zoom-controls[data-minimap] { right: auto; left: calc(var(--safe-l) + 6px); }
+body.layout-wide .zoom-controls { bottom: 12px; }
+body.layout-wide.has-sheet .zoom-controls { right: calc(var(--panel-w) + 12px); }
+@media (max-height: 699px), (max-width: 369px) {
+  .zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 8px + 84px + 24px + 4px); }
+}
+.zoom-btn {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.zoom-btn[hidden] { display: none; }
+.zoom-face {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  background: var(--parch);
+  box-shadow: 0 0 0 var(--u) var(--outline), 0 var(--u) 0 var(--u) var(--outline), 0 3px 6px rgba(0, 0, 0, 0.25);
+  opacity: 0.88;
+  transition: transform var(--t-fast) ease, opacity var(--t-fast) ease;
+}
+.zoom-btn:active .zoom-face { transform: translateY(var(--u)); filter: brightness(0.92); opacity: 1; }
+.zoom-btn:focus-visible .zoom-face { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: 1px; opacity: 1; }
+.zoom-btn[aria-disabled='true'] .zoom-face { opacity: 0.45; }
+.zoom-reset .zoom-face { width: 40px; height: 30px; }
+.zoom-reset-text { font-size: 0.875rem; font-weight: 700; line-height: 1; color: var(--text); }
+/* Glyphes « + » et « − » : barres pleines, nettes à toute taille de texte. */
+.zoom-glyph { position: relative; display: block; width: 18px; height: 18px; }
+.zoom-glyph::before,
+.zoom-glyph::after { content: ''; position: absolute; background: var(--outline); }
+.zoom-glyph::before { left: 0; right: 0; top: 7px; height: 4px; }
+.zoom-glyph--plus::after { top: 0; bottom: 0; left: 7px; width: 4px; }
+.zoom-glyph--minus::after { display: none; }
+html.high-contrast .zoom-face { opacity: 1; background: #fff; box-shadow: 0 0 0 2px #000, 0 2px 0 2px #000; }
+html.reduced-motion .zoom-face { transition: none; }

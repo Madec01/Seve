@@ -41,7 +41,7 @@ Deux phases de réalisation (§ 14) : **Phase A — le socle** (années continue
 
 ### 1.2 Le temps
 
-- **Inchangé** : 1 jour = 20 s à ×1, saisons de **7 jours**, année de 28 jours (≈ 9 min 30 à ×1, 10 à 15 min avec les fiches et fenêtres ouvertes). Vitesses pause, ×1, ×2, ×4.
+- **Inchangé** : saisons de **7 jours**, année de 28 jours. Vitesses pause, ×1, ×2, ×4. *(2026-10-03)* 1 jour = 36 s réelles à ×1 (avant : 20 s ; le cœur compte toujours 20 « secondes de jeu » par jour, `REAL_DAY_SECONDS`) : une année ≈ 17 min à ×1, 20 à 25 min avec les fiches et fenêtres ouvertes.
 - **Années continues** : `state.time.year` (1, 2, 3…) ; `state.time.day` repart à 1 chaque printemps. Au soir du dernier jour d'hiver : charges d'hiver, puis **bilan de l'année** (fenêtre, partie en pause), puis l'aube du 1er jour de printemps de l'année suivante.
 - Ce qui continue d'une année à l'autre : **tout** (argent, terrains, parcelles et ce qui y pousse — navets et choux d'hiver continuent au printemps —, arbres, bâtiments, animaux, machines, employés, stock, amitié de Joseph). Ce qui repart à zéro : les statistiques de l'année (`stats.year`), le calendrier des fêtes.
 - Le **gel** frappe chaque 1er jour d'hiver comme dans les niveaux (sauf dans la serre, § 4.3).
@@ -664,7 +664,7 @@ Style : **Kenney Tiny Farm / Tiny Town**, dessinés par programme comme la v3 (`
 ## 12. Rendu et audio (principes)
 
 - `layout-career.js` construit la colonne à partir de `state.career.lots` (même forme que les dispositions existantes : `plots`, `slots`, `decorSlots`, `fieldRect`, `essential`, + `lots: [{ id, type, rect }]`). Les index des parcelles sont ceux du cœur (ajoutées **à la fin** quand un champ est aménagé, jamais renumérotées).
-- **Employés** : chaque personnage lit `staff[i].task` (`{ kind, target, startAt, doneAt }`, § ARCHITECTURE) et **interpole** sa position entre son point de départ et sa cible ; arrivé, il joue l'animation de l'action (arrosoir + gouttes, panier + légume qui saute, sac de graines) ; trajet en ligne droite par le chemin du terrain (pas de recherche de chemin) ; à ×4 tout va 4 fois plus vite ; au repos, il flâne près de la maison. Hors de l'écran : rien n'est dessiné.
+- **Employés** : chaque personnage lit `staff[i].task` (`{ kind, target, startAt, doneAt }`, § ARCHITECTURE) et **marche vers sa cible au pas, en temps réel** (2026-10-03 : avant, sa position suivait l'horloge du jeu et il courait, d'autant plus vite que la vitesse était haute) ; arrivé, il joue l'animation de l'action (arrosoir + gouttes, panier + légume qui saute, sac de graines) ; à ×2 et ×4 il allonge un peu le pas (×1,25, ×1,5) et, si sa tâche suivante est trop loin pour y arriver sans courir, il « coupe » (fondu, réapparition près du but) ; au repos, il flâne près de la maison. Hors de l'écran : rien n'est dessiné.
 - **Machines** : la moissonneuse et le semoir traversent le champ **rang par rang** pendant leur passage (événement `machineWorked` avec la liste des parcelles et l'heure de chaque parcelle) ; le tracteur les tire (sinon le cheval) ; sinon ils restent garés.
 - **Animaux** : 6 au plus dessinés par abri ; bulle de ramassage quand il y a quelque chose (au-dessus du toit).
 - **Terrains** : forêt dense au-dessus ; terrain à vendre assombri avec son panneau ; animation de défrichage à l'achat ; décor de fête selon le calendrier.
