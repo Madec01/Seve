@@ -40,7 +40,7 @@ const DEFAULT_HINTS = {
   'cozy.fete': { title: 'Jour de fête', text: 'Demain, c\'est jour de fête : un petit jeu au doigt, sans chrono. Ce que vous ne faites pas, le village le fera.' },
   'cozy.winter': { title: 'L\'hiver vivant', text: 'Ramassez les trouvailles en lisière, remplissez la mangeoire, et passez chez Joseph le soir.' },
   'cozy.lanterns': { title: 'Les lanternes', text: 'Joseph allume des lanternes pour votre année : une au moins par critère. L\'an prochain, on peut toujours faire mieux.' },
-  'cozy.helpers': { title: 'Vos récoltes vous attendent', text: 'L\'équipe ne les cueille qu\'après 2 à 4 jours. À la main, elles valent 25 % de plus !' },
+  'cozy.helpers': { title: 'Vos récoltes vous attendent', text: 'L\'équipe ne les cueille qu\'après 3 à 4 jours. À la main, elles valent 25 % de plus !' },
   'cozy.seedFair': { title: 'La foire aux graines', text: 'Des sachets à −25 % pour le printemps : vos semis les prendront d\'abord, sans payer.' },
 };
 const HINT_TITLES = Object.fromEntries(Object.entries(DEFAULT_HINTS).map(([k, v]) => [k, v.title]));
@@ -307,7 +307,8 @@ export function createCozy(app) {
   }
 
   function feteHead(f) {
-    return el('div.cz-head', el('span.cz-head-ico', feteIcon(f, 'sprite--lg')), el('div', el('b.cz-name', f.name), f.text ? el('p.cz-lead', f.text) : null));
+    // Le nom de la fête est déjà le titre de la feuille : ici, seulement l'annonce (QA du lot 4 : nom en double).
+    return el('div.cz-head', el('span.cz-head-ico', feteIcon(f, 'sprite--lg')), el('div', f.text ? el('p.cz-lead', f.text) : el('b.cz-name', f.name)));
   }
   function rulesList(f) {
     const rules = (f.rules || []).filter(Boolean);
@@ -752,9 +753,12 @@ export function createCozy(app) {
             ),
           ),
         );
-        const ready = vill.length > 0 && sel.baskets.slice(0, vill.length).every((b) => b.length > 0);
+        // Autant de paniers garnis que de produits différents (3 au plus) : une petite ferme peut offrir 1 ou 2 paniers.
+        const need = Math.min(vill.length, choices.length);
+        const filled = sel.baskets.slice(0, vill.length).filter((b) => b.length > 0).length;
+        const ready = vill.length > 0 && need > 0 && filled >= need;
         const pv = ready ? q('fetePreview', app.game, sel.baskets.slice(0, vill.length).map((b) => b.map(({ kind, id }) => ({ kind, id })))) : null;
-        parts.push(el('p.cz-preview', { 'aria-live': 'polite' }, pv ? [el('b', plural(pv.hearts || 0, 'cœur')), pv.amount ? ` · +${fmt(pv.amount)}` : ''] : 'Un produit au moins dans chaque panier.'));
+        parts.push(el('p.cz-preview', { 'aria-live': 'polite' }, pv && !pv.reason ? [el('b', plural(pv.hearts || 0, 'cœur')), pv.amount ? ` · +${fmt(pv.amount)}` : ''] : need < vill.length ? `${need === 1 ? 'Un panier garni' : `${need} paniers garnis`} suffisent cette année.` : 'Un produit au moins dans chaque panier.'));
         parts.push(
           el(
             `button.btn.btn--red.btn--big.btn--wide.cz-go${ready ? '' : '.is-disabled'}`,
@@ -763,7 +767,7 @@ export function createCozy(app) {
               id: 'cz-baskets-go',
               'aria-disabled': ready ? 'false' : 'true',
               onclick: () => {
-                if (!ready) return refused('Un produit au moins dans chaque panier.');
+                if (!ready) return refused(need < vill.length ? `${need === 1 ? 'Un panier garni' : `${need} paniers garnis`} au moins.` : 'Un produit au moins dans chaque panier.');
                 const res = act('giveBaskets', sel.baskets.slice(0, vill.length).map((b) => b.map(({ kind, id }) => ({ kind, id }))));
                 if (res?.ok) {
                   tone('chime', { volume: 0.85 });
@@ -779,7 +783,7 @@ export function createCozy(app) {
     } else {
       parts.push(resultBox(f.result, f));
       const per2 = f.result?.perBasket || [];
-      if (per2.length) parts.push(el('div.cz-thanks', vill.map((v, i) => el('p.cz-say', portraitOf(v.portrait || `portrait.client.${v.clientId}`, 'sprite--xs'), ` ${v.name} : « ${(per2[i] || 0) >= 2 ? 'Oh, mes préférés !' : (per2[i] || 0) === 1 ? 'Comme c\'est gentil !' : 'Merci, c\'est trop gentil !'} »`))));
+      if (per2.length) parts.push(el('div.cz-thanks', vill.map((v, i) => el('p.cz-say', portraitOf(v.portrait || `portrait.client.${v.clientId}`, 'sprite--xs'), ` ${v.name} : « ${!(f.result?.items?.[i] || []).length ? 'Joyeux Noël !' : (per2[i] || 0) >= 2 ? 'Oh, mes préférés !' : (per2[i] || 0) === 1 ? 'Comme c\'est gentil !' : 'Merci, c\'est trop gentil !'} »`))));
     }
     parts.push(rulesList(f));
     return el('div.cz-fete.cz-baskets', parts);
@@ -831,7 +835,7 @@ export function createCozy(app) {
       );
     }
     if (bank.length) parts.push(el('section.cz-bank', el('h3.stats-title', czIcon(['icon.seedbank'], 'sprite--sm', '🥫'), 'Ma réserve de graines'), bank.map((b) => el('div.stats-line', el('span.stats-label', cropIcon(b.cropId, 'sprite--xs'), ` ${b.name}`), el('b.stats-value', plural(b.n, 'semis', 'semis'))))));
-    parts.push(el('p.sheet-hint', 'Vos semis (et ceux de l\'équipe) prennent d\'abord la réserve, sans payer. Elle ne se périme jamais.'));
+    // (La règle « vos semis prennent la réserve d'abord » est déjà dans les règles du cœur, en bas de la feuille.)
     if (app.careerUI?.open?.plan) {
       const lot = safe(() => (app.game.query.career.lots?.() || []).find((l) => l.type === 'field' || l.id === 'start'), null);
       if (lot) parts.push(el('button.btn.btn--wide.cz-plan', { type: 'button', id: 'cz-plan', onclick: () => app.careerUI.open.plan(lot.id, 'spring') }, czIcon(['icon.seedbank'], 'sprite--sm', '📒'), 'Mon carnet de semis (printemps)'));
@@ -1042,7 +1046,7 @@ export function createCozy(app) {
       ev?.partial ? el('p.stats-note', 'Année commencée avant les lanternes.') : null,
       lanternRows(ev?.criteria || [], { animate: true }),
       bankrupt ? el('p.cz-lead.is-soft', 'L\'an prochain, ça ira mieux.') : null,
-      r.ecus || (r.cosmetics || []).length ? el('div.cz-rewards', ecuLine(r.ecus), (r.cosmetics || []).map((id) => el('p.cz-found', czIcon([`decor.${id}`], 'sprite--sm', '🏮'), `Nouveau décor : ${cosmeticName(id)} (« Décorer la ferme »)`))) : null,
+      r.ecus || (r.cosmetics || []).length ? el('div.cz-rewards', ecuLine(r.ecus), (r.cosmetics || []).map((id) => el('p.cz-found', czIcon([`decor.${id}`], 'sprite--sm', '🏮'), `Nouveau décor : ${cosmeticName(id)}, à poser avec « Décorer la ferme »`))) : null,
     );
   }
 
@@ -1194,21 +1198,23 @@ export function createCozy(app) {
     }
     const w = p.wait;
     if (w && (p.mature || p.action === 'harvest')) {
-      // Seulement l'aide qui travaille vraiment sur ce terrain (moissonneuse ou cueilleuse allumée, jardinier).
-      const helpers = helpersOn(p.lot);
-      const m = helpers.machine && Number.isFinite(w.machineIn) ? w.machineIn : null;
-      const s = helpers.staff && Number.isFinite(w.staffIn) ? w.staffIn : null;
+      // Seulement l'aide qui travaille vraiment sur ce terrain (le cœur met machineIn / staffIn à null sinon :
+      // moissonneuse ou cueilleuse allumée, jardinier qui couvre le terrain).
+      const m = Number.isFinite(w.machineIn) ? w.machineIn : null;
+      const s = Number.isFinite(w.staffIn) ? w.staffIn : null;
       let who = null;
       let n = null;
       if (m !== null && (s === null || m <= s)) {
-        who = helpers.machine === 'fruitPicker' ? 'la cueilleuse' : 'la moissonneuse';
+        who = (w.machine || helpersOn(p.lot).machine) === 'fruitPicker' ? 'la cueilleuse' : 'la moissonneuse';
         n = m;
       } else if (s !== null) {
-        who = 'l\'équipe';
+        who = 'le jardinier';
         n = s;
       }
-      const when = n === null ? '' : n <= 0 ? `${who} peut la récolter dès maintenant` : `${who} passera dans ${plural(n, 'jour')}`;
-      rows.push(el('div.tip-note.cz-wait', czIcon(['badge.waiting'], 'sprite--xs', '♥'), el('span', 'Vous attend', when ? ` · ${when}` : '')));
+      if (who) {
+        const when = w.freeze ? `${who} la rentrera aujourd'hui, avant le gel` : n <= 0 ? `${who} peut la récolter dès maintenant` : `${who} passera dans ${plural(n, 'jour')}`;
+        rows.push(el('div.tip-note.cz-wait', czIcon(['badge.waiting'], 'sprite--xs', '♥'), el('span', 'Vous attend', ` · ${when}`)));
+      }
     }
     if (p.weeded) rows.push(el('div.tip-sub.cz-weeded', '✓ ', typeof p.weeded === 'string' ? `Désherbée par ${p.weeded}` : p.weededBy ? `Désherbée par ${p.weededBy}` : 'Désherbée (belle et dorée un peu plus probables à la main)'));
     return rows.length ? el('div.cz-plot', rows) : null;
@@ -1436,7 +1442,7 @@ export function createCozy(app) {
         if (ev.seasonId === 'winter') hint('cozy.winter', null);
         break;
       case 'dawn':
-        if (career && hand.n > 0) morning(`Hier : ${plural(hand.n, 'récolte')} à la main (+${fmt(hand.bonus)} de prime).`);
+        if (career && hand.n > 0) morning(`À la main : ${plural(hand.n, 'récolte')} (+${fmt(hand.bonus)} de prime).`);
         hand.n = 0;
         hand.bonus = 0;
         hand.day = dayKey(g);
@@ -1444,7 +1450,8 @@ export function createCozy(app) {
           const k = dayKey(g);
           if (lastRipeHint !== k) {
             lastRipeHint = k;
-            const waiting = (safe(() => g.query.plots(), []) || []).some((p) => p.wait && p.action === 'harvest');
+            // Seulement quand une aide travaille vraiment sur ce terrain (un débutant sans équipe n'a rien à attendre).
+            const waiting = (safe(() => g.query.plots(), []) || []).some((p) => p.action === 'harvest' && p.wait && (Number.isFinite(p.wait.machineIn) || Number.isFinite(p.wait.staffIn)));
             if (waiting) hint('cozy.helpers', null);
           }
         }

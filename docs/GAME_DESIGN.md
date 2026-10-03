@@ -2000,6 +2000,9 @@ choix au hasard) ≈ 45 à 60 pièces, soit **≈ + 2,5 %** de revenu.
 3. **« Offrir les paniers »** : chaque villageois remercie ; **♥** pour chaque produit qu'il aime (0 à 2 par panier),
    jamais de reproche (« Merci, c'est trop gentil ! » à 0 ♥, « Oh, mes préférés ! » à 2 ♥).
 
+4. *(intégration, 2026-10-03)* Une ferme qui n'a produit que 1 ou 2 choses cette année offre autant de paniers garnis
+   que de produits différents ; le dernier villageois reçoit un « Joyeux Noël ! » (aucun reproche, pas de pièces pour lui).
+
 Produit aimé en plus des cultures préférées (lot 3) : Rose → confiture de fraises ; Paulo → pain ; Lili → œufs ;
 Garnier → lait ; Chevalier → fromage de vache ; Fabre → œufs (œufs durs du pique-nique) ; Perrin → jus de pomme ; le maire → fromage de chèvre ;
 Odette → confiture de fraises ; Léon → jus de pomme ; Morel → laine ; les jumeaux → pain.
@@ -2144,7 +2147,7 @@ décors, sans effet sur le jeu.
 - **Paniers** : un villageois sans produit aimé dans la production de l'année reçoit quand même son merci (0 ♥).
 - **Hiver de 14 jours** (niveau 5) : 14 trouvailles au plus (3 à la fois), mangeoire chaque jour, une seule veillée.
 - **Saison d'hiver de carrière à 10 ou 14 jours** : foire aux graines au dernier jour, veillée au jour 3.
-- **F1, terrain sans joueur** (le joueur ne vient jamais) : la moissonneuse récolte à partir de la 2ᵉ aube, les
+- **F1, terrain sans joueur** (le joueur ne vient jamais) : la moissonneuse récolte à partir de la 3ᵉ aube, les
   jardiniers de la 4ᵉ ; un champ ne reste jamais plein plus de 4 jours.
 - **F1 et commandes / charrette / quêtes** : inchangé (seule la récolte à la main les remplit, comme au lot 3).
 - **F1 et le géant** : règle du lot 2 (3 aubes) ; le désherbage ne s'applique pas au géant.

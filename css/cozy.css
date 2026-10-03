@@ -26,7 +26,7 @@
 .cz-head-ico .sprite { max-width: 56px; max-height: 56px; object-fit: contain; }
 .cz-rules { margin: 12px 0 0; padding: 0 0 0 1.2rem; font-size: 0.875rem; color: var(--text-soft); }
 .cz-rules li + li { margin-top: 2px; }
-.cz-go { margin: 6px 0 4px; }
+.cz-go { margin: 6px 0 4px; min-width: 0; max-width: 100%; }
 .cz-preview { min-height: 1.5em; margin: 8px 0 2px; font-size: 1rem; text-align: center; color: var(--text); }
 .cz-sec { margin: 0 0 12px; }
 .cz-sec .stats-title, .cz-stall .stats-title, .cz-bank .stats-title { display: flex; align-items: center; gap: 6px; }
@@ -109,7 +109,7 @@ body.layout-wide.in-fete .cz-fetebar { left: 12px; right: auto; bottom: 12px; wi
 .cz-tile.is-liked:not(.is-on) { box-shadow: 0 0 0 var(--u) #e88aa8, 0 calc(var(--u) * 2) 0 var(--u) rgba(63, 38, 49, 0.16); }
 .cz-tile-name { font-size: 0.875rem; line-height: 1.1; text-align: center; }
 .cz-tile-q { display: inline-flex; gap: 2px; min-height: 16px; }
-.cz-q { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 2px; font-size: 0.75rem; font-weight: 700; line-height: 1; color: var(--outline); background: var(--parch-2); box-shadow: 0 0 0 1px var(--parch-3); }
+.cz-q { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 2px; font-size: 0.875rem; font-weight: 700; line-height: 1; color: var(--outline); background: var(--parch-2); box-shadow: 0 0 0 1px var(--parch-3); }
 .cz-q.is-gold { color: #6b4c00; background: #ffe77a; }
 .cz-q.is-fine { color: #2f4c80; background: #d6e8fb; }
 .cz-q.is-giant { color: #1f5c2a; background: #cdeec0; }
@@ -288,10 +288,10 @@ button.cz-crate:active { transform: translateY(var(--u)); }
 .al-case.is-missing .al-case-ico .sprite { filter: brightness(0) opacity(0.22); }
 .al-case.is-missing .al-case-name { color: var(--text-soft); }
 .al-case.is-new { box-shadow: 0 0 0 calc(var(--u) * 1.5) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--u) rgba(63, 38, 49, 0.14); }
-.al-new { position: absolute; top: 3px; right: 3px; padding: 1px 4px; font-size: 0.75rem; font-weight: 700; color: var(--parch); background: var(--red-dark); text-shadow: var(--text-outline); }
+.al-new { position: absolute; top: 3px; right: 3px; padding: 0 3px; font-size: 14px; line-height: 1.15; font-weight: 700; color: var(--parch); background: var(--red-dark); text-shadow: var(--text-outline); }
 .al-stamps { display: inline-flex; gap: 3px; min-height: 16px; }
 .al-stamp { display: inline-grid; place-items: center; min-width: 16px; height: 16px; font-size: 0.75rem; line-height: 1; }
-.al-stamp-empty { color: var(--parch-3); font-weight: 700; }
+.al-stamp-empty { color: var(--parch-3); font-weight: 700; font-size: 0.875rem; }
 .al-stamp.is-on.is-gold { color: var(--gold-dark); }
 .al-stamp.is-on.is-giant { color: var(--green-dark); }
 .al-stamps.is-full { flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 6px; }

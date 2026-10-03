@@ -55,8 +55,20 @@ test('la récolte vous attend : machines à partir de la Fᵉ aube (F1.machineDe
   assert.equal(g.state.plots[0].ripeAt, today);
   assert.equal(helpersMayHarvest(g.state, 0, 'machine'), false);
   assert.equal(helpersMayHarvest(g.state, 0, 'staff'), false);
-  assert.deepEqual(waitInfo(g.state, 0), { machineIn: F1.machineDelay, staffIn: F1.staffDelay });
-  assert.deepEqual(g.query.plot(0).wait, { machineIn: F1.machineDelay, staffIn: F1.staffDelay });
+  // Sans moissonneuse ni jardinier sur le terrain : personne ne passera (rien à annoncer).
+  assert.deepEqual(waitInfo(g.state, 0), { machineIn: null, staffIn: null, machine: null, freeze: false });
+  assert.deepEqual(g.query.plot(0).wait, { machineIn: null, staffIn: null, machine: null, freeze: false });
+  // Avec une moissonneuse allumée et un jardinier qui couvre le terrain : les délais F1.
+  const lot = g.state.plots[0].lot;
+  g.state.career.machines[`harvester@${lot}`] = { id: 'harvester', lotId: lot, level: 1, on: true, workedDay: 0, usedDay: 0, used: 0 };
+  g.state.career.staff.push({ id: 'test', job: 'gardener', lotId: 'all' });
+  assert.deepEqual(waitInfo(g.state, 0), { machineIn: F1.machineDelay, staffIn: F1.staffDelay, machine: 'harvester', freeze: false });
+  // Moissonneuse éteinte, ou machine d'un autre terrain : plus de délai machine.
+  g.state.career.machines[`harvester@${lot}`].on = false;
+  assert.equal(waitInfo(g.state, 0).machineIn, null);
+  assert.equal(waitInfo(g.state, 0).staffIn, F1.staffDelay);
+  delete g.state.career.machines[`harvester@${lot}`];
+  g.state.career.staff.pop();
   for (let k = 1; k <= F1.staffDelay; k++) {
     nextDay(g);
     assert.equal(helpersMayHarvest(g.state, 0, 'machine'), k >= F1.machineDelay, `machine, aube ${k}`);
@@ -80,7 +92,9 @@ test('rien ne se perd : le dernier jour de l\'automne, l\'équipe récolte tout 
   markRipe(g.state);
   assert.equal(helpersMayHarvest(g.state, 0, 'machine'), true, 'la carotte gèlerait demain');
   assert.equal(helpersMayHarvest(g.state, 1, 'machine'), false, 'le chou résiste au gel');
-  assert.deepEqual(waitInfo(g.state, 0), { machineIn: 0, staffIn: 0 });
+  g.state.career.staff.push({ id: 'test', job: 'gardener', lotId: 'all' });
+  assert.deepEqual(waitInfo(g.state, 0), { machineIn: null, staffIn: 0, machine: null, freeze: true });
+  g.state.career.staff.pop();
 });
 
 test('moissonneuse : laisse la récolte mûre au joueur, puis la récolte (prix normal) après le délai', () => {

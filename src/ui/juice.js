@@ -231,7 +231,8 @@ export function createJuice(app) {
       });
     }
     const amount = Math.round(ev.amount || 0);
-    const money = amount > 0 && !ev.processed && !ev.stored && !ev.diverted;
+    // (Lot 4, F1) La prime à la main est payée tout de suite même quand la récolte part au grenier ou à l'atelier.
+    const money = amount > 0 && ((!ev.processed && !ev.stored && !ev.diverted) || ev.handBonus > 0);
     if (money) {
       combo.total += amount;
       if (reduced()) {

@@ -99,7 +99,7 @@ function eligible(api, kind, i) {
   const p = api.state.plots[i];
   if (!p || !p.unlocked || !p.env) return false;
   const crop = p.cropId ? getCrop(p.cropId) : null;
-  // (lot 2) le géant attend d'abord le joueur ; (lot 4, F1) la récolte aussi : à partir de la 2ᵉ aube après la maturité.
+  // (lot 2) le géant attend d'abord le joueur ; (lot 4, F1) la récolte aussi : à partir de la 3ᵉ aube après la maturité (F1.machineDelay).
   if (kind === 'harvest') return !!crop && !isTreeCrop(crop) && isMature(p) && giantOpenToHelpers(api.state, i) && helpersMayHarvest(api.state, i, 'machine');
   if (kind === 'pick') return !!crop && isTreeCrop(crop) && isMature(p) && helpersMayHarvest(api.state, i, 'machine');
   if (kind === 'sow') return !p.cropId && p.env !== 'orchard' && sowChoice(api, i) !== null;

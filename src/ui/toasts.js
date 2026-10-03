@@ -29,6 +29,7 @@ export function createToasts(stack, bannerNode) {
   let hidden = 0; // messages effacés faute de place depuis que la pastille est apparue
   let moreTimer = null;
   const moreCount = el('b.toast-more-n', '');
+  const moreText = el('span.toast-more-text', 'messages');
   const more = el(
     'button.btn.btn--small.toast-more',
     {
@@ -45,7 +46,7 @@ export function createToasts(stack, bannerNode) {
       },
     },
     moreCount,
-    el('span.toast-more-text', 'messages'),
+    moreText,
   );
 
   function hideMore() {
@@ -58,6 +59,7 @@ export function createToasts(stack, bannerNode) {
   function showMore(n) {
     hidden += n;
     moreCount.textContent = `+${hidden}`;
+    moreText.textContent = hidden > 1 ? 'messages' : 'message';
     more.setAttribute('aria-label', `${hidden} autre${hidden > 1 ? 's' : ''} message${hidden > 1 ? 's' : ''} : voir l'historique`);
     more.hidden = false;
     stack.append(more); // en haut de la pile (column-reverse : le dernier enfant est le plus haut)
@@ -164,6 +166,7 @@ export function createToasts(stack, bannerNode) {
       go,
     );
     if (o.onClick) node.classList.add('is-action');
+    if (o.keepTouch) node.classList.add('is-sticky'); // reste touchable même sur une feuille haute (mise à jour)
     if (duration >= 5000) node.dataset.important = '1';
     stack.prepend(node);
     // Au plus MAX_VISIBLE messages : on efface d'abord les plus anciens qui ne proposent rien d'important

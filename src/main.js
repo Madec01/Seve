@@ -199,6 +199,7 @@ pwa.onUpdateAvailable(() => {
     title: 'Nouvelle version disponible',
     text: 'La partie est sauvegardée.',
     actionLabel: 'Recharger',
+    keepTouch: true,
     duration: 60000,
     onClick: () => {
       save();
@@ -446,6 +447,8 @@ app.onDecorChange = () => {
 };
 app.onDialogChange = () => {
   document.body.classList.toggle('has-dialog', app.dialogs?.isOpen() ?? false);
+  // (QA du lot 4) Fenêtre de fin (saison, année, victoire) : les messages attendent dans l'historique (css/style.css).
+  document.body.dataset.dialog = (app.dialogs?.isOpen() && app.dialogs.top()) || '';
   app.tabbar?.refresh();
   updateWakeLock();
 };

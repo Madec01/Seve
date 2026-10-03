@@ -35,6 +35,7 @@ import { isTreeAdult } from './trees.js';
 import { gameCrops } from './perks.js';
 import { levelInvestments } from './economy.js';
 import { lanternsFor } from './lanterns.js';
+import { agree } from '../data/french.js';
 
 export { COZY_VERSION };
 
@@ -417,7 +418,8 @@ function noteBest(host, fete) {
 // ── Choix des mini-jeux (ce que la ferme a produit cette année) ────────────────────────────────
 
 function itemName(kind, id) {
-  if (kind === 'crop') return getCrop(id)?.name ?? id;
+  // Le pommier donne des pommes : sur un étal ou dans un panier, ce sont « Pommes » (QA du lot 4).
+  if (kind === 'crop') return id === 'apple' ? 'Pommes' : getCrop(id)?.name ?? id;
   if (kind === 'product') return getProduct(id)?.name ?? id;
   return ANIMAL_PRODUCTS[id]?.name ?? id;
 }
@@ -487,6 +489,23 @@ function choicesFor(state, fete) {
   return all.filter((it) => it.kind === 'crop' && acc.includes(it.id));
 }
 
+/** « Carotte : pas récoltée cette année. » : participe accordé avec le nom (pluriel : « Œufs », « Petits pois »). */
+function notThisYear(name, word) {
+  const first = String(name).trim().toLowerCase().split(/[\s']/)[0] || '';
+  const many = /[sx]$/.test(first) && !['maïs', 'jus', 'brebis', 'anis', 'radis'].includes(first);
+  return `${name} : pas ${agree(name, many ? 2 : 1, word)} cette année.`;
+}
+
+/** Objets cachés féminins (grenouilles, lanternes) : accords des textes de la chasse. */
+const HIDDEN_FEMININE = new Set(['frog', 'lantern']);
+
+/** Résultat d'une fête pour l'interface : copie, détail du stand avec nom et icône. */
+function resultInfo(result) {
+  const r = clone(result);
+  if (Array.isArray(r.detail)) r.detail = r.detail.map((d) => ({ ...d, item: { ...d.item, name: itemName(d.item.kind, d.item.id), icon: itemIcon(d.item.kind, d.item.id) } }));
+  return r;
+}
+
 // ── Moteurs : calculs purs (aperçu et validation) ─────────────────────────────────────────────
 
 function soupResult(host, fete, items) {
@@ -498,7 +517,7 @@ function soupResult(host, fete, items) {
   for (const id of ids) {
     const name = getCrop(id)?.name ?? id;
     if (!acc.includes(id)) return { reason: `${name} : pas dans cette soupe.` };
-    if (!producedHas(state, { kind: 'crop', id })) return { reason: `${name} : pas récolté cette année.` };
+    if (!producedHas(state, { kind: 'crop', id })) return { reason: notThisYear(name, 'récolté') };
   }
   const g = fete.themeId ? THEME_FETE_GAMES[fete.themeId] : null;
   if (g?.require && !ids.includes(g.require)) return { reason: `${g.name} : du ${getCrop(g.require)?.name.toLowerCase() ?? g.require} obligatoire.` };
@@ -531,7 +550,7 @@ function standResult(host, fete, items) {
   if (!Array.isArray(items) || items.length < 1 || items.length > slots) return { reason: `De 1 à ${slots} produits différents.` };
   const keys = items.map((it) => (obj(it) ? `${it.kind}:${it.id}` : ''));
   if (keys.includes('') || new Set(keys).size !== keys.length) return { reason: `De 1 à ${slots} produits différents.` };
-  for (const it of items) if (!producedHas(state, it)) return { reason: `${itemName(it.kind, it.id)} : pas produit cette année.` };
+  for (const it of items) if (!producedHas(state, it)) return { reason: notThisYear(itemName(it.kind, it.id), 'produit') };
   const detail = items.map((it) => ({ item: { kind: it.kind, id: it.id }, points: standPointsOf(state, fete, it) }));
   const score = detail.reduce((s, d) => s + d.points, 0);
   let ribbon = 'green';
@@ -553,9 +572,20 @@ function basketsResult(host, fete, baskets) {
   if (!Array.isArray(baskets) || baskets.length !== E.baskets) return { reason: 'Un produit au moins dans chaque panier.' };
   const seen = new Set();
   const perBasket = [];
+  // Une ferme qui a produit moins de 3 choses cette année peut quand même offrir ses paniers (QA du lot 4) : il faut
+  // autant de paniers garnis que de produits différents (3 au plus) ; un panier vide reçoit juste un « Joyeux Noël ».
+  const avail = choicesFor(state, fete).length;
+  if (avail <= 0) return { reason: 'Récoltez ou produisez quelque chose, et revenez faire les paniers !' };
+  const need = Math.min(E.baskets, avail);
+  const filled = baskets.filter((b) => Array.isArray(b) && b.filter(Boolean).length > 0).length;
+  if (filled < need) return { reason: need < E.baskets ? `${need === 1 ? 'Un panier garni' : `${need} paniers garnis`} au moins.` : 'Un produit au moins dans chaque panier.' };
   for (let k = 0; k < baskets.length; k++) {
     const b = (Array.isArray(baskets[k]) ? baskets[k] : []).filter(Boolean);
-    if (b.length < 1 || b.length > E.perBasket) return { reason: 'Un produit au moins dans chaque panier.' };
+    if (b.length > E.perBasket) return { reason: 'Deux produits au plus par panier.' };
+    if (b.length < 1) {
+      perBasket.push(0);
+      continue;
+    }
     let hearts = 0;
     const likes = villagerLikes(fete.villagers[k]).map((l) => l.id);
     for (const it of b) {
@@ -563,14 +593,14 @@ function basketsResult(host, fete, baskets) {
       const key = `${it.kind}:${it.id}`;
       if (seen.has(key)) return { reason: 'Un même produit une seule fois.' };
       seen.add(key);
-      if (!producedHas(state, it)) return { reason: `${itemName(it.kind, it.id)} : pas produit cette année.` };
+      if (!producedHas(state, it)) return { reason: notThisYear(itemName(it.kind, it.id), 'produit') };
       if (likes.includes(it.id)) hearts += 1;
     }
     perBasket.push(hearts);
   }
   const hearts = perBasket.reduce((a, b) => a + b, 0);
   const R = FETE_REWARDS.paniers;
-  return { hearts, perBasket, amount: coinsFor(host, R.perBasket * E.baskets + R.perHeart * hearts), ecus: hearts };
+  return { hearts, perBasket, filled, amount: coinsFor(host, R.perBasket * filled + R.perHeart * hearts), ecus: hearts };
 }
 
 // ── Aube et soir ──────────────────────────────────────────────────────────────────────────────
@@ -716,8 +746,11 @@ export function cozyEvening(host) {
       amount += coinsFor(host, h.gold ? R.villageGold : R.village);
     }
     if (amount > 0) host.earn('fete', amount);
-    const kind = HIDDEN_NAMES[hiddenKind(fete)] || 'œufs';
-    text = n > 0 ? `Lili et les enfants du village ont trouvé ${n === 1 ? `le dernier des ${kind}` : `les ${n} derniers ${kind}`} pour vous !` : 'Quelle belle chasse !';
+    const hk = hiddenKind(fete);
+    const kind = HIDDEN_NAMES[hk] || 'œufs';
+    const fem = HIDDEN_FEMININE.has(hk);
+    const verb = hk === 'lampion' || hk === 'lantern' ? 'allumé' : 'trouvé';
+    text = n > 0 ? `Lili et les enfants du village ont ${verb} ${n === 1 ? `${fem ? 'la dernière' : 'le dernier'} des ${kind}` : `${fem ? `les ${n} dernières` : `les ${n} derniers`} ${kind}`} pour vous !` : 'Quelle belle chasse !';
   } else if (!fete.done) {
     text = fete.engine === 'marmite' ? 'La soupe était bonne ! On vous en a gardé un bol.' : fete.engine === 'foire' ? 'La foire est finie : elle revient à la fin de l\'hiver prochain.' : 'La fête est finie : elle revient l\'an prochain.';
   } else text = 'Quelle belle fête !';
@@ -755,6 +788,7 @@ export function feteFind(host, index) {
   if (found === total) {
     f.done = true;
     f.result.ecus = R.allEcus;
+    f.result.text = 'Bravo, vous avez tout trouvé !';
     z.stats.eggsAll += 1;
     noteBest(host, f);
     host.push('feteDone', { id: f.id, engine: 'chasse', score: found, amount: f.result.amount, ecus: R.allEcus, text: 'Bravo, vous avez tout trouvé !' });
@@ -772,7 +806,7 @@ export function cookSoup(host, items) {
   const z = host.state.cozy;
   f.done = true;
   const text = r.ladles === 3 ? 'La meilleure soupe de l\'année !' : r.ladles === 2 ? 'Un régal !' : 'Une bonne soupe, merci !';
-  f.result = { score: r.ladles, ladles: r.ladles, amount: r.amount, ecus: r.ecus, items: r.ids.map((id) => ({ kind: 'crop', id })) };
+  f.result = { score: r.ladles, ladles: r.ladles, amount: r.amount, ecus: r.ecus, text, items: r.ids.map((id) => ({ kind: 'crop', id })) };
   host.earn('fete', r.amount);
   if (r.ladles === 3) {
     z.stats.ladles3 += 1;
@@ -793,7 +827,8 @@ export function presentStand(host, items) {
   const { state } = host;
   const z = state.cozy;
   f.done = true;
-  f.result = { score: r.score, ribbon: r.ribbon, amount: r.amount, ecus: r.ecus, items: items.map((it) => ({ kind: it.kind, id: it.id })) };
+  const sayText = r.ribbon === 'gold' ? 'Grand prix du jury : bravo !' : r.ribbon === 'blue' ? 'Un bel étal, vraiment !' : 'Les enfants ont adoré votre stand !';
+  f.result = { score: r.score, ribbon: r.ribbon, amount: r.amount, ecus: r.ecus, text: sayText, detail: r.detail, items: items.map((it) => ({ kind: it.kind, id: it.id })) };
   host.earn('fete', r.amount);
   z.stats.ribbons[r.ribbon] = (z.stats.ribbons[r.ribbon] || 0) + 1;
   if (r.ribbon === 'gold') noteBest(host, f);
@@ -802,7 +837,7 @@ export function presentStand(host, items) {
   if (host.mode === 'career' && f.id === 'harvestFestival') z.stand = { year: state.time.year, ribbon: r.ribbon, score: r.score };
   const ribbonName = RIBBONS.find((x) => x.id === r.ribbon).name;
   host.push('feteDone', { id: f.id, engine: 'etal', score: r.score, ribbon: r.ribbon, amount: r.amount, ecus: r.ecus, text: `${ribbonName} !` });
-  return { ok: true, score: r.score, ribbon: r.ribbon, amount: r.amount, ecus: r.ecus, detail: r.detail };
+  return { ok: true, score: r.score, ribbon: r.ribbon, amount: r.amount, ecus: r.ecus, detail: r.detail, text: sayText };
 }
 
 /** Paniers de Noël. → { ok, hearts, perBasket, amount, ecus } */
@@ -814,14 +849,15 @@ export function giveBaskets(host, baskets) {
   if (r.reason) return host.fail(r.reason);
   const z = host.state.cozy;
   f.done = true;
-  f.result = { score: r.hearts, hearts: r.hearts, amount: r.amount, ecus: r.ecus, items: baskets.map((b) => b.filter(Boolean).map((it) => ({ kind: it.kind, id: it.id }))) };
+  const thanks = r.hearts >= 4 ? 'Oh, nos préférés : merci !' : 'Merci, c\'est trop gentil !';
+  f.result = { score: r.hearts, hearts: r.hearts, perBasket: [...r.perBasket], amount: r.amount, ecus: r.ecus, text: thanks, items: baskets.map((b) => b.filter(Boolean).map((it) => ({ kind: it.kind, id: it.id }))) };
   host.earn('fete', r.amount);
   z.year.hearts += r.hearts;
   z.stats.hearts += r.hearts;
   if (r.hearts >= 6) noteBest(host, f);
   noteFetePlayed(host, f, { hearts: r.hearts, score: r.hearts });
-  host.push('feteDone', { id: f.id, engine: 'paniers', hearts: r.hearts, amount: r.amount, ecus: r.ecus, text: r.hearts >= 4 ? 'Oh, leurs préférés !' : 'Merci, c\'est trop gentil !' });
-  return { ok: true, hearts: r.hearts, perBasket: r.perBasket, amount: r.amount, ecus: r.ecus };
+  host.push('feteDone', { id: f.id, engine: 'paniers', hearts: r.hearts, amount: r.amount, ecus: r.ecus, text: thanks });
+  return { ok: true, hearts: r.hearts, perBasket: r.perBasket, amount: r.amount, ecus: r.ecus, text: thanks };
 }
 
 /** Aperçu en direct (pur, rien n'est écrit). → { score?, ladles?, ribbon?, hearts?, amount } */
@@ -1057,11 +1093,11 @@ export function feteInfo(host) {
   const name = def ? def.name : g?.name ?? f.id;
   const kind = hiddenKind(f);
   const rules = [];
-  if (f.engine === 'chasse') rules.push(`Trouvez les ${FETE_ENGINES.chasse.count} ${HIDDEN_NAMES[kind]} cachés dans la ferme.`, 'Pas de chrono : le jeu est en pause, et le soir le village trouve ce qui reste.');
+  if (f.engine === 'chasse') rules.push(kind === 'lampion' || kind === 'lantern' ? `Allumez les ${FETE_ENGINES.chasse.count} ${HIDDEN_NAMES[kind]} ${HIDDEN_FEMININE.has(kind) ? 'cachées' : 'cachés'} dans la ferme.` : `Trouvez les ${FETE_ENGINES.chasse.count} ${HIDDEN_NAMES[kind]} ${HIDDEN_FEMININE.has(kind) ? 'cachées' : 'cachés'} dans la ferme.`, 'Pas de chrono : le jeu est en pause, et le soir le village trouve ce qui reste.');
   else if (f.engine === 'marmite') rules.push(g?.require ? `Du ${getCrop(g.require).name.toLowerCase()} obligatoire, et jusqu'à deux autres ingrédients.` : 'Jusqu\'à trois légumes de l\'année, tous différents.', 'Trois légumes, dont un beau : la meilleure soupe !');
   else if (f.engine === 'etal') rules.push(`Remplissez ${standSlots(f)} cagettes avec ce que la ferme a produit cette année.`, 'Belles, dorées, géants et fait maison plaisent au jury.');
   else if (f.engine === 'paniers') rules.push('Deux produits par panier, offerts à trois villageois.', 'Un ♥ pour chaque produit qu\'ils aiment.');
-  else if (f.engine === 'foire') rules.push(`Un sachet = ${SEED_FAIR.pack} semis à −${Math.round(SEED_FAIR.discount * 100)} % pour le printemps.`, 'Vos semis (et l\'équipe) prennent la réserve d\'abord, sans payer.');
+  else if (f.engine === 'foire') rules.push(`Un sachet = ${SEED_FAIR.pack} semis à −${Math.round(SEED_FAIR.discount * 100)} % pour le printemps.`, 'Vos semis (et l\'équipe) prennent la réserve d\'abord, sans payer ; elle ne se périme jamais.');
   const info = {
     id: f.id,
     name,
@@ -1072,7 +1108,7 @@ export function feteInfo(host) {
     rules,
     day: f.day,
     done: f.done,
-    result: f.result ? clone(f.result) : null,
+    result: f.result ? resultInfo(f.result) : null,
     hidden: null,
     choices: null,
     max: null,

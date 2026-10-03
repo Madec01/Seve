@@ -3,7 +3,7 @@
 // src/data/cozy.js (la prime à la main : HAND_BONUS de src/data/career/career.js).
 //
 // Les salariés et les machines font les corvées (arroser, désherber, semer, ramasser, chasser les corbeaux) ; la
-// récolte attend d'abord le joueur : machines (moissonneuse, cueilleuse) à partir de la 2ᵉ aube après la maturité,
+// récolte attend d'abord le joueur : machines (moissonneuse, cueilleuse) à partir de la 3ᵉ aube après la maturité,
 // jardiniers à partir de la 4ᵉ (ripeAt : jour absolu de la maturité, posé à l'aube). Rien ne reste bloqué : le
 // dernier jour de l'automne, l'équipe récolte tout de suite ce qui gèlerait (hors serre). Le géant garde la règle du
 // lot 2 (3 aubes, giantOpenToHelpers). Aucun tirage.
@@ -78,8 +78,26 @@ export function helpersMayHarvest(state, i, who = 'staff') {
 }
 
 /**
- * Fiche de la parcelle : aubes avant que l'équipe puisse récolter ({ machineIn, staffIn } ; 0 = déjà) ; null si la
- * parcelle n'est pas mûre ou sans F1.
+ * Aides qui peuvent récolter cette parcelle : { machine: 'harvester' | 'fruitPicker' | null (allumée, sur ce terrain),
+ * staff: bool (un jardinier couvre ce terrain) }.
+ */
+export function harvestHelpers(state, i) {
+  const p = state.plots[i];
+  const out = { machine: null, staff: false };
+  if (!p || !p.cropId || state.mode !== 'career' || !state.career) return out;
+  const crop = getCrop(p.cropId);
+  const want = crop && isTreeCrop(crop) ? 'fruitPicker' : 'harvester';
+  for (const m of Object.values(state.career.machines || {})) {
+    if (m && m.id === want && m.lotId === p.lot && m.on) out.machine = want;
+  }
+  out.staff = (state.career.staff || []).some((s) => s && s.job === 'gardener' && (s.lotId === 'all' || s.lotId === p.lot));
+  return out;
+}
+
+/**
+ * Fiche de la parcelle : aubes avant que l'équipe puisse récolter ({ machineIn, staffIn, machine } ; 0 = déjà ;
+ * null quand cette aide n'est pas sur le terrain : pas de moissonneuse / cueilleuse allumée, pas de jardinier) ; null si
+ * la parcelle n'est pas mûre ou sans F1.
  */
 export function waitInfo(state, i) {
   if (!helpersOn(state)) return null;
@@ -87,9 +105,12 @@ export function waitInfo(state, i) {
   if (!p || !p.cropId || !isMature(p) || p.giant !== undefined) return null;
   const w = waitedDawns(state, i);
   const freeze = wouldFreezeTomorrow(state, p);
+  const h = harvestHelpers(state, i);
   return {
-    machineIn: freeze ? 0 : Math.max(0, F1.machineDelay - w),
-    staffIn: freeze ? 0 : Math.max(0, F1.staffDelay - w),
+    machineIn: h.machine ? (freeze ? 0 : Math.max(0, F1.machineDelay - w)) : null,
+    staffIn: h.staff ? (freeze ? 0 : Math.max(0, F1.staffDelay - w)) : null,
+    machine: h.machine,
+    freeze,
   };
 }
 

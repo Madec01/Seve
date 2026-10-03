@@ -877,6 +877,21 @@ body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
 /* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
    sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
 body.has-tall-sheet:not(.layout-wide) #toasts { bottom: calc(var(--inset-bottom) + 10px); }
+/* (QA du lot 4) … et là, ils ne captent plus rien : la pastille « +N messages » et les « Voir » couvraient le bouton
+   principal de la feuille (« Chercher les œufs », « Goûter la soupe »). Les messages restent dans l'historique. */
+/* (QA du lot 4) Fenêtres de fin (saison, bilan annuel, victoire, faillite) : les messages du soir (cases d'album,
+   trouvailles, succès) ne se posent plus sur le bilan ni sur ses boutons ; ils restent dans l'historique. */
+body[data-dialog="victory"] #toasts .toast:not(.is-sticky), body[data-dialog="victory"] #toasts .toast-more,
+body[data-dialog="bankrupt"] #toasts .toast:not(.is-sticky), body[data-dialog="bankrupt"] #toasts .toast-more,
+body[data-dialog="season-end"] #toasts .toast:not(.is-sticky), body[data-dialog="season-end"] #toasts .toast-more,
+body[data-dialog="career-year"] #toasts .toast:not(.is-sticky), body[data-dialog="career-year"] #toasts .toast-more,
+body[data-dialog="career-rank"] #toasts .toast:not(.is-sticky), body[data-dialog="career-rank"] #toasts .toast-more { display: none; }
+/* … et sur les feuilles des fêtes et de l'hiver (mini-jeux), les messages ne recouvrent plus le bouton principal :
+   seuls les refus (« De 1 à 3 légumes ») restent affichés. */
+body.has-tall-sheet:not(.layout-wide):has(.sheet.cz-sheet) #toasts .toast:not(.is-sticky):not(.toast--error) { display: none; }
+body.has-tall-sheet:not(.layout-wide) #toasts .toast-more,
+body.in-fete #toasts .toast-more { display: none; }
+body.has-tall-sheet:not(.layout-wide) #toasts .toast:not(.is-sticky) .toast-go { pointer-events: none; }
 body.layout-wide.has-sheet #toasts { left: calc((100vw - var(--panel-w)) / 2); width: min(30rem, calc(100vw - var(--panel-w) - 16px)); }
 .toast {
   display: flex;
@@ -2452,7 +2467,7 @@ body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 .c-year-net b { font-size: 2.25rem; line-height: 1; }
 .c-year-net small { font-size: 0.875rem; color: var(--text-soft); }
 .c-best { display: flex; align-items: center; gap: 6px; margin: 0; font-weight: 600; }
-.c-best small { font-weight: 400; color: var(--text-soft); }
+.c-best small { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
 .c-year-cols { display: grid; grid-template-columns: 1fr; gap: 10px; width: 100%; text-align: left; }
 @media (min-width: 560px) { .c-year-cols { grid-template-columns: 1fr 1fr; } }
 .c-year-rank { display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; }

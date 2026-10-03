@@ -2787,7 +2787,7 @@ vendus et revenus des animaux (`produced.products` / `produced.animal` : niveaux
 ```js
 markRipe(state)                              // aube : ripeAt = absDay pour toute parcelle mûre qui n'en a pas ; efface sinon
 helpersMayHarvest(state, i, who)             // who : 'machine' | 'staff' → bool
-//   true si : pas de parts.helpers (ancien comportement) ; ou absDay − ripeAt ≥ F1.machineDelay (2) / F1.staffDelay (4) ;
+//   true si : pas de parts.helpers (ancien comportement) ; ou absDay − ripeAt ≥ F1.machineDelay (3) / F1.staffDelay (4) ;
 //   ou dernier jour de l'automne et la culture gèlerait demain (hors serre) ; le géant garde la règle du lot 2
 //   (giantOpenToHelpers, 3 aubes) et n'est pas concerné par ripeAt.
 weedable(state, i) / weed(api, i, staff)     // culture en pousse, pas un arbre, pas encore désherbée → weeded = true
@@ -3226,3 +3226,33 @@ src/main.js                app.album, app.cozy, app.storage ; onGameEvent → ap
   main d'abord avec F1) ; serre (rang 2), mare (rang 3) et 2 canards dans les envies du tranquille et de l'appliqué ;
   décor des robots `SIM_CAREER_DECOR`.
 - **Seuils d'étoiles Détente** recalculés (`src/data/difficulty.js`, game design § 13.3).
+
+### Intégration CORE ↔ UI/RENDER et QA au doigt (2026-10-03)
+
+Écarts finaux du cœur vérifiés dans l'interface (moissonneuse et cueilleuse à 3 aubes lues dans `query.plot(i).wait`,
+prime à la main payée aussi vers le grenier / l'atelier, `HAND_BONUS_LEGACY`, `career.speciesIds`, récompenses déjà
+créditées par `claimAlbumReward` / `recordLanterns` / `recordStory`, ordre du dernier soir d'hiver, 20 décors,
+pièces des fêtes × `careerFactor(rang)`, récolte immédiate du dernier jour d'automne). Changements de contrat :
+
+- **`query.plot(i).wait`** (carrière, F1) = `{ machineIn, staffIn, machine, freeze }` : `machineIn` est `null` sans
+  moissonneuse (cueilleuse pour un arbre) **allumée sur ce terrain**, `staffIn` est `null` sans jardinier qui couvre le
+  terrain (`lotId` du terrain ou `'all'`) ; `machine` : `'harvester' | 'fruitPicker' | null` ; `freeze` : dernier jour de
+  l'automne, la culture gèlerait demain (l'équipe la rentre aujourd'hui). Aides : `harvestHelpers(state, i)` de `handwork.js` (pur). La fiche « Vous attend · la moissonneuse passera dans N jours » n'apparaît que
+  s'il y a une aide ; le conseil `cozy.helpers` aussi.
+- **`fete.result`** : + `text` (phrase des villageois : chasse complète, soupe, stand, paniers), `perBasket` (paniers),
+  `detail` (stand ; `query.fete().result.detail[].item` a `name` et `icon`). Le résultat d'une action garde sa forme
+  (+ `text` pour `presentStand` et `giveBaskets`).
+- **Paniers d'une petite ferme** : il faut autant de paniers garnis que de produits différents de l'année (3 au plus) ;
+  un panier vide reçoit « Joyeux Noël ! » (0 ♥, pas de pièces pour lui). Refus : « Récoltez ou produisez quelque chose,
+  et revenez faire les paniers ! », « 2 paniers garnis au moins. », « Deux produits au plus par panier. ».
+- **Accords** : refus « Carotte : pas récoltée cette année. », « Confiture de fraises : pas produite… », « Œufs : pas
+  produits… » ; chasse des grenouilles / lanternes : « cachées », « les 8 dernières grenouilles », lampions et lanternes
+  « allumés » ; lanternes : « Encore 1 culture ou produit / 2 cultures ou produits », « 1 382 pièces » ; soin de
+  carrière « 21 % de soin cette année » ; « Pommes » (et non « Pommier ») sur les étals et dans les paniers.
+- **Messages** : sur une feuille haute, la pastille « +N messages » est masquée et les « Voir » ne captent plus le doigt
+  (ils couvraient « Chercher les œufs », « Goûter la soupe ») ; sur les feuilles des fêtes et de l'hiver, seuls les refus
+  s'affichent ; pendant le mode fête, pas de pastille ; sur les fenêtres de fin (saison, bilan annuel, rang, victoire,
+  faillite : `body[data-dialog]`), les messages attendent dans l'historique. Option `toasts.show({ keepTouch })` (mise à
+  jour du jeu) pour rester touchable partout. Pastille au singulier : « +1 message ».
+- Feuilles des fêtes : le nom n'est plus répété sous le titre ; boutons `.cz-go` sans `min-width` (débordaient à 150 %
+  sur 360 px) ; badges de qualité, « Nouveau » et tampons vides de l'album à 14 px.

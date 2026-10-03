@@ -136,7 +136,7 @@ test('soupe partagée : 1 louche toujours, 2 avec 2 légumes, 3 avec 3 dont un b
   const g = detente(2, 4);
   goTo(g, 11);
   assert.equal(g.query.fete().engine, 'marmite');
-  assert.equal(g.actions.cookSoup([{ kind: 'crop', id: 'carrot' }]).reason, 'Carotte : pas récolté cette année.');
+  assert.equal(g.actions.cookSoup([{ kind: 'crop', id: 'carrot' }]).reason, 'Carotte : pas récoltée cette année.');
   produced(g, { carrot: 2, turnip: 1, wheat: 1, tomato: 1, strawberry: 1 });
   assert.equal(g.actions.cookSoup([{ kind: 'crop', id: 'strawberry' }]).reason, 'Fraise : pas dans cette soupe.');
   assert.equal(g.actions.cookSoup([]).reason, 'De 1 à 3 légumes différents.');
@@ -232,4 +232,59 @@ test('fêtes : pièces dans le bilan (cozyIncome, compté dans summary.net), voi
   const s = g.query.summary();
   assert.equal(s.cozyIncome, FETE_REWARDS.chasse.found + (g.query.fete().hidden.items[0].gold ? 4 : 0));
   assert.ok(s.cozy && s.cozy.year && s.cozy.stats);
+});
+
+test('résultats des fêtes pour l\'interface : phrase (text), cœurs par panier, détail du stand nommé ; accords des refus', () => {
+  // Stand : texte du villageois et détail avec nom et icône dans query.fete().result.
+  const g = detente(9, 4);
+  goTo(g, 16);
+  produced(g, { carrot: 1 }, { animal: { eggs: 1 } });
+  assert.equal(g.actions.presentStand([{ kind: 'animal', id: 'eggs' }, { kind: 'crop', id: 'corn' }]).reason, 'Maïs : pas produit cette année.');
+  assert.equal(g.actions.presentStand([{ kind: 'product', id: 'strawberryJam' }]).reason, 'Confiture de fraises : pas produite cette année.');
+  const r = g.actions.presentStand([{ kind: 'crop', id: 'carrot' }, { kind: 'animal', id: 'eggs' }]);
+  assert.equal(r.text, 'Les enfants ont adoré votre stand !');
+  const res = g.query.fete().result;
+  assert.equal(res.text, r.text);
+  assert.deepEqual(res.detail.map((d) => [d.item.id, typeof d.item.name, d.points]), [['carrot', 'string', 1], ['eggs', 'string', 1]]);
+  // Soupe : la phrase des villageois est gardée dans le résultat.
+  const s = detente(2, 4);
+  goTo(s, 11);
+  produced(s, { carrot: 1, turnip: 1 });
+  const sr = s.actions.cookSoup([{ kind: 'crop', id: 'carrot' }, { kind: 'crop', id: 'turnip' }]);
+  assert.equal(s.query.fete().result.text, sr.text);
+  assert.equal(sr.text, 'Un régal !');
+  // Paniers : cœurs par panier et phrase dans le résultat.
+  const p = detente(2, 4);
+  goTo(p, 25);
+  const f = p.query.fete();
+  const like = (id) => CLIENTS_BY_ID[id].favorites[0];
+  const ids = f.villagers.map((v) => like(v.clientId));
+  produced(p, Object.fromEntries([...ids, 'cabbage', 'turnip', 'carrot'].map((id) => [id, 1])));
+  const pool = [...new Set([...ids, 'cabbage', 'turnip', 'carrot'])].slice(0, 3);
+  const pr = p.actions.giveBaskets(pool.map((id) => [{ kind: 'crop', id }]));
+  assert.ok(pr.ok);
+  assert.deepEqual(p.query.fete().result.perBasket, pr.perBasket);
+  assert.equal(p.query.fete().result.text, pr.text);
+  // Chasse des grenouilles (thème) : textes au féminin ; le soir, « les N dernières grenouilles ».
+  const c = detente(4, 3);
+  c.actions.triggerCozy('fete', 'springFete');
+  c.state.cozy.fete.themeId = 'frogs';
+  const rules = c.query.fete().rules.join(' ');
+  assert.match(rules, /grenouilles cachées/);
+  const ev = record(c);
+  nextDay(c);
+  assert.match(ev.of('feteEnded')[0].text, /les 8 dernières grenouilles/);
+});
+
+test('paniers de Noël : une ferme qui n\'a produit que 2 choses offre quand même 2 paniers (le 3ᵉ reste vide, sans reproche)', () => {
+  const g = detente(2, 4);
+  goTo(g, 25);
+  assert.equal(g.actions.giveBaskets([[], [], []]).reason, 'Récoltez ou produisez quelque chose, et revenez faire les paniers !');
+  produced(g, { carrot: 1, corn: 1 });
+  assert.equal(g.actions.giveBaskets([[{ kind: 'crop', id: 'carrot' }], [], []]).reason, '2 paniers garnis au moins.');
+  const r = g.actions.giveBaskets([[{ kind: 'crop', id: 'carrot' }], [{ kind: 'crop', id: 'corn' }], []]);
+  assert.ok(r.ok);
+  assert.equal(r.perBasket.length, 3);
+  assert.equal(r.perBasket[2], 0);
+  assert.equal(r.amount, 2 * FETE_REWARDS.paniers.perBasket + r.hearts * FETE_REWARDS.paniers.perHeart);
 });

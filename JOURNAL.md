@@ -32,6 +32,8 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-02 | `backup/avant-lot3-variete-2026-10-02` | Avant le lot 3 (variété : commandes du village, cadeau de saison, charrette, défis, années à thème, colporteur), commit `154a4fa` |
 | 2026-10-02 | `backup/lot3-variete-2026-10-02` | Lot 3 variété terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9. La branche `backup/wip-lot3-2026-10-02` a servi de sauvegarde intermédiaire |
 | 2026-10-03 | `backup/avant-lot4-collection-2026-10-03` | Avant le lot 4 (album, lanternes, aider sans remplacer, fêtes participatives, hiver vivant), commit `581fa70` (main avec PR n° 9 fusionnée + lot 3) |
+| 2026-10-03 | `backup/lot4-collection-2026-10-03` | Lot 4 collection & enjeux doux terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 (avec le lot 3) |
+| 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -787,6 +789,46 @@ terminées.)*
 - **Tests** : `album`, `lanterns`, `festivals`, `winter`, `f1`, `cozy-career`, `cozy-migration`, `cozy` (+ tests
   existants adaptés) ; parité Classique 400 / 400 inchangée.
 
+### 2026-10-03 — Lot 4 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde avant : `backup/avant-qa-lot4-2026-10-03` (branche + tag locaux, commit `0ff8cf0`).
+
+- **Écarts du cœur vérifiés dans l'interface** : moissonneuse / cueilleuse à 3 aubes (fiche « la moissonneuse passera
+  dans 3 jours », lue dans `query.plot(i).wait`), prime à la main payée aussi vers le grenier / l'atelier (les pièces de
+  la prime s'envolent maintenant vers le compteur, `juice.js`), `HAND_BONUS_LEGACY` (fiche « +10 % » des carrières sans
+  lot 4), `career.speciesIds`, `claimAlbumReward` / `recordLanterns` / `recordStory` sans double crédit (+30 écus une
+  seule fois, « Déjà reçu. » ensuite), dernier soir d'hiver `feteEnded → billPaid → lanternsLit → yearEnd`, 20 décors,
+  pièces des fêtes × (1 + 0,5 × (rang − 1)) (rang 4 : soupe 30, rosette 80, paniers 30, lampions 50), récolte de
+  l'équipe le dernier jour d'automne (« la moissonneuse la rentrera aujourd'hui, avant le gel »).
+- **Cœur** : `query.plot(i).wait` ne donne `machineIn` / `staffIn` que si une moissonneuse (cueilleuse) allumée ou un
+  jardinier travaille sur le terrain (+ `machine`, `freeze` ; `harvestHelpers` dans `handwork.js`, test) ;
+  `fete.result` + `text`, `perBasket`, `detail` (nommé dans `query.fete()`) ; paniers possibles avec 1 ou 2 produits
+  dans l'année (autant de paniers garnis que de produits, test) ; accords (« Carotte : pas récoltée », « Confiture : pas
+  produite », « Œufs : pas produits », « grenouilles cachées », « les 8 dernières grenouilles », « Encore 1 culture ou
+  produit / 2 cultures ou produits », « 1 382 pièces », « 21 % de soin cette année », « Pommes » sur l'étal) ; règle de
+  la foire complétée (« elle ne se périme jamais »).
+- **Interface** : messages qui ne couvrent plus le bouton principal des feuilles (pastille masquée et « Voir »
+  inactifs sur une feuille haute ; sur les feuilles des fêtes et de l'hiver seuls les refus s'affichent ; pas de
+  pastille en mode fête ; rien sur les fenêtres de fin de saison / d'année / de victoire, tout reste dans l'historique ;
+  `keepTouch` pour « Nouvelle version ») ; « +1 message » au singulier ; nom de la fête plus répété sous le titre ;
+  boutons des mini-jeux qui débordaient à 150 % sur 360 px ; badges ★ ✦ ◆, « Nouveau » et tampons de l'album à 14 px ;
+  « Meilleure culture · N pièces » du bilan annuel à 14 px ; fiche « Vous attend » seulement s'il y a une aide sur le
+  terrain, et conseil `cozy.helpers` seulement quand une équipe attend vraiment (plus en an 1 sans personne) ; paniers
+  d'une petite ferme (« 2 paniers garnis suffisent cette année », « Joyeux Noël ! ») ; résumé du matin « À la main :
+  12 récoltes (+36 de prime) » (plus de second « Hier : ») ; décor des lanternes « à poser avec « Décorer la ferme » ».
+- **QA au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `index.html` publié, `?debug=1&nosw`,
+  captures `lot4-qa-*.png`) : Détente niveau 2 jouée jusqu'à la victoire (chasse complète au doigt avec l'indice, toucher
+  d'une parcelle ignoré en mode fête, soupe, stand, paniers, 7 trouvailles, mangeoire, veillée, page des lanternes
+  13 / 20, 2 décors de lanterne) ; même partie en 360 × 740 avec mouvement réduit et texte 150 % ; Classique (aucune
+  clé `cozy`, aucune fête ni lanterne ni ligne « À faire » du lot, album seul) ; carrière (chasse arrêtée à 3 œufs puis
+  « Lili … les 5 derniers œufs », badge et ligne « À faire », prime, jardinière qui désherbe, moissonneuse à 3 aubes,
+  gel, comice + stand 200, foire et réserve « Réserve : 8 », fêtes de thème lampions / tarte au miel / fromages, bilan
+  annuel avec lanternes) en Pixel 7 et en 360 × 740 / 150 % ; anciennes sauvegardes du commit `581fa70` (Détente et
+  carrière) reprises sans erreur, « 7 cases de l'album retrouvées dans vos anciennes parties », `ripeAt` reculé de 4
+  aubes, prime 1,25 ; album : page du potager complétée par une vraie carotte, « Recevoir » +30 écus une fois,
+  épouvantail fleuri posé. Aucune erreur console ; cibles ≥ 48 px et textes ≥ 14 px partout (la rangée des étals de la
+  foire et des onglets de l'album défile à l'horizontale, comme prévu).
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -941,3 +983,14 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-02 | Lot 3 : « Semeur curieux » / « Potager varié » quand il y a peu de cultures faisables (niveau 2 au printemps : 3) : paliers plafonnés à 3 / 3 / 3, les trois médailles tombent d'un coup dès le 2ᵉ jour | Corrigé (paliers strictement croissants sous le plafond, défi non proposé si le bronze tomberait sous 2 ; même règle pour « La charrette pleine » à 2 caisses ; game design § 16.5, test) |
 | 2026-10-02 | Lot 3 : une commande non gardée pour laquelle on a semé est remplacée à l'aube suivante si rien n'est encore livré (il faut penser à la punaise) | Corrigé (semer à la main sa culture la garde d'office : `orderKept { auto }`, étiquette « Gardée : Lili », mention dans la feuille ; refusable ; tests niveaux + carrière) |
 | 2026-10-02 | Lot 3, carrière (Pixel 7) : début de saison très chargé en messages (comice, Joseph, charrette, abri plein) qui couvrent la bande de la maison et captent le toucher ; visiteur du thème sous la mini-carte tant qu'on ne fait pas défiler | Corrigé (2 messages au plus + pastille « +N messages » vers l'historique ; seuls les boutons « Voir » se touchent ; visiteur à gauche du panneau, ligne « À faire » qui amène la vue sur lui) |
+| 2026-10-03 | Lot 4 : pastille « +N messages » et messages « Voir » posés sur le bouton « Chercher les œufs » / « Goûter la soupe » : le doigt ouvrait l'historique | Corrigé (`style.css` : rien de touchable sur une feuille haute, messages masqués sur les feuilles du lot 4 sauf les refus) |
+| 2026-10-03 | Lot 4 : messages du soir (cases d'album, trouvaille, succès, « Voir ») empilés sur la fenêtre de victoire et ses boutons | Corrigé (`body[data-dialog]` : fenêtres de fin sans messages, tout dans l'historique) |
+| 2026-10-03 | Lot 4 : « +1 messages » | Corrigé |
+| 2026-10-03 | Lot 4 : paniers de Noël impossibles avec moins de 3 produits dans l'année (il fallait un produit différent par panier) | Corrigé (cœur + interface + test) |
+| 2026-10-03 | Lot 4 : `query.plot().wait.machineIn` renseigné sans moissonneuse ; conseil « l'équipe ne les cueille qu'après… » montré à un débutant sans équipe | Corrigé (cœur + test, interface) |
+| 2026-10-03 | Lot 4 : accords « Encore 4 culture », « Carotte : pas récolté », « grenouilles cachés », « les 3 derniers grenouilles », « 1 pièces » | Corrigé (tests) |
+| 2026-10-03 | Lot 4 : `fete.result` sans phrase ni cœurs par panier ; détail du stand sans nom (« +2 » seul) ; « Pommier » sur l'étal | Corrigé |
+| 2026-10-03 | Lot 4 : bouton des mini-jeux plus large que l'écran à 150 % sur 360 px (`min-width: 15rem`) ; badges ★, « Nouveau », tampons à 12 px ; nom de la fête répété sous le titre | Corrigé (`cozy.css`, `cozy.js`) |
+| 2026-10-03 | Lot 4 : la prime à la main d'une récolte partie au grenier ou à l'atelier était payée sans pièce qui vole vers le compteur | Corrigé (`juice.js`) |
+| 2026-10-03 | Lot 4, carrière : la fenêtre courte de fin de saison du lot 3 s'ouvre à l'image suivante (différée) : si l'on enchaîne plusieurs jours sans image (outil de débogage), elle s'ouvre plus tard par-dessus une feuille | Sans effet en jeu réel (une image par 16 ms) ; noté |
+| 2026-10-03 | Lot 4 : à 150 % sur 360 px, le titre « L'album de la ferme » touche le ✕ de la fenêtre ; barre du haut de carrière : la case du fermage recouvre en partie l'icône météo quand le texte est long (« couvert · ce soir ! ») | À voir (titres de fenêtres et barre du haut, hors lot 4) |
