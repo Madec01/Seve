@@ -39,7 +39,9 @@ test('légume géant : union des 4 parcelles voisines, sinon la parcelle de l\'a
 test('décors trouvés à la ferme (owl.carved, statue.small ; lot 3 : colporteur, magazine) : un sprite dans la ferme et la boutique', () => {
   // (lot 4) Les 21 décors de l'album et des lanternes ont leur propre test (tests/album.test.js ; sprites : paquet ART/RENDER).
   const LOT4 = new Set(['scarecrow.flower', 'can.golden', 'barrow.giant', 'jam.shelf', 'weathervane.pig', 'sundial', 'lantern.fairy', 'pump.village', 'bunting.post', 'arch.fete', 'woodpile', 'heron.wood', 'rocking.chair', 'herbarium', 'lantern.green', 'lantern.blue', 'lantern.pink', 'lantern.yellow', 'lantern.orange', 'lantern.grand']);
-  const found = COSMETICS.filter((c) => c.found && !LOT4.has(c.id));
+  // (Vallée vivante) Les 3 décors de la Vallée ont leur propre test (tests/valley*.test.js ; sprites : paquet ART).
+  const VALLEY = new Set(['seed.cabinet', 'nestbox.painted', 'valley.linden']);
+  const found = COSMETICS.filter((c) => c.found && !LOT4.has(c.id) && !VALLEY.has(c.id));
   assert.deepEqual(found.map((c) => c.id).sort(), ['lantern.peddler', 'owl.carved', 'sign.magazine', 'statue.small', 'weathervane.rooster']);
   assert.equal(decorSprite('owl.carved'), 'owl.carved');
   assert.equal(decorSprite('statue.small'), 'find.statue');

@@ -17,6 +17,7 @@ import { hashSeed, stream } from './rng.js';
 import { inGreenhouse, isMature, needsWaterToday } from './farm.js';
 import { cloverFactor, horseshoeBonus, themeGiantFactor, themeGoldenHourFactor } from './variety-effects.js';
 import { F1 } from '../data/cozy.js';
+import { giantBonusOf, giantFactorOf, qualityBonusOf } from './career/heirlooms.js';
 
 export const SURPRISES_VERSION = 1;
 export const SPECIAL_IDS = SPECIAL_WEATHERS.map((w) => w.id);
@@ -241,6 +242,8 @@ export function qualityChances(state, plot, byHand = true) {
   if (shoe) add(shoe);
   // (lot 4, F1) Culture désherbée par un jardinier : + 1 point (belle), + 0,3 point (dorée), à la main seulement.
   if (byHand && plot.weeded && state.cozy?.parts?.helpers) add({ fine: F1.weedFine, gold: F1.weedGold });
+  // (Vallée vivante, carrière) Variété généreuse, hérisson (à la main), coccinelles et pollinisation (étape 3).
+  if (state.career?.valley) add(qualityBonusOf(state, plot, byHand));
   // Vœu « chance » × 2 ; (lot 3) carte « Trèfle à quatre feuilles » × 2 (cumulables : × 4 au plus).
   const luck = (luckActive(state) ? QUALITY.luckFactor : 1) * (state.variety ? cloverFactor(state) : 1);
   if (luck !== 1) {
@@ -360,9 +363,20 @@ export function tryGiant(state, level) {
   const cands = giantCandidates(state, level);
   if (!cands.length) return null;
   const rng = stream(state.rng, 'surprise');
+  // (Vallée vivante, carrière) Lièvre : + 1,5 point ; un carré d'une variété géante : × 2 (et c'est lui qui grossit).
+  let pool = cands;
+  let valleyF = 1;
+  if (state.career?.valley) {
+    const giantSquares = cands.filter((sq) => giantFactorOf(state, sq.map((k) => state.plots[k])) > 1);
+    if (giantSquares.length) {
+      pool = giantSquares;
+      valleyF = giantFactorOf(state, giantSquares[0].map((k) => state.plots[k]));
+    }
+  }
+  const base = GIANT.chance + (state.career?.valley ? giantBonusOf(state) : 0);
   // (lot 3) Année des géants (carrière) : chance × 2 (toujours un seul tirage).
-  if (!rng.chance(GIANT.chance * (state.variety ? themeGiantFactor(state) : 1))) return null;
-  const sq = cands[rng.int(0, cands.length - 1)];
+  if (!rng.chance(base * valleyF * (state.variety ? themeGiantFactor(state) : 1))) return null;
+  const sq = pool[rng.int(0, pool.length - 1)];
   const g = mergeGiant(state, sq);
   bump(state.surprises.stats.giants, g.cropId);
   return g;

@@ -45,7 +45,8 @@ export const LANTERN_RULES = {
     neighbours: [9, 16, 19],
     beauty: [8, 13, 15],
     neighbourPoints: { order: 1, crate: 1, quest: 3, fete: 2, heart: 1, visitor: 2, story: 1 },
-    beautyPoints: { decor: 1, decorMax: 12, path: 1, fence: 1, hive: 1, hiveMax: 4, tree: 1, treeMax: 4, embellish: 2, giant: 1, feeder: 1, feederDays: 3, birds: 1, birdsN: 3, pet: 1 },
+    // (Vallée vivante) nature : + 1 par aménagement nature posé (natureMax au plus) ; butterfly : le paon-du-jour installé.
+    beautyPoints: { decor: 1, decorMax: 12, path: 1, fence: 1, hive: 1, hiveMax: 4, tree: 1, treeMax: 4, embellish: 2, giant: 1, feeder: 1, feederDays: 3, birds: 1, birdsN: 3, pet: 1, nature: 1, natureMax: 6, butterfly: 1 },
     prosperity: [0.3, 0.65, 2.5],
     prosperityFloor: 1000,
   },

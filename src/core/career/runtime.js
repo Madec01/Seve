@@ -72,6 +72,8 @@ import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety
 import { handBonusOf, helpersOn, waitInfo, waitedDawns } from './handwork.js';
 import { noteCozyHarvest, noteCozyProduct, takeFromSeedBank } from '../cozy.js';
 import { careerCozyYear } from './cozy.js';
+import { careerValleyYear, lotNature, valleyHarvest, valleyPlotExtras, valleySow } from './valley.js';
+import { dryGrowthOf as heirloomDryGrowth, planVariety, priceFactorOf } from './heirlooms.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -161,12 +163,17 @@ export function createCareerRuntime(core) {
   }
 
   // ── Actions de la parcelle (joueur, employés, machines) ──
-  function plant(plotIndex, cropId, { by = 'player' } = {}) {
+  function plant(plotIndex, cropId, { by = 'player', heirloom = null } = {}) {
     if (!core.playing()) return fail(core.ENDED);
+    // (Vallée vivante) Semis d'une variété ancienne ('heirloom:<id>' : plan de culture, semoir, jardiniers, joueur).
+    const planned = state.career.valley ? planVariety(cropId) : null;
+    if (planned) return valleySow(api, plotIndex, planned, { by });
     if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
     const p = state.plots[plotIndex];
     if (!p.unlocked) return fail('Cette parcelle n\'est pas encore ouverte.');
     if (p.cropId) return fail('Cette parcelle est déjà plantée.');
+    // (Vallée vivante) Jachère fleurie : seul le joueur sème par-dessus (elle s'arrête, sans sol reposé).
+    if (p.fallow !== undefined && by !== 'player') return fail('Jachère fleurie : la parcelle fleurit jusqu\'à la fin de la saison.');
     // (lot 2) Champignons : le joueur les cueille d'abord ; un salarié ou une machine qui sème là les ramasse
     // pour vous (payés), pour qu'un champ tenu par les machines ne soit jamais bloqué.
     if (p.forage && by === 'player') return fail('Cueillez d\'abord les champignons.');
@@ -176,7 +183,8 @@ export function createCareerRuntime(core) {
     const rare = !!state.variety && isRareCrop(crop.id);
     if (rare && by !== 'player') return fail('Les graines rares se sèment à la main.');
     if (rare && freeSowKind(state, crop.id) !== 'rare') return fail('Plus de graines rares : le colporteur en vend.');
-    if (!rare && !core.getCrops().includes(crop)) {
+    // (Vallée vivante) Une variété ancienne se sème quel que soit le rang de sa culture (cadeau de la vallée).
+    if (!rare && !heirloom && !core.getCrops().includes(crop)) {
       const r = cropRank(crop.id);
       return fail(r ? `${crop.name} : ${rankLabel(r)}` : 'Culture inconnue.');
     }
@@ -186,10 +194,10 @@ export function createCareerRuntime(core) {
     const sid = seasonId(state);
     if (!inGreenhouse(p) && !crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
     // (lot 3) Semis offert (visiteur du thème) : à la main seulement, sans payer.
-    const freeSow = state.variety && by === 'player' && !tree ? freeSowKind(state, crop.id) : null;
+    const freeSow = state.variety && by === 'player' && !tree && !heirloom ? freeSowKind(state, crop.id) : null;
     // (lot 4) Réserve de graines (foire aux graines) : tout semis de cette culture la prend d'abord, sans payer.
-    const fromBank = !freeSow && !rare && !!state.cozy && (state.cozy.seedBank?.[crop.id] || 0) > 0;
-    const cost = freeSow || fromBank ? 0 : seedCost(crop);
+    const fromBank = !heirloom && !freeSow && !rare && !!state.cozy && (state.cozy.seedBank?.[crop.id] || 0) > 0;
+    const cost = heirloom ? heirloom.cost : freeSow || fromBank ? 0 : seedCost(crop);
     if (state.money < cost) return fail(notEnough(cost - state.money));
     if (fromBank) takeFromSeedBank(state, crop.id);
     if (p.forage) {
@@ -199,6 +207,8 @@ export function createCareerRuntime(core) {
         push('foragePicked', { plotIndex, kind: f.kind, amount: f.value, by });
       }
     }
+    const fallowCancelled = p.fallow !== undefined;
+    if (fallowCancelled) delete p.fallow;
     if (tree) setTree(state, p, crop.id);
     else {
       p.cropId = crop.id;
@@ -208,15 +218,18 @@ export function createCareerRuntime(core) {
       p.insured = false;
       noteSown(state, plotIndex);
     }
+    if (heirloom) p.variety = heirloom.id;
     addStat(state, 'cropsPlanted', 1);
     spend('seeds', cost);
     const sow = freeSow ? consumeSow(state, crop.id) : fromBank ? { fromBank: true, bankLeft: state.cozy.seedBank[crop.id] || 0 } : null;
-    push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by, ...(sow || {}) });
+    const vf = heirloom || fallowCancelled ? { ...(heirloom ? { variety: heirloom.id } : {}), ...(fallowCancelled ? { fallowCancelled: true } : {}) } : null;
+    push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by, ...(sow || {}), ...(vf || {}) });
     if (state.variety && !tree) {
       noteVariety(state, 'sown', 1, crop.id);
       if (by === 'player') autoKeepOrders(careerVarietyHost(api), crop.id, plotIndex);
       checkMedals(careerVarietyHost(api));
     }
+    if (vf) return { ok: true, cost, fatigue: p.fatigued, ...(sow || {}), ...vf };
     return sow ? { ok: true, cost, fatigue: p.fatigued, ...sow } : { ok: true, cost, fatigue: p.fatigued };
   }
 
@@ -239,7 +252,9 @@ export function createCareerRuntime(core) {
   /** Valeur de la récolte d'une parcelle pour `by` (avant ateliers / grenier / commandes). */
   function harvestAmount(p, by) {
     const unit = rawUnitPrice(state, L(), getCrop(p.cropId)) * yieldFactor(state, L(), p);
-    return Math.round(unit * (by === 'player' ? handBonusOf(state) : 1) * (p.crowPenalty ? CROW_PENALTY : 1));
+    // (Vallée vivante) Variété savoureuse : + 10 %.
+    const vf = state.career.valley ? priceFactorOf(state, p) : 1;
+    return Math.round(unit * vf * (by === 'player' ? handBonusOf(state) : 1) * (p.crowPenalty ? CROW_PENALTY : 1));
   }
 
   /** (lot 2) Valeur d'un géant récolté à la main : 6 × une parcelle (prime « à la main » comprise). */
@@ -270,11 +285,22 @@ export function createCareerRuntime(core) {
     if (by !== 'player' && !giantOpenToHelpers(state, plotIndex)) return fail('Le légume géant attend d\'être récolté à la main.');
     const g = giantAt(state, plotIndex);
     const cropId = g.cropId;
+    const giantVariety = state.career.valley ? state.plots[g.anchor].variety || null : null;
     const sid = seasonId(state);
     const amount = by === 'player' ? giantValue(g.anchor) : harvestAmount(state.plots[g.anchor], by) * g.plots.length;
     const life = c().lifetime;
+    // (Vallée vivante) À la main, chaque parcelle d'un géant d'une variété compte comme une récolte à la main.
+    const valleyEvents = [];
+    let valleySeeds = 0;
     for (const k of g.plots) {
       const q = state.plots[k];
+      if (q.variety && state.career.valley) {
+        const vh = valleyHarvest(api, k, by);
+        if (vh) {
+          valleySeeds += vh.seeds;
+          valleyEvents.push(...vh.events);
+        }
+      } else if (state.career.valley && q.lastVariety !== undefined) delete q.lastVariety;
       q.lastHarvested = cropId;
       clearPlot(q);
       q.crow = false;
@@ -299,9 +325,11 @@ export function createCareerRuntime(core) {
     const res = {
       plotIndex, cropId, amount, fatigue: false, tree: false, processed: null, by, handPicked: by === 'player', stored: false, crowPenalty: false,
       quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(preview ? { claimed: { kind: preview.kind, id: preview.id, label: preview.label } } : {}), ...(part > 0 ? { loanRepayment: part } : {}),
+      ...(giantVariety ? { variety: giantVariety, seeds: valleySeeds } : {}),
     };
     push('harvested', res);
     push('giantHarvested', { ...giant, cropName: getCrop(cropId).name, amount, by });
+    for (const [type, payload] of valleyEvents) push(type, payload);
     repayJoseph(amount, 'harvest');
     if (state.variety) {
       const host = careerVarietyHost(api);
@@ -355,7 +383,8 @@ export function createCareerRuntime(core) {
     const caredLot4 = state.cozy ? tree || careOf(state, p).wateredEveryDay : false;
     const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, yf);
     let stored = false;
-    if (!diverted && !processed && wouldStore(state, cropId)) {
+    // (Vallée vivante) Une variété ancienne ne va jamais au grenier (son trait ne se perd pas dans le stock).
+    if (!diverted && !processed && !p.variety && wouldStore(state, cropId)) {
       addStock(state, cropId);
       stored = true;
     }
@@ -363,6 +392,9 @@ export function createCareerRuntime(core) {
     // une commande (comme la prime de qualité) : récolter soi-même vaut toujours plus.
     const handBonus = Math.max(0, handPart);
     const amount = ((diverted && !sold) || processed || stored ? handBonus : value) + qualityBonus;
+    // (Vallée vivante) Graines gardées à la main, fixation (avant clearPlot) ; lastVariety pour le plan « même culture ».
+    const vh = p.variety && state.career.valley ? valleyHarvest(api, plotIndex, by) : null;
+    if (!vh && !tree && state.career.valley && p.lastVariety !== undefined) delete p.lastVariety;
     if (tree) {
       p.fruit = 0;
       if (p.ripeAt !== undefined) delete p.ripeAt;
@@ -394,7 +426,9 @@ export function createCareerRuntime(core) {
       ...cf,
       ...(part > 0 ? { loanRepayment: part } : {}),
       ...(helpersOn(state) ? { handBonus, waited } : {}),
+      ...(vh ? { variety: vh.variety, seeds: vh.seeds } : {}),
     });
+    if (vh) for (const [type, payload] of vh.events) push(type, payload);
     if (stored) push('stored', { cropId, n: 1, plotIndex });
     if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
     repayJoseph(amount, 'harvest');
@@ -404,7 +438,7 @@ export function createCareerRuntime(core) {
       checkMedals(careerVarietyHost(api));
     }
     if (state.cozy) noteCozyHarvest(state, { cropId, quality: q ? q.quality : 'normal', cared: caredLot4, by, handBonus });
-    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...cf, ...(part > 0 ? { loanRepayment: part } : {}), ...(helpersOn(state) ? { handBonus, waited } : {}) };
+    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...cf, ...(part > 0 ? { loanRepayment: part } : {}), ...(helpersOn(state) ? { handBonus, waited } : {}), ...(vh ? { variety: vh.variety, seeds: vh.seeds, fixed: vh.fixed } : {}) };
   }
 
   function unlockPlot(plotIndex) {
@@ -563,6 +597,8 @@ export function createCareerRuntime(core) {
       ...(state.variety ? { variety: careerVarietyYear(state), nextTheme: careerNextTheme(state) } : {}),
       // (lot 4) Fêtes, hiver, récoltes à la main de l'année (au bilan : + lanternes, extension cozy).
       ...(state.cozy ? { cozy: careerCozyYear(state) } : {}),
+      // (Vallée vivante) Ce qui est venu cette année (au bilan : complété par l'extension).
+      ...(state.career.valley ? { valley: careerValleyYear(state) } : {}),
     };
   }
 
@@ -897,6 +933,7 @@ export function createCareerRuntime(core) {
       staff: c().staff.filter((s) => s.lotId === lot.id).map((s) => s.id),
       plan: lot.plan ? { ...lot.plan } : null,
       special: lot.special || null,
+      ...(state.career.valley ? { nature: lotNature(state, lot.id) } : {}),
     };
   }
 
@@ -1085,6 +1122,9 @@ export function createCareerRuntime(core) {
             weededBy: p.weededBy ?? null,
           }
         : {}),
+      // (Vallée vivante) Variété, planche d'essai, jachère, sol reposé ; une variété sobre n'a pas besoin d'eau (hors canicule).
+      ...(state.career.valley ? valleyPlotExtras(api, i) : {}),
+      ...(state.career.valley && crop && !mature && heirloomDryGrowth(state, p, crop, state.weather.today === 'heatwave') === 1 ? { needsWater: false, ...(p.watered ? {} : { action: null }) } : {}),
     };
   }
 

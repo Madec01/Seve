@@ -48,9 +48,13 @@ export const COSMETICS = [
   { id: 'lantern.pink', name: 'Lanterne rose (voisinage)', category: 'small', price: 0, found: true },
   { id: 'lantern.yellow', name: 'Lanterne jaune (beauté)', category: 'small', price: 0, found: true },
   { id: 'lantern.orange', name: 'Lanterne orange (prospérité)', category: 'small', price: 0, found: true },
+  { id: 'seed.cabinet', name: 'Le semainier à graines', category: 'small', price: 0, found: true },
+  { id: 'nestbox.painted', name: 'Le nichoir peint', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   { id: 'herbarium', name: 'Le grand herbier', category: 'large', price: 0, found: true },
+  // (Vallée vivante, lot V1) Pages de l'album « Graines anciennes » et « Les habitants de la ferme », étape 5 de la vallée.
+  { id: 'valley.linden', name: 'Le tilleul de la vallée', category: 'large', price: 0, found: true },
   { id: 'lantern.grand', name: 'Le grand lampion', category: 'large', price: 0, found: true },
   // Allées
   { id: 'path.dirt', name: 'Allées de terre', category: 'path', price: 0, isDefault: true },

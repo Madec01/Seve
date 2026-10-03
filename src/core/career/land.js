@@ -20,6 +20,9 @@ import { ensureLotPlots, newPlot, notEnoughMoney, placeBuilding, rankLabel, remo
 import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
 import { lotFinds } from './surprises.js';
+import { reserveLotNature } from './habitat.js';
+import { isFixed, planVariety } from './heirlooms.js';
+import { VARIETIES_BY_ID } from '../../data/career/valley.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
 
@@ -274,7 +277,10 @@ export function developLot(api, lotId, type) {
     plots = ensureLotPlots(state, lot, def.plots.env, count);
   }
   api.push('lotDeveloped', { lotId: lot.id, lotType: type, cost, plots }); // « lotType » : « type » écraserait le type de l'événement (on('*'))
-  return { ok: true, cost, plots };
+  // (Vallée vivante) Les haies restent ; les autres aménagements nature du terrain vont à la réserve (à replacer gratuitement).
+  const kinds = state.career.valley ? reserveLotNature(state, lot.id) : [];
+  if (kinds.length) api.push('natureReserved', { lotId: lot.id, kinds });
+  return kinds.length ? { ok: true, cost, plots, natureReserved: kinds } : { ok: true, cost, plots };
 }
 
 /** Aménagements proposés pour un terrain : [{ type, name, cost, canDevelop, reason, max, count, rank }]. */
@@ -298,7 +304,15 @@ export function setPlan(api, lotId, seasonId, cropId) {
   if (!lot) return api.fail('Terrain inconnu.');
   if (!lot.plan) return api.fail('Ce terrain n\'a pas de plan de culture.');
   if (!SEASONS.includes(seasonId)) return api.fail('Saison inconnue.');
-  if (cropId !== null && cropId !== 'same') {
+  // (Vallée vivante) 'heirloom:<id>' : une variété ancienne fixée (sauvée) dans le plan de culture.
+  const heirloom = state.career.valley ? planVariety(cropId) : null;
+  if (heirloom) {
+    const x = VARIETIES_BY_ID[heirloom];
+    const crop = getCrop(x.cropId);
+    if (!isFixed(state, heirloom)) return api.fail(`${x.name} : sauvez-la d'abord (6 récoltes à la main).`);
+    if (crop.kind === 'tree') return api.fail('Culture inconnue.');
+    if (lot.type !== 'greenhouse' && !crop.seasons.includes(seasonId)) return api.fail(`${crop.name} : ne se sème pas cette saison.`);
+  } else if (cropId !== null && cropId !== 'same') {
     const crop = getCrop(cropId);
     if (crop && crop.rare) return api.fail('Les graines rares se sèment à la main.');
     if (!crop || crop.kind === 'tree') return api.fail('Culture inconnue.');

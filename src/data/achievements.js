@@ -40,6 +40,7 @@
 //   careerYear {n}                commencer l'année n
 //   careerStock {n}               n unités au grenier en même temps
 //   careerYearNet {n}             n pièces de bénéfice en une année
+//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand
 
 import { CROPS } from './crops.js';
 
@@ -118,6 +119,21 @@ export const COZY_ACHIEVEMENTS = [
   cozy('goldMedals10', 'Dix médailles d\'or', '10 médailles d\'or aux défis de la saison.', 20, { type: 'goldMedals', n: 10 }),
 ];
 
+/**
+ * (Vallée vivante, lot V1) 7 succès de carrière (catégorie « Carrière », écus seulement, 155 écus). Condition
+ * careerValley { key, n } sur ctx.career.valley (query.achievementContext()) : started (boîte reçue), fixed (variétés
+ * fixées), installed (habitants installés), stage (étape), hand (récoltes à la main de variétés anciennes).
+ */
+export const VALLEY_ACHIEVEMENTS = [
+  career('valleyBox', 'La boîte en fer', 'Recevoir la boîte en fer de Joseph.', 10, { type: 'careerValley', key: 'started', n: 1 }),
+  career('firstSaved', 'Graine sauvée', 'Sauver une première variété ancienne.', 10, { type: 'careerValley', key: 'fixed', n: 1 }),
+  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixed', n: 12 }),
+  career('firstNeighbour', 'Premier habitant', 'Installer un premier habitant.', 10, { type: 'careerValley', key: 'installed', n: 1 }),
+  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installed', n: 12 }),
+  career('valleySings', 'La vallée chante', 'Atteindre l\'étape 5 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 5 }),
+  career('seedHands', 'Les mains dans les graines', '100 récoltes à la main de variétés anciennes.', 15, { type: 'careerValley', key: 'hand', n: 100 }),
+];
+
 function cozy(id, name, description, ecus, check) {
   return { id, name, description, category: 'cozy', reward: { stars: 0, ecus }, check };
 }
@@ -127,7 +143,7 @@ function cozy(id, name, description, ecus, check) {
  * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
  * category: 'cozy'.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS];
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

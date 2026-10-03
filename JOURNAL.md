@@ -1120,7 +1120,53 @@ textes ≥ 14 px, aucune erreur console. Captures `screens/pace-*.png`. Tests : 
 - Remarque : les messages (pleine largeur) passent devant les boutons + / − du zoom posés à droite (ils ne captent pas
   le toucher) ; à revoir avec le placement du zoom.
 
+### 2026-10-03 — Vallée vivante V1 : planche de sprites `valley1.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley1.py` (même méthode que `generate-lot4.py`) → `assets/sprites/valley1.png`
+  (16 × 19 tuiles, 155 sprites), bloc `// <valley1:auto>` d'`src/render/atlas.js` et `SHEETS.valley1` ; tous les noms du
+  tableau « Sprites » du contrat V1 (`docs/ARCHITECTURE.md`) existent (198 vérifiés sous Node), aucun nom ni aucune entrée
+  des autres planches touchés (le script refuse un heurt).
+- Variétés : icônes des 12, stade mûr `.4` et plant `.3` aux couleurs de la variété (cultures de base recolorées et
+  retouchées : côtes du cœur de bœuf, cloques du chou de Milan, courgettes rondes, vitelotte allongée, fraises des bois,
+  citrouille d'Étampes aplatie), étapes 0 à 2 et fané = alias de la culture de base (fin du bloc) ; citrouille géante
+  rouge vif ; pommes de Calville à poser sur `tree.apple.*`.
+- 12 habitants en 2 images (regard à gauche), 5 indices ; haies champêtres (autotuile verticale, 4 saisons, milieu qui se
+  raccorde), bandes fleuries répétables (2 variantes par saison), nichoirs, tas de bois, hôtel à insectes, roseaux, chêne
+  (plant, jeune, adulte × 4 saisons), jachères fleuries, fleurs de lisière, cueillette des haies, boîte en fer (fermée /
+  ouverte), étiquette, sachet, vignettes `story.box` et `valley.stage.0..5`, pictogrammes, vols d'oiseaux, papillon,
+  onglets d'album, 3 décors, 7 succès (+ `.locked`).
+- `tools/atlas-preview.html` : case « Vallée V1 seulement » (`?valley1=1`) et démonstration (haies et bandes raccordées,
+  étapes des variétés, pommes de Calville). `CREDITS.md` : ligne `valley1.png` (CC0, création originale).
+- Écart : pas de `heirloom.calvilleBlanc.<étape>` (le pommier garde `tree.apple.*` + le calque des pommes, comme le
+  contrat). Le paquet (`node tools/build.js`) reste à refaire au moment du commit.
+
 ### 2026-10-03 — Affichage : messages, zoom, mini-carte, barre du haut et titre des fenêtres
-- Les messages réservent la place des boutons de zoom et de la mini-carte : plus aucun recouvrement (droitier/gaucher, niveaux/carrière, 100/150 %).
-- Titre des fenêtres à ✕ (album à 150 % sur 360 px) : le ruban se décale, écart ≥ 12 px.
-- Carrière : la case du fermage rétrécit (le mot « couvert » s'efface d'abord) au lieu de recouvrir la météo ; mesure de la météo refaite quand l'argent change de longueur.
+
+Bugs corrigés (vérifiés au doigt, Pixel 7 et 360 × 740, texte 100 % et 150 %, droitier et gaucher, Niveaux et Carrière :
+16 combinaisons, rectangles mesurés sans aucun chevauchement, cibles ≥ 48 px, textes ≥ 14 px, aucune erreur console ;
+captures `screens/overlap-*.png`) :
+
+- **Messages devant les boutons + / − / 1:1 et la mini-carte** (remarque du travail précédent) : à 150 % sur 360 px,
+  les deux messages et la pastille « +N » couvraient les trois boutons du zoom, la mini-carte et ses boutons.
+  `src/ui/zoom.js` publie la hauteur occupée en bas par la colonne de zoom (comptée avec « 1:1 », pour que les messages
+  ne sautent pas quand on zoome) et la mini-carte (ou son bouton « Carte ») : `--float-reserve` + `body.has-float-ui`
+  (mesure à chaque changement d'état, au plus toutes les 250 ms sinon) ; `css/guidance.css` pose les messages juste
+  au-dessus (jamais sous la barre du haut). Même règle en droitier et en gaucher ; feuille ouverte, menu, grand écran :
+  inchangés.
+- **« 1:1 » en 13 px** → 14 px (0,875 rem).
+- **Titre de fenêtre contre le ✕** (« L'album de la ferme » à 150 % sur 360 px : 96 px de place dans le ruban pour 168,
+  le texte débordait sur le ✕ ; à 100 % : 6 px d'écart) : sur téléphone (≤ 439 px), le ruban d'une fenêtre fermable se
+  décale à gauche du ✕ et ses bouts passent à 32 px (échelle 1) ; un titre encore trop long serait coupé (…) dans le
+  ruban. Écart titre → ✕ mesuré : ≥ 12 px partout.
+- **Carrière : la case du fermage recouvrait l'icône de la météo** (argent à 5 chiffres, « couvert · 6 j ») : la colonne
+  de la météo était la seule à pouvoir rétrécir (`minmax(0, 1fr)`) alors que la case gardait 48 px minimum ; le fermage
+  débordait dessus (et en gaucher, la vitesse passée en tête décalait les colonnes). Grilles de la barre du haut
+  (Niveaux, Carrière, gaucher, vitesse en bas) : argent `max-content`, météo `minmax(48px, 1fr)`, fermage
+  `minmax(0, auto)`. `src/ui/hud.js` `fitRow()` (remplace `fitWeather`) : si la case du fermage est trop étroite, le mot
+  d'état s'efface (`is-tight` ; symbole ✓ / ! / ✗ et couleur restent), puis l'icône (`is-tighter`) ; rien n'est coupé.
+- **Météo « Ensol… » avec l'icône de demain hors de sa case** (360 px, 100 %) : la mesure se faisait avant que le
+  compteur d'argent ait fini de rouler (« 180 » → « 98 765 ») ; elle est refaite quand le compteur change de longueur et
+  au chargement de la police.
+
+- Remarque : en cours de vérification, avertissement console `ALBUM_COMPLETE_PAGES is not defined`
+  (`src/core/progression.js`) — travail en cours d'un autre paquet (Vallée), non touché ici.

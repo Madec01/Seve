@@ -34,12 +34,12 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '0611fe21c286';
-// 149 fichiers, 26.8 Mo ; installés d'emblée (core) : 67 fichiers, 1.74 Mo
+const VERSION = '679e1521a0d6';
+// 150 fichiers, 26.9 Mo ; installés d'emblée (core) : 68 fichiers, 1.84 Mo
 const PRECACHE = [
-  ["index.html", '3d3cba213634cffb', 26045, 'core'],
+  ["index.html", 'f96dd1ef7adc341c', 26045, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.a9fec83c92.js", '646b67521f0533c5', 1358024, 'core'],
+  ["dist/game.c4e2cdd793.js", 'a1e43b8a8d75ad54', 1424403, 'core'],
   ["dist/game.2b597ce1d1.css", '2b597ce1d1593293', 158009, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
@@ -186,6 +186,7 @@ const PRECACHE = [
   ["assets/sprites/ui/slot-wood-deep.png", 'ee73765497a9b1f2', 166, 'core'],
   ["assets/sprites/ui/slot-wood.png", '77631b56d79873e0', 174, 'core'],
   ["assets/sprites/v3.png", '897aacf1899d5794', 18649, 'core'],
+  ["assets/sprites/valley1.png", 'e1043eae1319e9fc', 36791, 'core'],
 ];
 // </precache>
 

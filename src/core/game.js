@@ -180,6 +180,7 @@ import {
   pickWinterFind, presentStand, buySeedPack, triggerCozyShared, winterQuery,
 } from './cozy.js';
 import { careerCozyHost, careerAchievementExtras, triggerCareerCozy } from './career/cozy.js';
+import { valleyAchievementContext, valleyPlantable } from './career/valley.js';
 import { treeSeedCost as treeSeedCostOf } from './trees.js';
 
 export const STATE_VERSION = 2;
@@ -1576,7 +1577,7 @@ function wrap(state, { fresh = false } = {}) {
         if (plot && inGreenhouse(plot)) return !tree;
         return c.seasons.includes(sid) && (!plot || !tree);
       };
-      return crops
+      const rows = crops
         .filter(allowed)
         .map((c) => {
           const tree = isTreeCrop(c);
@@ -1630,6 +1631,13 @@ function wrap(state, { fresh = false } = {}) {
           };
         })
         .concat(state.variety ? rarePlantableRows(plot, rate) : []);
+      // (Vallée vivante, carrière) Lignes « Graines anciennes » et « Jachère fleurie » (propriétés du tableau).
+      const vp = rt && state.career.valley ? valleyPlantable(rt.api, plotIndex) : null;
+      if (vp) {
+        rows.heirlooms = vp.heirlooms;
+        rows.fallow = vp.fallow;
+      }
+      return rows;
     },
 
     investments() {
@@ -1840,7 +1848,7 @@ function wrap(state, { fresh = false } = {}) {
           availableInvestments: [],
           adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
           dailyCharges: rt.chargesInfo().dailyTotal,
-          career: { ...rt.achievementContext(), ...(state.cozy ? careerAchievementExtras(state) : {}) },
+          career: { ...rt.achievementContext(), ...(state.cozy ? careerAchievementExtras(state) : {}), ...(state.career.valley ? { valley: valleyAchievementContext(state) } : {}) },
           ...(state.variety ? { variety: varietyAchievements() } : {}),
           ...lot4Context(),
         };
@@ -2059,6 +2067,10 @@ function wrap(state, { fresh = false } = {}) {
     /** (lot 4) Fêtes, hiver et lanternes actifs (Détente et carrière par défaut ; Classique : non). */
     get cozy() {
       return !!state.cozy;
+    },
+    /** (Vallée vivante) La Vallée est active (carrière seulement ; par défaut). */
+    get valley() {
+      return !!state.career?.valley;
     },
     update,
     on: emitter.on,

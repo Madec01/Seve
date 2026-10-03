@@ -29,6 +29,8 @@ import {
   WINTER_FINDS, WINTER_FINDS_BY_ID, WINTER_RULES, careerFactor,
 } from '../data/cozy.js';
 import { hashSeed, stream } from './rng.js';
+import { winterCoinsFactor, winterFindsMax } from './career/heirlooms.js';
+import { natureBeauty } from './career/habitat.js';
 import { absDay } from './surprises.js';
 import { currentTheme, isStarCrop, themeFestivalToday } from './variety-effects.js';
 import { isTreeAdult } from './trees.js';
@@ -235,7 +237,8 @@ export function checkCozy(state) {
   if (z.stand !== null && !(obj(z.stand) && int(z.stand.year) && RIBBONS.some((r) => r.id === z.stand.ribbon))) return 'lot 4 (stand)';
   const w = z.winter;
   if (!obj(w) || !Array.isArray(w.finds) || !Array.isArray(w.traces) || !obj(w.feeder) || !int(w.storyDay) || !int(w.nextId)) return 'lot 4 (hiver)';
-  if (w.finds.length > WINTER_RULES.maxFinds) return 'lot 4 (trouvailles)';
+  // (Vallée vivante) Le rouge-gorge installé (il ne repart jamais) : 4 trouvailles à la fois.
+  if (w.finds.length > (state.career?.valley ? winterFindsMax(state, WINTER_RULES.maxFinds) : WINTER_RULES.maxFinds)) return 'lot 4 (trouvailles)';
   for (const x of w.finds) if (!obj(x) || typeof x.id !== 'string' || !WINTER_FINDS_BY_ID[x.kind] || !(x.u >= 0 && x.u < 1) || !int(x.day)) return 'lot 4 (trouvaille)';
   for (const x of w.traces) if (!obj(x) || !TRACES_BY_ID[x.kind] || !(x.u >= 0 && x.u < 1)) return 'lot 4 (trace)';
   if (!int(w.feeder.filledDay) || (w.feeder.bird !== null && !(obj(w.feeder.bird) && BIRDS_BY_ID[w.feeder.bird.id]))) return 'lot 4 (mangeoire)';
@@ -394,6 +397,13 @@ export function noteLevelIncomes(state, incomes, milkToDairy = []) {
 }
 
 // ── Récompenses ────────────────────────────────────────────────────────────────────────────────
+
+/** (Vallée vivante, carrière) Beauté : + 1 par aménagement nature (natureMax au plus), + 1 avec le paon-du-jour. */
+function valleyBeauty(state, B) {
+  if (!state.career?.valley || !B.nature) return 0;
+  const b = natureBeauty(state);
+  return Math.min(B.natureMax, b.nature) * B.nature + (b.butterfly ? B.butterfly || 0 : 0);
+}
 
 function coinsFor(host, base) {
   return host.mode === 'career' ? Math.round(base * careerFactor(host.rank())) : base;
@@ -696,7 +706,8 @@ export function cozyDawn(host, { newSeason = false, weather = host.state.weather
     const rng = stream(state.rng, 'cozy');
     const r = [rng.float(), rng.float(), rng.float(), rng.float(), rng.float()];
     const added = [];
-    if (w.finds.length < WINTER_RULES.maxFinds) {
+    // (Vallée vivante, carrière) Rouge-gorge installé : 4 trouvailles à la fois.
+    if (w.finds.length < (state.career?.valley ? winterFindsMax(state, WINTER_RULES.maxFinds) : WINTER_RULES.maxFinds)) {
       const kind = weightedPick(WINTER_FINDS, (x) => x.weight, r[0]);
       const find = { id: `w${w.nextId++}`, kind: kind.id, u: Math.min(0.999999, r[1]), day: today };
       w.finds.push(find);
@@ -961,7 +972,8 @@ export function pickWinterFind(host, findId) {
   if (k < 0) return host.fail('Rien à ramasser ici.');
   const find = w.finds.splice(k, 1)[0];
   const def = WINTER_FINDS_BY_ID[find.kind];
-  const amount = coinsFor(host, def.coins);
+  // (Vallée vivante, carrière) Écureuil installé : pièces × 2.
+  const amount = coinsFor(host, def.coins) * (host.state.career?.valley ? winterCoinsFactor(host.state) : 1);
   host.earn('winter', amount);
   bump(z.stats.finds, find.kind);
   z.year.finds += 1;
@@ -1039,7 +1051,8 @@ export function lanternFacts(host, extra = {}) {
       + (count(y.giants) > 0 ? B.giant : 0)
       + (y.feederDays >= B.feederDays ? B.feeder : 0)
       + (count(y.birds) >= B.birdsN ? B.birds : 0)
-      + (state.career.pets?.cat || state.career.pets?.dog ? B.pet : 0);
+      + (state.career.pets?.cat || state.career.pets?.dog ? B.pet : 0)
+      + valleyBeauty(state, B);
     const shelters = Object.entries(state.career.buildings || {}).some(([id, b]) => b && ['coop', 'hutch', 'duckPond', 'goatShed', 'cowshed', 'pigsty'].includes(id) && (state.investments[{ coop: 'hen', hutch: 'rabbit', duckPond: 'duck', goatShed: 'goat', cowshed: 'cow', pigsty: 'pig' }[id]] || 0) > 0);
     return {
       variety: count(y.produced.crops) + count(y.produced.products) + count(y.produced.animal),
