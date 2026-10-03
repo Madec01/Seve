@@ -285,7 +285,10 @@ body.is-loading #hud { transform: translateY(-110%); pointer-events: none; }
 
 .hud-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  /* Argent : toujours en entier (max-content). Météo : au moins 48 px (cible), elle prend la place qui reste ;
+     fermage : sa largeur s'il y a la place,
+     sinon il rétrécit DANS sa colonne (mot d'état effacé, src/ui/hud.js fitRow) au lieu de couvrir la météo. */
+  grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto;
   gap: 5px;
   align-items: stretch;
 }
@@ -364,6 +367,11 @@ body.is-loading #hud { transform: translateY(-110%); pointer-events: none; }
    dans une pastille au contour sombre, et un mot avant le délai (« couvert · dans 4 j »). */
 .bill-line { gap: 0; }
 .bill-word:not(:empty)::after { content: ' · '; white-space: pre; }
+/* Case trop étroite (src/ui/hud.js fitRow) : le mot d'état s'efface (symbole et couleur restent) ; ce qui
+   dépasse encore est coupé dans la case, jamais posé sur la météo voisine. */
+.hud-bill.is-tight .bill-word { display: none; }
+.hud-bill.is-tighter .hud-line--big > .ico { display: none; }
+.hud-bill.is-tight > .hud-line { overflow: hidden; }
 .bill-glyph {
   flex: none;
   display: inline-block;
@@ -2127,7 +2135,7 @@ body.layout-wide.in-decor .decorbar { left: 12px; right: auto; bottom: 12px; wid
 body.layout-wide #tabbar.is-five .tabbar-label { font-size: 0.875rem; }
 
 /* ─── Barre du haut : année, rang ────────────────────────────────────────────── */
-#hud.is-career .hud-row { grid-template-columns: auto minmax(0, 1fr) auto auto auto; gap: 4px; }
+#hud.is-career .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto auto; gap: 4px; }
 /* La météo reste une cible d'au moins 48 px même quand l'argent s'allonge (« 19 750 ») ; nom coupé proprement. */
 #hud.is-career .hud-weather { min-width: 48px; }
 #hud.is-career .hud-weather .w-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2786,11 +2794,11 @@ html.font-readable .sheet-hint { line-height: 1.4; }
 #tabbar > .hud-speed .speed-label { font-size: min(0.875rem, 16px); }
 /* Disposition miroir, vitesse en haut : le bouton passe à gauche de la barre du haut. */
 html.left-handed #hud:not(.is-docked) .hud-row > .hud-speed { order: -1; }
-html.left-handed #hud:not(.is-docked) .hud-row { grid-template-columns: auto auto minmax(0, 1fr) auto; }
-html.left-handed #hud.is-career:not(.is-docked) .hud-row { grid-template-columns: auto auto minmax(0, 1fr) auto auto; }
+html.left-handed #hud:not(.is-docked) .hud-row { grid-template-columns: auto max-content minmax(48px, 1fr) minmax(0, auto); }
+html.left-handed #hud.is-career:not(.is-docked) .hud-row { grid-template-columns: auto max-content minmax(48px, 1fr) minmax(0, auto) auto; }
 /* Vitesse en bas : la barre du haut n'a plus que trois cases. */
-#hud.is-docked .hud-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-#hud.is-docked.is-career .hud-row { grid-template-columns: auto minmax(0, 1fr) auto auto; }
+#hud.is-docked .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto); }
+#hud.is-docked.is-career .hud-row { grid-template-columns: max-content minmax(48px, 1fr) minmax(0, auto) auto; }
 
 /* ─── Contrastes renforcés ─────────────────────────────────────────────────────────────── */
 html.high-contrast {
@@ -2868,13 +2876,23 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 #tabbar.has-dock.is-five .tabbar-label { font-size: 14px; }
 #tabbar.has-dock .tabbar-btn { padding-left: 0; padding-right: 0; }
 
-/* Grand texte (130–150 %) sur téléphone : le titre des fenêtres reste dans son ruban, à côté du ✕
+/* Téléphone (et grand texte 130–150 %) : le titre des fenêtres reste dans son ruban, à côté du ✕
    (« Où en étais-je ? » débordait à 150 % en 360 px de large). */
 @media (max-width: 439px) {
   html[data-text-scale='130'] .dialog-title,
   html[data-text-scale='150'] .dialog-title { font-size: min(1.25rem, 21px); }
-  html[data-text-scale='130'] .dialog.is-closable .dialog-ribbon,
-  html[data-text-scale='150'] .dialog.is-closable .dialog-ribbon { max-width: calc(100% - 112px); }
+  /* (2026-10-03) Ruban décalé à gauche du ✕ (au lieu d'être centré entre deux marges de 56 px) et bouts du ruban
+     à l'échelle 1 (32 px au lieu de 48) : à 150 % sur 360 px, « L'album de la ferme » débordait du ruban (96 px
+     de place pour 168) et touchait le ✕ (à 100 % : 6 px d'écart). Ce qui dépasserait encore est coupé (…) dans
+     le ruban. Toutes les tailles de texte : même dessin d'une fenêtre à l'autre. */
+  .dialog.is-closable .dialog-ribbon {
+    max-width: calc(100% - 56px);
+    margin-right: 56px;
+    border-left-width: calc(var(--u) * 16);
+    border-right-width: calc(var(--u) * 16);
+    border-image-width: 0 calc(var(--u) * 16);
+  }
+  .dialog.is-closable .dialog-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (max-width: 379px) {
   html[data-text-scale='130'] .dialog.is-closable .dialog-title,
@@ -2934,7 +2952,7 @@ body.layout-wide.has-sheet .zoom-controls { right: calc(var(--panel-w) + 12px); 
 .zoom-btn:focus-visible .zoom-face { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: 1px; opacity: 1; }
 .zoom-btn[aria-disabled='true'] .zoom-face { opacity: 0.45; }
 .zoom-reset .zoom-face { width: 40px; height: 30px; }
-.zoom-reset-text { font-size: 0.8125rem; font-weight: 700; line-height: 1; color: var(--text); }
+.zoom-reset-text { font-size: 0.875rem; font-weight: 700; line-height: 1; color: var(--text); }
 /* Glyphes « + » et « − » : barres pleines, nettes à toute taille de texte. */
 .zoom-glyph { position: relative; display: block; width: 18px; height: 18px; }
 .zoom-glyph::before,

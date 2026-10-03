@@ -114,6 +114,14 @@ html.reduced-motion .todo { animation: none; }
 /* La ligne posée, les messages et la mini-carte passent au-dessus d'elle. */
 body.has-todo:not(.has-sheet) #toasts { bottom: calc(var(--inset-bottom) + var(--todo-h) + 14px); }
 body.has-todo .minimap { bottom: calc(var(--inset-bottom) + var(--todo-h) + 12px); }
+/* Boutons de zoom + / − / 1:1 et mini-carte à l'écran (téléphone) : les messages se posent AU-DESSUS d'eux
+   (--float-reserve, publié par src/ui/zoom.js : hauteur occupée depuis le bas de l'écran, colonne de zoom comptée
+   avec « 1:1 »), en droitier comme en gaucher ; ils ne recouvrent ni ces boutons, ni la mini-carte, ni la ligne
+   « À faire ». Jamais plus haut que sous la barre du haut. */
+:root { --float-reserve: 0px; }
+body.has-float-ui:not(.has-sheet):not(.layout-wide):not(.in-menu) #toasts {
+  bottom: min(max(calc(var(--inset-bottom) + var(--todo-h) + 14px), var(--float-reserve)), calc(var(--app-h) - var(--inset-top) - 62px));
+}
 
 /* Grand écran : une ligne compacte en bas à gauche. */
 body.layout-wide .todo { right: auto; width: min(30rem, calc(100vw - var(--panel-w) - 32px)); bottom: 12px; }

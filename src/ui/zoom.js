@@ -13,6 +13,9 @@
 // par défaut (indépendant de l'écran), null ou absent = défaut.
 // Boutons : colonne à droite (à gauche pour gaucher), au-dessus de la ligne « À faire » et des onglets, à
 // gauche de la mini-carte en carrière ; cibles de 48 px ; cachés sous une feuille, une fenêtre, une bulle.
+// Place des messages : frame() publie la hauteur occupée en bas par ces boutons et la mini-carte
+// (`--float-reserve` sur <html>, classe `body.has-float-ui`) ; les messages se posent au-dessus (css/guidance.css),
+// jamais sur un bouton + / − / 1:1, sur la mini-carte ni sur la ligne « À faire ».
 
 import { el } from './dom.js';
 
@@ -81,6 +84,39 @@ export function createZoomControls(app) {
   root.addEventListener('pointerdown', (e) => e.stopPropagation());
   root.addEventListener('dblclick', (e) => e.preventDefault());
 
+  // ── Place réservée au-dessus des boutons et de la mini-carte (messages) ──────────────────
+  // Colonne comptée avec « 1:1 » même au zoom par défaut : les messages ne sautent pas quand on zoome.
+  const COLUMN_H = 3 * 48 + 2 * 4;
+  const RESERVE_GAP = 8;
+  let reserveAt = 0;
+  let reserveKey = '';
+  let lastReserveState = ''; // état des boutons / de la mini-carte à la dernière mesure
+  function measureReserve(force) {
+    const now = performance.now();
+    if (!force && now - reserveAt < 250) return;
+    reserveAt = now;
+    const vh = document.documentElement.clientHeight || window.innerHeight;
+    let top = Infinity;
+    if (!root.hidden) {
+      const r = root.getBoundingClientRect();
+      if (r.height > 0) top = Math.min(top, r.bottom - COLUMN_H);
+    }
+    const mm = app.careerUI?.minimap;
+    if (mm && !mm.root.hidden) {
+      for (const n of mm.root.querySelectorAll('.minimap-frame, .minimap-btn, .minimap-show')) {
+        const r = n.getBoundingClientRect();
+        if (r.height > 0 && r.width > 0) top = Math.min(top, r.top);
+      }
+    }
+    const wide = document.body.classList.contains('layout-wide');
+    const h = Number.isFinite(top) && !wide ? Math.max(0, Math.ceil(vh - top + RESERVE_GAP)) : 0;
+    const key = String(h);
+    if (key === reserveKey) return;
+    reserveKey = key;
+    document.documentElement.style.setProperty('--float-reserve', `${h}px`);
+    document.body.classList.toggle('has-float-ui', h > 0);
+  }
+
   function save() {
     const s = app.scene;
     if (!s?.zoomInfo || app.inMenu || !app.game) return;
@@ -129,6 +165,7 @@ export function createZoomControls(app) {
     if (want !== visible) {
       visible = want;
       root.hidden = !want;
+      lastReserveState = ''; // mesure tout de suite
     }
     // Place : à gauche de la mini-carte (carrière), ou de son bouton « Carte » quand elle est cachée.
     const mm = app.careerUI?.minimap;
@@ -143,6 +180,8 @@ export function createZoomControls(app) {
       resetBtn.hidden = info.isDefault;
     }
     if (!info.gesture && !info.animating) save();
+    measureReserve(state !== lastReserveState);
+    lastReserveState = state;
   }
 
   return {

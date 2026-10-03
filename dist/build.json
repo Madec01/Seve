@@ -1,8 +1,8 @@
 {
-  "id": "135e7b25f528",
+  "id": "0611fe21c286",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.b826e4d32b.js",
-  "css": "dist/game.8727d5a46d.css",
+  "js": "dist/game.a9fec83c92.js",
+  "css": "dist/game.2b597ce1d1.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -152,9 +152,9 @@
     "assets/sprites/v3.png": "897aacf1899d5794",
     "css/cozy.css": "096b9ffea0c439ff",
     "css/fonts.css": "f6a60d8eb500f8f4",
-    "css/guidance.css": "4f08f9e3874c4480",
+    "css/guidance.css": "40cbbd0be7f99e99",
     "css/lot2.css": "abbc12b1669158cb",
-    "css/style.css": "4bafff27efc46b31",
+    "css/style.css": "4fa1ebbb6844b2c6",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
@@ -277,7 +277,7 @@
     "src/ui/guide-prefs.js": "e79573213ab6a060",
     "src/ui/guide.js": "e5913fbec1e0d00a",
     "src/ui/hints.js": "5e2db5912a972dd6",
-    "src/ui/hud.js": "216647354deb05ec",
+    "src/ui/hud.js": "0fc9bd901b1e8597",
     "src/ui/icons.js": "cd979dc037cdc49f",
     "src/ui/juice.js": "370e970fcf275dc2",
     "src/ui/lot2.js": "d9cb8c5b4dc500e7",
@@ -293,11 +293,19 @@
     "src/ui/tutorial.js": "b567fa8157c237dd",
     "src/ui/v3.js": "45edf2a4853e4468",
     "src/ui/variety.js": "de2d58a58925120a",
-    "src/ui/zoom.js": "8b9269d7d476aee4",
+    "src/ui/zoom.js": "93e4ccf42101d380",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "7d71ff01c80f9a0c"
   },
   "history": [
+    {
+      "id": "0611fe21c286",
+      "files": [
+        "dist/game.a9fec83c92.js",
+        "dist/game.a9fec83c92.js.map",
+        "dist/game.2b597ce1d1.css"
+      ]
+    },
     {
       "id": "135e7b25f528",
       "files": [
@@ -327,14 +335,6 @@
       "files": [
         "dist/game.a6f4735fd2.js",
         "dist/game.a6f4735fd2.js.map",
-        "dist/game.22a6d55155.css"
-      ]
-    },
-    {
-      "id": "a6ea7a8b59f0",
-      "files": [
-        "dist/game.0f63fd353e.js",
-        "dist/game.0f63fd353e.js.map",
         "dist/game.22a6d55155.css"
       ]
     }

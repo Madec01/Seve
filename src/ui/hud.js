@@ -243,14 +243,29 @@ export function createHud(root, app) {
   /**
    * Case météo trop étroite (carrière : argent à 5 chiffres, « couvert · demain ») : l'icône du jour seule,
    * plutôt qu'une flèche coupée et « Nu… » (le nom et demain restent dans la fiche de la météo).
+   * Puis case du fermage trop étroite (carrière à 150 % sur 360 px : « couvert · 6 j » recouvrait l'icône de la
+   * météo) : le mot d'état s'efface (le symbole ✓ / ! / ✗ et la couleur restent, le mot est dans la fiche et le
+   * libellé), puis l'icône du fermage ; s'il le faut encore, la ligne est coupée dans sa case (css/style.css),
+   * jamais sur la voisine.
    */
   let fitKey = '';
-  function fitWeather() {
+  let shownMoneyLen = 0;
+  // Police chargée après la première mesure : les largeurs changent, on remesure.
+  document.fonts?.addEventListener?.('loadingdone', () => {
+    fitKey = '';
+    fitRow();
+  });
+  function fitRow() {
     const key = `${window.innerWidth}|${document.documentElement.dataset.textScale || ''}|${weather.parentElement?.textContent || weather.textContent}`;
     if (key === fitKey) return;
     fitKey = key;
     weather.classList.remove('is-tight');
+    bill.classList.remove('is-tight', 'is-tighter');
     if (weather.scrollWidth > weather.clientWidth + 1) weather.classList.add('is-tight');
+    // Les lignes et leurs morceaux se coupent déjà en « … » (css) : on regarde chacun.
+    const cut = () => [...bill.querySelectorAll('.hud-line, .hud-line > *')].some((n) => n.scrollWidth > n.clientWidth + 1);
+    if (cut()) bill.classList.add('is-tight'); // 1) le mot d'état s'efface
+    if (cut()) bill.classList.add('is-tighter'); // 2) puis l'icône du fermage (le montant et ✓ / ! / ✗ restent)
   }
 
   /** (Lot 2) Icône de météo spéciale à la place de l'icône de base (nœud mis en cache par météo). */
@@ -415,7 +430,6 @@ export function createHud(root, app) {
     setText(wName, spToday ? SPECIAL_WEATHERS_BY_ID[spToday]?.name || weatherName(w.today) : weatherName(w.today));
     weather.querySelector('.w-tomorrow').style.visibility = w.tomorrow ? '' : 'hidden';
     weather.querySelector('.w-arrow').style.visibility = w.tomorrow ? '' : 'hidden';
-    fitWeather();
     weather.setAttribute('aria-label', `Météo : ${weatherName(w.today)}${w.tomorrow ? `, demain ${weatherName(w.tomorrow)}` : ''}`);
 
     const p = projection();
@@ -437,6 +451,7 @@ export function createHud(root, app) {
     bill.classList.toggle('is-danger', state === 'danger');
     // Pas d'alarme qui clignote quand Joseph couvrira le manque : le jeu reste calme.
     bill.classList.toggle('is-urgent', status === 'playing' && p.daysLeft <= 1 && (p.state === 'warn' || p.state === 'danger'));
+    fitRow(); // météo puis fermage : chacun reste dans sa case
 
     const sp = game.state.speed;
     setIcon(speedIcon, sp === 0 ? 'pause' : sp <= 1 ? 'play' : sp === 2 ? 'fast' : 'faster');
@@ -542,6 +557,13 @@ export function createHud(root, app) {
       moneyValue.textContent = fmt(n);
       money.classList.toggle('is-negative', n < 0);
       money.setAttribute('aria-label', `Argent : ${fmt(n)} pièces`);
+      // Le compteur s'allonge en roulant (« 980 » → « 98 765 ») : météo et fermage se réajustent (une mesure
+      // seulement quand le nombre de caractères change).
+      const len = moneyValue.textContent.length;
+      if (len !== shownMoneyLen) {
+        shownMoneyLen = len;
+        fitRow();
+      }
     }
     // Avancée de la journée
     // (écritures de style seulement quand la valeur affichée change : pas de mise en page à

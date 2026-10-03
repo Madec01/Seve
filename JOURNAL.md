@@ -1119,3 +1119,8 @@ textes ≥ 14 px, aucune erreur console. Captures `screens/pace-*.png`. Tests : 
   pensent pas à ouvrir l'historique.
 - Remarque : les messages (pleine largeur) passent devant les boutons + / − du zoom posés à droite (ils ne captent pas
   le toucher) ; à revoir avec le placement du zoom.
+
+### 2026-10-03 — Affichage : messages, zoom, mini-carte, barre du haut et titre des fenêtres
+- Les messages réservent la place des boutons de zoom et de la mini-carte : plus aucun recouvrement (droitier/gaucher, niveaux/carrière, 100/150 %).
+- Titre des fenêtres à ✕ (album à 150 % sur 360 px) : le ruban se décale, écart ≥ 12 px.
+- Carrière : la case du fermage rétrécit (le mot « couvert » s'efface d'abord) au lieu de recouvrir la météo ; mesure de la météo refaite quand l'argent change de longueur.
