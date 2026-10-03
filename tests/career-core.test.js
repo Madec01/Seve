@@ -6,7 +6,7 @@ import { createCareer, careerOptions } from '../src/core/career/career.js';
 import { createGame } from '../src/core/game.js';
 import { levelFor } from '../src/data/difficulty.js';
 import { getCrop } from '../src/data/crops.js';
-import { CAREER_MARKET, HAND_BONUS, OFF_SEASON_FACTOR } from '../src/data/career/career.js';
+import { CAREER_MARKET, HAND_BONUS_LEGACY as HAND_BONUS, OFF_SEASON_FACTOR } from '../src/data/career/career.js';
 import { LOT_PRICES } from '../src/data/career/lots.js';
 import { DAY_SECONDS, goTo, newCareer, nextDay, record, setRank, skipDays, skipYear, tendAll, withExtension } from './career-helpers.js';
 

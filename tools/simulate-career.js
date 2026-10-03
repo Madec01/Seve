@@ -17,6 +17,13 @@
 //                                                        (--variety board,themes : seulement ces parties) ; défaut : avec
 //   node tools/simulate-career.js --compare-variety      (lot 3) sans → avec : revenu par année, rang médian, Domaine,
 //                                                        sollicitations par semaine, faillites, gains de la variété
+//   node tools/simulate-career.js --cozy off             (lot 4) sans fêtes, hiver, lanternes ni « aider sans remplacer »
+//                                                        (--cozy fetes,winter,lanterns : seulement ces parties) ; défaut : avec
+//   node tools/simulate-career.js --compare-cozy         (lot 4) sans → avec tout le lot (revenu, rangs, Domaine, fêtes, hiver)
+//   node tools/simulate-career.js --compare-f1           (lot 4) sans → avec « aider sans remplacer » (fêtes et hiver des deux
+//                                                        côtés) : handsOff (bénéfice des ans 4 à 7), tranquille (revenu,
+//                                                        rangs, Domaine, part à la main, gestes), automator, débutant
+//   node tools/simulate-career.js --lanterns             (lot 4) lanternes de l'année par robot et par critère
 //
 // Robots (profils humains : budget de gestes par jour, comme tools/simulate.js ; « glisser » sur un terrain :
 // 1 geste + 0,25 par parcelle, « semer partout » : 3 gestes par terrain, ramasser un abri : 1, chasser un
@@ -36,6 +43,11 @@
 //   idle      joue la 1re année comme casual, puis ne fait plus rien (ni geste ni achat).
 //   automator comme optimal, mais aucun geste à partir de l'année 3 (seulement des décisions : achats,
 //             embauches, plans, congés) : part « idle » de la fin de partie.
+//   handsOff  (lot 4) le tranquille les ans 1 à 3, puis plus rien (ni geste, ni achat) : la ferme laissée seule.
+// (lot 4) Avec « aider sans remplacer » (F1), le tranquille et le débutant récoltent d'abord à la main ce qui est mûr,
+// terrain le plus mûr d'abord, dans leur budget de gestes (même là où travaillent l'équipe et les machines : elles
+// attendent 2 à 4 aubes) ; les achats se font avant d'aller aux champs et ne coûtent pas de gestes de champ (correction
+// du lot 4 : le robot ne s'agrandissait plus, faute de gestes) ; fêtes, hiver : COZY_STYLES de tools/simulate.js.
 //
 // Carte 2D (carrière v2) : l'appliqué achète le terrain proposé (colonne d'origine d'abord) ; les autres
 // choisissent au hasard un terrain de la lisière (même prix). Quête « culture » acceptée : le premier champ la met
@@ -49,11 +61,12 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
-import { createCareer } from '../src/core/career/career.js';
+import { createCareer, loadCareer } from '../src/core/career/career.js';
+import { migrateRipe } from '../src/core/career/handwork.js';
 import { DAY_SECONDS } from '../src/data/balance.js';
 import { getCrop, isTreeCrop } from '../src/data/crops.js';
 import { RANKS } from '../src/data/career/ranks.js';
-import { HUMAN_PROFILES, parseVariety, sowRare, varietyChoices, varietyDay } from './simulate.js';
+import { COZY_STYLES, HUMAN_PROFILES, parseCozy, parseVariety, sowRare, varietyChoices, varietyDay, cozyDay } from './simulate.js';
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
@@ -64,7 +77,7 @@ function arg(name, fallback) {
 }
 
 const ASSUMED_TYPES = ['staff', 'quests', 'contestsWon'];
-export const STRATEGIES = ['casual', 'novice', 'optimal', 'idle', 'automator'];
+export const STRATEGIES = ['casual', 'novice', 'optimal', 'idle', 'automator', 'handsOff'];
 
 // ── Profils ────────────────────────────────────────────────────────────────────────────────
 const C = HUMAN_PROFILES.casual;
@@ -77,6 +90,7 @@ export const CAREER_PROFILES = {
     contestAware: 0.5, plan: 'simple', hirePick: 'first', smart: false,
     // (lot 3) Variété : comme le joueur tranquille des niveaux (§ 16.10).
     boardLook: C.boardLook, keepOrder: C.keepOrder, requestBias: C.requestBias, cardPick: C.cardPick, challengePick: C.challengePick, rareBuy: C.rareBuy, merchantAny: 0,
+    cozy: COZY_STYLES.casual,
   },
   novice: {
     taps: N.taps, skipDay: N.skipDay, harvestProb: N.harvestProb, maxDelay: N.maxDelay, plantProb: N.plantProb, water: N.water,
@@ -84,16 +98,29 @@ export const CAREER_PROFILES = {
     collectProb: 0.5, acceptVisitor: 0.5, acceptQuest: 0.5, chaseCrow: 0.4, fish: 0.3, winterLeave: 0, merchant: 0.5, pet: 0.8,
     contestAware: 0, plan: 'same', hirePick: 'first', smart: false, starter: true,
     boardLook: 0, keepOrder: 0, requestBias: 1, cardPick: 'first', challengePick: 'none', rareBuy: 0, merchantAny: N.merchantAny,
+    cozy: COZY_STYLES.novice, todoHarvest: true,
   },
   optimal: {
     taps: [40, 40], skipDay: 0, harvestProb: 1, maxDelay: 0, plantProb: 1, water: [1, 1], avoidFreeze: 1, rentAware: 1,
     buyProb: 1, buyBuffer: [20, 20], reserveSeasons: 2, collectProb: 1, acceptVisitor: 1, acceptQuest: 1, chaseCrow: 1, fish: 1,
     winterLeave: 'smart', merchant: 'smart', pet: 1, contestAware: 1, plan: 'best', hirePick: 'best', smart: true, askQuest: 0.2,
     boardLook: 1, keepOrder: 1, requestBias: 2, cardPick: 'best', challengePick: 'best', rareBuy: 1, merchantAny: 0,
+    cozy: COZY_STYLES.optimal,
   },
 };
 CAREER_PROFILES.idle = { ...CAREER_PROFILES.casual, idleFrom: 2 };
 CAREER_PROFILES.automator = { ...CAREER_PROFILES.optimal, noGesturesFrom: 3 };
+// (lot 4) La ferme laissée seule : le tranquille les ans 1 à 3, puis plus rien.
+CAREER_PROFILES.handsOff = { ...CAREER_PROFILES.casual, idleFrom: 4 };
+
+/** (lot 4) Décor posé par le joueur simulé (critère « beauté » des lanternes). */
+const DECOR3 = { 'porch.left': 'flowers.red', 'porch.right': 'bench', 'yard.1': 'birdhouse' };
+const DECOR6 = { ...DECOR3, 'yard.2': 'flowers.yellow', 'gate.left': 'scarecrow', 'gate.right': 'lamp' };
+export const SIM_CAREER_DECOR = {
+  casual: { decor: DECOR3 }, idle: { decor: DECOR3 }, handsOff: { decor: DECOR3 },
+  novice: { decor: { 'porch.left': 'flowers.red' } },
+  optimal: { decor: DECOR6, path: 'path.stone' }, automator: { decor: DECOR6, path: 'path.stone' },
+};
 
 // Plans de culture des champs (semoir, jardiniers).
 const PLANS = {
@@ -180,6 +207,8 @@ const CASUAL_WISHES = [
   { kind: 'upgrade', id: 'jamWorkshop', level: 3 },
   { kind: 'lot', type: 'field' },
   { kind: 'item', id: 'solarPanel', n: 1 },
+  // (lot 4) la serre au rang 2 (500) : l'hiver vit plus tôt
+  { kind: 'lot', type: 'greenhouse' },
   // rang 3
   { kind: 'build', type: 'workshops', id: 'dairy' },
   { kind: 'lot', type: 'meadow' },
@@ -201,6 +230,9 @@ const CASUAL_WISHES = [
   { kind: 'build', type: 'meadow', id: 'pigsty' },
   { kind: 'animal', id: 'pig', n: 2 },
   { kind: 'item', id: 'beehive', n: 4 },
+  // (lot 4) la mare au rang 3 (300) : canards et pêche, aussi l'hiver (les canards : une espèce de plus, rang 5)
+  { kind: 'lot', type: 'pond' },
+  { kind: 'animal', id: 'duck', n: 2 },
   // rang 4
   { kind: 'lot', type: 'orchard' },
   { kind: 'lot', type: 'meadow' },
@@ -233,8 +265,6 @@ const CASUAL_WISHES = [
   // rang 6 (carte 2D : jusqu'à 16 terrains)
   { kind: 'lot', type: 'meadow' },
   { kind: 'lot', type: 'workshops' },
-  { kind: 'lot', type: 'greenhouse' },
-  { kind: 'lot', type: 'pond' },
 ];
 
 const OPTIMAL_WISHES = [
@@ -255,6 +285,8 @@ const OPTIMAL_WISHES = [
   { kind: 'hire', job: 'gardener', n: 1 },
   { kind: 'build', type: 'meadow', id: 'goatShed' },
   { kind: 'animal', id: 'goat', n: 3 },
+  // (lot 4) la serre au rang 2
+  { kind: 'lot', type: 'greenhouse' },
   // rang 3
   { kind: 'build', type: 'workshops', id: 'dairy' },
   { kind: 'lot', type: 'meadow' },
@@ -274,6 +306,9 @@ const OPTIMAL_WISHES = [
   { kind: 'build', type: 'meadow', id: 'pigsty' },
   { kind: 'animal', id: 'pig', n: 2 },
   { kind: 'hire', job: 'keeper', n: 1 },
+  // (lot 4) la mare au rang 3
+  { kind: 'lot', type: 'pond' },
+  { kind: 'animal', id: 'duck', n: 2 },
   // rang 4
   { kind: 'lot', type: 'meadow' },
   { kind: 'build', type: 'meadow', id: 'sheepfold' },
@@ -304,8 +339,6 @@ const OPTIMAL_WISHES = [
   // rang 6 (carte 2D : jusqu'à 16 terrains)
   { kind: 'lot', type: 'meadow' },
   { kind: 'lot', type: 'workshops' },
-  { kind: 'lot', type: 'greenhouse' },
-  { kind: 'lot', type: 'pond' },
 ];
 
 // Le novice : surtout des animaux et des champs, sans ordre ni calcul, jamais de congé.
@@ -348,9 +381,9 @@ const NOVICE_WISHES = [
   { kind: 'lot', type: 'field' },
 ];
 
-const WISHES = { casual: CASUAL_WISHES, novice: NOVICE_WISHES, optimal: OPTIMAL_WISHES, idle: CASUAL_WISHES, automator: OPTIMAL_WISHES };
+const WISHES = { casual: CASUAL_WISHES, novice: NOVICE_WISHES, optimal: OPTIMAL_WISHES, idle: CASUAL_WISHES, automator: OPTIMAL_WISHES, handsOff: CASUAL_WISHES };
 
-const TYPE_INFO = { field: { cost: 150, rank: 1 }, meadow: { cost: 120, rank: 1 }, orchard: { cost: 100, rank: 2 }, workshops: { cost: 100, rank: 2 }, greenhouse: { cost: 800, rank: 3 }, pond: { cost: 400, rank: 4 } };
+const TYPE_INFO = { field: { cost: 150, rank: 1 }, meadow: { cost: 120, rank: 1 }, orchard: { cost: 100, rank: 2 }, workshops: { cost: 100, rank: 2 }, greenhouse: { cost: 500, rank: 2 }, pond: { cost: 300, rank: 3 } };
 function getTypeInfo(type) {
   return TYPE_INFO[type] || { cost: 0, rank: 9 };
 }
@@ -731,6 +764,11 @@ function fieldWork(game, me, spend) {
   const cal = game.query.calendar();
   const lots = tendOrder(game);
   const priority = priorityCrops(game, me);
+  // (lot 4, F1) L'équipe laisse la récolte au joueur : il récolte d'abord à la main, terrain le plus mûr d'abord.
+  if (game.state.cozy?.parts?.helpers) {
+    handHarvestFirst(game, me, spend, lots);
+    return { lots, priority, cal };
+  }
   // Récolte (glisser) : le jour même avec harvestProb, au plus tard après maxDelay jours.
   for (const L of lots) {
     if (L.harvester && !L.helped && L.env === 'field') continue; // la moissonneuse passe
@@ -757,6 +795,43 @@ function fieldWork(game, me, spend) {
     }
   }
   return { lots, priority, cal };
+}
+
+/**
+ * (lot 4, F1) Récolte à la main d'abord : tous les terrains (aidés ou non), le plus mûr d'abord (le plus de parcelles
+ * mûres, puis celles qui attendent depuis le plus longtemps) ; le jour même avec harvestProb, au plus tard après maxDelay
+ * jours (le débutant suit la ligne « À faire » des champs mûrs : tout ce qui est mûr, le plus mûr d'abord).
+ */
+function handHarvestFirst(game, me, spend, lots) {
+  const P = me.profile;
+  const plans = [];
+  for (const L of lots) {
+    const ripe = [];
+    let waited = 0;
+    for (const i of L.list) {
+      const p = game.state.plots[i];
+      if (!isMatureState(p)) {
+        delete me.matureSince[i];
+        continue;
+      }
+      if (me.matureSince[i] === undefined) me.matureSince[i] = me.day;
+      const late = me.day - me.matureSince[i] >= P.maxDelay;
+      if (P.todoHarvest || late || me.rnd() < P.harvestProb) ripe.push(i);
+      waited += me.day - me.matureSince[i];
+    }
+    if (ripe.length) plans.push({ L, ripe, waited });
+  }
+  plans.sort((a, b) => b.ripe.length - a.ripe.length || b.waited - a.waited);
+  for (const { ripe } of plans) {
+    if (!spend(1)) break;
+    for (const i of ripe) {
+      if (!spend(0.25)) return;
+      if (game.actions.harvest(i).ok) {
+        delete me.matureSince[i];
+        me.stats.handHarvests++;
+      }
+    }
+  }
 }
 
 function sowAndWater(game, me, spend, { lots, priority, cal }) {
@@ -887,16 +962,17 @@ function playDay(game, me) {
   if (!noGestures) handleEvents(game, me, spend);
   // (lot 3) Tableau du village (et grenier → commandes, charrette), colporteur.
   if (!noGestures && game.state.variety) varietyDay(game, me, P, spend, (P.reserveSeasons || 0) * seasonCharge(game));
-  const ctx = noGestures ? null : fieldWork(game, me, spend);
-  if (!noGestures) collectShelters(game, me, spend);
-  // Achats (le joueur ouvre la boutique certains jours ; l'automate décide chaque jour sans geste).
+  // (lot 4) Fête du jour (mini-jeu en pause : pas de geste), trouvailles d'hiver, mangeoire, veillée, foire aux graines.
+  if (!noGestures && game.state.cozy) cozyDay(game, me, P.cozy, spend, (P.reserveSeasons || 1) * seasonCharge(game));
+  // Achats (le joueur ouvre la boutique certains jours ; l'automate décide chaque jour sans geste). (lot 4) Avant les
+  // champs et sans coûter de gestes de champ : le robot s'agrandit aussi les jours où il récolte beaucoup.
   if (noGestures || me.rnd() < P.buyProb) {
-    if (noGestures || spend(3)) {
-      const reserve = P.reserveSeasons * seasonCharge(game) + between(me.rnd, P.buyBuffer);
-      shop(game, me, reserve);
-    }
+    const reserve = P.reserveSeasons * seasonCharge(game) + between(me.rnd, P.buyBuffer);
+    shop(game, me, reserve);
   }
   if (me.staffHelper) me.staffHelper(game, me);
+  const ctx = noGestures ? null : fieldWork(game, me, spend);
+  if (!noGestures) collectShelters(game, me, spend);
   if (ctx) sowAndWater(game, me, spend, ctx);
   sellStock(game, me);
   return t;
@@ -912,8 +988,8 @@ export async function loadStaffHelper() {
   return staffHelperModule;
 }
 
-export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true } = {}) {
-  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises, variety });
+export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true, cozy = true, keepGame = false } = {}) {
+  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises, variety, cozy, cosmetics: SIM_CAREER_DECOR[strategy] || null });
   const profile = CAREER_PROFILES[strategy];
   if (!profile) throw new Error(`Stratégie inconnue : ${strategy}`);
   const me = {
@@ -922,11 +998,20 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     stats: { visitorsAccepted: 0, questsAccepted: 0, crowsChased: 0, collects: 0, handHarvests: 0 },
     pace: { questsOffered: 0, questsAsked: 0, questsAccepted: 0, questsDone: 0, questsFailed: 0, questsWithdrawn: 0, questDays: [], visitors: 0, visitorsAccepted: 0, visitorsDelivered: 0, asks: 0, events: 0, festivals: 0, reminders: 0, days: 0, maxOpen: 0, sideLots: 0 },
     staffHelper: helper && typeof helper.staffDecisions === 'function' ? (g, m) => helper.staffDecisions(g, m) : null,
+    seedBase: humanSeed(seed, strategy),
+    springPlan: PLANS[profile.plan]?.spring ? [PLANS[profile.plan].spring] : [],
   };
   game.actions.career.setStorageMode('low');
   const out = { seed, strategy, years: [], bankrupt: false, loans: 0, hardships: 0, rescues: 0, quests: 0, contests: 0, domaineYear: null, overdraftStreakMax: 0 };
   // (lot 3) gains de la variété (pièces, toute la carrière) et écus.
   out.variety = { orders: 0, cart: 0, cards: 0, medals: 0, merchant: 0, ecus: 0, ordersDone: 0, medalsN: 0, themes: 0 };
+  // (lot 4) fêtes et hiver (pièces), écus, lanternes par année, comice (stand).
+  out.cozy = { fetes: 0, winter: 0, ecus: 0, seedPacks: 0, standBonus: 0, lanterns: [] };
+  game.on('feteDone', (e) => (out.cozy.ecus += e.ecus || 0));
+  game.on('winterPicked', (e) => (out.cozy.winter += e.amount || 0));
+  game.on('storyHeard', () => (out.cozy.ecus += 1));
+  game.on('seedPackBought', () => out.cozy.seedPacks++);
+  game.on('lanternsLit', (e) => out.cozy.lanterns.push({ year: e.year, values: [...e.values], total: e.total, criteria: e.criteria.map((c) => c.value) }));
   game.on('orderDone', (e) => {
     out.variety.orders += e.premium;
     out.variety.ordersDone++;
@@ -964,6 +1049,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   game.on('contestAwarded', (e) => {
     y.contest = e.amount;
     if (e.all) out.contests++;
+    out.cozy.standBonus += e.standBonus || 0;
   });
   game.on('careerEvent', (e) => {
     y.events++;
@@ -1071,6 +1157,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
         harvests: game.state.career.lifetime.harvests,
         products: game.state.career.lifetime.productsSold,
         tapsPerDay: y.taps / Math.max(1, y.days),
+        handShare: byTotal(y.harvestsBy) ? (y.harvestsBy.player || 0) / byTotal(y.harvestsBy) : 1,
         playerShare: byTotal(y.harvestsBy) + byTotal(y.sownBy) ? ((y.harvestsBy.player || 0) + (y.sownBy.player || 0)) / (byTotal(y.harvestsBy) + byTotal(y.sownBy)) : 1,
         harvestsBy: { ...y.harvestsBy },
         collectedBy: { ...y.collectedBy },
@@ -1090,6 +1177,8 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     }
   }
   out.bankrupt = game.state.status === 'bankrupt';
+  out.cozy.fetes = Object.values(game.state.career?.history || []).reduce((s, h) => s + (h.incomeBy?.fetes || 0), 0);
+  if (keepGame) out.game = game;
   out.hearts = game.state.career.joseph.hearts;
   out.me = me.stats;
   out.pace = me.pace;
@@ -1110,11 +1199,11 @@ function median(xs) {
 
 const pct = (n, d) => (d ? Math.round((100 * n) / d) : 0);
 
-export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true, variety = true } = {}) {
+export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true, variety = true, cozy = true } = {}) {
   const table = {};
   for (const strategy of strategies) {
     const careers = [];
-    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises, variety }));
+    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises, variety, cozy }));
     const rows = [];
     for (let yv = 1; yv <= years; yv++) {
       const at = careers.map((c) => c.years.find((x) => x.year === yv)).filter(Boolean);
@@ -1136,6 +1225,9 @@ export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10,
         products: median(at.map((x) => x.products)),
         minMoney: Math.min(...at.map((x) => x.minMoney)),
         taps: Math.round(median(at.map((x) => x.tapsPerDay)) * 10) / 10,
+        handShare: Math.round(median(at.map((x) => x.handShare)) * 100),
+        patrimonyMean: Math.round(at.reduce((s, x) => s + x.patrimony, 0) / at.length),
+        netMean: Math.round(at.reduce((s, x) => s + x.net, 0) / at.length),
         playerShare: Math.round(median(at.map((x) => x.playerShare)) * 100),
         quests: median(at.map((x) => x.quests)),
         hearts: median(at.map((x) => x.hearts)),
@@ -1166,6 +1258,17 @@ export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10,
       pace: paceSummary(careers),
       // (lot 3) gains moyens de la variété par carrière (pièces) et écus.
       variety: Object.fromEntries(Object.keys(careers[0]?.variety || {}).map((k) => [k, Math.round(careers.reduce((s2, c) => s2 + c.variety[k], 0) / careers.length)])),
+      // (lot 4) gains moyens par carrière (fêtes, hiver, stand du comice), écus, lanternes de chaque année.
+      cozy: {
+        fetes: Math.round(careers.reduce((s2, c) => s2 + (c.cozy?.fetes || 0), 0) / careers.length),
+        winter: Math.round(careers.reduce((s2, c) => s2 + (c.cozy?.winter || 0), 0) / careers.length),
+        standBonus: Math.round(careers.reduce((s2, c) => s2 + (c.cozy?.standBonus || 0), 0) / careers.length),
+        ecus: Math.round(careers.reduce((s2, c) => s2 + (c.cozy?.ecus || 0), 0) / careers.length),
+        seedPacks: Math.round(careers.reduce((s2, c) => s2 + (c.cozy?.seedPacks || 0), 0) / careers.length),
+        lanterns: careers.flatMap((c) => c.cozy?.lanterns || []),
+      },
+      rank3By5: pct(careers.filter((c) => (c.years.find((x) => x.year === 5)?.rank || 0) >= 3).length, careers.length),
+      contestIncome: Math.round(careers.reduce((s2, c) => s2 + c.years.reduce((a, y) => a + (y.contest || 0), 0), 0) / careers.length),
     };
   }
   return table;
@@ -1270,6 +1373,83 @@ function printCompareVariety(off, on, years) {
   }
 }
 
+/** (lot 4) Sans → avec : revenu cumulé, rangs médians, Domaine, faillites, part à la main et gestes (ans 5-10), comice. */
+function printCompareLot4(off, on, years, title) {
+  console.log(`\n${title}`);
+  const sumIncome = (t) => t.rows.slice(0, years).reduce((s2, r) => s2 + r.income, 0);
+  const late = (t, k) => {
+    const rows = t.rows.filter((r) => r.year >= 5);
+    return rows.length ? Math.round(rows.reduce((s2, r) => s2 + r[k], 0) / rows.length) : 0;
+  };
+  for (const strategy of Object.keys(off)) {
+    const a = off[strategy];
+    const b = on[strategy];
+    const ia = sumIncome(a);
+    const ib = sumIncome(b);
+    const d = ia ? (100 * (ib - ia)) / ia : 0;
+    const p10 = (t) => t.rows.find((r) => r.year === Math.min(10, years))?.patrimonyMean ?? 0;
+    const dp = p10(a) ? (100 * (p10(b) - p10(a))) / p10(a) : 0;
+    const ranks = a.rows.map((r, k) => `${r.rankMedian}→${b.rows[k]?.rankMedian ?? '—'}`).join(' ');
+    console.log(`  ${strategy.padEnd(9)} revenu ${Math.round(ia)} → ${Math.round(ib)} (${d >= 0 ? '+' : ''}${d.toFixed(1)} %) · patrimoine an ${Math.min(10, years)} (moy.) ${p10(a)} → ${p10(b)} (${dp >= 0 ? '+' : ''}${dp.toFixed(1)} %) · Domaine ${a.domaineYear}→${b.domaineYear} · faillites ${a.bankrupt}→${b.bankrupt} % · rang 3 à l'an 5 : ${a.rank3By5}→${b.rank3By5} %`);
+    console.log(`            rangs ${ranks} · à la main (ans 5-10) ${late(a, 'handShare')} → ${late(b, 'handShare')} % · gestes/j ${late(a, 'taps')} → ${late(b, 'taps')} · comice ${a.contestIncome} → ${b.contestIncome}`);
+    if (strategy === 'handsOff') {
+      const prof = (t) => t.rows.filter((r) => r.year >= 4 && r.year <= 7).reduce((s2, r) => s2 + r.netMean, 0) / 4;
+      const pa = prof(a);
+      const pb = prof(b);
+      console.log(`            ferme laissée seule : bénéfice moyen par an (ans 4 à 7) ${Math.round(pa)} → ${Math.round(pb)} (${pa ? `${(100 * (pb - pa) / Math.abs(pa)).toFixed(0)} %` : '—'}) · argent min ${Math.min(...a.rows.map((r) => r.minMoney))} → ${Math.min(...b.rows.map((r) => r.minMoney))}`);
+    }
+    const c = b.cozy || {};
+    console.log(`            par carrière (avec) : fêtes ${c.fetes} · hiver ${c.winter} · stand du comice ${c.standBonus} · sachets ${c.seedPacks} · écus ${c.ecus}`);
+  }
+}
+
+/**
+ * (lot 4) La même ferme laissée seule : le tranquille la construit 3 ans SANS « aider sans remplacer », puis la même
+ * sauvegarde tourne seule 4 ans (ans 4 à 7), sans puis avec F1. → { off, on } bénéfice moyen par an, revenus par poste.
+ */
+export function handsOffSameFarm({ runs = 8, helper = null, difficulty = 'detente', seasonLength = 7 } = {}) {
+  const res = { off: 0, on: 0, incomeOff: {}, incomeOn: {} };
+  for (let k = 1; k <= runs; k++) {
+    const built = playCareer({ seed: k, strategy: 'casual', years: 3, difficulty, seasonLength, helper, cozy: { helpers: false }, keepGame: true });
+    const saved = built.game.serialize();
+    for (const helpers of [false, true]) {
+      const st = JSON.parse(JSON.stringify(saved));
+      st.cozy.parts.helpers = helpers;
+      if (helpers) migrateRipe(st);
+      const g = loadCareer(st);
+      let net = 0;
+      const book = helpers ? res.incomeOn : res.incomeOff;
+      g.on('yearEnd', (e) => {
+        if (e.year < 4 || e.year > 7) return;
+        net += e.report.net;
+        for (const [key, v] of Object.entries(e.report.incomeBy)) book[key] = (book[key] || 0) + v / runs / 4;
+      });
+      while (g.state.time.year <= 7 && g.state.status === 'playing') g.update(DAY_SECONDS / g.state.speed);
+      res[helpers ? 'on' : 'off'] += net / 4 / runs;
+    }
+  }
+  res.off = Math.round(res.off);
+  res.on = Math.round(res.on);
+  return res;
+}
+
+/** (lot 4) Lanternes par année : parts 1 / 2 / 3 / 4 par critère, total médian, par robot. */
+function printCareerLanterns(table) {
+  const names = ['variété', 'soin', 'voisinage', 'beauté', 'prospérité'];
+  console.log('\nLanternes de carrière : par critère, parts des années à 1 / 2 / 3 / 4 lanternes ; total médian');
+  for (const [strategy, t] of Object.entries(table)) {
+    const lit = t.cozy?.lanterns || [];
+    if (!lit.length) continue;
+    console.log(`  ${strategy.padEnd(9)} total médian ${median(lit.map((l) => l.total))} / 20 (${lit.length} années)`);
+    names.forEach((nm, k) => {
+      const parts = [1, 2, 3, 4].map((n) => `${String(pct(lit.filter((l) => l.values[k] === n).length, lit.length)).padStart(3)} %`);
+      const vals = lit.map((l) => l.criteria[k]).filter((x) => x !== null && x !== undefined).sort((a2, b2) => a2 - b2);
+      const q = (p2) => (vals.length ? Math.round(vals[Math.floor((vals.length - 1) * p2)] * 100) / 100 : '—');
+      console.log(`             ${nm.padEnd(11)} ${parts.join('  ')}   (mesure : 20 % ${q(0.2)} · 55 % ${q(0.55)} · 90 % ${q(0.9)})`);
+    });
+  }
+}
+
 async function run() {
   const strategies = arg('strategy', null) ? String(arg('strategy')).split(',') : STRATEGIES;
   const helper = await loadStaffHelper();
@@ -1284,7 +1464,31 @@ async function run() {
     assumeObjectives: !!arg('assume-objectives', false),
     helper: helper || null,
     variety: arg('variety', null) === null ? true : parseVariety(arg('variety')),
+    cozy: arg('cozy', null) === null ? true : parseCozy(arg('cozy')),
   };
+  if (arg('compare-cozy', false)) {
+    const off = simulateCareer({ ...opts, cozy: false });
+    const on = simulateCareer({ ...opts, cozy: opts.cozy === false ? true : opts.cozy });
+    if (arg('json', false)) console.log(JSON.stringify({ off, on }, null, 2));
+    else printCompareLot4(off, on, opts.years, `Lot 4 — carrière : sans → avec (fêtes, hiver, lanternes, aider sans remplacer) · ${opts.runs} carrières × ${opts.years} ans`);
+    return;
+  }
+  if (arg('compare-f1', false)) {
+    const off = simulateCareer({ ...opts, cozy: { helpers: false } });
+    const on = simulateCareer({ ...opts, cozy: true });
+    if (arg('json', false)) console.log(JSON.stringify({ off, on }, null, 2));
+    else printCompareLot4(off, on, opts.years, `Lot 4 — « aider sans remplacer » (F1) : sans → avec (fêtes et hiver des deux côtés) · ${opts.runs} carrières × ${opts.years} ans`);
+    if (!arg('json', false) && opts.strategies.includes('handsOff')) {
+      const h = handsOffSameFarm({ runs: opts.runs, helper: opts.helper, difficulty: opts.difficulty, seasonLength: opts.seasonLength });
+      const keys = [...new Set([...Object.keys(h.incomeOff), ...Object.keys(h.incomeOn)])].filter((key) => Math.abs(h.incomeOff[key] || 0) + Math.abs(h.incomeOn[key] || 0) >= 50);
+      console.log(`  même ferme laissée seule (construite 3 ans sans F1, puis ans 4 à 7) : bénéfice par an ${h.off} → ${h.on} (${h.off ? `${((100 * (h.on - h.off)) / Math.abs(h.off)).toFixed(0)} %` : '—'}) · ${keys.map((key) => `${key} ${Math.round(h.incomeOff[key] || 0)}→${Math.round(h.incomeOn[key] || 0)}`).join(' · ')}`);
+    }
+    return;
+  }
+  if (arg('lanterns', false)) {
+    printCareerLanterns(simulateCareer(opts));
+    return;
+  }
   if (arg('compare-variety', false)) {
     const off = simulateCareer({ ...opts, variety: false });
     const on = simulateCareer({ ...opts, variety: opts.variety === false ? true : opts.variety });

@@ -245,6 +245,25 @@ export function createSynth(ctx, destination) {
       bell(midiFreq(91), t + 0.45, 0.06 * v, 1.6);
       bell(midiFreq(96), t + 0.6, 0.04 * v, 1.6);
     },
+    // (Lot 4) Gazouillis d'un oiseau de la mangeoire : trois notes aiguës brèves qui glissent vers le haut.
+    chirp(t, v) {
+      for (let i = 0; i < 3; i++) {
+        if (voices >= MAX_VOICES) return;
+        const t0 = t + i * 0.09 + (i === 2 ? 0.05 : 0);
+        const o = ctx.createOscillator();
+        o.type = 'sine';
+        const f0 = 2600 + i * 260;
+        o.frequency.setValueAtTime(f0, t0);
+        o.frequency.exponentialRampToValueAtTime(f0 * 1.35, t0 + 0.05);
+        o.frequency.exponentialRampToValueAtTime(f0 * 1.1, t0 + 0.08);
+        const g = ctx.createGain();
+        env(g, t0, 0.07 * v, 0.004, 0.07);
+        o.connect(g);
+        g.connect(out);
+        o.start(t0);
+        track(o, t0 + 0.12);
+      }
+    },
     // Trouvaille / coffre ouvert : arpège montant chaleureux.
     reveal(t, v) {
       [72, 76, 79, 84].forEach((m, i) => mallet(midiFreq(m), t + i * 0.08, 0.1 * v, 0.6));

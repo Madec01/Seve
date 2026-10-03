@@ -169,11 +169,18 @@ import {
 } from './variety.js';
 import { cartInfo, claimPreview, claimUnits, renewBoard, drawCart } from './requests.js';
 import { cardActive, hasVarietyAlmanac, seedFairFactor, vAbsDay, vSeasonAbs } from './variety-effects.js';
-import { careerVarietyHost, careerDeliverOrder, careerLoadCart } from './career/variety-host.js';
+import { careerVarietyHost, careerDeliverOrder, careerLoadCart, careerVarietyYear } from './career/variety-host.js';
 import { triggerCareerVariety } from './career/variety.js';
 import { CARD_VALUES } from '../data/variety.js';
 import { getInvestment as investmentData } from '../data/investments.js';
 import { hasRoom } from './processing.js';
+import {
+  checkCozy, completeCozy, cookSoup, cozyDawn, cozyEvening, cozyLanterns, cozyPendingStats, cozyQuery, enableCozy, feteFind, feteInfo,
+  fetePreview, fillFeeder, giveBaskets, hearStory, lanternsQuery, migrateToCozy, noteCozyHarvest, noteCozyProduct, noteLevelIncomes,
+  pickWinterFind, presentStand, buySeedPack, triggerCozyShared, winterQuery,
+} from './cozy.js';
+import { careerCozyHost, careerAchievementExtras, triggerCareerCozy } from './career/cozy.js';
+import { treeSeedCost as treeSeedCostOf } from './trees.js';
 
 export const STATE_VERSION = 2;
 
@@ -186,7 +193,7 @@ const V1_MAX_LEVEL = 8;
  *   (progression.runPerks(progress) ; {} = aucun bonus, jeu d'origine) ; difficulty : 'detente' (défaut)
  *   ou 'classique' (nombres de la v3, test de parité) — voir src/data/difficulty.js
  */
-export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY, surprises, variety } = {}) {
+export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficulty = DEFAULT_DIFFICULTY, surprises, variety, cozy } = {}) {
   if (!isDifficulty(difficulty)) throw new Error(`Difficulté inconnue : ${difficulty}`);
   const level = levelFor(levelId, difficulty);
   if (!level) throw new Error(`Niveau inconnu : ${levelId}`);
@@ -227,6 +234,11 @@ export function createGame({ levelId = 1, seed = Date.now(), perks = {}, difficu
   const varietyOpt = variety ?? (difficulty !== 'classique' ? true : undefined);
   if (varietyOpt === false) state.variety = null;
   else if (varietyOpt) enableVariety(state, varietyOpt);
+  // (lot 4) Album, lanternes, fêtes, hiver : actif par défaut en Détente ; en Classique, la clé est ABSENTE (parité).
+  // cozy: false → null (gardé tel quel à la reprise) ; true ou { lanterns, fetes, winter, decor }.
+  const cozyOpt = cozy ?? (difficulty !== 'classique' ? true : undefined);
+  if (cozyOpt === false) state.cozy = null;
+  else if (cozyOpt) enableCozy(state, cozyOpt);
   for (const idx of level.startTrees || []) setTree(state, state.plots[idx], 'apple', true);
   state.weather.today = drawWeather(state, level, 0);
   state.weather.tomorrow = drawWeather(state, level, tomorrowSeasonIndex(state, level) ?? 0);
@@ -280,6 +292,10 @@ export function migrateState(saved) {
   if (s.variety === undefined && s.difficulty === 'detente' && s.rng && typeof s.rng === 'object' && s.time && typeof s.time === 'object') {
     migrateToVariety(s);
   } else if (s.variety) completeVariety(s);
+  // (lot 4) Fêtes, hiver, lanternes : une partie Détente d'avant le lot 4 les reçoit à la reprise (Classique : jamais).
+  if (s.cozy === undefined && s.difficulty === 'detente' && s.rng && typeof s.rng === 'object' && s.time && typeof s.time === 'object') {
+    migrateToCozy(s);
+  } else if (s.cozy) completeCozy(s);
   return s;
 }
 
@@ -381,6 +397,9 @@ function checkState(s, level) {
   // Variété (lot 3).
   const vp = checkVariety(s);
   if (vp) return vp;
+  // Album, fêtes, hiver, lanternes (lot 4).
+  const cp = checkCozy(s);
+  if (cp) return cp;
   return null;
 }
 
@@ -591,6 +610,60 @@ function wrap(state, { fresh = false } = {}) {
     };
   }
 
+  // ── Lot 4 : album, lanternes, fêtes, hiver (niveaux ; la carrière passe par src/core/career/cozy.js) ──────
+  /** Argent du lot 4 (fêtes, trouvailles d'hiver) : statistique cozyIncome (créée seulement quand il y en a). */
+  function earnCozy(amount) {
+    if (!(amount > 0)) return;
+    for (const st of [state.stats.year, state.stats.season]) st.cozyIncome = (st.cozyIncome || 0) + amount;
+    if (inDawn) state.money += amount;
+    else changeMoney(amount);
+  }
+
+  const chost = {
+    mode: 'levels',
+    state,
+    get level() {
+      return level;
+    },
+    get crops() {
+      return crops;
+    },
+    push,
+    fail,
+    earn: (_kind, amount) => earnCozy(amount),
+    spend: () => {},
+    rank: () => 1,
+    seasonLength: (si) => level.seasonLengths[si],
+    patrimony: () => state.money,
+    treeSeedCost: (crop) => treeSeedCostOf(state, crop),
+  };
+
+  /** Hôte du lot 4 pour la partie : niveaux (chost) ou carrière (extension). */
+  const cozyHost = () => (rt ? careerCozyHost(rt.api) : chost);
+
+  /** Une action du lot 4 (les deux modes) : lot actif, partie en cours ; carrière : rangs et niveau ensuite. */
+  function cozyAction(fn) {
+    return (...args) => {
+      if (!playing()) return fail(ENDED);
+      if (!state.cozy) return fail('Fêtes et hiver désactivés.');
+      const res = fn(cozyHost(), ...args);
+      if (rt && res && res.ok) {
+        rt.api.refreshLevel();
+        rt.api.checkRanks();
+      }
+      return res;
+    };
+  }
+
+  /** (lot 4) Lanternes de l'année (dernier soir, avant victory / bankrupt) : state.cozy.lit, événement lanternsLit. */
+  function lightLanterns() {
+    if (!state.cozy?.parts.lanterns) return null;
+    const res = cozyLanterns(chost, { money: state.money });
+    state.cozy.lit = { values: res.values, total: res.total, partial: res.partial };
+    push('lanternsLit', { year: 1, levelId: level.id, values: res.values, total: res.total, criteria: res.criteria, partial: res.partial });
+    return state.cozy.lit;
+  }
+
   /** Débogage (lot 3) : lance une partie de la variété tout de suite. */
   function triggerVariety(host, kind, arg) {
     const v = state.variety;
@@ -681,6 +754,8 @@ function wrap(state, { fresh = false } = {}) {
     }
     // (lot 3) Basile repart le soir de son dernier jour ; la charrette part le dernier soir, avant le fermage.
     if (state.variety) merchantEvening(vhost);
+    // (lot 4) Fin de la fête du jour (le village trouve ce qui reste), avant la charrette et le fermage.
+    if (state.cozy) for (const [type, payload] of cozyEvening(chost)) push(type, payload);
     if (!isLastDayOfSeason(state, level)) return;
     if (state.variety) {
       const departed = varietyCartEvening(vhost);
@@ -699,9 +774,12 @@ function wrap(state, { fresh = false } = {}) {
     }
     if (state.money < rent) {
       const owed = state.neighbourLoan ? state.neighbourLoan.debt : 0;
+      // (lot 4) Faillite (Détente, rare) : les lanternes de l'année s'allument quand même (« L'an prochain, ça ira mieux »).
+      const lit = state.cozy ? lightLanterns() : null;
       state.status = 'bankrupt';
       state.time.elapsed = DAY_SECONDS; // la partie s'arrête le soir du dernier jour
       state.result = { outcome: 'bankrupt', amountDue: rent, money: state.money, seasonId: sid, day: state.time.day };
+      if (lit) state.result.lanterns = lit;
       const extra = state.neighbourLoan ? { neighbourDebt: owed } : {};
       if (state.neighbourLoan) state.result.neighbourDebt = owed;
       push('bankrupt', { amountDue: rent, money: state.money, seasonId: sid, ...extra, summary: buildSummary(state, sid, { amountDue: rent }) });
@@ -728,11 +806,14 @@ function wrap(state, { fresh = false } = {}) {
       // Fin de l'année : le voisin reprend ce qui lui est encore dû, dans la limite de l'argent qui
       // reste ; il efface le reste (l'argent final n'est jamais négatif à cause de lui).
       if (state.neighbourLoan && state.neighbourLoan.debt > 0) settleNeighbourAtYearEnd();
+      // (lot 4) Les lanternes de l'année, juste avant la victoire.
+      const lit = state.cozy ? lightLanterns() : null;
       const [t2, t3] = level.starThresholds;
       const stars = 1 + (state.money >= t2 ? 1 : 0) + (state.money >= t3 ? 1 : 0);
       state.status = 'victory';
       state.time.elapsed = DAY_SECONDS;
       state.result = { outcome: 'victory', stars, money: state.money, day: state.time.day };
+      if (lit) state.result.lanterns = lit;
       push('victory', { money: state.money, stars, summary: buildSummary(state, sid, { stars }) });
     }
   }
@@ -860,11 +941,14 @@ function wrap(state, { fresh = false } = {}) {
       extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: owned(state, sale.buildingId), kind: 'processed', productId: sale.productId });
       push('productSold', sale);
       if (state.variety) noteVariety(state, 'products', 1);
+      if (state.cozy) noteCozyProduct(state, sale.productId);
     }
 
     // 9. Revenus ; le lait part à la fromagerie.
     const incomes = dawnIncomes(state, level, state.time.seasonIndex, today, isLastDayOfSeason(state, level));
     const milk = fillMilk(state, level, incomes, sid);
+    // (lot 4) Ce que la ferme a produit : œufs (poulailler), lait (vache, chèvre), laine (tonte).
+    if (state.cozy) noteLevelIncomes(state, incomes, milk.milkToDairy);
     for (const st of milk.started) push('processingStarted', st);
     const investmentTotal = incomes.reduce((s, i) => s + i.amount, 0);
     if (state.variety) {
@@ -901,6 +985,8 @@ function wrap(state, { fresh = false } = {}) {
     // (lot 3) Médailles des défis (produits vendus, animaux) : pièces versées pendant l'aube.
     const lot3Medals = [];
     if (state.variety) checkMedals({ ...vhost, push: (t, p) => lot3Medals.push([t, p]) });
+    // (lot 4) Fêtes (veille, jour), hiver (trouvaille, trace, oiseau, veillée).
+    const lot4 = state.cozy ? cozyDawn(chost, { newSeason, weather: today }) : null;
     inDawn = false;
 
     // 12. Événements.
@@ -922,6 +1008,7 @@ function wrap(state, { fresh = false } = {}) {
     push('dawn', dawnInfo);
     if (lot2) for (const [type, payload] of lot2.events) push(type, payload);
     if (lot3) for (const [type, payload] of [...lot3, ...lot3Medals]) push(type, payload);
+    if (lot4) for (const [type, payload] of lot4) push(type, payload);
     if (neighbourPayment > 0) {
       push('loanRepayment', { amount: neighbourPayment, remaining: state.neighbourLoan.debt, source: 'product' });
       if (neighbourDone) push('loanRepaid', { total: state.neighbourLoan.repaid, borrowed: state.neighbourLoan.borrowed, loans: state.neighbourLoan.loans, source: 'product' });
@@ -1003,6 +1090,8 @@ function wrap(state, { fresh = false } = {}) {
       noteHarvest(state, { cropId, amount, units: g.plots.length });
       checkMedals(vhost);
     }
+    // (lot 4) Un géant : 4 récoltes soignées (arrosé le jour où il a mûri), tampon ◆ de l'album.
+    if (state.cozy) noteCozyHarvest(state, { cropId, cared: true, by: 'player', units: g.plots.length, giant: true });
     pushContestChanges(contestBefore);
     return { ok: true, amount, cropId, tree: false, processed: null, quality: 'normal', qualityBonus: 0, qualityMultiplier: 1, giant, ...(neighbourPart > 0 ? { loanRepayment: neighbourPart } : {}) };
   }
@@ -1102,6 +1191,8 @@ function wrap(state, { fresh = false } = {}) {
       const workshopFirst = !!preview && !!targetFor(state, cropId) && hasRoom(state, targetFor(state, cropId).buildingId);
       const claim = preview && !workshopFirst ? preview : null;
       const wateredAll = state.variety && !tree ? careOf(state, p).wateredEveryDay : false;
+      // (lot 4) Récolte soignée (lanternes) : arrosée chaque jour où il le fallait (arbres : toujours).
+      const caredLot4 = state.cozy ? tree || careOf(state, p).wateredEveryDay : false;
       const processed = claim ? null : tryProcessHarvest(state, cropId, raw, yf);
       const amount = (processed ? 0 : raw) + qualityBonus;
       if (tree) {
@@ -1126,6 +1217,7 @@ function wrap(state, { fresh = false } = {}) {
         noteHarvest(state, { cropId, amount, quality: q ? q.quality : 'normal', care: wateredAll, tree });
         checkMedals(vhost);
       }
+      if (state.cozy) noteCozyHarvest(state, { cropId, quality: q ? q.quality : 'normal', cared: caredLot4, by: 'player' });
       pushContestChanges(contestBefore);
       return neighbourPart > 0 ? { ok: true, amount, cropId, tree, processed, ...qf, ...cf, loanRepayment: neighbourPart } : { ok: true, amount, cropId, tree, processed, ...qf, ...cf };
     }),
@@ -1271,6 +1363,29 @@ function wrap(state, { fresh = false } = {}) {
      * 'challenges' (défis tirés à nouveau), 'board' (tableau rempli), 'theme' (carrière : thème `arg` tout de suite).
      */
     triggerVariety: act(varietyAction((host, kind, arg) => triggerVariety(host, kind, arg))),
+
+    // ── (lot 4) Fêtes participatives et hiver vivant (les deux modes, seulement quand c'est activé) ──
+    /** Chasse (œufs, lampions, grenouilles, lanternes) : toucher un objet caché. → { ok, index, gold, amount, found, total } */
+    feteFind: act(cozyAction((host, index) => feteFind(host, index))),
+    /** Soupe partagée : 1 à 3 légumes de l'année. → { ok, ladles, amount, ecus, text } */
+    cookSoup: act(cozyAction((host, items) => cookSoup(host, items))),
+    /** Stand de la ferme : 1 à 5 produits de l'année. → { ok, score, ribbon, amount, ecus, detail } */
+    presentStand: act(cozyAction((host, items) => presentStand(host, items))),
+    /** Paniers de Noël : [[item, item?] × 3]. → { ok, hearts, perBasket, amount, ecus } */
+    giveBaskets: act(cozyAction((host, baskets) => giveBaskets(host, baskets))),
+    /** Carrière : foire aux graines (un sachet de semis prépayés). → { ok, cropId, seeds, cost, bank } */
+    buySeedPack: act(cozyAction((host, cropId) => buySeedPack(host, cropId))),
+    /** Hiver : ramasser une trouvaille en lisière. → { ok, kind, name, amount } */
+    pickWinterFind: act(cozyAction((host, findId) => pickWinterFind(host, findId))),
+    /** Hiver : remplir la mangeoire (une fois par jour). → { ok } */
+    fillFeeder: act(cozyAction((host) => fillFeeder(host))),
+    /** Hiver : la veillée de Joseph (l'histoire est choisie par la progression : recordStory). → { ok } */
+    hearStory: act(cozyAction((host) => hearStory(host))),
+    /**
+     * Débogage et tests : 'fete' (id, ou 'theme.<id>'), 'winter', 'bird' (id), 'trace' (kind), 'story', 'lanterns',
+     * 'ripe' (carrière : ripeAt des parcelles mûres reculé de arg aubes).
+     */
+    triggerCozy: act(cozyAction((host, kind, arg) => (rt && kind === 'ripe' ? triggerCareerCozy(host, kind, arg) : triggerCozyShared(host, kind, arg)))),
 
     setSpeed: act((speed) => {
       if (!SPEEDS.includes(speed)) return fail('Vitesse invalide.');
@@ -1510,6 +1625,8 @@ function wrap(state, { fresh = false } = {}) {
             noWater: !tree && !needsWaterToday(c, 'sunny', level),
             sowAll: !tree,
             ...(state.variety ? varietyPlantFields(c) : {}),
+            // (lot 4) Carrière : semis prépayés de la foire aux graines (pris d'abord, sans payer).
+            ...(rt && state.cozy ? { bank: state.cozy.seedBank[c.id] || 0, ...((state.cozy.seedBank[c.id] || 0) > 0 ? { canAfford: true } : {}) } : {}),
           };
         })
         .concat(state.variety ? rarePlantableRows(plot, rate) : []);
@@ -1690,6 +1807,23 @@ function wrap(state, { fresh = false } = {}) {
       return state.variety ? merchantQuery(varietyHost()) : null;
     },
 
+    // ── (lot 4) Fêtes, hiver, lanternes : null quand c'est désactivé (Classique). Voir « Lot 4 — contrats ». ──
+    cozy() {
+      return state.cozy ? cozyQuery(cozyHost()) : null;
+    },
+    fete() {
+      return state.cozy ? feteInfo(cozyHost()) : null;
+    },
+    fetePreview(items) {
+      return state.cozy ? fetePreview(cozyHost(), items) : null;
+    },
+    winter() {
+      return state.cozy ? winterQuery(cozyHost()) : null;
+    },
+    lanterns() {
+      return state.cozy ? lanternsQuery(cozyHost()) : null;
+    },
+
     /** Contexte des succès (src/core/progression.js : checkAchievements). */
     achievementContext() {
       if (rt) {
@@ -1706,8 +1840,9 @@ function wrap(state, { fresh = false } = {}) {
           availableInvestments: [],
           adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
           dailyCharges: rt.chargesInfo().dailyTotal,
-          career: rt.achievementContext(),
+          career: { ...rt.achievementContext(), ...(state.cozy ? careerAchievementExtras(state) : {}) },
           ...(state.variety ? { variety: varietyAchievements() } : {}),
+          ...lot4Context(),
         };
       }
       return {
@@ -1724,14 +1859,41 @@ function wrap(state, { fresh = false } = {}) {
         adultTrees: state.plots.filter((p) => isTreePlot(p) && isTreeAdult(state, p)).length,
         dailyCharges: dailyCharges(state, level),
         ...(state.variety ? { variety: varietyAchievements() } : {}),
+        ...lot4Context(),
       };
     },
   };
 
+  /**
+   * (lot 4) Contexte de l'album : le temps du jour (TOUS les modes : lecture seule, sert à l'album) ; avec les surprises,
+   * leurs cumuls et la météo spéciale du jour ; avec le lot 4, ses compteurs (stats : partie ou carrière ; pending : pas
+   * encore comptés dans la progression ; year : année en cours ; contestGoals : épreuves du concours réussies).
+   */
+  function lot4Context() {
+    const out = { weather: state.weather.today };
+    if (state.surprises) {
+      out.surprisesStats = JSON.parse(JSON.stringify(state.surprises.stats));
+      out.specialWeather = specialNow().today || null;
+    }
+    if (state.cozy) {
+      out.cozy = {
+        stats: JSON.parse(JSON.stringify(state.cozy.stats)),
+        pending: cozyPendingStats(state),
+        year: JSON.parse(JSON.stringify(state.cozy.year)),
+        contestGoals: !rt && state.contest?.result ? state.contest.result.goalsMet.length : 0,
+      };
+    }
+    return out;
+  }
+
   // ── (lot 3) Aides des requêtes ──
   function varietyAchievements() {
     const st = state.variety.stats;
-    return { ordersDone: st.ordersDone, cartsFull: st.cartsFull, medals: { ...st.medals }, rareHarvested: { ...st.rareHarvested } };
+    // (lot 4) + clients livrés et passages de Basile (album) ; pending : ce qui n'est pas encore compté dans la
+    // progression (niveaux : la partie ; carrière : depuis le dernier bilan) — succès « Ami du village », etc.
+    const y = rt ? careerVarietyYear(state) : null;
+    const pending = y ? { ordersDone: y.ordersDone, cartsFull: y.cartsFull, gold: y.medals.gold } : { ordersDone: st.ordersDone, cartsFull: st.cartsFull, gold: st.medals.gold };
+    return { ordersDone: st.ordersDone, cartsFull: st.cartsFull, medals: { ...st.medals }, rareHarvested: { ...st.rareHarvested }, ordersByClient: { ...(st.ordersByClient || {}) }, merchantVisits: st.merchantVisits || 0, pending };
   }
 
   /** Claim d'une parcelle (l'atelier allumé avec une place libre passe d'abord). */
@@ -1893,6 +2055,10 @@ function wrap(state, { fresh = false } = {}) {
     /** (lot 3) Variété active (Détente et carrière par défaut ; Classique : non). */
     get variety() {
       return !!state.variety;
+    },
+    /** (lot 4) Fêtes, hiver et lanternes actifs (Détente et carrière par défaut ; Classique : non). */
+    get cozy() {
+      return !!state.cozy;
     },
     update,
     on: emitter.on,

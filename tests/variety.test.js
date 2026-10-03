@@ -390,7 +390,7 @@ test('variété : bilan (summary.variety, varietyIncome compté dans le net) et 
   const s = g.query.summary();
   assert.ok(s.variety);
   assert.equal(s.variety.cardIncome, CARD_VALUES.purse.base + CARD_VALUES.purse.perSeason);
-  assert.deepEqual(Object.keys(g.query.achievementContext().variety).sort(), ['cartsFull', 'medals', 'ordersDone', 'rareHarvested']);
+  assert.deepEqual(Object.keys(g.query.achievementContext().variety).sort(), ['cartsFull', 'medals', 'merchantVisits', 'ordersByClient', 'ordersDone', 'pending', 'rareHarvested']);
   const level = levelFor(2, 'detente');
   assert.ok(level.starThresholds[0] > 0);
 });

@@ -16,6 +16,7 @@ import {
 import { hashSeed, stream } from './rng.js';
 import { inGreenhouse, isMature, needsWaterToday } from './farm.js';
 import { cloverFactor, horseshoeBonus, themeGiantFactor, themeGoldenHourFactor } from './variety-effects.js';
+import { F1 } from '../data/cozy.js';
 
 export const SURPRISES_VERSION = 1;
 export const SPECIAL_IDS = SPECIAL_WEATHERS.map((w) => w.id);
@@ -238,6 +239,8 @@ export function qualityChances(state, plot, byHand = true) {
   // (lot 3) Fer à cheval du colporteur : + 1 point (belle), + 0,3 point (dorée).
   const shoe = state.variety ? horseshoeBonus(state) : null;
   if (shoe) add(shoe);
+  // (lot 4, F1) Culture désherbée par un jardinier : + 1 point (belle), + 0,3 point (dorée), à la main seulement.
+  if (byHand && plot.weeded && state.cozy?.parts?.helpers) add({ fine: F1.weedFine, gold: F1.weedGold });
   // Vœu « chance » × 2 ; (lot 3) carte « Trèfle à quatre feuilles » × 2 (cumulables : × 4 au plus).
   const luck = (luckActive(state) ? QUALITY.luckFactor : 1) * (state.variety ? cloverFactor(state) : 1);
   if (luck !== 1) {

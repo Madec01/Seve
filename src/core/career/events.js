@@ -31,6 +31,8 @@ import { foxActive } from '../surprises.js';
 import { themeFestivalToday } from '../variety-effects.js';
 import { acceptThemeVisitor, themeCalendar, themeEventWeight, themeFishFactor, themeOfferInfo, themeTouristPass } from './themes.js';
 import { MERCHANT } from '../../data/variety.js';
+import { STAND_COMICE } from '../../data/cozy.js';
+import { helpersOn } from './handwork.js';
 
 // ── Dates ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -46,11 +48,22 @@ export function seasonEndIndex(state) {
   return (state.time.year - 1) * 4 * L + (state.time.seasonIndex + 1) * L;
 }
 
+/** Jour de la saison d'une fête du calendrier (lot 4 : 'last' = dernier jour de la saison). */
+export function festivalDay(state, f) {
+  return f.day === 'last' ? state.career.seasonLength : f.day;
+}
+
 /** Fête du calendrier à une date (saison, jour de la saison), si le rang la permet ; sinon null. */
 export function festivalAt(state, seasonIndex, dayOfSeason) {
   const sid = SEASONS[seasonIndex];
   const rank = state.career?.rank || 1;
-  return CALENDAR_EVENTS.find((e) => e.seasonId === sid && e.day === dayOfSeason && e.rank <= rank) || null;
+  return CALENDAR_EVENTS.find((e) => e.seasonId === sid && festivalDay(state, e) === dayOfSeason && e.rank <= rank) || null;
+}
+
+/** Facteurs de prix d'une fête (lot 4 : le marché de Noël dès le rang 1, ses facteurs au rang 2 : factorsRank). */
+function festivalFactors(state, f) {
+  if (!f) return null;
+  return (f.factorsRank ?? 0) <= (state.career?.rank || 1) ? f.factors : null;
 }
 
 /** Fête du jour (données de CALENDAR_EVENTS) ou null. */
@@ -130,13 +143,16 @@ function treeCropIds() {
 /** Compteur (cumulé) d'une épreuve, pour la progression depuis l'annonce. */
 function goalCounter(state, goal) {
   const year = state.stats.year;
+  // (lot 4, F1-5) « Le jury veut voir le travail du fermier » : seules les récoltes à la main comptent.
+  const hand = helpersOn(state);
   switch (goal.type) {
     case 'harvest': {
       const ids = goal.tree ? treeCropIds() : goal.cropIds;
-      return ids.reduce((n, id) => n + (year.cropsHarvested[id] || 0), 0);
+      const book = hand ? state.cozy.stats.handCrops || {} : year.cropsHarvested;
+      return ids.reduce((n, id) => n + (book[id] || 0), 0);
     }
     case 'harvests':
-      return state.career.lifetime.harvests || 0;
+      return (hand ? state.career.lifetime.handPicked : state.career.lifetime.harvests) || 0;
     case 'productsSold': {
       const sold = year.productsSold || {};
       const ids = goal.productIds || Object.keys(sold);
@@ -244,12 +260,16 @@ function judgeContest(api) {
   });
   const goalsMet = goals.filter((g) => g.done).map((g) => g.id);
   const all = goals.length === CONTEST.goals && goalsMet.length === goals.length;
-  const amount = k.prizePerGoal * goalsMet.length + (all ? k.prizePerGoal * CONTEST.bonusAllGoals : 0);
+  // (lot 4) Le stand de la fête des récoltes, présenté de nouveau au comice : + 25 % (ruban bleu) / + 50 % (rosette
+  // d'or) du prix d'une épreuve.
+  const stand = state.cozy?.stand && state.cozy.stand.year === k.year ? state.cozy.stand : null;
+  const standBonus = stand ? Math.round(k.prizePerGoal * (STAND_COMICE[stand.ribbon] || 0)) : 0;
+  const amount = k.prizePerGoal * goalsMet.length + (all ? k.prizePerGoal * CONTEST.bonusAllGoals : 0) + standBonus;
   k.judged = true;
-  k.result = { goalsMet, amount, all, goals };
+  k.result = { goalsMet, amount, all, goals, ...(stand ? { standBonus, ribbon: stand.ribbon } : {}) };
   if (amount > 0) api.earn('contest', amount);
   if (all) c.lifetime.contestsWon = (c.lifetime.contestsWon || 0) + 1;
-  api.push('contestAwarded', { career: true, year: k.year, amount, goalsMet, goals, all, contestsWon: c.lifetime.contestsWon });
+  api.push('contestAwarded', { career: true, year: k.year, amount, goalsMet, goals, all, contestsWon: c.lifetime.contestsWon, ...(state.cozy ? { standBonus, ribbon: stand ? stand.ribbon : null } : {}) });
 }
 
 /** Comice de l'année pour l'interface (forme proche de query.contest() v3). */
@@ -810,6 +830,8 @@ function fish(api) {
   e.fishedDay = today;
   e.year.fish += 1;
   e.year.fishIncome += amount;
+  // (lot 4) Album : poissons pêchés (la pêche marche aussi l'hiver, « sous la glace »).
+  if (state.cozy) state.cozy.stats.fish[f.id] = (state.cozy.stats.fish[f.id] || 0) + 1;
   api.earn('other', amount);
   api.push('fishCaught', { fishId: f.id, name: f.name, amount });
   return { ok: true, amount, fishId: f.id, name: f.name };
@@ -850,7 +872,7 @@ function dawnEvents(api, { seasonId, weather }) {
   if (fest && !e.calendarDone.includes(fest.id)) {
     e.calendarDone.push(fest.id);
     if (fest.joyful) cheerStaff(api); // employés joyeux 7 jours (CORE-B)
-    api.push('festival', { id: fest.id, name: fest.name, text: fest.text, icon: fest.icon, seasonId: fest.seasonId, day: fest.day });
+    api.push('festival', { id: fest.id, name: fest.name, text: fest.text, icon: fest.icon, seasonId: fest.seasonId, day: festivalDay(state, fest) });
   }
   // Rappel la veille du dernier jour d'une commande acceptée pas encore livrée.
   for (const o of e.offers) {
@@ -935,11 +957,11 @@ function calendarInfo(state) {
   const done = ev(state).calendarDone || [];
   const extra = state.variety ? varietyCalendar(state, nowDay) : [];
   return [...CALENDAR_EVENTS.map((f) => {
-    const at = SEASONS.indexOf(f.seasonId) * L + f.day;
+    const at = SEASONS.indexOf(f.seasonId) * L + festivalDay(state, f);
     const isToday = at === nowDay;
     const passed = at < nowDay;
     return {
-      id: f.id, name: f.name, text: f.text, icon: f.icon, seasonId: f.seasonId, day: f.day, rank: f.rank,
+      id: f.id, name: f.name, text: f.text, icon: f.icon, seasonId: f.seasonId, day: festivalDay(state, f), rank: f.rank,
       locked: f.rank > state.career.rank, today: isToday, done: done.includes(f.id) || passed,
       daysUntil: isToday ? 0 : passed ? at + 4 * L - nowDay : at - nowDay,
     };
@@ -972,15 +994,15 @@ function activeInfo(state) {
   return { id: a.id, kind: a.kind, name: def?.name || a.kind, icon: def?.icon || null, day: a.day, endDay: a.endDay, text: eventText(state, a), data: JSON.parse(JSON.stringify(a.data)) };
 }
 
-function festivalInfo(f) {
-  return f ? { id: f.id, name: f.name, text: f.text, icon: f.icon, seasonId: f.seasonId, day: f.day, factors: { ...f.factors }, seedFactor: f.seedFactor ?? 1 } : null;
+function festivalInfo(state, f) {
+  return f ? { id: f.id, name: f.name, text: f.text, icon: f.icon, seasonId: f.seasonId, day: festivalDay(state, f), factors: { ...(festivalFactors(state, f) || {}) }, seedFactor: f.seedFactor ?? 1 } : null;
 }
 
 function eventsQuery(state) {
   const e = ev(state);
   return {
-    today: festivalInfo(festivalToday(state)),
-    tomorrow: festivalInfo(festivalTomorrow(state)),
+    today: festivalInfo(state, festivalToday(state)),
+    tomorrow: festivalInfo(state, festivalTomorrow(state)),
     active: activeInfo(state),
     offers: e.offers.map((o) => offerInfo(state, o)),
     calendar: calendarInfo(state),
@@ -1048,8 +1070,7 @@ export const eventsExtension = {
   hooks: { seasonStart, dawnEvents, dawn, tick, incomes, evening, yearEnd, harvest },
   providers: {
     priceFactor(state, { kind }) {
-      const f = festivalToday(state);
-      return f?.factors?.[kind] ?? 1;
+      return festivalFactors(state, festivalToday(state))?.[kind] ?? 1;
     },
     seedFactor(state) {
       return festivalToday(state)?.seedFactor ?? 1;
@@ -1086,7 +1107,7 @@ export const eventsExtension = {
   queries: (api) => ({
     events: () => eventsQuery(api.state),
     contest: () => contestInfo(api.state),
-    festival: () => festivalInfo(festivalToday(api.state)),
+    festival: () => festivalInfo(api.state, festivalToday(api.state)),
   }),
 };
 

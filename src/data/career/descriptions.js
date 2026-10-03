@@ -15,6 +15,8 @@ import { CAREER_ANIMALS_BY_ID, COLLECT } from './animals.js';
 import { LOT_TYPES_BY_ID } from './lots.js';
 import { PRODUCTS } from '../products.js';
 import { countNoun } from '../french.js';
+import { F1 } from '../cozy.js';
+import { HAND_BONUS } from './career.js';
 
 const pct = (x) => `${Math.round(x * 100)} %`;
 const plural = (n, one, many = `${one}s`) => `${n} ${n > 1 ? many : one}`;
@@ -37,7 +39,7 @@ export const BUILDING_ABOUT = {
     tips: ['C\'est le premier achat conseillé : il rapporte dès le premier jour.', 'Les passants achètent surtout en été ; rien les jours d\'orage.'],
   },
   greenhouse: {
-    role: 'Une serre vitrée : on y sème toutes les cultures, en toute saison, sans gel, pluie ni canicule.',
+    role: 'Une serre vitrée (dès la Ferme familiale) : on y sème toutes les cultures, en toute saison, sans gel, pluie ni canicule.',
     tips: ['En hiver, la serre froide pousse deux fois moins vite : la serre chauffée pousse même mieux qu\'un champ.', 'Parfaite pour les tomates hors saison, vendues 25 % plus cher.'],
   },
   guestHouse: {
@@ -94,8 +96,9 @@ export const BUILDING_ABOUT = {
 export const MACHINE_ABOUT = {
   sprinklers: { role: 'Arrosent les parcelles de ce terrain chaque matin : plus besoin d\'arroser à la main.', tips: ['Un petit entretien chaque jour, même éteints (gratuit avec le château d\'eau).'] },
   seeder: { role: 'Sème ce terrain selon son plan de culture, et achète les graines pour vous.', tips: ['Réglez le plan de culture dans la fiche du terrain (« même culture » par défaut).', 'Il faut un cheval ou le tracteur pour le tirer.'] },
-  harvester: { role: 'Récolte les cultures mûres de ce terrain, sans que vous ayez à toucher les parcelles.', tips: ['La récolte à la main rapporte 10 % de plus : gardez un champ pour vous si vous aimez récolter.'] },
-  fruitPicker: { role: 'Cueille tous les fruits mûrs du verger.', tips: ['Aucune bête ni tracteur nécessaire.'] },
+  // (lot 4, F1) La récolte vous attend : la moissonneuse et la cueilleuse ne prennent que ce qui attend depuis quelques jours.
+  harvester: { role: `Récolte ce qui attend depuis ${F1.machineDelay} jours sur ce terrain : rien ne reste jamais bloqué.`, tips: [`À la main, la récolte vaut ${Math.round((HAND_BONUS - 1) * 100)} % de plus : la moissonneuse vous la laisse d'abord.`] },
+  fruitPicker: { role: `Cueille les fruits qui attendent depuis ${F1.machineDelay} jours au verger.`, tips: ['Aucune bête ni tracteur nécessaire.'] },
   collector: { role: 'Ramasse la production d\'un abri deux fois par jour : plus rien ne se perd.', tips: ['Idéal pour le poulailler et le clapier, qui se remplissent vite.'] },
   tractor: { role: 'Tire les machines de niveau 2 et aide vos jardiniers à travailler plus vite.', tips: ['Il consomme du carburant seulement les jours où il tire une machine.'] },
   waterTower: { role: 'Plus d\'entretien pour les arroseurs, et la serre est arrosée chaque matin.', tips: ['Rentable dès que vous avez beaucoup d\'arroseurs.'] },

@@ -637,20 +637,26 @@ Pourquoi pas seulement « tout moins cher » : les coûts fixes (charges, fermag
 
 | # | Départ | Fermages (printemps → hiver) | ★★ / ★★★ | Réglage propre |
 |---|---|---|---|---|
-| 1 | 160 | 20 / 60 / 90 / 130 | 560 / 830 | tutoriel |
-| 2 | 180 | 20 / 60 / 80 / 120 | 310 / 570 | arrosage 1 pièce |
-| 3 | 160 | 20 / 50 / 100 / 170 | 350 / 670 | maladie 5 % |
-| 4 | 260 | 20 / 60 / 90 / 120 | 530 / 750 | 6 parcelles |
-| 5 | 160 | 20 / 80 / 140 / 500 | 490 / 810 | hiver de 14 jours |
-| 6 | 160 | 20 / 70 / 130 / 300 | 340 / 680 | marché fou |
-| 7 | 660 | 50 / 150 / 230 / 360 | 220 / 610 | crédit : **120** aux jours 4, 11, 18, 25 |
-| 8 | 160 | 20 / 80 / 130 / 240 | 380 / 730 | bio |
-| 9 | 360 | 20 / 60 / 120 / 260 | 290 / 480 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
-| 10 | 240 | 20 / 90 / 200 / 420 | 670 / 900 | pommiers sans ruche : demi-récolte |
-| 11 | 340 | 20 / 80 / 160 / 440 | 390 / 620 | montagne |
-| 12 | 310 | 20 / 100 / 190 / 480 | 400 / 680 | concours |
+| 1 | 160 | 20 / 60 / 90 / 130 | 590 / 910 | tutoriel |
+| 2 | 180 | 20 / 60 / 80 / 120 | 380 / 620 | arrosage 1 pièce |
+| 3 | 160 | 20 / 50 / 100 / 170 | 380 / 690 | maladie 5 % |
+| 4 | 260 | 20 / 60 / 90 / 120 | 620 / 810 | 6 parcelles |
+| 5 | 160 | 20 / 80 / 140 / 500 | 580 / 920 | hiver de 14 jours |
+| 6 | 160 | 20 / 70 / 130 / 300 | 370 / 730 | marché fou |
+| 7 | 660 | 50 / 150 / 230 / 360 | 250 / 630 | crédit : **120** aux jours 4, 11, 18, 25 |
+| 8 | 160 | 20 / 80 / 130 / 240 | 460 / 790 | bio |
+| 9 | 360 | 20 / 60 / 120 / 260 | 340 / 530 | récoltes brutes −25 % (× 1,25 du mode : × 0,94) |
+| 10 | 240 | 20 / 90 / 200 / 420 | 740 / 960 | pommiers sans ruche : demi-récolte |
+| 11 | 340 | 20 / 80 / 160 / 440 | 450 / 720 | montagne |
+| 12 | 310 | 20 / 100 / 190 / 480 | 470 / 760 | concours |
 
 Seuils d'étoiles : ★★ ≈ argent final médian du joueur tranquille (la moitié l'obtient) ; ★★★ ≈ ses 12 % meilleures parties — un joueur appliqué (qui arrose tout, comme les robots) l'obtient à coup sûr.
+
+*(Lot 4, 2026-10-03 : seuils recalculés avec les fêtes, l'hiver et les lanternes actifs en Détente — le lot ajoute ≈ 3,8 %
+au revenu de l'année du joueur tranquille et ≈ 15 % à son argent final médian ; même règle, `node tools/simulate.js
+--stars` (200 parties par niveau) : ★★ ou mieux à 49–52 % des parties du joueur tranquille, ★★★ à 11–14 % ; au niveau 2,
+le débutant obtient ★★★ dans 12 % des parties. Anciens seuils (lot 3, QA) : 560/830, 310/570, 350/670, 530/750, 490/810,
+340/680, 220/610, 380/730, 290/480, 670/900, 390/620, 400/680. Voir § 17.8.1.)*
 
 *(QA du lot 3, 2026-10-02 : paliers des défis strictement croissants (« Potager varié » et « Semeur curieux » non proposés quand trop peu de cultures sont faisables) et commande gardée d'office au semis : l'argent final médian du joueur tranquille bouge de quelques pour cent selon le niveau ; même règle, `node tools/simulate.js --stars` (200 parties par niveau) : ★★ ou mieux à 49–52 % des parties du joueur tranquille, ★★★ à 12–13 % ; au niveau 2, le débutant obtient ★★★ dans 11 % des parties. Anciens seuils (lot 3) : 570/870, 290/540, 310/620, 550/780, 450/840, 290/670, 250/580, 410/660, 290/490, 680/950, 440/640, 420/660.)*
 
@@ -1729,7 +1735,7 @@ visibles. On ne perd jamais une lanterne : chaque critère en a au moins une, et
 du même niveau) on peut toujours faire mieux. Les lanternes **ne changent ni les étoiles, ni l'argent** : c'est un regard
 bienveillant sur l'année, qui donne une raison de bien jouer en Détente sans jamais punir.
 
-### 17.2.1 Les cinq critères (valeurs de départ, à régler par la simulation, § 17.8)
+### 17.2.1 Les cinq critères *(réglés par la simulation, 2026-10-03 : voir les barèmes finaux sous les tableaux)*
 
 **Niveaux (Détente)** — compteurs de l'année de la partie :
 
@@ -1743,6 +1749,10 @@ bienveillant sur l'année, qui donne une raison de bien jouer en Détente sans j
 
 Exemples (niveau 1, `k` = 7) : variété 3 / 5 / 6 cultures ou produits ; niveau 12 (`k` = 18) : 8 / 11 / 15.
 
+**Barèmes finaux des niveaux** *(réglés, 2026-10-03 ; `src/data/cozy.js` fait foi)* : variété `⌈0,5 k⌉` / `⌈0,75 k⌉` /
+`⌈0,95 k⌉` (niveau 1 : 4 / 6 / 7 ; niveau 12 : 9 / 14 / 18) ; soin 30 / 50 / 67 % ; voisinage 12 / 17 / 21 points ;
+beauté 4 / 7 / 9 points ; prospérité inchangée (½ ★★, ★★, ★★★).
+
 **Carrière** — compteurs de l'année (remis à zéro au bilan) :
 
 | Critère | Mesure | 2 | 3 | 4 |
@@ -1752,6 +1762,10 @@ Exemples (niveau 1, `k` = 7) : variété 3 / 5 / 6 cultures ou produits ; niveau
 | **Voisinage** | commande 1, caisse pleine 1, quête de Joseph réussie 3, fête jouée 2 (calendrier et thème), ♥ des paniers 1, visiteur du thème accueilli 2, veillée 1 | ≥ 10 | ≥ 20 | ≥ 32 |
 | **Beauté** | décoration posée dans la ferme 1 (12 au plus), allée et clôture choisies 1 + 1, ruche 1 (4 au plus), arbre adulte 1 (4 au plus), embellissement 2, géant récolté 1, mangeoire 3 jours 1, 3 oiseaux 1, chat ou chien 1 | ≥ 4 | ≥ 9 | ≥ 15 |
 | **Prospérité** | croissance du patrimoine de l'année : (fin − début) ÷ max(début, 1 000) | ≥ 10 % | ≥ 25 % | ≥ 50 % |
+
+**Barèmes finaux de la carrière** *(réglés, 2026-10-03)* : variété 10 / 14 / 16 ; soin 65 / 74 / 80 % ; voisinage 9 / 16 / 19 ;
+beauté 8 / 13 / 15 ; prospérité 30 % / 65 % / 250 % (la croissance d'une jeune ferme est grande : la 4ᵉ lanterne reste rare).
+« Embellissement » (beauté, carrière) : un décor posé au coin d'un terrain acheté.
 
 Le « soin » de la carrière ne compte que les récoltes **à la main** : une ferme qui tourne seule a de belles récoltes,
 mais pas « soignées par le fermier » (principe F1, § 17.3) ; ramasser les abris à temps (soi-même ou par l'équipe) compte
@@ -1805,8 +1819,8 @@ plus quand il la fait. Rien ne reste jamais bloqué : l'équipe finit toujours p
 
 | # | Règle | Avant | Lot 4 |
 |---|---|---|---|
-| F1-1 | **Prime « Cueilli main »** : une récolte touchée par le joueur (toucher ou glisser) | + 10 % | **+ 25 %** (`HAND_BONUS` 1,25), toujours affichée : texte flottant « +31 ♥ », fiche de la parcelle « À la main : 31 · par l'équipe : 25 » |
-| F1-2 | **La récolte vous attend** : une culture (ou des fruits) mûre attend le joueur avant que l'équipe la récolte | aucune attente (géant : 3 aubes) | **moissonneuse et cueilleuse : à partir de la 2ᵉ aube** après la maturité ; **jardiniers : à partir de la 4ᵉ aube** ; géant : inchangé (3 aubes) |
+| F1-1 | **Prime « Cueilli main »** : une récolte touchée par le joueur (toucher ou glisser) | + 10 % | **+ 25 %** (`HAND_BONUS` 1,25), toujours affichée : texte flottant « +31 ♥ », fiche de la parcelle « À la main : 31 · par l'équipe : 25 » ; *(livraison)* la prime est **payée tout de suite même si la récolte part au grenier, à l'atelier ou à une commande** (comme la prime de qualité du lot 2) : récolter soi-même vaut toujours plus |
+| F1-2 | **La récolte vous attend** : une culture (ou des fruits) mûre attend le joueur avant que l'équipe la récolte | aucune attente (géant : 3 aubes) | **moissonneuse et cueilleuse : à partir de la 3ᵉ aube** après la maturité *(réglé : 2ᵉ aube dans la conception, voir § 17.3.2)* ; **jardiniers : à partir de la 4ᵉ aube** ; géant : inchangé (3 aubes) |
 | F1-3 | **Les jardiniers font les corvées** : ordre des tâches | corbeau > récolter > arroser > semer | corbeau > arroser > **désherber** > semer > récolter (seulement ce qui attend depuis 4 aubes) |
 | F1-4 | **Désherber** (nouvelle corvée, jardiniers seulement) : une fois par culture en pousse | — | la culture « désherbée » donne, à sa récolte **à la main**, + 1 point de chance « belle » et + 0,3 point « dorée » (s'ajoute aux soins du lot 2 ; fiche : « Désherbée par Lucie ») ; sans effet sur une récolte de l'équipe ; 1 action, 1 point d'expérience |
 | F1-5 | **Comice** : épreuves de récolte (citrouilles, tomates, pommes de terre, paniers de fruits, « N récoltes ») | toutes les récoltes comptent | **seulement les récoltes à la main** (« le jury veut voir le travail du fermier ») ; les autres épreuves (produits, fromages, œufs, truffes, stock) sont inchangées ; + le stand du comice (§ 17.4.3) |
@@ -1814,8 +1828,8 @@ plus quand il la fait. Rien ne reste jamais bloqué : l'équipe finit toujours p
 
 Précisions :
 - **Maturité** : une culture mûrit à l'aube (pousse) ; le cœur note le jour absolu `ripeAt`. Machines : récolte permise
-  si `jour − ripeAt ≥ 2` ; jardiniers : `≥ 4`. La 2ᵉ aube laisse donc au joueur toute la journée de maturité **et** la
-  suivante (≈ 40 s à ×1).
+  si `jour − ripeAt ≥ 3` (`F1.machineDelay`) ; jardiniers : `≥ 4` (`F1.staffDelay`). La 3ᵉ aube laisse donc au joueur la
+  journée de maturité **et** les deux suivantes (≈ 1 min à ×1).
 - **Exception « rien ne se perd »** : le **dernier jour de l'automne**, l'équipe récolte tout de suite ce qui gèlerait
   au 1er jour d'hiver (et la serre n'est pas concernée par le gel : la règle normale s'y applique).
 - Le **semoir** et les **arroseurs** sont inchangés (corvées) ; les **collecteurs** et **soigneurs** aussi (ramasser
@@ -1826,8 +1840,9 @@ Précisions :
   « Le Haut-Champ : 12 parcelles mûres vous attendent (+25 % à la main) » (un toucher amène la vue, le glisser récolte) ;
   résumé du matin : « Hier : 34 récoltes à la main (+86 de prime) » ; fiche de l'équipe : « Jardinier : arrose,
   désherbe, sème, chasse les corbeaux ; récolte ce qui attend depuis 4 jours » ; moissonneuse : « Récolte ce qui attend
-  depuis 2 jours ». Conseil « première fois » `cozy.helpers` à la première culture mûre d'un terrain équipé : « Vos
-  récoltes vous attendent : l'équipe ne les cueille qu'après 2 à 4 jours. À la main, elles valent 25 % de plus ! »
+  depuis 3 jours ». Conseil « première fois » `cozy.helpers` à la première culture mûre d'un terrain équipé : « Vos
+  récoltes vous attendent : l'équipe ne les cueille qu'après 3 à 4 jours. À la main, elles valent 25 % de plus ! »
+  (textes calculés à partir de `F1` et `HAND_BONUS`).
 - Rendu : jardinier accroupi qui arrache une touffe (`fx.weeds`) ; badge discret « ♥ » sur les parcelles mûres qui
   attendent ; texte flottant de la prime en vert.
 
@@ -1851,6 +1866,40 @@ dans son budget de gestes, terrain le plus mûr d'abord, et fait ses achats avan
 Variantes essayées : jardiniers à 3 aubes (ferme seule − 40 % seulement) ; jardiniers qui ne récoltent jamais (même
 effet que 4 aubes, mais un champ peut rester plein des semaines) ; récolte des machines vendue « en vrac » × 0,85
 (n'apporte presque rien de plus et ressemble à une punition) : **retenu : 2 aubes / 4 aubes, sans vrac**.
+
+#### 17.3.3 Réglage final (simulation complète, 60 carrières × 10 ans, 2026-10-03)
+
+Code complet (F1-1 à F1-5, désherbage, comice, fêtes et hiver), robot tranquille **corrigé** : ses achats se font avant
+d'aller aux champs et ne coûtent plus de gestes de champ (il ne s'agrandissait plus faute de gestes), il récolte d'abord à
+la main, terrain le plus mûr d'abord ; serre (rang 2) et mare (rang 3, + 2 canards) dans sa liste d'envies. Le débutant
+suit la ligne « À faire » des champs mûrs (tout ce qui est mûr, le plus mûr d'abord).
+
+Ce qui a changé par rapport au prototype :
+- **Prime à la main payée même quand la récolte part au grenier ou à l'atelier** : sans elle, le joueur tranquille (grenier
+  « cours bas ») perdait la prime sur la moitié de ses récoltes et F1 lui coûtait ≈ 4 % de revenu ; avec elle, F1 lui
+  **rapporte** ≈ + 4 %.
+- **Moissonneuse et cueilleuse à la 3ᵉ aube** (levier n° 2 du § 17.8) : la ferme du tranquille corrigé est bien plus
+  mécanisée à l'an 3 que celle du prototype (cultures ≈ 75 % du revenu d'une ferme laissée seule, presque toutes
+  récoltées par la moissonneuse) ; la 2ᵉ aube ne retirait que 30 % de son bénéfice. 3ᵉ aube : − 36 %, et plus de
+  temps pour le joueur. Au-delà (4ᵉ, 6ᵉ aube), le gain plafonne (− 42 %, − 46 %) : le reste du bénéfice vient des bêtes,
+  du miel et des ateliers, que l'équipe continue de ramasser (corvées : principe F1).
+
+| Mesure (`--compare-f1` : fêtes et hiver des deux côtés ; `--compare-cozy` : tout le lot) | Sans F1 / sans le lot | Avec | Cible |
+|---|---|---|---|
+| **Même ferme laissée seule** (construite 3 ans sans F1, puis ans 4 à 7) : bénéfice par an | + 7 660 | **+ 4 870 (− 36 %)** | ≤ 50 % d'avant : **non tenue** (voir ci-dessus) |
+| Ferme laissée seule (`handsOff`, carrières jouées séparément) : bénéfice par an (ans 4 à 7) | + 10 520 | + 7 250 (− 31 %) | idem ; jamais de faillite ✓ |
+| Tranquille : revenu sur 10 ans (F1 seul · tout le lot) | 285 800 · 282 700 | 297 100 (+ 3,9 % · **+ 5,1 %**) | − 1 à + 5 % (à la limite) |
+| Tranquille : rang médian par année · Domaine | 2 2 4 4 4 5 5 6 6 6 · an 8 | 2 2 4 4 5 5 5 6 6 6 · **an 8** | à un an près ✓ |
+| Tranquille : patrimoine moyen à l'an 10 (tout le lot) | 188 100 | 208 200 (+ 10,6 %) | — |
+| Tranquille : part des récoltes à la main · gestes par jour (ans 5 à 10) | 2 % · 2 | **92 % · 8** | ≥ 50 % · 6 à 10 ✓ |
+| Tranquille : comice (gains sur 10 ans) | 13 660 | 13 970 (stand compris) | ≥ 90 % ✓ |
+| `automator` : Domaine · patrimoine moyen à l'an 10 | an 7 · 245 800 | **jamais · 146 300 (− 40,5 %)** | pas avant l'an 7 · − 25 % ✓ |
+| Débutant : rang 3 à l'an 5 · patrimoine moyen à l'an 10 (F1 seul) | 100 % · 128 200 | 100 % · **137 600 (+ 7 %)** | ≥ 70 % ✓ · perte ≤ 10 % ✓ |
+| Appliqué (`optimal`) : revenu · Domaine (tout le lot) | 419 300 · an 6 | 528 800 (+ 26 %) · an 5 | — (il récolte tout à la main) |
+| Carrière Classique, tranquille : faillites | 0 % | 0 % | ≤ 20 % ✓ |
+
+Le débutant ne perd plus rien (il gagnait − 20 % de patrimoine dans le prototype) : la prime payée même au grenier et la
+récolte « à la ligne À faire » suffisent ; aucun autre levier n'a été nécessaire.
 
 ## 17.4 C6 — Les fêtes participatives
 
@@ -2159,6 +2208,43 @@ Leviers si une cible n'est pas tenue (dans cet ordre) : délai des jardiniers (4
 (2 → 3), prime à la main (1,25 → 1,2 ou 1,3), récompenses des fêtes, valeurs des trouvailles d'hiver, paliers des
 lanternes. **Jamais** les chiffres des niveaux ni du mode Classique.
 
+### 17.8.1 Résultats *(2026-10-03 ; niveaux : Détente, 200 parties par niveau et par stratégie, surprises et variété des deux côtés ; carrière : 60 carrières × 10 ans, saisons de 7 jours)*
+
+**Niveaux** (`node tools/simulate.js --compare-cozy`) :
+
+| # | tranquille : revenu (sans → avec) | argent final médian | débutant : revenu | appliqué : revenu |
+|---|---|---|---|---|
+| 1 | 2 048 → 2 091 (+ 2,1 %) | 555 → 593 | + 1,7 % | — |
+| 2 | 2 127 → 2 218 (+ 4,3 %) | 305 → 378 | + 3,6 % | — |
+| 3 | 2 170 → 2 264 (+ 4,3 %) | 345 → 376 | + 3,3 % | — |
+| 4 | 1 738 → 1 833 (+ 5,5 %) | 533 → 619 | + 3,6 % | — |
+| 5 | 3 037 → 3 180 (+ 4,7 %) | 485 → 583 | + 3,6 % | — |
+| 6 | 2 274 → 2 363 (+ 3,9 %) | 344 → 368 | + 2,8 % | — |
+| 7 | 2 599 → 2 692 (+ 3,6 %) | 217 → 253 | + 2,2 % | — |
+| 8 | 2 327 → 2 422 (+ 4,1 %) | 382 → 460 | + 2,1 % | — |
+| 9 | 1 704 → 1 766 (+ 3,6 %) | 293 → 344 | + 3,2 % | — |
+| 10 | 2 284 → 2 357 (+ 3,2 %) | 674 → 736 | + 2,7 % | — |
+| 11 | 2 044 → 2 114 (+ 3,4 %) | 392 → 452 | + 3,7 % | — |
+| 12 | 2 449 → 2 517 (+ 2,8 %) | 404 → 467 | + 3,0 % | − 0,4 % |
+| **moyenne** | **+ 3,8 %** (cible + 2 à + 5 % ✓) | **+ 14,8 %** | **+ 3,0 %** (≤ + 4 % ✓) | **+ 3,8 %** (≤ + 6 % ✓) |
+
+Par partie (tranquille) : fêtes ≈ 30 pièces (≈ 2,1 fêtes jouées sur 4), hiver ≈ 18 pièces (niveau 5 : 40), une veillée,
+≈ 2,4 écus de fêtes + 1 écu de veillée ; lanternes : total médian **12 / 20** (appliqué : 19 / 20 ; débutant : 7 / 20).
+Victoires : inchangées ou meilleures à tous les niveaux (cibles du § 13.6 tenues). Seuils d'étoiles Détente
+**recalculés** (§ 13.3 : ★★ et ★★★ relevés de 5 à 25 %). Les robots appliqués d'avant les humains (careless, balanced,
+investor) ne jouent pas les fêtes : + 0,5 à + 0,9 % (trouvailles et Lili). Le mode Classique ne change pas (parité
+400 / 400).
+
+**Lanternes** (répartition 1 / 2 / 3 / 4 du tranquille) : niveaux — variété 12 / 50 / 23 / 15 %, soin 16 / 43 / 30 / 11 %,
+voisinage 13 / 48 / 29 / 10 %, beauté 1 / 70 / 23 / 7 % (elle dépend du décor : 3 décorations dans la simulation),
+prospérité 14 / 35 / 39 / 13 % ; carrière — variété 14 / 49 / 30 / 7 %, soin 15 / 45 / 28 / 11 %, voisinage 12 / 57 / 23 / 8 %,
+beauté 15 / 33 / 37 / 15 %, prospérité 19 / 41 / 31 / 9 % ; total médian 12 / 20 (appliqué 17 / 20). Écus par année :
+≈ 3 à 4 (fêtes et veillée) + les lanternes (niveaux : seulement les progrès ; carrière : ⌊(total − 5) ÷ 2⌋ ≈ 3).
+
+**Carrière** (`node tools/simulate-career.js --compare-cozy`, `--compare-f1`) : voir le tableau du § 17.3.3. Par
+carrière du tranquille : fêtes ≈ 1 100 pièces, hiver ≈ 500, stand du comice ≈ 300, 19 sachets de la foire, ≈ 29 écus de
+fêtes et de veillées.
+
 ## 17.9 Ce que le lot prépare pour « La Vallée vivante » (sans l'implémenter)
 
 - **Album** : la structure (pages, cases, tampons, indices, récompenses) est générique et en données ; la Vallée
@@ -2184,5 +2270,8 @@ lanternes. **Jamais** les chiffres des niveaux ni du mode Classique.
   semis et le tutoriel ; la carte « Foire aux graines » du lot 3 joue déjà ce rôle).
 - Le prototype F1 n'a mesuré ni le désherbage ni le comice « à la main » : à confirmer par la simulation complète
   (60 carrières).
-- Le débutant perd ≈ 20 % de patrimoine à l'an 10 avec F1 : à surveiller (aucune cible ne porte sur son Domaine) ; levier :
-  ligne « À faire » plus insistante sur les champs mûrs.
+- ~~Le débutant perd ≈ 20 % de patrimoine à l'an 10 avec F1~~ *(réglé à la livraison : + 7 %, voir § 17.3.3)*.
+- **Ferme laissée seule** : la cible « au moins deux fois moins » n'est pas tenue avec les règles F1 (− 36 % sur la même
+  ferme) : le reste vient des bêtes, du miel et des ateliers, ramassés par l'équipe (corvées). Pistes, si l'on veut aller
+  plus loin (décision de l'utilisateur) : les soigneurs ramassent mais le fermier vend ; ou une humeur de l'équipe qui
+  baisse sans visite du fermier.

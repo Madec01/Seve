@@ -29,6 +29,7 @@ import { rankLabel } from './buildings.js';
 import { lotTypeName } from './land.js';
 import { collectShelter } from './animals.js';
 import { giantOpenToHelpers } from '../surprises.js';
+import { helpersMayHarvest } from './handwork.js';
 import { absDay, addWorkStat, byCell, effectiveLevel, ensureWork, isMature, machineCapacity, machineUsed, serpentine, sowChoice, useMachine } from './crew.js';
 import { inGreenhouse, needsWaterToday, rawUnitPrice } from '../farm.js';
 import { targetFor, tryProcessHarvest } from '../processing.js';
@@ -98,8 +99,9 @@ function eligible(api, kind, i) {
   const p = api.state.plots[i];
   if (!p || !p.unlocked || !p.env) return false;
   const crop = p.cropId ? getCrop(p.cropId) : null;
-  if (kind === 'harvest') return !!crop && !isTreeCrop(crop) && isMature(p) && giantOpenToHelpers(api.state, i); // (lot 2) le géant attend d'abord le joueur
-  if (kind === 'pick') return !!crop && isTreeCrop(crop) && isMature(p);
+  // (lot 2) le géant attend d'abord le joueur ; (lot 4, F1) la récolte aussi : à partir de la 2ᵉ aube après la maturité.
+  if (kind === 'harvest') return !!crop && !isTreeCrop(crop) && isMature(p) && giantOpenToHelpers(api.state, i) && helpersMayHarvest(api.state, i, 'machine');
+  if (kind === 'pick') return !!crop && isTreeCrop(crop) && isMature(p) && helpersMayHarvest(api.state, i, 'machine');
   if (kind === 'sow') return !p.cropId && p.env !== 'orchard' && sowChoice(api, i) !== null;
   return false;
 }

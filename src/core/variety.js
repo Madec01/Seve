@@ -59,6 +59,7 @@ export function emptyVarietyStats() {
     ordersDone: 0, ordersPremium: 0, ordersByClient: {}, carts: 0, cartsFull: 0, cratesFull: 0, cartPremium: 0,
     cardsPicked: {}, cardIncome: 0, medals: { bronze: 0, silver: 0, gold: 0 }, medalCoins: 0, medalEcus: 0,
     merchantSpent: 0, merchantBought: {}, rareSown: {}, rareHarvested: {},
+    merchantVisits: 0, // (lot 4) passages de Basile à la ferme (album : case « Basile le colporteur »)
   };
 }
 
@@ -749,6 +750,7 @@ function merchantDawn(host) {
   if (today === m.arriveDay && !m.stall.length) {
     m.announced = true;
     m.stall = drawStall(host);
+    state.variety.stats.merchantVisits = (state.variety.stats.merchantVisits || 0) + 1;
     events.push(['merchantArrived', { merchant: merchantInfo(host), text: MERCHANT.arriveText }]);
   }
   return events;

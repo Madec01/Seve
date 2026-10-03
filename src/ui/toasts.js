@@ -238,6 +238,10 @@ export function createToasts(stack, bannerNode) {
 
   return {
     show,
+    /** Retire un message affiché (nœud renvoyé par show) : ex. l'annonce d'une fête quand on entre dans la fête. */
+    hide(node) {
+      if (node && node.nodeType === 1) dismiss(node);
+    },
     banner,
     hideBanner,
     clearAll,

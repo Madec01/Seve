@@ -222,6 +222,10 @@ export function clearPlot(p) {
   if (p.care !== undefined) delete p.care;
   if (p.giant !== undefined) delete p.giant;
   if (p.giantSince !== undefined) delete p.giantSince;
+  // (lot 4, carrière) maturité et désherbage : propres à la culture en place.
+  if (p.ripeAt !== undefined) delete p.ripeAt;
+  if (p.weeded !== undefined) delete p.weeded;
+  if (p.weededBy !== undefined) delete p.weededBy;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */

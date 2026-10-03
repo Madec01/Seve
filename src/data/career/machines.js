@@ -14,6 +14,8 @@
 //   step     durée de passage d'une parcelle (fraction de la journée), pour l'animation rang par rang
 //   phase    'B' : contenu de la phase B
 
+import { F1 } from '../cozy.js';
+
 export const MACHINES = [
   {
     id: 'sprinklers',
@@ -60,7 +62,8 @@ export const MACHINES = [
       { cost: 700, rank: 3, capacity: 8, requires: 'puller', text: '8 récoltes par jour (cheval ou tracteur).' },
       { cost: 1000, rank: 4, capacity: Infinity, requires: 'tractor', text: 'Récolte tout le terrain (tracteur).' },
     ],
-    description: 'Récolte les cultures mûres (prix normal, sans le bonus « à la main »).',
+    // (lot 4, F1) La récolte attend d'abord le joueur : la moissonneuse ne prend que ce qui attend depuis F1.machineDelay aubes.
+    description: `Récolte ce qui attend depuis ${F1.machineDelay} jours (prix normal, sans la prime « à la main »).`,
   },
   {
     id: 'fruitPicker',
@@ -73,7 +76,7 @@ export const MACHINES = [
     passes: [0.3],
     step: 0.015,
     levels: [{ cost: 400, rank: 3, capacity: Infinity, requires: null, text: 'Cueille tous les fruits mûrs du verger.' }],
-    description: 'Cueille les fruits mûrs du verger.',
+    description: `Cueille les fruits qui attendent depuis ${F1.machineDelay} jours.`,
   },
   {
     id: 'collector',

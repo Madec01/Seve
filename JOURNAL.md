@@ -690,6 +690,103 @@ terminées.)*
 - **Points ouverts** : interrupteur « Fêtes et hiver » en Classique ; cuisine laissée au lot 5 (D4) ; foire aux graines
   dans les niveaux ; désherbage et comice « à la main » à mesurer ; perte du débutant en carrière.
 
+### 2026-10-03 — Lot 4 « Collection & enjeux doux » : planche de sprites (paquet ART)
+
+- Nouvelle planche `assets/sprites/lot4.png` (16 × 11 tuiles, 152 sprites + 1 alias), générée par `assets/sprites/generate-lot4.py` (même méthode que le lot 3 : palette Kenney, contour sombre, lumière en haut à gauche) ; bloc `// <lot4:auto>` et `SHEETS.lot4` dans `src/render/atlas.js` ; aperçu `tools/atlas-preview.html?lot4=1` ; ligne dans `CREDITS.md` (CC0, création originale).
+- Contenu : album (couverture 32 × 32, icône, 11 onglets de page, case vide, 5 tampons, ruban), `product.wool` et 5 poissons, trouvailles d'hiver sur la neige, 3 traces, 8 oiseaux de la mangeoire (posé / il picore), mangeoire 16 × 32 (vide / pleine), fenêtre éclairée, vignette de la veillée (48 × 32), objets cachés des fêtes (œufs, lampions, lanternes, grenouilles), marmite (2 images), étal, rubans, paniers, foire aux graines, sachet, M. le maire et Lili (debout / en marche), porte-lanternes, 10 lanternes 8 × 8, pictos des critères, `fx.weeds`, `badge.waiting`, 21 décors, icônes des 12 succès du lot (+ grisées).
+- Sprites 8 × 8 (`lantern.<critère>.on/off`, `badge.waiting`) : rangés par quatre dans une tuile ; entrée d'atlas à col/row demi-entiers et `w = h = 0.5` (drawSprite / spriteSize n'ont pas changé). Crochets du porte-lanternes : lanterne du montant m (0..4), rang r (0..3) dessinée à x = 1 + 6m, y = 3 + 7r dans le sprite.
+- `product.milk` existait déjà (career.png) : non redessiné. `album.page.feeder` est un alias de `bird.blueTit`. Vérifié : aucun nom en collision avec les autres planches ; vérification visuelle (planches de contrôle × 6 sur herbe, parchemin, neige, nuit ; aperçu Playwright) et retouches (oiseaux, marmite, rubans, fenêtre, vignette, décors, médaillons).
+
+### 2026-10-03 — Lot 4 « Collection & enjeux doux » : rendu et interface (paquet UI/RENDER)
+
+- **Scène** (`src/render/cozy-actors.js`, branché dans `scene.js` pour les niveaux et la carrière) : repères purs
+  `cozySpots(layout)` (≥ 16 cachettes au pied des buissons et des arbres, coins de clôture, puits, panneau, maison, bord
+  de forêt ; lisière ; traces ; mangeoire ; porte-lanternes sur le perron ; fenêtre de la veillée ; stand des fêtes près
+  du panneau du village — jamais sur une parcelle ni un chemin, vérifié pour les 12 niveaux en portrait et paysage et en
+  carrière) et `cozySpot(u, spots, taken)`. Objets cachés des chasses (œufs, lampions, grenouilles, lanternes) qui se
+  dandinent toutes les ~4 s, sautent et font des confettis quand on les trouve (lampions et lanternes restent allumés
+  et brillent le soir) ; stand du jour (marmite fumante, étal, paniers, foire aux graines) ; M. le maire qui vient au
+  stand, Lili le soir de la chasse ; trouvailles d'hiver en lisière avec étincelle, traces dans la neige ; mangeoire et
+  oiseau du jour (il picore, il chante quand on le touche) ; fenêtre éclairée de la veillée ; porte-lanternes (niveaux :
+  meilleur résultat du niveau, carrière : l'année passée) qui brille le soir ; badge « ♥ vous attend » sur les
+  parcelles mûres (F1), touffe arrachée du désherbage, prime « +31 ♥ » en vert ; mare gelée avec trou de pêche en hiver
+  (carrière). Repli dessiné pour chaque sprite si la planche `lot4` manque (`OPTIONAL_SHEETS`) ; décors « trouvés » du
+  lot (`DECOR_SPRITES`, grands décors 2 × 2 sur l'emplacement de la mare) avec repli. Mouvements réduits : rien ne
+  bouge, fondus.
+- **Toucher** : `hitTest` + `feteItem`, `winterFind`, `feeder`, `storyWindow`, `lanternRack`, `feteStall`, agrandis
+  jusqu'à 48 px CSS ; **mode fête** (`scene.setFeteMode`) : seuls les objets cachés répondent, le défilement reste.
+- **Fêtes** (`src/ui/cozy.js`, `css/cozy.css`) : feuilles « vivantes » de la chasse (8 œufs dessinés, « Chercher les
+  œufs »), de la soupe (marmite, tuiles ≥ 72 px avec ★ / ✦ / ◆, aperçu en direct `fetePreview`, « Goûter la soupe ! »),
+  du stand (5 ou 6 cagettes de 64 px, ruban), des paniers (3 villageois, ce qu'ils aiment, panier choisi `aria-pressed`,
+  ♥), de la foire aux graines (étals défilants, cartes ≥ 112 px, réserve, « Mon carnet de semis ») ; résultat sans
+  aucun mot négatif. **Mode fête** : pause `fete`, barre « 🥚 3 / 8 · Indice · Terminer » à la place des onglets,
+  indice illimité (la vue glisse vers l'objet le plus proche, anneau et étincelles), sortie automatique quand une
+  fenêtre importante s'ouvre ou quand tout est trouvé (fanfare).
+- **Hiver** : feuille « L'hiver à la ferme » (Ramasser / Montrer pour chaque trouvaille, mangeoire, veillée, préparer
+  le printemps), feuille « La veillée » (vignette, 3 lignes qui apparaissent une à une, « Bonne nuit, Joseph » →
+  `recordStory` : écu et case d'album).
+- **Lanternes** : page « Les lanternes de l'année » après la victoire (et la faillite : « L'an prochain, ça ira
+  mieux »), lanternes qui s'allument une à une avec un carillon, une ligne ≥ 64 px par critère (nombre lu, jamais la
+  couleur seule), un conseil doux ; bloc dans le bilan annuel de la carrière ; aperçu dans le Bilan ; section « Les
+  lanternes » du Carnet (années en petites colonnes) ; « 🏮 13 / 20 » sur les cartes de niveaux ; `recordLanterns`
+  (écus, décors, succès) ; porte-lanternes mis à jour.
+- **Album** (`src/ui/album.js`) : fenêtre haute (menu de pause, les deux modes, le jeu en pause) et 4ᵉ onglet « Album »
+  de la grange : onglets d'icônes 48 × 48, ‹ › 48 × 48, points de page, glisser pour changer de page, grille 3 colonnes
+  (cases ≥ 104 × 120), silhouettes grises nommées avec indice, badge « Nouveau », tampons, fiche d'une case (dessin ×3,
+  anecdote, « Trouvée le 3 oct. · Ma ferme »), « Page complète ! » et « Recevoir », album complet ; un message par aube
+  (`recordAlbumDawn`), les autres dans l'historique ; cases du bilan de fin annoncées ; rattrapage annoncé en douceur au
+  démarrage ; pastilles (menu principal, grange, pause). Section « Album et fêtes » des succès de la grange.
+- **F1** : fiche de parcelle « À la main : 16 · par l'équipe : 13 », « Vous attend · la moissonneuse passera dans
+  1 jour » (seulement si une moissonneuse, une cueilleuse ou un jardinier travaille vraiment sur ce terrain),
+  « Désherbée par … » ; ligne « À faire » « Le champ de départ : 12 parcelles mûres vous attendent (+25 % à la main) »
+  (remplace « N parcelles à récolter ») ; résumé du matin « Hier : 34 récoltes à la main (+86 de prime) » ; feuille des
+  graines « Réserve : 16 » ; texte du jardinier dans l'équipe ; ligne « Stand du comice : +150 ».
+- **Ailleurs** : lignes « À faire » (fête du jour, veille, trouvailles, mangeoire, veillée), résumé du matin, conseils
+  « première fois » `cozy.*` (textes de `COZY_HINTS`), son `chirp` synthétisé, libellés « Fêtes du village » /
+  « Commandes du village » des bilans de carrière, poissons dessinés dans le message de pêche, pêche sous la glace.
+  `createGame({ cozy: { decor } })` en Détente seulement (Classique : aucune option, aucune clé). Débogage
+  `__debug.cozy` (= `__debug.lot4`).
+- **Vérification au doigt** (Playwright, Pixel 7 et 360 × 740, touchers réels) : chasse complète au doigt (8 œufs,
+  indice), soupe, stand (maire), paniers, foire, hiver, veillée, lanternes (victoire réelle du niveau 2, bilan annuel de
+  carrière), album (pause, grange, fiche), F1, nuit des lampions (mouvements réduits) ; cibles ≥ 48 px et textes
+  ≥ 14 px mesurés par script, aucun débordement, aucune erreur console. Classique : clé `cozy` absente, rien dessiné.
+  Tests purs : `tests/lot4-render.test.js` (8 tests). Captures `lot4-ui-*.png`.
+- **À signaler au CORE** : mesure de la variété « Encore 4 culture ou produits » (accord), `fete.result` sans `text` ni
+  `perBasket` (l'interface affiche une phrase selon le résultat) ; `query.plot().wait` donne `machineIn` même sans machine
+  (l'interface vérifie elle-même).
+
+### 2026-10-03 — Lot 4 « Collection & enjeux doux » : cœur, données, tests et équilibrage (paquet CORE)
+
+- **Album** (`src/data/album.js`, `src/core/album.js`) : 124 cases sur 11 pages, tampons, 12 veillées, récompenses de
+  page (écus + décor trouvé, déjà ajoutés à la progression rendue), album complet, faits tirés de `achievementContext`
+  et de la progression, rattrapage unique au premier chargement (`storage.js`, `albumMigration()`, sauvegardes lues
+  sans être modifiées), `recordAlbumDawn`, `albumPages(progress, mode)` avec note de mode.
+- **Lanternes** (`src/core/lanterns.js`, `LANTERN_RULES`) : 5 critères (variété, soin, voisins, beauté, prospérité),
+  barèmes niveaux et carrière, meilleur total par niveau (`recordLanterns`, `levelLanterns`), « Une année pour
+  souffler » si la croissance est nulle, historique de carrière (10 ans), `report.cozy` du bilan annuel.
+- **F1 carrière** (`src/core/career/handwork.js`) : prime « Cueilli main » 1,25 (1,1 gardé pour les carrières sans
+  lot 4), payée même quand la récolte part au grenier ; `ripeAt` posé à l'aube ; machines après 3 aubes
+  (`F1.machineDelay`), jardiniers après 4 ; rien ne gèle le dernier jour d'automne ; jardiniers corbeau > arroser >
+  désherber > semer > récolter ; désherbage +1 / +0,3 point à la main ; comice : épreuves de récolte à la main, stand
+  +25 % / +50 %.
+- **Fêtes** (`src/core/cozy.js`, `src/data/cozy.js`) : 4 moteurs (chasse, marmite, étal, paniers) + foire aux graines
+  (dernier jour d'hiver, carrière ; réserve de semis prise par tout semis), 9 fêtes des années à thème, calendrier de
+  carrière modifié (`'last'`, `factorsRank`), récompenses × (1 + 0,5 × (rang − 1)).
+- **Hiver vivant** : trouvailles, traces, mangeoire et oiseaux, veillées de Joseph, serre au rang 2 (500), mare et
+  canards au rang 3 (300) ; pêche notée par poisson ; compteur des passages de Basile (lot 3).
+- **Le reste** : 12 succès « Album et fêtes », 20 décors trouvés (14 album + 6 lanternes), `state.cozy` (absent en
+  Classique, `null` avec `cozy: false`), flux rng `cozy`, migrations (Détente et carrière d'avant le lot 4 : année
+  « partielle » ; cultures mûres reculées de 4 aubes), `checkCozy`, options `createGame` / `createCareer({ cozy })`,
+  requêtes `cozy`, `fete`, `fetePreview`, `winter`, `lanterns`. Écarts consignés dans ARCHITECTURE.md (« Écarts et
+  précisions (livraison CORE) ») ; règles finales dans GAME_DESIGN.md § 17 et § 13.3.
+- **Simulations** : niveaux (200 graines) recettes +3,8 % casual, +3,0 % novice, +3,8 % optimal, victoires inchangées ;
+  carrière (60 × 10 ans) casual +5,1 % recettes, Domaine en 8 ans (inchangé), novice patrimoine +7,3 % (F1 seul),
+  aucune faillite ; ferme laissée seule −31 % à −36 % (objectif −60 % non atteint : animaux, miel et ateliers restent
+  rentables sans le joueur). Robot tranquille de carrière corrigé (récolte à la main d'abord, boutique avant les champs,
+  serre, mare et canards). Nouveaux seuils d'étoiles Détente dans `src/data/difficulty.js` (anciens en commentaire).
+- **Tests** : `album`, `lanterns`, `festivals`, `winter`, `f1`, `cozy-career`, `cozy-migration`, `cozy` (+ tests
+  existants adaptés) ; parité Classique 400 / 400 inchangée.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).

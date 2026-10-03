@@ -100,10 +100,34 @@ function career(id, name, description, ecus, check) {
 }
 
 /**
- * Tous les succès (niveaux puis carrière) : c'est la liste que parcourt src/core/progression.js.
- * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career'.
+ * (lot 4) Succès « Album et fêtes » (docs/GAME_DESIGN.md § 17.7.2) : 12 succès, 255 écus, aucune étoile (la monnaie
+ * des bonus du mode Niveaux ne change pas). Communs aux deux modes.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS];
+export const COZY_ACHIEVEMENTS = [
+  cozy('albumPage', 'Première page', 'Compléter une page de l\'album.', 10, { type: 'albumPage' }),
+  cozy('goldenHerbarium', 'Herbier doré', 'La page dorée du potager : une récolte dorée de chacune des 15 cultures.', 30, { type: 'albumGoldPage' }),
+  cozy('albumComplete', 'Album complet', 'Compléter les 11 pages de l\'album.', 50, { type: 'albumComplete' }),
+  cozy('brightYear', 'Une année lumineuse', '15 lanternes en une année.', 15, { type: 'lanternsYear', n: 15 }),
+  cozy('allLanterns', 'Toutes les lanternes', '20 lanternes en une année.', 40, { type: 'lanternsYear', n: 20 }),
+  cozy('eggHunter', 'Chasseur d\'œufs', 'Trouver soi-même les 8 œufs d\'une chasse.', 10, { type: 'eggHunter' }),
+  cozy('goldRosette', 'Grand prix du jury', 'Une rosette d\'or au stand de la ferme.', 15, { type: 'goldRosette' }),
+  cozy('birdFriends', 'Les amis à plumes', 'Les 8 oiseaux de la mangeoire.', 15, { type: 'birdFriends', n: 8 }),
+  cozy('handPicked500', 'Les mains dans la terre', '500 récoltes à la main en carrière.', 20, { type: 'handPicked', n: 500 }),
+  cozy('orders50', 'Ami du village', '50 commandes du tableau livrées.', 20, { type: 'ordersTotal', n: 50 }),
+  cozy('fullCart', 'Charrette pleine', 'Remplir toutes les caisses d\'une charrette.', 10, { type: 'cartFull' }),
+  cozy('goldMedals10', 'Dix médailles d\'or', '10 médailles d\'or aux défis de la saison.', 20, { type: 'goldMedals', n: 10 }),
+];
+
+function cozy(id, name, description, ecus, check) {
+  return { id, name, description, category: 'cozy', reward: { stars: 0, ecus }, check };
+}
+
+/**
+ * Tous les succès (niveaux, carrière, puis lot 4) : c'est la liste que parcourt src/core/progression.js.
+ * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
+ * category: 'cozy'.
+ */
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

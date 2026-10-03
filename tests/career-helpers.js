@@ -11,9 +11,11 @@ export { DAY_SECONDS, forceWeather, nextDay, record, skipDays };
  * ici) : les tests du lot 2 les demandent ({ surprises: true }, tests/surprises*.test.js).
  * Variété du lot 3 désactivée par défaut (tableau, charrette, colporteur, thèmes remplacent le visiteur et le
  * marchand ambulant) : les tests du lot 3 la demandent ({ variety: true }, tests/variety*.test.js).
+ * Lot 4 (fêtes, hiver, lanternes, « aider sans remplacer ») désactivé par défaut : les tests du lot 4 le demandent
+ * ({ cozy: true }, tests/cozy*.test.js, tests/f1.test.js).
  */
 export function newCareer(opts = {}, { rawWeather = false } = {}) {
-  const game = createCareer({ seed: 7, surprises: false, variety: false, ...opts });
+  const game = createCareer({ seed: 7, surprises: false, variety: false, cozy: false, ...opts });
   if (!rawWeather) game.state.weather.today = 'sunny';
   return game;
 }

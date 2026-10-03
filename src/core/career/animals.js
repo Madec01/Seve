@@ -24,6 +24,7 @@ import { animalCount, shelterCapacity } from './buildings.js';
 import { absDay, addWorkStat, ensureWork, keeperBonus } from './crew.js';
 import { hayFactor } from '../variety-effects.js';
 import { noteVariety } from '../variety.js';
+import { noteCozyAnimal } from '../cozy.js';
 
 /** Animal de carrière logé dans un abri. */
 export function animalOfShelter(shelterId) {
@@ -75,6 +76,8 @@ function addPending(api, shelterId, amount, seasonId) {
   b.pending = Math.round((before + added) * 100) / 100;
   if (lost > 0) {
     addWorkStat(state, 'lostAnimals', lost);
+    // (lot 4) Lanternes (soin des bêtes) : valeur perdue dans les abris pleins cette année.
+    if (state.cozy) state.cozy.year.animalLost = (state.cozy.year.animalLost || 0) + lost;
     api.push('shelterFull', { buildingId: shelterId, lost: Math.round(lost), pending: Math.round(b.pending), cap });
   }
   return { added, lost };
@@ -101,6 +104,12 @@ export function collectShelter(api, buildingId, by = 'player', extra = {}) {
   addWorkStat(state, 'collected', amount, by);
   // (lot 3) Défi « La tournée des abris » : ramassages faits par le joueur.
   if (by === 'player' && state.variety) noteVariety(state, 'collect', 1);
+  // (lot 4) Ce que la ferme a produit (fêtes, album) et soin des bêtes (lanternes).
+  if (state.cozy) {
+    state.cozy.year.animalCollected += amount;
+    const product = animalOfShelter(buildingId)?.product;
+    if (product) noteCozyAnimal(state, product, 1);
+  }
   api.push('collected', { buildingId, amount, by, animalId: def.animal, product: animalOfShelter(buildingId)?.product || null, ...extra });
   return { ok: true, amount };
 }

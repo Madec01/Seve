@@ -38,6 +38,7 @@ import { collectShelter } from './animals.js';
 import { gainXp, sellerThreshold, staffStatus } from './staff.js';
 import { chaseCrowAt } from './events.js';
 import { giantOpenToHelpers } from '../surprises.js';
+import { helpersMayHarvest, helpersOn, weed, weedable } from './handwork.js';
 
 const EPS = 1e-9;
 const MAX_STEPS = 50000;
@@ -75,9 +76,12 @@ function gardenAction(api, i, t, pass) {
       return p.crow && p.cropId ? 'chase' : null;
     case 'harvest': {
       if (!crop || !isMature(p) || !giantOpenToHelpers(state, i)) return null; // (lot 2) le géant attend d'abord le joueur
+      if (!helpersMayHarvest(state, i, 'staff')) return null; // (lot 4, F1) ce qui attend depuis 4 aubes seulement
       const kind = tree ? 'pick' : 'harvest';
       return machineWillPass(api, p.lot, kind, t) ? null : kind;
     }
+    case 'weed':
+      return weedable(state, i) ? 'weed' : null; // (lot 4, F1-4) une fois par culture en pousse
     case 'water': {
       if (!crop || tree || p.watered || isMature(p)) return null;
       return needsWaterToday(crop, inGreenhouse(p) ? 'sunny' : state.weather.today, api.level) ? 'water' : null;
@@ -96,7 +100,9 @@ function pickGardenerTarget(api, s, t) {
   const { state } = api;
   const lots = gardenLots(state, s);
   const reserved = reservedPlots(state, s);
-  for (const pass of ['chase', 'harvest', 'water', 'sow']) {
+  // (lot 4, F1-3) Les jardiniers font d'abord les corvées ; ils récoltent en dernier (ce qui attend depuis 4 aubes).
+  const passes = helpersOn(state) ? ['chase', 'water', 'weed', 'sow', 'harvest'] : ['chase', 'harvest', 'water', 'sow'];
+  for (const pass of passes) {
     for (const lot of lots) {
       for (const i of byCell(state, api.lotPlots(lot.id))) {
         if (reserved.has(i)) continue;
@@ -273,6 +279,12 @@ function perform(api, s, task) {
       if (r.ok) s.year.watered = (s.year.watered || 0) + 1;
       return { ok: !!r.ok };
     }
+    case 'weed': {
+      if (!weedable(state, i)) return { ok: false };
+      const r = weed(api, i, s);
+      if (r.ok) s.year.weeded = (s.year.weeded || 0) + 1;
+      return { ok: !!r.ok };
+    }
     case 'sow': {
       const cropId = sowChoice(api, i);
       if (!cropId) return { ok: false };
@@ -310,6 +322,7 @@ function xpFor(s, task, result) {
     case 'harvest':
     case 'pick':
     case 'water':
+    case 'weed':
     case 'sow':
       return XP_GAIN.gardener;
     default:
@@ -411,7 +424,7 @@ function workPlan(api) {
 
 /** Outil tenu (sprite `tool.<id>` de l'atlas) selon la tâche du jardinier. */
 function toolFor(kind) {
-  return { water: 'can', harvest: 'basket', pick: 'basket', sow: 'seedbag', chase: 'hoe' }[kind] || 'hoe';
+  return { water: 'can', harvest: 'basket', pick: 'basket', sow: 'seedbag', chase: 'hoe', weed: 'hoe' }[kind] || 'hoe';
 }
 
 registerCareerExtension({

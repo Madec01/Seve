@@ -107,6 +107,10 @@ function foundHint(item) {
   // (lot 3) Étal de Basile le colporteur ; cadeau de la journaliste (année du boom touristique, carrière).
   if (item.id === 'lantern.peddler' || item.id === 'weathervane.rooster') return 'à l\'étal de Basile le colporteur';
   if (item.id === 'sign.magazine') return 'grâce à la journaliste de « Campagne & Jardins » (carrière)';
+  // (lot 4) Récompenses de l'album (pages complètes) et des lanternes (4 lanternes d'un critère, 20 / 20).
+  if (/^lantern\.(green|blue|pink|yellow|orange)$/.test(item.id)) return 'en allumant 4 lanternes d\'un même critère, un soir de fin d\'année';
+  if (item.id === 'lantern.grand') return 'en allumant les 20 lanternes de l\'année';
+  if (['scarecrow.flower', 'can.golden', 'barrow.giant', 'jam.shelf', 'weathervane.pig', 'sundial', 'lantern.fairy', 'pump.village', 'bunting.post', 'arch.fete', 'woodpile', 'heron.wood', 'rocking.chair', 'herbarium'].includes(item.id)) return 'en complétant une page de l\'album (« Recevoir »)';
   return 'au petit matin, sous une vieille souche';
 }
 

@@ -16,13 +16,16 @@
 //                                           y compris pour une progression d'avant les modes)
 //   career: { started, bestRank, bestYear, years,          mode Carrière (docs/CARRIERE.md § 1.6 et § 1.8) :
 //             archive: [{ farmName, years, rank, patrimony, endedBy: 'bankrupt'|'restart' }] } (5 dernières, la plus récente d'abord)
+//   (lot 4) album: { found, stamps, claimed, seen, stories, retroDone }   l'album de la ferme (src/core/album.js)
+//   (lot 4) lanterns: { levels: { [id]: { best: [5], total, at } }, career: { best: [5], total, years }, firsts: [critère], grand }
+//   (lot 4) lifetime.cozy: { handPicked, eggsAll, ribbonsGold, birds: { [id]: n }, fetes }
 // }
 // Les succès parcourent ALL_ACHIEVEMENTS (niveaux + carrière) ; ceux de la carrière (category 'career') ne
 // donnent que des écus.
 //
 // Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
-import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
 import { CAREER_ARCHIVE_MAX, CAREER_ECUS } from '../data/career/career.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
 import { getCrop } from '../data/crops.js';
@@ -30,6 +33,16 @@ import { LEVELS, getLevel } from '../data/levels.js';
 import { PERKS, PERK_TIERS, getPerk, perkMaxRank } from '../data/perks.js';
 import { getProduct } from '../data/products.js';
 import { DEFAULT_DIFFICULTY, isDifficulty } from '../data/difficulty.js';
+import { ALBUM_PAGES } from '../data/album.js';
+import { BIRDS_BY_ID, LANTERN_CRITERIA, LANTERN_REWARDS } from '../data/cozy.js';
+import {
+  albumClaimable, albumFacts, albumOverview, albumPages, albumRetro, checkAlbum, claimAlbumReward, defaultAlbum, markAlbumSeen, normalizeAlbum,
+  pageDone, recordAlbum, recordStory, retroText,
+} from './album.js';
+
+export {
+  albumClaimable, albumFacts, albumOverview, albumPages, albumRetro, checkAlbum, claimAlbumReward, markAlbumSeen, recordAlbum, recordStory, retroText,
+};
 
 export const PROGRESS_SCHEMA = 2;
 
@@ -48,7 +61,47 @@ export function defaultCareerProgress() {
 }
 
 function defaultLifetime() {
-  return { harvests: 0, cropsHarvested: {}, productsSold: {}, yearsWon: 0, yearsLost: 0, rentsPaid: 0, variety: defaultLifetimeVariety() };
+  return { harvests: 0, cropsHarvested: {}, productsSold: {}, yearsWon: 0, yearsLost: 0, rentsPaid: 0, variety: defaultLifetimeVariety(), cozy: defaultLifetimeCozy() };
+}
+
+/** (lot 4) Cumuls des fêtes, de l'hiver et de F1 (succès « Album et fêtes »). */
+function defaultLifetimeCozy() {
+  return { handPicked: 0, eggsAll: 0, ribbonsGold: 0, birds: {}, fetes: 0 };
+}
+
+/** (lot 4) Lanternes : meilleurs totaux par niveau, carrière, premières lanternes 4/4 par critère, grand lampion. */
+export function defaultLanterns() {
+  return { levels: {}, career: { best: [1, 1, 1, 1, 1], total: 0, years: 0 }, firsts: [], grand: false };
+}
+
+function normalizeLanterns(raw) {
+  const l = defaultLanterns();
+  if (!isObj(raw)) return l;
+  const vals = (v) => (Array.isArray(v) && v.length === 5 && v.every((x) => Number.isInteger(x) && x >= 1 && x <= 4) ? [...v] : null);
+  if (isObj(raw.levels)) {
+    for (const [id, v] of Object.entries(raw.levels)) {
+      if (!getLevel(Number(id)) || !isObj(v) || !vals(v.best)) continue;
+      l.levels[Number(id)] = { best: vals(v.best), total: vals(v.best).reduce((a, b) => a + b, 0), at: Number.isFinite(v.at) ? v.at : null };
+    }
+  }
+  if (isObj(raw.career) && vals(raw.career.best)) {
+    l.career = { best: vals(raw.career.best), total: nonNegInt(raw.career.total), years: nonNegInt(raw.career.years) };
+  } else if (isObj(raw.career)) l.career.years = nonNegInt(raw.career.years);
+  const ids = LANTERN_CRITERIA.map((c) => c.id);
+  if (Array.isArray(raw.firsts)) l.firsts = [...new Set(raw.firsts.filter((x) => ids.includes(x)))];
+  l.grand = raw.grand === true;
+  return l;
+}
+
+function addLifetimeCozy(l, stats) {
+  if (!isObj(stats)) return;
+  if (!isObj(l.cozy)) l.cozy = defaultLifetimeCozy();
+  const c = l.cozy;
+  c.handPicked += nonNegInt(stats.handPicked);
+  c.eggsAll += nonNegInt(stats.eggsAll);
+  c.ribbonsGold += nonNegInt(stats.ribbons?.gold);
+  c.fetes += Object.values(stats.fetes || {}).reduce((a, n) => a + nonNegInt(n), 0);
+  for (const [id, n] of Object.entries(stats.birds || {})) if (BIRDS_BY_ID[id] && n > 0) c.birds[id] = (c.birds[id] || 0) + nonNegInt(n);
 }
 
 /** (lot 3) Cumuls de la variété (album du lot 4) : commandes livrées, charrettes pleines, médailles, graines rares récoltées. */
@@ -84,6 +137,9 @@ export function defaultProgress() {
     hintsSeen: [],
     difficulty: DEFAULT_DIFFICULTY,
     career: defaultCareerProgress(),
+    // (lot 4) Une progression neuve n'a rien à rattraper (retroDone) ; une progression lue sans album, si (normalizeProgress).
+    album: { ...defaultAlbum(), retroDone: true },
+    lanterns: defaultLanterns(),
   };
 }
 
@@ -141,6 +197,7 @@ export function normalizeProgress(raw) {
       yearsLost: nonNegInt(l.yearsLost),
       rentsPaid: nonNegInt(l.rentsPaid),
       variety: defaultLifetimeVariety(),
+      cozy: defaultLifetimeCozy(),
     };
     if (isObj(l.variety)) {
       const v = l.variety;
@@ -149,6 +206,16 @@ export function normalizeProgress(raw) {
         cartsFull: nonNegInt(v.cartsFull),
         medals: { bronze: nonNegInt(v.medals?.bronze), silver: nonNegInt(v.medals?.silver), gold: nonNegInt(v.medals?.gold) },
         rare: countMap(v.rare, (id) => !!getCrop(id)),
+      };
+    }
+    if (isObj(l.cozy)) {
+      const c = l.cozy;
+      p.lifetime.cozy = {
+        handPicked: nonNegInt(c.handPicked),
+        eggsAll: nonNegInt(c.eggsAll),
+        ribbonsGold: nonNegInt(c.ribbonsGold),
+        birds: countMap(c.birds, (id) => !!BIRDS_BY_ID[id]),
+        fetes: nonNegInt(c.fetes),
       };
     }
   }
@@ -193,6 +260,10 @@ export function normalizeProgress(raw) {
         .slice(0, CAREER_ARCHIVE_MAX);
     }
   }
+  // (lot 4) Album et lanternes. Une progression d'avant le lot 4 (sans album) a retroDone: false : le rattrapage
+  // (albumRetro) se fait au premier chargement (src/storage.js).
+  p.album = normalizeAlbum(raw.album);
+  p.lanterns = normalizeLanterns(raw.lanterns);
   return p;
 }
 
@@ -346,7 +417,22 @@ function facts(p, ctx) {
     for (const [id, n] of Object.entries(year.cropsHarvested || {})) cropsHarvested[id] = (cropsHarvested[id] || 0) + n;
     for (const [id, n] of Object.entries(year.productsSold || {})) productsSold[id] = (productsSold[id] || 0) + n;
   }
-  return { cropsHarvested, productsSold, harvests: sumValues(cropsHarvested), products: sumValues(productsSold), year, ctx };
+  // (lot 4) Cumuls des fêtes, de F1 et de la variété : progression + ce qui n'est pas encore compté (ctx.cozy.pending,
+  // ctx.variety.pending) ; ctx.counted : déjà dans les cumuls (fin de partie, bilan annuel).
+  const lc = life.cozy || defaultLifetimeCozy();
+  const pend = ctx && !ctx.counted ? ctx.cozy?.pending || null : null;
+  const birds = new Set(Object.keys(lc.birds || {}));
+  for (const id of Object.keys(pend?.birds || {})) if ((pend.birds[id] || 0) > 0) birds.add(id);
+  const cozy = {
+    eggsAll: (lc.eggsAll || 0) + (pend?.eggsAll || 0),
+    ribbonsGold: (lc.ribbonsGold || 0) + (pend?.ribbons?.gold || 0),
+    handPicked: (lc.handPicked || 0) + (pend?.handPicked || 0),
+    birds,
+  };
+  const lv = life.variety || defaultLifetimeVariety();
+  const vp = ctx && !ctx.counted ? ctx.variety?.pending || null : null;
+  const variety = { orders: (lv.orders || 0) + (vp?.ordersDone || 0), cartsFull: (lv.cartsFull || 0) + (vp?.cartsFull || 0), gold: (lv.medals?.gold || 0) + (vp?.gold || 0) };
+  return { cropsHarvested, productsSold, harvests: sumValues(cropsHarvested), products: sumValues(productsSold), year, ctx, cozy, variety };
 }
 
 function levelsWonCount(p, ids) {
@@ -455,9 +541,46 @@ function evaluate(check, p, f) {
       const v = Math.max(ctx?.career?.yearNet ?? 0, ctx?.career?.bestYearNet ?? 0);
       return ctx?.career ? counter(Math.max(0, v), check.n) : { done: false, progress: null };
     }
+    // ── (lot 4) Album et fêtes (écus seulement) ──
+    case 'albumPage': {
+      const a = normalizeAlbum(p.album);
+      return { done: ALBUM_PAGES.some((pg) => pageDone(a, pg)), progress: null };
+    }
+    case 'albumGoldPage': {
+      const a = normalizeAlbum(p.album);
+      const garden = ALBUM_PAGES.find((pg) => pg.id === 'garden');
+      const n = garden.cases.filter((c) => (a.stamps[`garden.${c.id}`] || []).includes('gold')).length;
+      return counter(n, garden.cases.length);
+    }
+    case 'albumComplete': {
+      const a = normalizeAlbum(p.album);
+      return counter(ALBUM_PAGES.filter((pg) => pageDone(a, pg)).length, ALBUM_PAGES.length);
+    }
+    case 'lanternsYear':
+      return counter(bestLanterns(p), check.n);
+    case 'eggHunter':
+      return counter(f.cozy.eggsAll, 1);
+    case 'goldRosette':
+      return counter(f.cozy.ribbonsGold, 1);
+    case 'birdFriends':
+      return counter(f.cozy.birds.size, check.n);
+    case 'handPicked':
+      return counter(f.cozy.handPicked, check.n);
+    case 'ordersTotal':
+      return counter(f.variety.orders, check.n);
+    case 'cartFull':
+      return counter(f.variety.cartsFull, 1);
+    case 'goldMedals':
+      return counter(f.variety.gold, check.n);
     default:
       return { done: false, progress: null };
   }
+}
+
+/** Meilleur total de lanternes d'une année (niveaux et carrière). */
+function bestLanterns(p) {
+  const l = p.lanterns || defaultLanterns();
+  return Math.max(l.career?.total || 0, ...Object.values(l.levels || {}).map((x) => x.total || 0));
 }
 
 /**
@@ -498,6 +621,11 @@ export function careerAchievementList(p, ctx) {
   return listOf(CAREER_ACHIEVEMENTS, p, ctx, true);
 }
 
+/** (lot 4) Liste pour la catégorie « Album et fêtes » de la grange (écus seulement), même forme + category: 'cozy'. */
+export function cozyAchievementList(p, ctx) {
+  return listOf(COZY_ACHIEVEMENTS, p, ctx, true);
+}
+
 function listOf(list, p, ctx, withCategory) {
   const f = facts(p, ctx);
   return list.map((a) => {
@@ -529,7 +657,8 @@ export function ecusForRun({ outcome, stars = 0, money = 0 }) {
  * Enregistre la fin d'une partie (victoire, faillite ou abandon par « Quitter » / « Recommencer ») :
  * niveaux (étoiles, record, terminé, joué), cumuls de la partie, écus, puis succès.
  * @param run { levelId, outcome: 'victory'|'bankrupt'|'abandon', stars, money, summary, perksActive,
- *              adultTrees?, investments?, availableInvestments?, dailyCharges? }
+ *              adultTrees?, investments?, availableInvestments?, dailyCharges?, context? }
+ *   context (lot 4) : query.achievementContext() de la fin de partie (album : temps du jour, surprises, fêtes…)
  *   summary : game.query.summary() ou le résumé de l'événement victory / bankrupt (null : cumuls inchangés)
  * → { progress, rewards: { ecus, newStars, newBest, firstTime, achievementStars, achievementEcus }, achievements: [id] }
  */
@@ -566,6 +695,7 @@ export function recordRunEnd(p, run, now = Date.now()) {
     }
     l.rentsPaid += nonNegInt(summary.rentsPaid);
     addLifetimeVariety(l, summary.variety);
+    addLifetimeCozy(l, summary.cozy?.stats);
   }
   if (outcome === 'victory') progress.lifetime.yearsWon += 1;
   if (outcome === 'bankrupt') progress.lifetime.yearsLost += 1;
@@ -585,11 +715,14 @@ export function recordRunEnd(p, run, now = Date.now()) {
     adultTrees: run.adultTrees,
     dailyCharges: run.dailyCharges,
   };
-  const ids = checkAchievements(progress, ctx);
-  const unlocked = unlockAchievements(progress, ids, now);
+  // (lot 4) Album : ce que la partie a montré (contexte de fin : run.context = query.achievementContext(), sinon le bilan).
+  const albumCtx = run.context ? { ...run.context, counted: true } : ctx;
+  const albumRes = recordAlbum(progress, checkAlbum(progress, albumCtx), now, 'levels');
+  const ids = checkAchievements(albumRes.progress, ctx);
+  const unlocked = unlockAchievements(albumRes.progress, ids, now);
   rewards.achievementStars = unlocked.rewards.stars;
   rewards.achievementEcus = unlocked.rewards.ecus;
-  return { progress: unlocked.progress, rewards, achievements: ids };
+  return { progress: unlocked.progress, rewards, achievements: ids, album: { cases: albumRes.cases, stamps: albumRes.stamps } };
 }
 
 // ── Carrière ───────────────────────────────────────────────────────────────────────────
@@ -619,11 +752,12 @@ export function recordCareerStart(p, now = Date.now()) {
 /**
  * Bilan d'une année de carrière (événement yearEnd) : écus du bilan, cumuls (récoltes, produits de l'année
  * ajoutés à lifetime : « Cent paniers », « Artisan du terroir »…), meilleurs rang et année, succès.
- * @param run { year, rank, net, report, career? } — report : celui de yearEnd ; career : query.career.achievementContext()
+ * @param run { year, rank, net, report, career?, context? } — report : celui de yearEnd ; career :
+ *   query.career.achievementContext() ; context (lot 4) : query.achievementContext() (album)
  * → { progress, rewards: { ecus, achievementEcus }, achievements: [id] }
  * Ne passer ensuite à checkAchievements que des contextes de l'année SUIVANTE (sinon l'année compterait deux fois).
  */
-export function recordCareerYear(p, { year, rank, net, report = null, career = null } = {}, now = Date.now()) {
+export function recordCareerYear(p, { year, rank, net, report = null, career = null, context = null } = {}, now = Date.now()) {
   const progress = clone(p);
   if (!progress.career) progress.career = defaultCareerProgress();
   const pc = progress.career;
@@ -643,6 +777,7 @@ export function recordCareerYear(p, { year, rank, net, report = null, career = n
       l.productsSold[id] = (l.productsSold[id] || 0) + n;
     }
     addLifetimeVariety(l, report.variety);
+    addLifetimeCozy(l, report.cozy?.stats);
   }
   const ecus = ecusForCareerYear({ rank, net, houseLevel: report?.houseLevel ?? career?.houseLevel ?? 1 });
   progress.ecus += ecus;
@@ -653,9 +788,12 @@ export function recordCareerYear(p, { year, rank, net, report = null, career = n
     stats: report ? { year: { cropsHarvested: report.cropsHarvested || {}, productsSold: report.productsSold || {}, cropsLost: {} }, season: null } : null,
     career: { ...(career || {}), rank: Math.max(rank || 0, career?.rank || 0), year: Math.max((year || 0) + 1, career?.year || 0), yearNet: net, bestYearNet: Math.max(net || 0, career?.bestYearNet || 0) },
   };
-  const ids = checkAchievements(progress, ctx);
-  const res = unlockAchievements(progress, ids, now);
-  return { progress: res.progress, rewards: { ecus, achievementEcus: res.rewards.ecus }, achievements: ids };
+  // (lot 4) Album : le contexte de la carrière au bilan (run.context = query.achievementContext(), sinon le bilan).
+  const albumCtx = context ? { ...context, counted: true } : ctx;
+  const albumRes = recordAlbum(progress, checkAlbum(progress, albumCtx), now, 'career');
+  const ids = checkAchievements(albumRes.progress, ctx);
+  const res = unlockAchievements(albumRes.progress, ids, now);
+  return { progress: res.progress, rewards: { ecus, achievementEcus: res.rewards.ecus }, achievements: ids, album: { cases: albumRes.cases, stamps: albumRes.stamps } };
 }
 
 /**
@@ -798,4 +936,86 @@ export function markHint(p, hintId) {
   const progress = clone(p);
   progress.hintsSeen = [...(progress.hintsSeen || []), String(hintId)];
   return progress;
+}
+
+// ── (lot 4) Lanternes et album : récompenses dans la progression ──────────────────────────────
+
+/**
+ * Lanternes d'une année (événement lanternsLit) : meilleur total du niveau, écus, lanternes de couleur (premier 4 / 4
+ * d'un critère), grand lampion (premier 20 / 20), succès « Une année lumineuse » et « Toutes les lanternes ».
+ *   niveaux : écus = max(0, total − meilleur total précédent du niveau), la première fois total − 5 ;
+ *   carrière : écus = ⌊(total − 5) ÷ 2⌋ chaque année.
+ * @param run { mode: 'levels' | 'career', levelId?, values: [5], total?, partial? }
+ * → { progress, rewards: { ecus, cosmetics: [id], newBest, achievementEcus }, achievements: [id] }
+ */
+export function recordLanterns(p, run, now = Date.now()) {
+  const progress = clone(p);
+  progress.lanterns = normalizeLanterns(progress.lanterns);
+  const L = progress.lanterns;
+  const values = Array.isArray(run?.values) && run.values.length === 5 ? run.values.map((v) => Math.max(1, Math.min(4, Math.round(v) || 1))) : [1, 1, 1, 1, 1];
+  const total = values.reduce((a, b) => a + b, 0);
+  const rewards = { ecus: 0, cosmetics: [], newBest: false, achievementEcus: 0 };
+  if (run?.mode === 'career') {
+    rewards.ecus = Math.max(0, Math.floor((total - LANTERN_REWARDS.careerBase) / LANTERN_REWARDS.careerDivisor));
+    L.career.years += 1;
+    if (total > (L.career.total || 0)) {
+      rewards.newBest = true;
+      L.career.best = values;
+      L.career.total = total;
+    }
+  } else if (getLevel(Number(run?.levelId))) {
+    const id = Number(run.levelId);
+    const prev = L.levels[id];
+    rewards.ecus = prev ? Math.max(0, total - prev.total) : Math.max(0, total - LANTERN_REWARDS.firstBase);
+    if (!prev || total > prev.total) {
+      rewards.newBest = true;
+      L.levels[id] = { best: values, total, at: now };
+    }
+  }
+  progress.ecus = (progress.ecus || 0) + rewards.ecus;
+  // Lanternes de couleur : la première fois qu'un critère a 4 lanternes (n'importe quel mode).
+  LANTERN_CRITERIA.forEach((c, k) => {
+    if (values[k] < 4 || L.firsts.includes(c.id)) return;
+    L.firsts.push(c.id);
+    if (unlockFound(progress, c.lantern)) rewards.cosmetics.push(c.lantern);
+  });
+  if (total >= LANTERN_REWARDS.grandTotal && !L.grand) {
+    L.grand = true;
+    if (unlockFound(progress, LANTERN_REWARDS.grand)) rewards.cosmetics.push(LANTERN_REWARDS.grand);
+  }
+  const ids = checkAchievements(progress, null);
+  const res = unlockAchievements(progress, ids, now);
+  rewards.achievementEcus = res.rewards.ecus;
+  return { progress: res.progress, rewards, achievements: ids };
+}
+
+/** Débloque un décor trouvé (dans `progress`, modifié en place). → true s'il est nouveau. */
+function unlockFound(progress, itemId) {
+  if (!getCosmetic(itemId) || progress.cosmetics.owned.includes(itemId)) return false;
+  const owned = new Set([...progress.cosmetics.owned, itemId]);
+  progress.cosmetics.owned = COSMETICS.filter((i) => owned.has(i.id)).map((i) => i.id);
+  return true;
+}
+
+/** Meilleur résultat de lanternes d'un niveau (choix du niveau : « 🏮 13 / 20 ») : { best, total } | null. */
+export function levelLanterns(p, levelId) {
+  const e = p?.lanterns?.levels?.[levelId];
+  return e ? { best: [...e.best], total: e.total } : null;
+}
+
+/** Résumé du décor de la progression (critère « beauté » des niveaux, createGame({ cozy: { decor } })). */
+export function decorSummary(p) {
+  const c = p?.cosmetics || {};
+  return { placed: Object.keys(c.decor || {}).length, path: !!c.path && c.path !== DEFAULT_COSMETICS.path, fence: !!c.fence && c.fence !== DEFAULT_COSMETICS.fence };
+}
+
+/**
+ * Album à une aube (comme les succès : partie en cours seulement) : nouveautés écrites, succès débloqués.
+ * → { progress, cases, stamps, achievements: [id], rewards: { ecus } }
+ */
+export function recordAlbumDawn(p, ctx, now = Date.now(), src = 'levels') {
+  const res = recordAlbum(p, checkAlbum(p, ctx), now, src);
+  const ids = checkAchievements(res.progress, ctx);
+  const un = unlockAchievements(res.progress, ids, now);
+  return { progress: un.progress, cases: res.cases, stamps: res.stamps, achievements: ids, rewards: { ecus: un.rewards.ecus } };
 }

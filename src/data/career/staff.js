@@ -3,6 +3,8 @@
 //
 // Rien de ce fichier n'est lu par une partie de niveau.
 
+import { F1 } from '../cozy.js';
+
 /** Métiers (§ 7.2). `lotTypes` : terrains où l'on peut l'affecter ; `all` : « tous les … » possible. */
 export const JOBS = [
   {
@@ -11,7 +13,8 @@ export const JOBS = [
     lotTypes: ['field', 'orchard', 'greenhouse'],
     all: true,
     allLabel: 'Tous les champs',
-    text: 'Chasse les corbeaux, récolte, arrose et sème selon le plan de culture (achète les graines).',
+    // (lot 4, F1) Les corvées d'abord ; la récolte attend le joueur (F1.staffDelay aubes).
+    text: `Arrose, désherbe, sème selon le plan de culture (achète les graines), chasse les corbeaux ; récolte ce qui attend depuis ${F1.staffDelay} jours.`,
     tool: 'can',
   },
   {

@@ -106,6 +106,14 @@
 // state.variety. hitTest + { type: 'villageBoard' | 'cart' | 'merchant' | 'themeVisitor' } ; scene.varietySpots(),
 // scene.varietyStats().
 //
+// Lot 4 « Collection & enjeux doux » (cozy-actors.js) : objets cachés des fêtes, stand du jour, maire et Lili,
+// trouvailles d'hiver, traces, mangeoire et oiseau, fenêtre de la veillée, porte-lanternes, badge « vous attend »
+// (carrière, F1) ; jamais sans state.cozy. hitTest + { type: 'feteItem', index } | { type: 'winterFind', id } |
+// { type: 'feeder' } | { type: 'storyWindow' } | { type: 'lanternRack' } | { type: 'feteStall' } (cibles ≥ 48 px CSS) ;
+// en mode fête (scene.setFeteMode(true)), seuls les objets cachés répondent (et le défilement).
+//   scene.setFeteMode(on), scene.feteMode, scene.setLanterns(values | null) (niveaux : meilleur résultat du niveau),
+//   scene.cozySpots(), scene.cozyStats(), scene.cozyItemRect(kind, id) (px du monde), scene.cozySing()
+//
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import {
@@ -120,6 +128,7 @@ import { createLayout, tileHash } from './layout.js';
 import { createEffects, canDraw, giantRect } from './effects.js';
 import { createLot2Actors } from './lot2-actors.js';
 import { createVarietyActors } from './variety-actors.js';
+import { createCozyActors } from './cozy-actors.js';
 
 const OUTLINE = '#3f2631';
 const MIN_ZOOM = 2;
@@ -196,6 +205,9 @@ export function createScene(canvas, images, level, opts = {}) {
   // (Lot 3) Tableau du village, charrette du marché, roulotte de Basile, visiteur du thème, poule voyageuse.
   const variety = createVarietyActors(effects);
   variety.setImages(images);
+  // (Lot 4) Fêtes, hiver vivant, porte-lanternes, badge « vous attend » (cozy-actors.js).
+  const cozy = createCozyActors(effects);
+  cozy.setImages(images);
   /** Objet du lot 3 dans la liste triée par profondeur (sprite de l'atlas, ou repli dessiné : opts.img). */
   const pushVariety = (name, x, y, sortY, opts = {}) => {
     if (opts.img) {
@@ -875,13 +887,19 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     if (careerMode) return hitTestCareer(w.x, w.y, hitOpts);
     const owned = lastGame ? lastGame.state.investments : undefined;
+    // (Lot 4) Mode fête : seuls les objets cachés répondent (cibles d'au moins 48 px CSS).
+    const touch = !!(hitOpts && hitOpts.touch);
+    const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
+    if (cozy.feteMode) return cozy.hitTest(w.x, w.y, touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0, cOpts);
     // (Lot 3) Panneau, charrette, roulotte : touchés en plein d'abord ; la tolérance du doigt ne passe qu'après
     // les parcelles et les bâtiments (un toucher près du champ reste pour la parcelle).
+    const cHit = cozy.hitTest(w.x, w.y, 0, { ...cOpts, minWorld: 0 });
+    if (cHit) return cHit;
     const vHit = variety.hitTest(w.x, w.y, 0);
     if (vHit) return vHit;
-    if (hitOpts && hitOpts.touch) {
+    if (touch) {
       const slop = (TOUCH_SLOP_CSS * dpr) / zoom;
-      return layout.hitTestNear(w.x, w.y, owned, slop) || variety.hitTest(w.x, w.y, slop);
+      return layout.hitTestNear(w.x, w.y, owned, slop) || cozy.hitTest(w.x, w.y, slop, cOpts) || variety.hitTest(w.x, w.y, slop);
     }
     return layout.hitTest(w.x, w.y, owned);
   }
@@ -893,8 +911,12 @@ export function createScene(canvas, images, level, opts = {}) {
   function hitTestCareer(wx, wy, hitOpts) {
     const touch = !!(hitOpts && hitOpts.touch);
     const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
+    const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
+    if (cozy.feteMode) return cozy.hitTest(wx, wy, slop, cOpts); // (lot 4) mode fête : objets cachés seulement
     const a = actors.hitTest(wx, wy, slop);
     if (a) return a;
+    const cHit = cozy.hitTest(wx, wy, 0, { ...cOpts, minWorld: 0 }); // (lot 4) objets cachés, lisière, mangeoire…
+    if (cHit) return cHit;
     const vHit = variety.hitTest(wx, wy, 0); // (lot 3) panneau, charrette, roulotte, visiteur du thème
     if (vHit) return vHit;
     const bs = lastGame?.state?.career?.buildings || {};
@@ -904,7 +926,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
       if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
     }
-    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? variety.hitTest(wx, wy, slop) : null);
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) : null);
   }
 
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
@@ -2221,13 +2243,7 @@ export function createScene(canvas, images, level, opts = {}) {
     for (const id of PROCESSING_IDS) if (A.has(id)) pushWorkshop(id, owned, objSet);
 
     // (v3) Décorations posées sur les emplacements (la mare est au sol, dans la couche fixe)
-    for (const d of layout.decorSlots || []) {
-      if (d.kind !== 'small') continue;
-      const name = decorSprite(cosmetics.decor[d.id]);
-      if (!name || name === 'deco.pond') continue;
-      const tall = (SPRITES[name].h || 1) > 1;
-      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
-    }
+    for (const d of layout.decorSlots || []) pushDecor(d, objSet);
     // (v3) Coupe du concours posée sur le panneau de la ferme
     const cres = lastGame?.state?.contest?.result;
     const met = cres && Array.isArray(cres.goalsMet) ? cres.goalsMet.length : 0;
@@ -2353,13 +2369,7 @@ export function createScene(canvas, images, level, opts = {}) {
       }
     }
     // Décorations posées sur les emplacements
-    for (const d of L.decorSlots || []) {
-      if (d.kind !== 'small') continue;
-      const name = decorSprite(cosmetics.decor[d.id]);
-      if (!name || name === 'deco.pond') continue;
-      const tall = (SPRITES[name].h || 1) > 1;
-      pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + TILE - 0.5, objSet);
-    }
+    for (const d of L.decorSlots || []) pushDecor(d, objSet);
     const pond = (L.decorSlots || []).find((d) => d.id === 'pond');
     if (pond && decorSprite(cosmetics.decor.pond) === 'deco.pond') pushSprite('deco.pond', pond.x, pond.y, pond.y + 1, objSet);
     // Coupe du comice sur le panneau de la ferme ; cocarde pendant le comice
@@ -2480,9 +2490,15 @@ export function createScene(canvas, images, level, opts = {}) {
   /** Eau des mares : quelques reflets qui scintillent. */
   function drawWater() {
     const c = vctx;
+    // (Lot 4) Hiver vivant : la mare gèle (glace et trou de pêche), on y pêche quand même.
+    const iced = !!(lastGame?.state?.cozy?.parts?.winter && lastGame.state.time && (lastGame.state.time.seasonIndex % 4) === 3);
     for (const p of layout.ponds) {
       const w = p.water;
       if ((w.y + w.h) * TILE < -oy || w.y * TILE > -oy + viewH) continue;
+      if (iced) {
+        drawIce(c, w);
+        continue;
+      }
       for (let k = 0; k < 7; k++) {
         const ph = (time * 0.7 + k * 0.37) % 1;
         if (ph > 0.5) continue;
@@ -2495,6 +2511,40 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       c.globalAlpha = 1;
     }
+  }
+
+  /** (Lot 4) Glace d'hiver sur une mare (tuiles d'eau) : voile clair, fissures, trou de pêche rond. */
+  function drawIce(c, w) {
+    const x = (w.x + 1) * TILE - 4;
+    const y = (w.y + 1) * TILE - 4;
+    const ww = (w.w - 2) * TILE + 8;
+    const hh = (w.h - 2) * TILE + 8;
+    if (ww <= 0 || hh <= 0) return;
+    c.globalAlpha = 0.55;
+    c.fillStyle = '#e8f4ff';
+    c.fillRect(x, y, ww, hh);
+    c.globalAlpha = 0.8;
+    c.fillStyle = '#b9d4ee';
+    for (let k = 0; k < 4; k++) {
+      const cx = x + Math.floor(tileHash(w.x, k, 41) * (ww - 10)) + 3;
+      const cy = y + Math.floor(tileHash(w.y, k, 43) * (hh - 6)) + 2;
+      c.fillRect(cx, cy, 5, 1);
+      c.fillRect(cx + 4, cy + 1, 3, 1);
+    }
+    // Trou de pêche (au bord droit) : eau sombre qui scintille.
+    const hx = x + ww - 14;
+    const hy = y + Math.floor(hh / 2) - 3;
+    c.globalAlpha = 1;
+    c.fillStyle = OUTLINE;
+    c.fillRect(hx - 1, hy, 9, 6);
+    c.fillRect(hx, hy - 1, 7, 8);
+    c.fillStyle = '#3b6891';
+    c.fillRect(hx, hy, 7, 6);
+    if (!reducedMotion && Math.sin(time * 2.3) > 0.6) {
+      c.fillStyle = '#e8f6ff';
+      c.fillRect(hx + 2, hy + 2, 2, 1);
+    }
+    c.globalAlpha = 1;
   }
 
   /** Bulles de ramassage au-dessus des abris (production en attente) ; nombres à l'écran ensuite. */
@@ -2597,6 +2647,44 @@ export function createScene(canvas, images, level, opts = {}) {
       if (SPRITES[icon]) drawSprite(ctx, images, icon, Math.round(cx - tw / 2 - 16 * iconS), Math.round(labelPt.y - 8 * iconS), { scale: iconS });
     }
     ctx.restore();
+  }
+
+  /**
+   * Décoration posée sur un emplacement (petite, ou grande 2 × 2 hors mare : le grand herbier, le grand lampion du
+   * lot 4). Sprite absent (planche pas encore chargée) : petit repli dessiné.
+   */
+  function pushDecor(d, objSet) {
+    if (d.kind !== 'small' && d.kind !== 'large') return;
+    const name = decorSprite(cosmetics.decor[d.id]);
+    if (!name || name === 'deco.pond') return;
+    if (d.kind === 'large' && (SPRITES[name].h || 1) < 2) return; // mare de l'emplacement : couche fixe
+    if (!canDraw(objSet, name)) {
+      pushVariety(null, d.x, d.kind === 'large' ? d.y : d.y, d.y + d.h - 0.5, { img: decorFallback(d.kind === 'large' ? 32 : 16) });
+      return;
+    }
+    const tall = d.kind === 'small' && (SPRITES[name].h || 1) > 1;
+    pushSprite(name, d.x, tall ? d.y - TILE : d.y, d.y + (d.kind === 'large' ? d.h : TILE) - 0.5, objSet);
+  }
+
+  const decorFallbacks = {};
+  /** Repli d'une décoration dont la planche manque : socle de bois et étoile (16 ou 32 px). */
+  function decorFallback(size) {
+    if (decorFallbacks[size]) return decorFallbacks[size];
+    const cv = makeCanvas(size, size);
+    const g = cv.getContext('2d');
+    const k = size / 16;
+    g.fillStyle = OUTLINE;
+    g.fillRect(3 * k, 11 * k, 10 * k, 4 * k);
+    g.fillStyle = '#b8794a';
+    g.fillRect(4 * k, 12 * k, 8 * k, 2 * k);
+    g.fillStyle = OUTLINE;
+    g.fillRect(6 * k, 3 * k, 4 * k, 8 * k);
+    g.fillRect(4 * k, 5 * k, 8 * k, 4 * k);
+    g.fillStyle = '#fddc00';
+    g.fillRect(7 * k, 4 * k, 2 * k, 6 * k);
+    g.fillRect(5 * k, 6 * k, 6 * k, 2 * k);
+    decorFallbacks[size] = cv;
+    return cv;
   }
 
   function drawEntries() {
@@ -2955,7 +3043,8 @@ export function createScene(canvas, images, level, opts = {}) {
       const name = decorSprite(cosmetics.decor[d.id]);
       if (name) {
         const tall = (SPRITES[name].h || 1) > 1 && d.kind === 'small';
-        drawSprite(c, objSet, name, d.x, tall ? d.y - TILE : d.y);
+        if (canDraw(objSet, name)) drawSprite(c, objSet, name, d.x, tall ? d.y - TILE : d.y);
+        else c.drawImage(decorFallback(d.kind === 'large' ? 32 : 16), d.x, d.y);
         // Objet posé : souligné d'un trait clair.
         c.globalAlpha = 0.6 + 0.4 * pulse;
         c.fillStyle = '#fff3b0';
@@ -3368,6 +3457,7 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.clear();
       lot2.clear();
       variety.clear();
+      cozy.clear();
     }
 
     const cal = game.query.calendar();
@@ -3382,6 +3472,7 @@ export function createScene(canvas, images, level, opts = {}) {
     syncPlots(game, raining);
     lot2.sync(game, layout, { day: game.state.time?.day || 0, dayProgress });
     variety.sync(game, layout, { time });
+    cozy.sync(game, layout, { time });
     initialized = true;
 
     // Clé du cache de la couche fixe : saison + emplacements achetés (la taille remet la clé à -1).
@@ -3406,6 +3497,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.update(dt, fxState);
     lot2.update(dt);
     variety.update(dt);
+    cozy.update(dt);
 
     // Tampon de vue
     const c = vctx;
@@ -3418,6 +3510,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawGround(c, images);
     collectDrawables(owned, season, sheetsEnv, weather, dayProgress);
     variety.collect(pushVariety);
+    cozy.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3425,6 +3518,7 @@ export function createScene(canvas, images, level, opts = {}) {
     if (contestDay(cal)) drawBunting();
     drawWorkBubbles(owned);
     drawPlotMarkers();
+    cozy.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3433,6 +3527,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
     drawLampGlow(dayProgress, weather);
+    cozy.drawGlow(c, ox, oy, dayProgress, weather);
     effects.postProcess(c, view, scratch);
 
     // Canvas final
@@ -3482,6 +3577,7 @@ export function createScene(canvas, images, level, opts = {}) {
       effects.clear();
       lot2.clear();
       variety.clear();
+      cozy.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -3517,6 +3613,7 @@ export function createScene(canvas, images, level, opts = {}) {
       actors.shift(dy);
       lot2.shift(0, dy);
       variety.shift(0, dy);
+      cozy.shift(0, dy);
     }
     computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
     if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
@@ -3620,6 +3717,7 @@ export function createScene(canvas, images, level, opts = {}) {
     }
     actors.onEvent(type, payload, L);
     variety.onEvent(type, payload, L);
+    cozy.onEvent(type, payload, L);
     effects.onEvent(type, payload, L);
   }
 
@@ -3669,6 +3767,7 @@ export function createScene(canvas, images, level, opts = {}) {
     actors.sync(game, layout, time);
     lot2.sync(game, layout, { day: careerDay(game), dayProgress, career: true });
     variety.sync(game, layout, { time });
+    cozy.sync(game, layout, { time });
     initialized = true;
     flushDeferred();
 
@@ -3692,6 +3791,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.update(dt, fxState);
     lot2.update(dt);
     variety.update(dt);
+    cozy.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -3707,6 +3807,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawClearing(season, sheetsEnv);
     collectCareer(owned, season, sheetsEnv);
     variety.collect(pushVariety);
+    cozy.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -3716,6 +3817,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawWorkBubbles(owned);
     drawCollectBubbles();
     drawPlotMarkers();
+    cozy.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -3724,6 +3826,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.drawWeather(c);
     effects.drawLight(c, viewW, viewH);
     drawLampGlow(dayProgress, weather);
+    cozy.drawGlow(c, ox, oy, dayProgress, weather);
     drawFairGlow(dayProgress, weather);
     effects.postProcess(c, view, scratch);
 
@@ -3743,6 +3846,7 @@ export function createScene(canvas, images, level, opts = {}) {
     effects.clear();
     lot2.clear();
     variety.clear();
+    cozy.clear();
     userScrolled = false;
     stopFling();
     scrollAnim = null;
@@ -3776,6 +3880,7 @@ export function createScene(canvas, images, level, opts = {}) {
       actors.setReducedMotion?.(reducedMotion);
       lot2.setReducedMotion(reducedMotion);
       variety.setReducedMotion(reducedMotion);
+      cozy.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -3816,6 +3921,7 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       if (LOT2_EVENTS.has(type)) lot2.onEvent(type, payload || {}, layout);
       variety.onEvent(type, payload || {}, layout);
+      cozy.onEvent(type, payload || {}, layout);
       effects.onEvent(type, payload, layout);
     },
     setLevel,
@@ -3887,6 +3993,33 @@ export function createScene(canvas, images, level, opts = {}) {
     },
     varietyStats() {
       return variety.stats();
+    },
+    // ── (Lot 4) Fêtes, hiver, lanternes ──
+    /** Mode fête (chasse aux œufs…) : seuls les objets cachés répondent au toucher ; le défilement reste. */
+    setFeteMode(on) {
+      cozy.setFeteMode(on);
+      if (on) hover = null;
+    },
+    get feteMode() {
+      return cozy.feteMode;
+    },
+    /** Niveaux : porte-lanternes du perron (meilleur résultat du niveau, [5] de 0 à 4), null = éteint. */
+    setLanterns(values) {
+      cozy.setLanterns(values);
+    },
+    cozySpots() {
+      return cozy.spots();
+    },
+    cozyStats() {
+      return cozy.stats();
+    },
+    /** Rectangle (px du monde) d'une cible du lot 4 : 'feteItem' (index) | 'winterFind' (id) | 'feeder' | … */
+    cozyItemRect(kind, id) {
+      return cozy.itemRect(kind, id);
+    },
+    /** L'oiseau de la mangeoire chante (petit saut). */
+    cozySing() {
+      cozy.sing();
     },
     lot2Stats() {
       return { ...lot2.stats(), effects: effects.stats() };

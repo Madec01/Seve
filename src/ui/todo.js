@@ -204,6 +204,15 @@ export function createTodo(app) {
 
     // (Lot 3) Tableau du village, charrette, colporteur, cadeau et défis de la saison (src/ui/variety.js).
     for (const it of safe(() => app.variety?.todoItems?.(game), []) || []) add(it);
+    // (Lot 4) Fête du jour, hiver vivant, veillée ; carrière : « Le Haut-Champ : 12 parcelles mûres vous attendent »
+    // (remplace « N parcelles à récolter » : `replaces`).
+    for (const it of safe(() => app.cozy?.todoItems?.(game), []) || []) {
+      if (it.replaces) {
+        const k = out.findIndex((x) => x.id === it.replaces);
+        if (k >= 0) out.splice(k, 1);
+      }
+      add(it);
+    }
 
     if (career) {
       // Terrain à acheter (si l'argent suffit en gardant les charges de saison).
@@ -372,6 +381,7 @@ export function createTodo(app) {
     if (app.hints?.active) return false;
     if (app.tutorial?.active && app.tutorial.stepId !== 'wait-winter') return false;
     if (app.decor?.active) return false;
+    if (app.cozy?.feteMode) return false; // (lot 4) mode fête : la barre de la chasse remplace les onglets
     if (document.body.classList.contains('is-rotated')) return false;
     return true;
   }
@@ -471,7 +481,7 @@ export function createTodo(app) {
       const plotsHit = ev.plots || [];
       if (plotsHit.length && !app.sheets.isOpen() && !app.dialogs.isOpen()) requestAnimationFrame(() => focusPlots(plotsHit));
       lastTick = 0;
-    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderKept', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought'].includes(ev.type)) {
+    } else if (['harvested', 'planted', 'watered', 'collected', 'offer', 'offerResolved', 'questOffered', 'questDone', 'crowChased', 'rankUp', 'lotBought', 'ordersRenewed', 'orderProgress', 'orderKept', 'orderDone', 'orderRemoved', 'cartArrived', 'cartProgress', 'crateFull', 'cartDeparted', 'cardsOffered', 'cardPicked', 'challengesOffered', 'challengeMedal', 'merchantSoon', 'merchantArrived', 'merchantLeft', 'merchantBought', 'feteSoon', 'feteStarted', 'feteFound', 'feteDone', 'feteEnded', 'seedPackBought', 'winterFind', 'winterPicked', 'feederFilled', 'feederBird', 'storyReady', 'storyHeard', 'weeded'].includes(ev.type)) {
       lastTick = 0;
     }
   }
