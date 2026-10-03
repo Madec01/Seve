@@ -9,7 +9,8 @@
 // « panneau » (achats, bilan) se rangent à droite, sans fond, et la scène reste utilisable.
 //
 // opts : { id, title, icon (nœud), content (nœud), kind: 'panel' | 'popup', tall: bool,
-//          onClose(reason), className, pauses: bool (false : jamais de pause de lecture) }
+//          onClose(reason), className, pauses: bool (false : jamais de pause de lecture),
+//          outsideClose: bool (false : un toucher sur la scène ne ferme pas la feuille) }
 //
 // Pause pendant la lecture (option d'accessibilité, activée par défaut en Détente) : tant qu'une
 // feuille est ouverte, le temps s'arrête (raison de pause « sheet », qui s'ajoute aux autres :
@@ -161,6 +162,14 @@ export function createSheets(layer, app) {
   // fait rien d'autre (pas de plantation ou d'arrosage involontaire).
   backdrop.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    // Fenêtre à lire jusqu'au bout (boîte de Joseph, récits) : un toucher dehors ne la ferme pas, la feuille
+    // tressaille pour montrer son bouton (✕, glissement et Échap restent).
+    if (current?.opts.outsideClose === false) {
+      box.classList.remove('is-nudge');
+      void box.offsetWidth;
+      box.classList.add('is-nudge');
+      return;
+    }
     close('outside');
   });
 

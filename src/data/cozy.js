@@ -112,7 +112,7 @@ export function careerFactor(rank = 1) {
 export const SOUP_CROPS = ['carrot', 'turnip', 'wheat', 'cabbage', 'tomato', 'corn', 'sunflower', 'potato', 'zucchini', 'pumpkin', 'pea', 'leek'];
 
 /** Points du stand ; seuils des rubans. */
-export const STAND_POINTS = { item: 1, fine: 1, gold: 2, giant: 2, homemade: 1, star: 1 };
+export const STAND_POINTS = { item: 1, fine: 1, gold: 2, giant: 2, homemade: 1, star: 1, heirloom: 1 }; // heirloom : (Vallée V2, carrière) culture dont une variété ancienne a été récoltée cette année
 export const RIBBONS = [
   { id: 'green', name: 'Coup de cœur des enfants', min: 1 },
   { id: 'blue', name: 'Bel étal', min: 8 },

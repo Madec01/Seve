@@ -20,9 +20,9 @@ import { el, fmt, plural } from './dom.js';
 import { icon, hasSprite, sprite } from './icons.js';
 import { v3 } from './v3.js';
 
-const STAMP_EMOJI = { gold: '★', giant: '◆', fete: '🎪', visitor: '✉', best: '🏅' };
-const STAMP_NAMES = { gold: 'Récolte dorée', giant: 'Légume géant', fete: 'Fête jouée', visitor: 'Visiteur accueilli', best: 'Le meilleur résultat' };
-const PAGE_EMOJI = { garden: '🥕', homemade: '🍯', animals: '🐔', sky: '⛅', luck: '🍀', village: '🏠', years: '📅', fetes: '🎏', edge: '🌿', feeder: '🐦', stories: '🕯', heirlooms: '🌱', wildlife: '🦔' };
+const STAMP_EMOJI = { gold: '★', giant: '◆', fete: '🎪', visitor: '✉', best: '🏅', heart: '♥' };
+const STAMP_NAMES = { gold: 'Récolte dorée', giant: 'Légume géant', fete: 'Fête jouée', visitor: 'Visiteur accueilli', best: 'Le meilleur résultat', heart: 'Variété préférée' };
+const PAGE_EMOJI = { garden: '🥕', homemade: '🍯', animals: '🐔', sky: '⛅', luck: '🍀', village: '🏠', years: '📅', fetes: '🎏', edge: '🌿', feeder: '🐦', stories: '🕯', heirlooms: '🌱', wildlife: '🦔', swaps: '🌱', crosses: '✨', wildlife2: '🐦' };
 const SRC_NAMES = { levels: 'Les niveaux', career: 'Ma ferme', retro: 'avant l\'album' };
 
 const MOD = { album: null, data: null };

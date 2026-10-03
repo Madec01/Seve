@@ -990,7 +990,7 @@ export function createScene(canvas, images, level, opts = {}) {
     const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
     if (cozy.feteMode) return cozy.hitTest(wx, wy, slop, cOpts); // (lot 4) mode fête : objets cachés seulement
     // (Vallée) Mode aménagement : seuls les emplacements libres répondent (et le défilement).
-    if (valley.placing) return valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld });
+    if (valley.placing || valley.pair) return valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }); // (V2) mode paire aussi
     const a = actors.hitTest(wx, wy, slop);
     if (a) return a;
     // (Vallée) Bête qui attend, trouvaille d'une haie, boîte en fer : cibles agrandies pour le doigt (≥ 48 px CSS).
@@ -2000,7 +2000,12 @@ export function createScene(canvas, images, level, opts = {}) {
       }
       // (Vallée) Variété ancienne : son propre dessin (heirloom.<id>.<étape>), sinon celui de la culture.
       const hName = pv.variety?.id ? `heirloom.${pv.variety.id}.${stage}` : null;
-      drawSprite(c, images, hName && canDraw(images, hName) ? hName : cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+      if (hName && !canDraw(images, hName) && pv.variety.tint && stage >= 2) {
+        // (Vallée V2) Variété sans dessin (planche valley2 pas encore là) : la culture, teintée par sa couleur.
+        const tinted = tintedCrop(pv.cropId, stage, pv.variety.tint);
+        if (tinted) drawTinted(c, tinted, r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+        else drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+      } else drawSprite(c, images, hName && canDraw(images, hName) ? hName : cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
       // Graine tout juste semée : une pousse bien lisible (forme), même sur une terre sombre.
       if (stage === 0) drawPixelMap(c, MARK_SPROUT, r.x + 5 * k, r.y + 7 * k, k);
       if (pv.mature) {
@@ -2023,6 +2028,42 @@ export function createScene(canvas, images, level, opts = {}) {
     for (let j = 0; j < giantCount; j++) drawGiant(c, giantList[j], k);
   }
 
+  // ── (Vallée V2) Repli teinté d'une variété sans dessin ──────────────────────────────
+  const tintCache = new Map();
+  /** Petite toile 16 × 16 (ou taille du sprite) : la culture, recolorée par la teinte de la variété (cache). */
+  function tintedCrop(cropId, stage, tint) {
+    const key = `${cropId}|${stage}|${tint}`;
+    if (tintCache.has(key)) return tintCache.get(key);
+    let cv = null;
+    try {
+      const name = cropSprite(cropId, stage);
+      const sp = SPRITES[name];
+      const w = (sp?.w || 1) * TILE;
+      const h = (sp?.h || 1) * TILE;
+      cv = document.createElement('canvas');
+      cv.width = w;
+      cv.height = h;
+      const g = cv.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      drawSprite(g, images, name, 0, 0);
+      g.globalCompositeOperation = 'source-atop';
+      g.globalAlpha = 0.45;
+      g.fillStyle = tint;
+      g.fillRect(0, 0, w, h);
+      g.globalAlpha = 1;
+      g.globalCompositeOperation = 'source-over';
+    } catch {
+      cv = null;
+    }
+    if (tintCache.size > 80) tintCache.clear();
+    tintCache.set(key, cv);
+    return cv;
+  }
+  function drawTinted(c, cv, x, y, sc) {
+    const k = typeof sc === 'number' ? sc : sc?.scale || 1;
+    c.drawImage(cv, Math.round(x), Math.round(y), cv.width * k, cv.height * k);
+  }
+
   // ── (Lot 2) Légumes géants et cueillette ─────────────────────────────────────────
   const giantList = [];
   let giantCount = 0;
@@ -2036,7 +2077,9 @@ export function createScene(canvas, images, level, opts = {}) {
     const r = giantRect(layout, g.plots, anchor);
     if (!r) return;
     const cropId = g.cropId || pv.cropId;
-    const name = `crop.${cropId}.giant`;
+    // (Vallée) Variété géante dessinée (chou du village, chou et citrouille croisés…) : son propre dessin.
+    const vGiant = pv.variety?.id ? `heirloom.${pv.variety.id}.giant` : null;
+    const name = vGiant && canDraw(images, vGiant) ? vGiant : `crop.${cropId}.giant`;
     const has = canDraw(images, name);
     const sw = has ? (SPRITES[name].w || 2) * TILE : TILE;
     const sh = has ? (SPRITES[name].h || 2) * TILE : TILE;
@@ -3530,6 +3573,11 @@ export function createScene(canvas, images, level, opts = {}) {
           mmSprite(c, 'icon.career.quest', p.x, p.y - icon * 0.4 - (pulse ? 1 : 0), icon);
         }
       }
+      // (Vallée V2) Mode paire : un point sur chaque terrain qui a une parcelle où semer la paire.
+      if (valley.pair) {
+        const pulse3 = Math.sin(time * 4) > 0;
+        for (const t0 of valley.pairTargets()) dot(map.toMap(t0.rect.x + t0.rect.w / 2, t0.rect.y + t0.rect.h / 2), pulse3 ? '#fff3b0' : '#8ee06a', Math.max(2, Math.round(cs / 10)));
+      }
       // (Vallée) Mode aménagement : un point sur chaque terrain qui a un emplacement libre du genre choisi.
       if (valley.placing) {
         const pulse2 = Math.sin(time * 4) > 0;
@@ -4353,6 +4401,16 @@ export function createScene(canvas, images, level, opts = {}) {
       valley.setStage(n);
     },
     /** Mode aménagement : les emplacements libres du genre pulsent ; seuls eux répondent au toucher (null : fin). */
+    /** (Vallée V2) Mode « paire » : les parcelles de valleyPairPlots(cropId) pulsent ; seules elles répondent. */
+    setPairPlacing(cropId) {
+      valley.setPair(cropId || null);
+    },
+    get pairPlacing() {
+      return valley.pair;
+    },
+    valleyPairTargets() {
+      return valley.pairTargets();
+    },
     setValleyPlacing(kind) {
       valley.setPlacing(kind || null);
       if (kind) hover = null;
@@ -4360,7 +4418,8 @@ export function createScene(canvas, images, level, opts = {}) {
     get valleyPlacing() {
       return valley.placing;
     },
-    /** Rectangle (px du monde) : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId). */
+    /** Rectangle (px du monde) : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId) ;
+     *  (V2) 'seedLibrary' | 'pairPlot' (index) | 'trocPin'. */
     valleyItemRect(kind, id) {
       return valley.itemRect(kind, id);
     },

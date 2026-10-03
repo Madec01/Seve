@@ -50,6 +50,10 @@ export const COSMETICS = [
   { id: 'lantern.orange', name: 'Lanterne orange (prospérité)', category: 'small', price: 0, found: true },
   { id: 'seed.cabinet', name: 'Le semainier à graines', category: 'small', price: 0, found: true },
   { id: 'nestbox.painted', name: 'Le nichoir peint', category: 'small', price: 0, found: true },
+  // (Vallée vivante, lot V2) Pages de l'album « Le troc du village », « Les variétés de la ferme », « Les habitants (suite) ».
+  { id: 'swap.basket', name: 'Le panier de sachets', category: 'small', price: 0, found: true },
+  { id: 'cross.sign', name: 'L\'enseigne « Ferme semencière »', category: 'small', price: 0, found: true },
+  { id: 'lizard.wall', name: 'Le muret au lézard', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   { id: 'herbarium', name: 'Le grand herbier', category: 'large', price: 0, found: true },

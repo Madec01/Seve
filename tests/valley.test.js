@@ -17,11 +17,13 @@ import { careerFactor } from '../src/data/cozy.js';
 import * as P from '../src/core/progression.js';
 import { valleyCareer, startedCareer, newCareer, nextDay, record, setRank, toSeason } from './valley-helpers.js';
 
-test('données : 12 variétés (une par culture), 7 traits, 8 aménagements, 12 habitants, 6 étapes, 24 signes de vie', () => {
+test('données : 12 variétés (une par culture), 7 traits (+ Parfumée du V2), 8 aménagements (+ nichoir à chauves-souris du V2), 12 habitants, 6 étapes, 24 signes de vie', () => {
   assert.equal(VARIETIES.length, 12);
   assert.equal(new Set(VARIETIES.map((x) => x.cropId)).size, 12);
-  assert.equal(TRAITS.length, 7);
-  assert.equal(NATURE_ITEMS.length, 8);
+  assert.equal(TRAITS.length, 8);
+  assert.equal(TRAITS.filter((t) => t.id !== 'scented').length, 7);
+  assert.equal(NATURE_ITEMS.length, 9);
+  assert.equal(NATURE_ITEMS.filter((n) => !n.heritage).length, 8);
   assert.equal(SPECIES.length, 12);
   assert.deepEqual(STAGES.map((s) => s.signs), [0, 2, 6, 11, 17, 24]);
   assert.equal(SIGNS_V1, 24);
@@ -51,7 +53,7 @@ test('activation : par défaut, null avec valley: false ; avant le rang 2 rien n
   assert.equal(ev.of('valleyStarted').length, 0);
   assert.equal(r1.actions.career.openJar().reason, 'La Vallée commence au rang 2.');
   const parts = createCareer({ seed: 3, valley: { wildlife: false } });
-  assert.deepEqual(parts.state.career.valley.parts, { seeds: true, wildlife: false });
+  assert.deepEqual(parts.state.career.valley.parts, { seeds: true, wildlife: false, heritage: true });
 });
 
 test('début (première aube au rang 2) : boîte de Joseph (3 × 3 graines), première haie offerte, chapitre 0 à lire', () => {
@@ -261,7 +263,10 @@ test('progression : 2 pages d\'album (carrière), 7 succès (155 écus), décor 
   g.actions.career.triggerValley('fix', 'bouleDOr');
   g.actions.career.triggerValley('install', 'robin');
   const ctx = g.query.achievementContext();
-  assert.deepEqual(ctx.career.valley, { started: true, fixed: ['bouleDOr'], installed: ['robin'], stage: 0, jars: 0, hand: 0 });
+  assert.deepEqual(ctx.career.valley, {
+    started: true, fixed: ['bouleDOr'], installed: ['robin'], stage: 0, jars: 0, hand: 0,
+    swaps: [], swapsFav: [], crossesFound: [], library: 0, fixedPays: 1, fixedVillage: 0, fixedCross: 0, installedV1: 1, installedV2: 0,
+  });
   const p = P.defaultProgress();
   const ids = P.checkAchievements(p, ctx);
   for (const id of ['valleyBox', 'firstSaved', 'firstNeighbour']) assert.ok(ids.includes(id), id);

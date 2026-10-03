@@ -13,7 +13,8 @@ import { startedCareer, emptyPlots, nextDay, record, withExtension, toSeason, se
 test('emplacements : haies sur chaque terrain possédé (sauf la maison), bande fleurie des champs, hôtel du champ de départ, chouette avec le grenier', () => {
   const g = startedCareer();
   const ids = spotsOf(g.state).map((x) => x.spotId);
-  assert.deepEqual(ids, ['home.nest', 'start.hedgeL', 'start.hedgeR', 'start.strip', 'start.hotel', 'yard.hedgeL', 'yard.hedgeR', 'yard.nest', 'yard.pile']);
+  // (V2) Le nichoir à chauves-souris sous l'avant-toit de la maison (en fin de liste du terrain ; partie `heritage`).
+  assert.deepEqual(ids, ['home.nest', 'home.bat', 'start.hedgeL', 'start.hedgeR', 'start.strip', 'start.hotel', 'yard.hedgeL', 'yard.hedgeR', 'yard.nest', 'yard.pile']);
   assert.ok(g.actions.career.upgradeBuilding('storage').ok);
   assert.ok(spotsOf(g.state).some((x) => x.spotId === 'home.owl'));
   const lot = g.actions.career.buyLot();

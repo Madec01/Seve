@@ -260,8 +260,8 @@ export function createGrange(app) {
   function achievementsTab() {
     const list = P().achievementList(null);
     const careerAll = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
-    // (Vallée vivante) Les 7 succès de la Vallée, rangés sous leur propre titre.
-    const valleyIds = new Set((v3.achievements?.VALLEY_ACHIEVEMENTS || []).map((a) => a.id));
+    // (Vallée vivante) Les succès de la Vallée (7 du V1, 6 du V2 « Le troc et les croisements »), sous leur propre titre.
+    const valleyIds = new Set([...(v3.achievements?.VALLEY_ACHIEVEMENTS || []), ...(v3.achievements?.HERITAGE_ACHIEVEMENTS || [])].map((a) => a.id));
     const career = careerAll.filter((a) => !valleyIds.has(a.id));
     const valley = careerAll.filter((a) => valleyIds.has(a.id));
     const vdone = valley.filter((a) => a.done).length;

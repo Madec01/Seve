@@ -1,14 +1,26 @@
 // La Vallée vivante (lot V1) — habitats, recettes, emplacements, signes de vie, étapes, indice (pur, sans tirage). Règles :
 // docs/VALLEE.md § 4 à § 6 et § 10.1 ; contrat : docs/ARCHITECTURE.md, « Vallée vivante — contrats du lot V1 ».
+// (V2) Espèces et variétés lues sur les tables ALL_* (16 et 35) ; nichoir à chauves-souris (emplacements `bat`, seulement
+// avec la partie `heritage`) ; prochain indice dans l'ordre du § 16.9.4 (récit, troc, paire, Grainothèque).
 
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import {
-  MAX_STAGE, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS, RECIPE_NATURE, RECIPE_TEXTS, SPECIES, SPECIES_BY_ID, STAGES,
-  BOON_TEXTS, VARIETIES, VARIETIES_BY_ID, agreeWith,
+  ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, MAX_STAGE, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS,
+  RECIPE_NATURE, RECIPE_TEXTS, STAGES, BOON_TEXTS, agreeWith,
 } from '../../data/career/valley.js';
+import { SEED_LIBRARY } from '../../data/career/heritage.js';
 import { inGreenhouse, isMature } from '../farm.js';
 import { isTreeAdult } from '../trees.js';
-import { isFixed, seasonAbs, seasonAbsOfDay, speciesInstalled, traitOf } from './heirlooms.js';
+import { careerSeasonCharge } from './effects.js';
+import { handSeedsOf, hasTrait, heritagePartOn, isFixed, libraryLevelOf, seasonAbs, seasonAbsOfDay, speciesInstalled, varietyName } from './heirlooms.js';
+import {
+  crossLinks, heritageOn, heritageSeedsOn, pairPlots, pairStatus, partnerPlotOf, swapInfo, unreadStory, unitOf,
+} from './heritage.js';
+
+const SPECIES = ALL_SPECIES;
+const SPECIES_BY_ID = ALL_SPECIES_BY_ID;
+const VARIETIES = ALL_VARIETIES;
+const VARIETIES_BY_ID = ALL_VARIETIES_BY_ID;
 
 const lowerFirst = (t) => t.charAt(0).toLowerCase() + t.slice(1);
 const BIG_SHELTERS = ['cowshed', 'stable', 'sheepfold', 'goatShed'];
@@ -21,9 +33,10 @@ export function granaryBuilt(state) {
   return !!state.career.buildings?.storage;
 }
 
-/** Définitions d'emplacements d'un terrain possédé : [{ slot, kind, side, needs?, startOnly? }]. */
+/** Définitions d'emplacements d'un terrain possédé : [{ slot, kind, side, needs?, startOnly?, heritage? }]. */
 function lotSpotDefs(state, lot) {
-  return (NATURE_SPOTS[lot.type] || []).filter((d) => (!d.startOnly || lot.id === 'start'));
+  const v2 = heritagePartOn(state);
+  return (NATURE_SPOTS[lot.type] || []).filter((d) => (!d.startOnly || lot.id === 'start') && (!d.heritage || v2));
 }
 
 /**
@@ -73,6 +86,7 @@ export function ofLot(name) {
 const WHERE = {
   hedge: 'près de la haie', strip: 'sur la bande fleurie', nestbox: 'près du nichoir', woodpile: 'près du tas de bois',
   insectHotel: 'près de l\'hôtel à insectes', owlbox: 'au nichoir du grenier', loneTree: 'au pied du chêne', reeds: 'au bord de la mare',
+  batbox: 'au nichoir à chauves-souris',
 };
 
 /** « près de la haie du Haut-Champ » (texte d'un emplacement). */
@@ -138,14 +152,14 @@ export function fallowPlots(state) {
 /** Parcelles d'une variété mellifère en pousse (pas encore mûres). */
 export function beePlotsGrowing(state) {
   let n = 0;
-  for (const p of state.plots) if (p && p.env && p.cropId && traitOf(p)?.id === 'bee' && !isMature(p)) n++;
+  for (const p of state.plots) if (p && p.env && p.cropId && hasTrait(state, p, 'bee') && !isMature(p)) n++;
   return n;
 }
 
 /** Compte de chaque genre de recette (aménagements posés + ce que la ferme offre). */
 export function habitatCounts(state) {
   const v = state.career.valley;
-  const c = { hedge: 0, strip: 0, nestbox: 0, woodpile: 0, insectHotel: 0, owlbox: 0, loneTree: 0, reeds: 0, pond: 0, orchard: 0, wildGround: 0, bigShelter: 0, treeAdult: 0, oakAdult: 0, flowers: 0, cropsGrowing: 0 };
+  const c = { hedge: 0, strip: 0, nestbox: 0, woodpile: 0, insectHotel: 0, owlbox: 0, loneTree: 0, reeds: 0, batbox: 0, pond: 0, orchard: 0, wildGround: 0, bigShelter: 0, treeAdult: 0, oakAdult: 0, flowers: 0, cropsGrowing: 0 };
   if (!v) return c;
   for (const n of Object.values(v.nature)) {
     c[n.kind] = (c[n.kind] || 0) + 1;
@@ -260,7 +274,7 @@ export function speciesSpot(state, id) {
 
 // ── Signes de vie, étapes, services ─────────────────────────────────────────────────────────
 
-/** Habitants installés (ids, ordre des données). */
+/** Habitants installés (ids, ordre des données : les 12 du V1 puis les 4 du V2). */
 export function installedSpecies(state) {
   return SPECIES.filter((s) => speciesInstalled(state, s.id)).map((s) => s.id);
 }
@@ -303,11 +317,11 @@ function plotSowable(state, i, crop) {
   return inGreenhouse(p) || crop.seasons.includes(['spring', 'summer', 'autumn', 'winter'][state.time.seasonIndex]);
 }
 
-/**
- * Le prochain indice : (1) une bête à aller voir ; (2) un chapitre de Joseph à lire ; (3) un bocal à ouvrir ; (4) une
- * planche d'essai mûre ; (5) l'espèce la plus proche de venir (ce qui manque) ; (6) des graines qui attendent d'être
- * semées ; (7) l'étape suivante. → null | { kind, text, icon, target }
- */
+/** Espèces que l'indice regarde : les 16 avec le V2, les 12 du V1 sinon. */
+function hintSpecies(state) {
+  return heritagePartOn(state) ? SPECIES : SPECIES.filter((s) => s.group !== 'v2');
+}
+
 /** Indice « graines à semer » : la première variété dont une graine peut être semée maintenant (null sinon). */
 function sowableSeedsHint(state) {
   const v = state.career.valley;
@@ -316,32 +330,90 @@ function sowableSeedsHint(state) {
     if (n <= 0) continue;
     const crop = getCrop(x.cropId);
     const k = state.plots.findIndex((p, i) => plotSowable(state, i, crop));
-    if (k >= 0) return { kind: 'seeds', text: `${n} ${n > 1 ? 'graines' : 'graine'} de ${x.name} ${n > 1 ? 'attendent' : 'attend'} d'être ${n > 1 ? 'semées' : 'semée'}.`, icon: x.icon, target: { type: 'plot', id: k } };
+    if (k >= 0) {
+      const name = varietyName(state, x);
+      return { kind: 'seeds', text: `${n} ${n > 1 ? 'graines' : 'graine'} de ${name} ${n > 1 ? 'attendent' : 'attend'} d'être ${n > 1 ? 'semées' : 'semée'}.`, icon: x.icon, target: { type: 'plot', id: k } };
+    }
   }
   return null;
 }
 
+/**
+ * (V2) « Semez la paire » : une variété du village en main dont le croisement n'est pas trouvé et dont aucune paire ne
+ * pousse, avec une parcelle libre et sa voisine. → null | indice
+ */
+function pairHint(state) {
+  if (!heritageSeedsOn(state)) return null;
+  const v = state.career.valley;
+  const links = crossLinks(state);
+  for (const x of VARIETIES) {
+    if (x.group !== 'village' || !v.varieties[x.id]) continue;
+    if (v.crosses?.[x.cropId]?.foundAt) continue;
+    if (links.some((l) => l.cropId === x.cropId)) continue;
+    if (!pairStatus(state, x.cropId).canPair) continue;
+    const spots = pairPlots(state, x.cropId);
+    if (!spots.length) continue;
+    return { kind: 'pair', text: `${x.name} ne demande qu'à rencontrer sa cousine du pays : semez la paire.`, icon: x.icon, target: { type: 'pair', id: x.cropId } };
+  }
+  return null;
+}
+
+/** (V2) La Grainothèque à construire : seulement si on peut la payer en gardant 2 saisons de charges. */
+function libraryHint(state) {
+  const v = state.career.valley;
+  if (!heritageSeedsOn(state) || !v.site || libraryLevelOf(state) > 0) return null;
+  const L = SEED_LIBRARY.levels[0];
+  if (state.career.rank < L.rank) return null;
+  let reserve = 0;
+  try {
+    reserve = 2 * careerSeasonCharge(state);
+  } catch {
+    reserve = 0;
+  }
+  if (state.money - L.price < reserve) return null;
+  return { kind: 'library', text: 'Une maison pour vos graines : la Grainothèque peut se construire derrière la maison.', icon: 'icon.library', target: { type: 'library', id: null } };
+}
+
+/**
+ * Le prochain indice (un seul, docs/VALLEE.md § 16.9.4) : (1) une bête à aller voir ; (2) un chapitre ou un récit de Joseph
+ * à lire ; (3) un troc en attente ; (4) un bocal à ouvrir ; (5) une planche d'essai mûre (« + 1 rencontre » si sa jumelle
+ * est à côté) ; (6) semer la paire ; (7) des graines qui attendent (rien de semé) ; (8) l'espèce la plus proche de venir ;
+ * (9) la Grainothèque à construire ; (10) des graines à semer ; (11) l'étape suivante. → null | { kind, text, icon, target }
+ */
 export function nextHint(state) {
   const v = state.career?.valley;
   if (!v || !v.started) return null;
   const wild = v.parts.wildlife !== false;
   const seeds = v.parts.seeds !== false;
+  const species = hintSpecies(state);
   if (wild) {
-    for (const s of SPECIES) {
+    for (const s of species) {
       const e = v.species[s.id];
       if (e?.state === 'visible') return { kind: 'observe', text: `${s.the || s.name} vous attend${s.pl ? 'ent' : ''} ${whereText(state, e.spotId)}.`, icon: s.icon, target: { type: 'species', id: s.id } };
     }
   }
   const unread = STAGES.find((st) => st.n <= v.stage && !v.chapters.read.includes(st.n));
   if (unread) return { kind: 'chapter', text: 'Joseph a quelque chose à vous dire.', icon: 'portrait.joseph', target: null };
+  if (heritageOn(state)) {
+    const story = unreadStory(state);
+    if (story) return { kind: 'story', text: 'Joseph a quelque chose à vous dire.', icon: 'portrait.joseph', target: { type: 'story', id: story.id } };
+    const troc = seeds ? swapInfo(state) : null;
+    if (troc) return { kind: 'troc', text: `${troc.clientName} propose un troc : ${troc.varietyName}.`, icon: 'troc.pin', target: { type: 'troc', id: troc.clientId } };
+  }
   const pending = (state.career.heirlooms || []).length - v.jars.opened;
   if (seeds && pending > 0) return { kind: 'jar', text: pending > 1 ? `${pending} bocaux de graines anciennes à ouvrir.` : 'Un bocal de graines anciennes à ouvrir.', icon: 'item.heirloom', target: null };
   if (seeds) {
     const k = state.plots.findIndex((p) => p && p.env && p.variety && p.cropId && isMature(p) && !isFixed(state, p.variety));
     if (k >= 0) {
       const x = VARIETIES_BY_ID[state.plots[k].variety];
-      return { kind: 'trial', text: `${x.name} est ${agreeWith(x, 'mûr')} : récoltez-${x.g === 'f' ? 'la' : 'le'} à la main (+ 2 graines).`, icon: x.icon, target: { type: 'plot', id: k } };
+      const name = varietyName(state, x);
+      const n = handSeedsOf(state, unitOf(x.id) === 'greffon');
+      const unit = unitOf(x.id) === 'greffon' ? (n > 1 ? 'greffons' : 'greffon') : n > 1 ? 'graines' : 'graine';
+      const meet = heritageSeedsOn(state) && partnerPlotOf(state, k) >= 0 ? ' et + 1 rencontre' : '';
+      return { kind: 'trial', text: `${name} est ${agreeWith(x, 'mûr')} : récoltez-${x.g === 'f' ? 'la' : 'le'} à la main (+ ${n} ${unit}${meet}).`, icon: x.icon, target: { type: 'plot', id: k } };
     }
+    const pair = pairHint(state);
+    if (pair) return pair;
   }
   // Rien de semé (juste après la boîte de Joseph, ou toutes les planches récoltées) : semer passe avant les recettes —
   // le premier geste de la Vallée est de semer ses graines (relecture « joueur tranquille », intégration V1).
@@ -351,7 +423,7 @@ export function nextHint(state) {
   if (wild) {
     const counts = habitatCounts(state);
     let best = null;
-    for (const s of SPECIES) {
+    for (const s of species) {
       if (v.species[s.id]) continue;
       const r = recipeStatus(state, s.id, counts);
       const missing = r.items.filter((x) => !x.ok);
@@ -366,7 +438,7 @@ export function nextHint(state) {
       if (!best || score < best.score) best = { s, r, missing, score };
     }
     if (best) {
-      const { s, r, missing } = best;
+      const { s, missing } = best;
       if (!missing.length) {
         return { kind: 'recipe', text: `Tout est prêt pour ${lowerFirst(s.the || s.name)} : ${comesText(s)} ${seasonsWhen(s.seasons)}.`, icon: s.icon, target: null };
       }
@@ -375,10 +447,14 @@ export function nextHint(state) {
       const lack = m.n - m.have;
       const text = m.kind === 'pond' ? `${s.name} : il faut une mare.` : `${s.name} : il manque ${recipeText(m.kind, lack)}.`;
       const target = kind === 'fallow' ? { type: 'nature', id: 'fallow' } : kind ? { type: 'nature', id: kind } : { type: 'lot', id: null };
-      void r;
+      // (V2) La Grainothèque passe avant une recette qui attend un aménagement verrouillé ou un terrain.
+      const lib = libraryHint(state);
+      if (lib && (!kind || (NATURE_ITEMS_BY_ID[kind]?.rank || 0) > state.career.rank)) return lib;
       return { kind: 'recipe', text, icon: s.icon, target };
     }
   }
+  const lib = libraryHint(state);
+  if (lib) return lib;
   if (seedsHint) return seedsHint;
   const next = STAGES.find((st) => st.n === v.stage + 1);
   if (next) {

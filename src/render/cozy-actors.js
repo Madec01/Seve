@@ -109,6 +109,7 @@ function occupancy(layout) {
   if (layout.valley?.reserved) {
     for (const r of Object.values(layout.valley.spots || {})) markPx(r);
     markPx(layout.valley.box);
+    markPx(layout.valley.library); // (V2) la Grainothèque
   }
   // Lot 3 : panneau du village, charrette et caisses, roulotte (repères calculés par variety-actors.js).
   try {

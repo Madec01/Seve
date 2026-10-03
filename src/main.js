@@ -71,6 +71,7 @@ import { createVariety } from './ui/variety.js';
 import { createCozy } from './ui/cozy.js';
 import { createAlbum } from './ui/album.js';
 import { createValley } from './ui/career/valley.js';
+import { createHeritage } from './ui/career/heritage.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -155,6 +156,7 @@ app.cozy = createCozy(app);
 // La Vallée vivante, lot V1 « La boîte en fer » (carrière seulement : rien sans state.career.valley) : fiche « La Vallée »,
 // mode aménagement, boîte de Joseph, bocaux, observation des bêtes, lignes des fiches existantes (src/ui/career/valley.js).
 app.valley = createValley(app);
+app.heritage = createHeritage(app); // (Vallée V2) Grainothèque, troc, croisements, récits (appelé par app.valley)
 
 applyDisplaySettings();
 
@@ -919,6 +921,7 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.heritage?.pairing) return app.heritage.leavePair(); // (Vallée V2) fin du mode paire
     if (app.valley.placing) return app.valley.leavePlacing(); // (Vallée) fin du mode aménagement
     if (!app.inMenu && app.game) app.openPauseMenu();
     return;
@@ -1572,6 +1575,7 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.variety.reset(game);
   app.cozy.reset(game);
   app.valley.reset(game);
+  app.heritage.reset(game);
   app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
@@ -1723,6 +1727,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.variety.reset(null);
   app.cozy.reset(null);
   app.valley.reset(null);
+  app.heritage.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1950,6 +1955,7 @@ function frame(t) {
   app.variety.frame();
   app.cozy.frame();
   app.valley.frame();
+  app.heritage.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1960,7 +1966,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2603,6 +2609,36 @@ if (DEBUG) {
     ui: () => app.valley.debugState(),
     stats: () => app.scene?.valleyStats?.() || null,
   };
+  /**
+   * (Vallée vivante, lot V2) Aides de vérification : situations posées par l'action de débogage du cœur
+   * (triggerValley 'site' | 'library' | 'troc' | 'swap' | 'meet' | 'cross'), fenêtres ouvertes par l'interface.
+   */
+  window.__debug.valley2 = {
+    on: () => !!app.heritage?.on?.(),
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    site: () => vlTrigger('site'),
+    library: (n = 1) => vlTrigger('library', n),
+    troc: (clientId) => vlTrigger('troc', clientId),
+    swap: (clientId) => vlTrigger('swap', clientId),
+    meet: (cropId = 'carrot', n = 1) => vlTrigger('meet', cropId, n),
+    cross: (cropId = 'carrot') => vlTrigger('cross', cropId),
+    /** Mode paire (vraie interface) ; sans culture : quitte le mode. */
+    pair: (cropId) => (cropId ? app.heritage.enterPair(cropId) : (app.heritage.leavePair(), false)),
+    pairPlots: (cropId) => app.game?.query?.career?.valleyPairPlots?.(cropId) ?? null,
+    links: () => app.game?.query?.career?.valleyCrossLinks?.() ?? null,
+    box: () => app.heritage.openBox(),
+    story: (id) => app.heritage.openStory(id),
+    open: (tab) => app.heritage.openLibrary(tab),
+    trocUI: () => app.heritage.openTroc(),
+    /** Point (px de la page) : 'seedLibrary' | 'pairPlot' (index) | 'trocPin'. */
+    point(kind, id) {
+      const r = app.scene?.valleyItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    ui: () => app.heritage.debugState(),
+    stats: () => app.scene?.valleyStats?.() || null,
+  };
+  for (const k of ['site', 'library', 'troc', 'swap', 'meet', 'cross', 'pair', 'box', 'story']) if (!window.__debug.valley[k]) window.__debug.valley[k] = window.__debug.valley2[k];
   window.__debug.lot3 = window.__debug.variety;
 }
 if (DEBUG) window.__debug.lot4 = window.__debug.cozy;
