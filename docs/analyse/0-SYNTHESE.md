@@ -129,3 +129,8 @@ Audit du code après le lot 1 (détails : `JOURNAL.md`, entrées « Lot 1 » du 
 | Bugs de l'analyse (annexe B 1 à 7, frictions 6 à 12, 15, 17, 19) | ✓ Corrigés | voir le tableau des bugs de `JOURNAL.md` |
 | Annexe B n° 8 (glissé qui fait défiler la carte) | ? Non reproduit, à vérifier au doigt | `src/ui/gestures.js` |
 | Frictions 14 (icônes des graines sans libellé), 21 (succès empilés) | ✗ Hors lot 1 | lots suivants |
+
+## Décisions de l'utilisateur (2026-10-03)
+
+- Ferme laissée seule en carrière : on **garde** l'équilibre du lot 4 (−31 à −37 %) ; animaux, miel et ateliers restent un revenu tranquille.
+- Suite : **« La Vallée vivante »** (voir `5-idees-projet-long.md`), conçue puis codée lot par lot.

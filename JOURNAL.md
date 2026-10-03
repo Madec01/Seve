@@ -33,6 +33,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-02 | `backup/lot3-variete-2026-10-02` | Lot 3 variété terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9. La branche `backup/wip-lot3-2026-10-02` a servi de sauvegarde intermédiaire |
 | 2026-10-03 | `backup/avant-lot4-collection-2026-10-03` | Avant le lot 4 (album, lanternes, aider sans remplacer, fêtes participatives, hiver vivant), commit `581fa70` (main avec PR n° 9 fusionnée + lot 3) |
 | 2026-10-03 | `backup/lot4-collection-2026-10-03` | Lot 4 collection & enjeux doux terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 (avec le lot 3) |
+| 2026-10-03 | `backup/avant-vallee-vivante-2026-10-03` | Avant « La Vallée vivante » (grand projet de carrière), après les 4 lots |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
