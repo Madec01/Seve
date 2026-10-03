@@ -1290,3 +1290,35 @@ vérification du lot V1 ».
 - **Idées / à revoir** : un joueur qui touche la scène pendant la boîte de Joseph la ferme (le détail des graines ne se revoit pas : un bouton « Revoir
   la boîte » dans les récits de Joseph ?) ; la bête qui attend pourrait se signaler par un petit bruit ; « nouveautés »
   65 % des saisons (cible 80 %, V2).
+
+### 2026-10-03 — Vallée V2 : conception
+
+Conception complète du lot V2 « Le troc et les croisements » et de ses contrats, sans code de jeu (rien de modifié dans
+`src/` ni `tests/`). Sauvegarde déjà faite avant le lot : `backup/avant-vallee-v2-2026-10-03` (commit `090ec5c`).
+
+- **`docs/VALLEE.md` § 16** (nouveau, remplace l'aperçu du § 11.2 là où ils diffèrent) : la **Grainothèque** (ouvrage de
+  la Vallée dans la bande de la maison, 5 niveaux 2 000 / 5 000 / 10 000 / 16 000 / 25 000 = 58 000, effets et dessins
+  par niveau, vitrine de la collection) ; le **troc** avec les 12 clients du tableau (variétés, textes, ♥ des préférées,
+  une proposition à la fois épinglée au tableau sans prendre de place de commande : chaque foire aux graines, puis une par
+  saison avec la Grainothèque, voisins ouverts par cercles) ; **11 variétés croisées** au nom de la ferme (règle
+  déterministe de 3 rencontres entre parcelles voisines, « Semer la paire » en un geste, traits hérités, noms et textes) ;
+  trait **Parfumée** ; **4 habitants** (osmie de printemps, merle d'hiver, lézard, pipistrelle) et le nichoir à
+  chauves-souris ; 4 récits de Joseph ; **« Revoir la boîte en fer »** ; maquettes des écrans du téléphone ; équilibrage
+  chiffré (calendrier visé du joueur tranquille, sources de revenu estimées + 1 à + 1,5 %, cibles, robots, leviers) ; cas
+  limites ; écarts avec l'aperçu ; 6 points à trancher.
+- **`docs/ARCHITECTURE.md`**, « Vallée vivante — contrats du lot V2 » : fichiers (nouveaux `src/data/career/heritage.js`,
+  `src/core/career/heritage.js`, `src/ui/career/heritage.js`), état exact (`v: 2`), déroulé de l'aube et de la récolte,
+  actions (`buildSeedLibrary`, `swapSeeds`, `sowPair`, `readStory`), requêtes, événements, flux **`valley2`** (4 nombres
+  par aube, rien d'autre ; `valley` et tous les flux existants inchangés), migration des carrières V1, simulation
+  (`--compare-valley2`), planche `valley2.png` (noms, tailles, descriptions), découpage CORE / ART / UI-RENDER et points
+  de contact. L'aperçu V2 du contrat V1 renvoie à cette section.
+- **`docs/GAME_DESIGN.md` § 18.1** : résumé du V2.
+- **Choix principaux** : croisements sans hasard (barre « 2 / 3 rencontres ») au lieu de 15 % par récolte ; Grainothèque
+  hors des emplacements de bâtiment (jamais bloquée, 100 % au patrimoine) ; troc de saison étalé par cercles pour combler
+  le creux de nouveautés des ans 6 à 10 (cible ≥ 80 % des saisons, le V1 seul : 65 %) ; Léon garde la **Pomme Api étoilé**
+  (la Reinette grise reste au verger conservatoire du V3) ; comice et quête de Joseph écartés (ils changeraient les tirages
+  du flux `events`).
+- **À trancher par l'utilisateur** (§ 16.15) : emplacement de la Grainothèque ; croisements déterministes ou avec une part
+  de chance ; rythme du troc ; signes de vie du V2 pour les étapes 1 à 5 ; liens écartés ; nom des croisées.
+- **Idées** : une variété croisée × croisée (3ᵉ génération) pour les légendes du V4 ; visiteurs devant la Grainothèque
+  qui sont les voisins du troc ; écho du jardin des voisins dans d'autres textes (fêtes, paniers de Noël).

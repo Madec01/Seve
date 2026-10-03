@@ -2319,4 +2319,36 @@ Conception complète, chiffrée et découpée en lots : **`docs/VALLEE.md`** ; c
 - **Équilibre** (cibles, `tools/simulate-career.js --compare-valley`) : V1 **+ 1 à + 5 %** de revenu pour le joueur
   tranquille (toute la Vallée ≤ + 8 %), rangs et Domaine à un an près, ferme laissée seule ≤ + 3 %, ≥ 1 nouveauté par
   saison ; ≈ 450 000 pièces de puits « pour la beauté » sur l'ensemble des lots (argent en caisse à l'an 14 divisé par 2
-  au V3) ; dépenses comptées à 100 % au patrimoine (à trancher).
+  au V3) ; dépenses comptées à 100 % au patrimoine (décidé : 100 %).
+
+### 18.1 Lot V2 « Le troc et les croisements » (conception détaillée, 2026-10-03)
+
+Conception complète : **`docs/VALLEE.md` § 16** ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot
+V2 ». En bref :
+
+- **La Grainothèque** : un ouvrage de la Vallée sur un emplacement réservé de la bande de la maison (panneau au rang 3,
+  récit « Une idée de Joseph »), **5 niveaux : 2 000 / 5 000 / 10 000 / 16 000 / 25 000** (rangs 3, 4, 5, 5, 6 ; **58 000**,
+  100 % au patrimoine) : N1 troc de saison ; N2 3 graines par récolte à la main ; N3 variété sauvée en 5 récoltes ; N4
+  croisement en 2 rencontres ; N5 graines des variétés sauvées au prix normal et touristes + 15 %. Sa fiche est la
+  vitrine de la collection (35 bocaux, croisements, voisins).
+- **Le troc** : chacun des **12 clients du tableau** garde une variété de son jardin (Carotte violette de Lili, Tomate
+  noire de Crimée de Mme Chevalier, Pomme Api étoilé de Léon…). Une proposition à la fois, épinglée au tableau (pas une
+  commande : aucune place, aucune récolte, aucune prime) : chaque **foire aux graines**, puis, avec la Grainothèque,
+  **une par saison** (voisins ouverts par cercles avec les niveaux 1 à 3). On donne 3 graines d'une variété sauvée (gratuit),
+  on reçoit 3 graines (4 si c'est une culture qu'il préfère). Elle attend sans limite.
+- **Les croisements** : la variété du pays et celle du village d'une même culture, **semées côte à côte** (« Semer la
+  paire », un geste) ; chaque récolte **à la main** de l'une pendant que l'autre pousse à côté = une **rencontre** ; **3
+  rencontres** (déterministe, barre visible) → un sachet doré de 3 graines d'une **variété croisée** à deux traits, au nom de
+  la ferme (« Tomate de la Ferme des Tilleuls ») ; **11** croisées (pas le pommier), à sauver comme les autres.
+- **Trait Parfumée** (produit d'atelier + 15 %) ; **4 habitants** (osmie au printemps : rencontres doubles ; merle en
+  hiver : 4 trouvailles des haies ; lézard en été : canicule + 10 % ; pipistrelle : équipe jamais lasse l'été) et le
+  **nichoir à chauves-souris** ; 4 récits de Joseph ; **« Revoir la boîte en fer »** ; pages d'album `swaps`, `crosses`,
+  `wildlife2` ; 6 succès ; stand de la fête + 1 point par culture à variété ancienne.
+- **Aléatoire** : un flux nouveau `valley2` (4 nombres par aube, les habitants du V2) ; troc et croisements sans hasard ;
+  aucun flux existant ne tire un nombre de plus. Niveaux et Classique strictement inchangés (parité).
+- **Équilibre** (cibles `--compare-valley2`, V1 → V1 + V2) : tranquille **+ 0 à + 4 %** de revenu (estimé + 1 à + 1,5 %),
+  rangs à un an près, argent en caisse à l'an 14 ≤ 70 % de sans la Vallée, **≥ 80 % des saisons avec une nouveauté** (le
+  V1 seul : 65 %), ferme laissée seule ≤ + 3 %, `automator` sans troc ni croisement ; V2 complet vers l'an 11 à 13, toute
+  la Vallée vers l'an 18 avec le V3.
+- **À trancher** (`docs/VALLEE.md` § 16.15) : emplacement de la Grainothèque, croisements déterministes ou avec une part
+  de chance, rythme du troc, signes de vie du V2 pour les étapes 1 à 5, liens écartés (comice, quête), nom des croisées.

@@ -3,7 +3,8 @@
 Le **grand projet long du mode Carrière** : la Vallée qui revient (faune, paysage) et la Grainothèque vivante (variétés
 anciennes), réunies en un seul fil, raconté par Joseph. Choix de l'utilisateur (2026-10-02, confirmé le 2026-10-03) ;
 idéation : `docs/analyse/5-idees-projet-long.md` § 4. Contrats de code du lot V1 : `docs/ARCHITECTURE.md`, « Vallée
-vivante — contrats du lot V1 ». Résumé : `docs/GAME_DESIGN.md` § 18.
+vivante — contrats du lot V1 » ; lot V2 « Le troc et les croisements » : conception détaillée au **§ 16**, contrats « Vallée
+vivante — contrats du lot V2 ». Résumé : `docs/GAME_DESIGN.md` § 18.
 
 Les chiffres sont des **valeurs de départ** : ils seront réglés par la simulation (`tools/simulate-career.js
 --compare-valley`, § 12) et la version qui fait foi vivra dans `src/data/career/valley.js`. Les noms de variétés marqués
@@ -540,6 +541,9 @@ Taille : comme le lot 4 (CORE · ART · UI/RENDER en parallèle).
 
 ### 11.2 V2 — « Le troc et les croisements » (la grainothèque grandit)
 
+*Aperçu d'origine, gardé pour l'histoire : la **conception détaillée du V2 est au § 16** (2026-10-03) et le remplace là
+où ils diffèrent (écarts : § 16.14) ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V2 ».*
+
 - **La Grainothèque** (bâtiment en pierre au tilleul, sur un emplacement libre de pré, de basse-cour ou de cour des
   ateliers), **5 niveaux : 2 000 / 5 000 / 10 000 / 16 000 / 25 000** (rangs 3, 3, 4, 5, 6 ; 58 000 en tout) : N1 troc et
   croisements ; N2 + 1 graine par récolte à la main (3) ; N3 fixation en 5 récoltes ; N4 chance de croisement + 5 points ;
@@ -799,3 +803,570 @@ Pistes pour le V2, qui ajoute justement des nouveautés « de saison » : troc a
 4. Durée de la restauration complète pour le joueur tranquille : **vers l'an 18**.
 
 Points non posés, tranchés selon la recommandation de la conception : dépenses de la Vallée comptées à 100 % dans le patrimoine ; variétés fixées semables par l'équipe et le semoir sans jamais garder de graines ; terres sauvages au V3, après les 16 terrains.
+
+---
+
+## 16. Lot V2 « Le troc et les croisements » — conception détaillée (2026-10-03)
+
+Conception complète du lot V2 ; elle **remplace l'aperçu du § 11.2** partout où les deux diffèrent (écarts listés au
+§ 16.14). Contrats de code : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V2 ». Résumé : `docs/GAME_DESIGN.md`
+§ 18. Comme au V1, les chiffres sont des **valeurs de départ** réglées ensuite par `tools/simulate-career.js
+--compare-valley2` ; la version qui fait foi vivra dans `src/data/career/heritage.js` et `src/data/career/valley.js`.
+
+### 16.0 En bref
+
+**L'idée.** La boîte en fer était le début ; le V2 donne aux graines **une maison** (la Grainothèque, derrière la ferme),
+**des voisins** (chacun des 12 clients du tableau garde une variété de son jardin et l'échange contre une des vôtres) et
+**un nom** (deux variétés d'une même culture semées côte à côte se croisent : la graine née chez vous porte le nom de la
+ferme). C'est « l'héritage qui porte votre nom ».
+
+**En une phrase de jeu.** Le joueur **échange** une graine sauvée contre la graine d'un voisin (un sachet épinglé au
+tableau du village, une fois par saison), **sème côte à côte** la variété du pays et celle du village, les **récolte à la
+main** jusqu'au croisement (barre « 2 / 3 rencontres », sans hasard), puis **sauve** la nouvelle variété ; l'argent de la
+ferme agrandit la Grainothèque, qui montre toute la collection sur ses étagères.
+
+**Ce que ça résout.**
+
+| Problème (V1, § 12.7) | Réponse du V2 |
+|---|---|
+| **Creux de nouveautés** : 65 % des saisons au lieu de 80 % (ans 6 et 7, printemps et hivers des ans 8 à 10) | Une proposition de troc **par saison** (hiver compris, et chaque foire aux graines), 23 variétés de plus à sauver, 11 croisements, 5 niveaux de Grainothèque, 4 habitants dont **un d'hiver** (le merle) et un de printemps (l'osmie), 4 récits de Joseph (§ 16.11). |
+| L'argent s'entasse (≈ 175 000 en caisse à l'an 14) | La Grainothèque : **58 000** pièces de puits « pour la beauté », comptées à 100 % au patrimoine (aucun rang retardé). |
+| Après les 12 variétés du pays, plus rien à semer de neuf | 12 variétés du village + 11 variétés croisées, chacune avec ses traits (deux pour les croisées). |
+| « Revoir la boîte » (idée du journal V1) | Bouton **« Revoir la boîte »** : la fiche de la boîte de Joseph se relit à tout moment, avec l'état actuel de ses trois variétés (§ 16.10). |
+
+**Règles d'or du V2** (en plus de celles du § 0) :
+
+1. **Aucune monnaie nouvelle, aucun coût caché** : le troc ne coûte rien (la Grainothèque garde toujours une poignée de
+   graines de chaque variété sauvée) ; seules la Grainothèque et le nichoir à chauves-souris coûtent des pièces.
+2. **Rien d'aléatoire frustrant** : propositions de troc et croisements sont **déterministes** (ordre fixe, barres
+   visibles) ; le seul hasard nouveau est la venue des 4 habitants du V2 (comme au V1), sur un **flux nouveau, `valley2`**.
+3. **Rien ne se perd, rien n'expire** : un troc proposé attend sans limite ; une rencontre de croisement ne se perd jamais ;
+   une planche d'essai perdue rend sa graine (règle du V1, étendue aux 23 nouvelles variétés).
+4. **Le joueur au centre** : échanger, semer la paire, récolter à la main, observer — jamais l'équipe ni les machines. Une
+   récolte de l'équipe ne compte jamais comme une rencontre.
+5. **Carrière seulement, niveaux identiques** : aucun champ, aucun flux, aucune règle en partie de niveau ; seules trois
+   pages d'album se voient dans la grange (« À découvrir dans Ma ferme »).
+6. **Aucun flux existant ne bouge** : `valley` (V1) tire exactement les mêmes nombres qu'avant (12 espèces du V1, haies,
+   bocaux, étal) ; `orders`, `variety`, `events`, `cozy`… inchangés.
+
+### 16.1 La boucle de jeu du V2
+
+| Échelle | Ce que fait le joueur (de ses mains) |
+|---|---|
+| Quelques secondes | Toucher le sachet épinglé au tableau → choisir une de ses graines sauvées → « Échanger » ; « Semer la paire » sur une parcelle vide ; récolter à la main une planche d'essai voisine de sa jumelle (« + 1 rencontre ») ; ouvrir le sachet doré d'un croisement. |
+| Une journée | Lire le prochain indice (« La Carotte violette et la Carotte jaune du Doubs ne demandent qu'à se rencontrer ») ; ranger une planche de croisement au champ de départ. |
+| Une saison | Un troc (un voisin épingle un sachet le 2ᵉ jour) ; sauver une variété du village ; un croisement de temps en temps. |
+| Une année | Un niveau de Grainothèque ; le troc de la foire aux graines ; un habitant du V2 ; un récit de Joseph. |
+| Plusieurs années | V2 complet (12 trocs, 11 croisements, 35 variétés sauvées, Grainothèque niveau 5, 16 habitants) vers l'**an 11 à 13** pour le joueur tranquille ; le V3 (« Le ruisseau ») prend le relais jusqu'à l'**an 18** (décision de l'utilisateur). |
+
+Session type (rang 5, an 7, printemps) : « Le 2ᵉ jour, un sachet est épinglé au tableau : Mme Chevalier propose sa tomate
+noire de Crimée. Je lui donne mes fraises Reine des Vallées (elle adore les fraises : 4 graines au lieu de 3). Cet été,
+je sèmerai la paire : tomate noire à côté de ma Cœur de bœuf. Au champ de départ, je récolte à la main ma Carotte violette,
+voisine d'une Jaune du Doubs : 3 / 3 rencontres, un sachet doré saute — la Carotte de la Ferme des Tilleuls ! »
+
+### 16.2 La Grainothèque (bâtiment à 5 niveaux)
+
+**Où.** Un **emplacement réservé dans la bande de la maison** (2 × 2 tuiles, « au bout de l'allée, derrière la maison »),
+comme le grenier et l'étal : **aucun emplacement de bâtiment** de pré, de basse-cour ou de cour des ateliers n'est pris
+(une grande ferme les a souvent tous remplis : rien ne doit bloquer). Le cœur ne connaît que le niveau ; RENDER place le
+rectangle (test : aucun chevauchement avec la maison, le grenier, l'étal, le puits, la mangeoire, le porte-lanternes, la
+boîte en fer, les nichoirs, l'aire des machines). Ce n'est **pas** un bâtiment de `BUILDINGS` (pas de fenêtre de bâtiment
+générique, pas d'entretien, pas de règle « 50 % au patrimoine ») : c'est un ouvrage de la Vallée, payé comme les
+aménagements (poste « La Vallée », **100 % au patrimoine**).
+
+**Quand.** À la première aube où la Vallée est commencée et la ferme au **rang 3**, Joseph raconte « Une idée de Joseph »
+(récit `heritage0`, § 16.11) et un **panneau de bois** apparaît sur l'emplacement (« Ici, une grainothèque ? ») : le
+toucher ouvre la fiche « La Grainothèque » (construction). Avant le rang 3 : rien.
+
+**Les 5 niveaux** (total **58 000**, comme prévu au § 11.2 ; prix et rangs réglables, § 16.12) :
+
+| Niveau | Nom | Prix | Rang | Ce qu'il débloque | Ce qu'on voit (scène, 32 × 32) |
+|---|---|---|---|---|---|
+| 1 | La remise aux graines | **2 000** | 3 | **Troc de saison** (une proposition par saison, cercle 1 : 4 voisins) ; l'**étagère** (la collection dans la fiche) ; récit « La remise aux graines » | petite remise de pierre sèche, toit de tuiles moussues, porte bleue, une fenêtre où brillent des bocaux |
+| 2 | La petite grainothèque | **5 000** | 4 | **+ 1 graine** par récolte à la main d'une planche d'essai (**3** au lieu de 2) ; cercle 2 (+ 4 voisins) | un auvent de bois sous lequel sèchent des tresses de maïs et des têtes de tournesol ; un banc |
+| 3 | La grainothèque | **10 000** | 5 | **Fixation en 5 récoltes à la main** (au lieu de 7) ; cercle 3 (+ 4 voisins) | maison de pierre à deux fenêtres, enseigne peinte « Grainothèque », étagères de bocaux visibles |
+| 4 | Le jardin d'essai | **16 000** | 5 | **Croisement en 2 rencontres** (au lieu de 3) | un petit jardin clos de piquets devant la porte, quatre rangs étiquetés, une ruche en paille |
+| 5 | La grainothèque vivante | **25 000** | 6 | Graines des variétés sauvées **au prix normal** (× 1 au lieu de × 1,25) ; **touristes + 15 %** (ils viennent voir les bocaux) ; récit « La grainothèque vivante » | un rosier grimpant sur la façade, la porte ouverte, des visiteurs qui s'arrêtent devant |
+
+- Les effets valent pour **toutes** les variétés (du pays, du village, croisées) : le V2 accélère aussi la fin du V1.
+- Un niveau s'achète d'un geste (« Agrandir · 5 000 ») dans la fiche ; le bâtiment change sous les yeux (fondu, étincelles ;
+  mouvements réduits : changement direct). Aucun niveau ne se perd ; aucun entretien.
+- **Ce qu'elle montre** : sa fiche (§ 16.9.1) est la **vitrine de la collection** — 35 bocaux rangés sur trois étagères
+  (du pays, du village, de la ferme), le tableau des croisements, les 12 voisins du troc. Toucher le bâtiment ouvre cette
+  fiche ; la carte « La Grainothèque » de l'onglet Graines de « La Vallée » y mène aussi.
+- **Pour la beauté** : au-delà du niveau 1 (qui ouvre le troc de saison), chaque niveau est surtout un plaisir de voir la
+  remise devenir maison ; ses effets restent modestes (§ 16.12.3).
+
+### 16.3 Le troc de graines avec les 12 voisins
+
+**Principe.** Chaque client du tableau du village garde **une variété de son jardin**. Quand il **propose un troc**, il
+épingle un **sachet** au tableau ; le joueur lui donne **3 graines d'une variété sauvée** (au choix, n'importe laquelle
+sauf la sienne), il donne **3 graines de la sienne** (un greffon pour Léon : 3 greffons). **Une fois par voisin.** Le troc
+ne coûte rien : la Grainothèque (ou, avant elle, la boîte en fer) garde toujours une poignée de chaque variété sauvée.
+
+**Ce que chacun aime (♥).** Si la variété donnée est d'une culture **préférée** du voisin (ses préférées du tableau, lot 3),
+il rend **4 graines au lieu de 3** et dit un petit mot ; la case d'album reçoit le tampon ♥. Une variété croisée (au nom de
+la ferme) déclenche une phrase spéciale (« Une graine de la Ferme des Tilleuls ! Je la planterai devant chez moi. »).
+Jamais de refus, jamais de « mauvais » choix.
+
+**Les 12 voisins et leurs variétés** (ordre fixe des propositions ; cercle = niveau de Grainothèque qui ouvre le troc de
+saison avec eux ; (†) vraie variété ancienne du domaine public) :
+
+| Ordre | Voisin | Cercle | Variété (id) | Culture | Trait | Sa proposition | Son merci |
+|---|---|---|---|---|---|---|---|
+| 1 | Lili, la petite voisine | 1 | Carotte violette (`carotteViolette`) | carotte | Généreuse | « Mes carottes violettes contre une de tes graines ? Caramel est d'accord ! » | « Je vais la semer à côté de la cabane de Caramel ! » |
+| 2 | Le père Fabre | 1 | Courgette blanche de Virginie (†) (`blancheDeVirginie`) | courgette | Mellifère | « Ma courgette blanche, celle des pique-niques. Un échange ? » | « Je la planterai près de l'étang. » |
+| 3 | M. Garnier | 1 | Pomme de terre bleue d'Artois (`bleueDArtois`) | pomme de terre | Rustique | « Une pomme de terre bleue, pour la leçon de sciences. On échange ? » | « Les enfants vont la semer dans le jardin de l'école. » |
+| 4 | Mme Morel | 1 | Navet des Vertus Marteau (†) (`marteauDesVertus`) | navet | Savoureuse | « Mes navets des Vertus donnent une teinture ivoire. Vous m'échangez ? » | « Je teindrai une laine à vos couleurs. » |
+| 5 | Paulo | 2 | Blé barbu du Roussillon (†) (`barbuDuRoussillon`) | blé | Parfumée | « Mon blé barbu fait la meilleure farine du canton. On échange ? » | « Je t'apporterai la première miche ! » |
+| 6 | Mme Chevalier | 2 | Tomate noire de Crimée (†) (`noireDeCrimee`) | tomate | Savoureuse | « La tomate noire de ma grand-mère, contre une graine de chez vous ? » | « Elle ira dans le potager de l'auberge. » |
+| 7 | Mme Rose | 2 | Tournesol velours rouge (`veloursRouge`) | tournesol | Généreuse | « Mon tournesol velours rouge, contre une graine qui fleurit ? » | « Elle sera dans mes bouquets l'été prochain. » |
+| 8 | Mamie Odette | 2 | Chou cœur de bœuf des Vertus (†) (`coeurDeBoeufDesVertus`) | chou | Géante | « Mon chou des Vertus tient tout l'hiver. Tu m'en donnes une des tiennes ? » | « Passe goûter la soupe cet hiver ! » |
+| 9 | Mlle Perrin | 3 | Fraise Madame Moutot (†) (`madameMoutot`) | fraise | Parfumée | « La fraise Madame Moutot, parfumée comme une sonate. Un troc ? » | « Je jouerai un air pour elle, au jardin. » |
+| 10 | M. le maire | 3 | Maïs blanc des Landes (`blancDesLandes`) | maïs | Sobre | « Le maïs blanc des Landes, pour le buffet. La mairie propose un échange ! » | « Au nom du village, merci pour ces graines ! » |
+| 11 | Zoé et Bastien | 3 | Citrouille galeuse d'Eysines (†) (`galeuseDEysines`) | citrouille | Savoureuse | « On a des graines de citrouille galeuse, chut… on échange ? » | « Promis, on la plantera devant la cabane ! » |
+| 12 | Léon, le facteur | 3 | Pomme Api étoilé (†) (`apiEtoile`, greffon) | pommier | Parfumée | « Un greffon d'Api étoilé, de l'arbre de mon grand-père. Un échange ? » | « Je la planterai sur ma tournée, au bord du chemin. » |
+
+Anecdotes (≤ 110 caractères, lues dans la fiche et l'album) et étiquettes des sachets (« De la part de Lili », écrites à
+la main) :
+
+| Variété | Anecdote |
+|---|---|
+| Carotte violette | Violette dehors, orange dedans : Lili jure que Caramel la préfère. Il n'a jamais dit le contraire. |
+| Courgette blanche de Virginie | Pâle comme la lune : ses grandes fleurs attirent les abeilles dès l'aube, dit le père Fabre. |
+| Pomme de terre bleue d'Artois | Bleue jusqu'au cœur : les enfants de la cantine la réclament à chaque rentrée. |
+| Navet des Vertus Marteau | Long et blanc, le navet des maraîchers d'autrefois : sa chair fine fond dans le pot-au-feu. |
+| Blé barbu du Roussillon | Ses longues barbes dorées ondulent au vent ; sa farine sent la noisette, dit Paulo. |
+| Tomate noire de Crimée | Sombre comme une prune, juteuse comme une pêche : la fierté de la soupe de l'auberge. |
+| Tournesol velours rouge | Ses pétales rouge sombre ont l'air de velours : Mme Rose en met au cœur de ses bouquets. |
+| Chou cœur de bœuf des Vertus | Pointu comme un cœur : Mamie Odette le fait mijoter tout l'hiver dans sa grande marmite. |
+| Fraise Madame Moutot | Grosse, ronde et parfumée : on la cultivait déjà au temps des grands-parents de Mlle Perrin. |
+| Maïs blanc des Landes | Il pousse dans le sable sans boire : le maire en sert la cruchade à chaque buffet. |
+| Citrouille galeuse d'Eysines | Couverte de petites bosses : plus elle est galeuse, plus elle est sucrée ! |
+| Pomme Api étoilé | Une petite pomme à cinq côtes, en étoile : Léon en garde toujours une dans sa sacoche. |
+
+**Le rythme (déterministe, sans échéance).** Une **seule proposition à la fois** ; elle **attend** sans limite (jamais
+retirée, jamais rappelée). Une proposition nouvelle n'apparaît que si aucune n'attend, et :
+
+1. **Troc de la foire** — chaque **dernier jour d'hiver** (foire aux graines, même sans les fêtes du lot 4), dès que la
+   Vallée est commencée et qu'**une variété au moins est sauvée** : « À la foire, tout le village est là » — le **prochain
+   voisin de l'ordre**, tous cercles confondus. C'est l'avant-goût, sans Grainothèque (une par an).
+2. **Troc de saison** — avec la Grainothèque (niveau ≥ 1), à l'aube du **2ᵉ jour de chaque saison** (hiver compris ; le
+   1ᵉʳ jour a déjà la charrette, les cartes et les défis) : le prochain voisin dont le **cercle** est ouvert (niveau ≥
+   cercle), en préférant le premier de l'ordre dont la culture **se sème cette saison ou la suivante** (ou toute l'année
+   avec une serre) ; sinon le premier de l'ordre. Léon attend qu'il y ait un **verger**.
+
+Avec ces deux sources, le joueur tranquille fait **un troc par saison ou presque** des ans 4 à 9 (N1 vers l'an 4, N2 vers
+l'an 6, N3 vers l'an 8, § 16.12) ; un joueur qui ne bâtit jamais la Grainothèque en fait un par an (à la foire), et rien
+n'est perdu.
+
+**Intégré au tableau du village, sans doublon.** Le troc **n'est pas une commande** : il ne prend aucune des 3 places du
+tableau, ne demande aucune récolte, ne paie aucune prime, ne touche ni au générateur « faisable cette saison » ni au flux
+`orders`. Il se voit **au tableau** : un petit **sachet kraft épinglé** sur le panneau du village (scène) ; dans la feuille
+du tableau, une **carte « Troc »** au-dessus des commandes (portrait, une ligne, bouton « Choisir une graine ») ; si le
+même voisin a aussi une commande, sa carte porte un petit sachet. Le tableau désactivé (option de test) : le troc reste
+dans la fiche de la Grainothèque et la ligne « À faire ». Les commandes ne demandent **jamais** une variété (inchangé).
+
+**Écho doux.** Une fois le troc fait, le merci d'une commande livrée par ce voisin est, une fois sur trois (hachage pur de
+l'identifiant de la commande, sans tirage), remplacé par une phrase de son jardin (« Vos fraises Reine des Vallées ont
+pris dans mon jardin ! ») : le village cultive vos graines.
+
+### 16.4 Les croisements : 11 variétés qui portent le nom de la ferme
+
+**La règle, en une phrase (lue dans la fiche) :** « Semez côte à côte les deux variétés d'une même culture ; chaque fois
+que vous en récoltez une **à la main** pendant que l'autre pousse **juste à côté**, les abeilles font une rencontre. **3
+rencontres** : une graine nouvelle, au nom de votre ferme. »
+
+| Règle | Valeur |
+|---|---|
+| Parents | pour chaque culture (sauf le pommier) : la **variété du pays** (V1) et la **variété du village** (§ 16.3) — table fixe, rien à deviner |
+| Voisines | même terrain (champ, champ de départ ou serre), **par un côté** (pas en diagonale) : colonnes et lignes de `query.plot(i)` |
+| Une **rencontre** | récolte **à la main** d'une parcelle d'un parent pendant qu'une parcelle voisine porte **l'autre parent** (semé, à n'importe quel stade) ; **une** rencontre par récolte au plus, même entourée ; récolte de l'équipe ou d'une machine : jamais |
+| Croisement | à **3 rencontres** (Grainothèque niveau 4 : **2**) ; avec l'**osmie** installée, chaque rencontre compte **double** |
+| Ce qu'on reçoit | un **sachet doré de 3 graines** de la variété croisée (popup : le sachet s'ouvre, le nom s'écrit) ; puis on la **sauve** comme les autres (planches d'essai, 7 récoltes à la main, 5 au niveau 3) |
+| Traits | les **deux traits** des parents (tableau ci-dessous) ; jamais de trait perdu ; une variété croisée n'a pas de génération suivante au V2 (le V4 s'en servira pour les légendes) |
+| Ce qui ne se perd pas | les rencontres (compteur par culture, jamais en baisse) ; une variété croisée trouvée ; ses graines (planche perdue : la graine revient) |
+| Grainothèque nécessaire ? | **Non** : c'est l'affaire des abeilles ; la Grainothèque l'accélère seulement (niveau 4) |
+
+**Le nom.** « {Culture} {de la ferme} » : « Tomate de la Ferme des Tilleuls », « Navet de Chez Martin ». La préposition
+suit le nom de la ferme (`ofFarm`, comme `ofLot` du V1) : « Le X » → « du X » ; « La X » → « de la X » ; « Les X » → « des X » ;
+« L'X » → « de l'X » ; un nom commençant par Ferme, Maison, Grange, Bergerie, Métairie, Bastide, Closerie → « de la … » ;
+une voyelle → « d'… » ; sinon « de … ». Le nom suit le nom actuel de la ferme (calculé, jamais enregistré). Sur un écran de
+360 px, le nom va à la ligne ; dans les listes serrées, « Tomate · de la ferme » et le sceau doré suffisent.
+
+**Les 11 variétés croisées** (id, traits hérités, petit texte, teinte) :
+
+| id | Culture | Parents (pays × village) | Traits | Petit texte (≤ 110 caractères) |
+|---|---|---|---|---|
+| `crossCarrot` | carotte | Jaune du Doubs × Carotte violette | Savoureuse + Généreuse | Ni jaune ni violette : orangée au cœur pourpre, comme un coucher de soleil. |
+| `crossTurnip` | navet | Boule d'or × Navet des Vertus Marteau | Précoce + Savoureuse | Doré et allongé, il pousse vite et fond dans la bouche : le meilleur des deux. |
+| `crossWheat` | blé | Rouge de Bordeaux × Blé barbu du Roussillon | Sobre + Parfumée | Des épis roux à longues barbes : il tient la sécheresse et sa farine sent le pain chaud. |
+| `crossCabbage` | chou | Milan de Pontoise × Cœur de bœuf des Vertus | Généreuse + Géante | Cloqué et pointu à la fois : un chou si grand qu'il faut deux bras pour le porter. |
+| `crossTomato` | tomate | Cœur de bœuf × Noire de Crimée | Généreuse + Savoureuse | Grosse, côtelée, presque noire : une seule tranche fait une tartine. |
+| `crossCorn` | maïs | Grand roux basque × Blanc des Landes | Rustique + Sobre | Des grains roux et blancs mêlés, comme un épi en habit de fête. |
+| `crossSunflower` | tournesol | Soleil d'or × Velours rouge | Mellifère + Généreuse | Or au bord, velours au cœur : les abeilles font la queue pour s'y poser. |
+| `crossPotato` | pomme de terre | Vitelotte × Bleue d'Artois | Savoureuse + Rustique | Violette et bleue marbrée : la purée en devient couleur lavande. |
+| `crossStrawberry` | fraise | Reine des Vallées × Madame Moutot | Mellifère + Parfumée | Petite comme une fraise des bois, parfumée comme une Moutot : un trésor de confiture. |
+| `crossZucchini` | courgette | Ronde de Nice × Blanche de Virginie | Précoce + Mellifère | Ronde et pâle, elle pousse en un clin d'œil sous ses grandes fleurs jaunes. |
+| `crossPumpkin` | citrouille | Rouge vif d'Étampes × Galeuse d'Eysines | Géante + Savoureuse | Rouge vif et galeuse : la citrouille des contes, en plus sucrée. |
+
+Les traits du village ont été choisis **différents** de ceux du pays pour chaque culture : un croisement a toujours deux
+traits distincts (la règle « trait en double → un troisième » de l'aperçu devient inutile ; la table fixe fait foi).
+Aucun trait n'est mis là où il ne servirait à rien (le navet et le chou résistent déjà au gel : pas de « rustique » ; la
+pomme de terre pousse déjà sans eau : pas de « sobre »).
+
+**Jouable au doigt.**
+- **« Semer la paire »** (fiche d'un croisement, fiche d'une variété du village, prochain indice) : la scène passe en mode
+  « paire » (comme le mode aménagement) : les parcelles vides **qui ont une voisine vide** pulsent ; un toucher sème le
+  parent du village sur la parcelle touchée et le parent du pays sur la voisine (droite, puis gauche, dessous, dessus) —
+  graines gardées d'abord, sinon (variété sauvée) au prix de la graine. Un seul geste pour une planche de croisement.
+- **Dans la scène**, deux parents voisins sont reliés par un **petit vol d'abeille** (une abeille qui fait l'aller-retour ;
+  mouvements réduits : un point de pollen fixe entre les deux parcelles) ; la fiche de la parcelle dit « Croisement avec
+  Carotte violette (à côté) : 2 / 3 rencontres · récoltez-la à la main ».
+- À la récolte à la main : texte flottant « + 1 rencontre · 2 / 3 » ; au croisement : le sachet doré saute de la parcelle.
+
+### 16.5 Le nouveau trait : Parfumée
+
+| id | Trait | Picto | Effet |
+|---|---|---|---|
+| `scented` | Parfumée | petite fleur au parfum (trois traits ondulés) | à l'atelier, le produit fait de cette récolte vaut **+ 15 %** (confiture de fraises, jus de pomme, farine, pain) |
+
+- Porté par le Blé barbu du Roussillon, la Fraise Madame Moutot, la Pomme Api étoilé et deux croisées (blé, fraise) : les
+  trois cultures qu'un atelier transforme. Sans atelier allumé, il ne fait rien (la fiche le dit).
+- Règle de cœur : une récolte de variété ne va jamais au grenier (V1) ; si elle part à l'atelier, le **rendement de la
+  place** (`yieldFactor`) est multiplié par 1,15 au moment où elle y entre (aucune donnée nouvelle dans les places
+  d'atelier, aucun changement du module partagé `processing.js`).
+- Une variété croisée a **deux traits** : chaque règle de trait du V1 lit désormais « la variété a ce trait » (liste) au
+  lieu de « le trait de la variété est celui-ci ».
+
+### 16.6 Quatre habitants de plus (page d'album nouvelle « Les habitants (suite) »)
+
+Même règles que le V1 (recette lisible, indice, venue, **il faut les toucher**, service doux), sur le flux **`valley2`**
+(4 nombres par aube, un par espèce, qu'elle soit candidate ou non) ; une seule venue annoncée par aube **toutes espèces
+confondues** (si une espèce du V1 s'est annoncée ce matin, celles du V2 attendent : aucun tirage en moins ni en plus).
+
+| id | Espèce | Recette d'habitat | Arrive | Service (installée) | Où on la voit |
+|---|---|---|---|---|---|
+| `wildBee` | Osmie (abeille maçonne) | 2 hôtels à insectes + 3 coins fleuris | **printemps** | chaque **rencontre de croisement compte double** | sur un hôtel à insectes |
+| `blackbird` | Merle noir | 6 haies + 1 arbre adulte (chêne isolé ou pommier) | **hiver** | **cueillette des haies : 4 trouvailles** à la fois au lieu de 3 | en haut d'une haie |
+| `lizard` | Lézard des murailles | 3 tas de bois et de pierres + 1 friche ou jachère fleurie | été | les jours de **canicule**, pousse **+ 10 %** | sur un tas de pierres |
+| `bat` | Pipistrelle | 1 **nichoir à chauves-souris** + la mare | été, automne | **l'été, l'équipe n'est jamais lasse** (on prend le frais, le soir, à les regarder voler) | au nichoir, au crépuscule |
+
+| Espèce | Indice (la veille) | Anecdote |
+|---|---|---|
+| Osmie | « De petits bouchons de terre au bout des tiges de l'hôtel… » | Elle ferme chaque tige de son nid avec un bouchon de terre, comme une maçonne. |
+| Merle noir | « Un chant flûté, au crépuscule, tout en haut de la haie… » | Il chante dès la fin de l'hiver, perché au plus haut, pour dire « ici, c'est chez moi ». |
+| Lézard des murailles | « Une petite queue qui file entre les pierres, en plein soleil… » | Il se chauffe au soleil le matin : sans chaleur, il ne peut pas courir. |
+| Pipistrelle | « Au crépuscule, de petites ombres zigzaguent au-dessus de la mare… » | Pas plus lourde qu'une pièce, elle mange des milliers de moucherons chaque nuit. |
+
+Accords : l'osmie (f), le merle noir (m), le lézard (m), la pipistrelle (f) ; « Bienvenue, petite osmie ! », « Bienvenue,
+beau merle ! », « Bienvenue, petit lézard ! », « Bienvenue, petite pipistrelle ! ».
+
+**Nouvel aménagement : le nichoir à chauves-souris** (`batbox`) — **100 + 50 × n**, rang **4**, beauté 1 (dans le plafond
+de 6 du V1). Emplacements : 1 sous l'avant-toit de la maison (`home.bat`), 1 par verger (`<lot>.bat`, « dans un vieux
+pommier »), 1 par cour des ateliers (`<lot>.bat`, « sous l'avant-toit »). Petite caisse plate de bois sombre, fente en bas.
+
+### 16.7 Les signes de vie et les étapes
+
+- Un signe de vie = une espèce installée ou une variété sauvée, **V2 compris** : 16 espèces + 35 variétés = **51** (au
+  lieu de 24). Les paliers des étapes 1 à 5 **ne changent pas** (2 / 6 / 11 / 17 / 24) : l'étape 5 « La vallée chante »
+  vient environ **un an plus tôt** (vers l'an 9 au lieu de l'an 11 pour le joueur tranquille) — c'est voulu : le V2
+  remplit les années où le V1 attendait ses dernières haies. Les étapes 6 et 7 du V3 (30 et 45 signes) s'appuient sur ce
+  total (§ 11.3, inchangé).
+- La rangée de silhouettes de la fiche « La Vallée » devient « 31 signes de vie · prochaine étape à 45 » (après l'étape 5,
+  le compteur continue pour le V3 ; tant que le V3 n'est pas là : « 31 signes de vie sur 51 »).
+
+### 16.8 Liens avec l'existant (sans doublon)
+
+| Existant | Ce que le V2 en fait | Pourquoi pas un doublon |
+|---|---|---|
+| **Tableau du village** (lot 3) | Le troc s'y épingle (sachet, carte « Troc ») ; écho dans les mercis | Pas une commande : aucune place, aucune récolte demandée, aucune prime, aucun tirage `orders` |
+| **Clients du village** et leurs préférées (lot 3) | Les 12 mêmes voisins, leurs préférées donnent le ♥ du troc | Ni nouveau personnage, ni nouvelle amitié à gérer |
+| **Foire aux graines** (lot 4) | Chaque année, le troc de la foire (sans Grainothèque) ; l'étal « La grainothèque du pays » du V1 ne change pas (variétés du pays seulement) | Un moment de plus d'une fête existante |
+| **Stand de la ferme** (lot 4, fête des récoltes) | Carrière : **+ 1 point** par culture présentée dont une variété ancienne a été récoltée cette année | Une ligne de barème, gardée par `state.career.valley` |
+| **Basile** (lot 3), **graines rares** | Inchangés (bocal ancien du pays ; pois, melon, poireau sans variété — le melon de la mère de Joseph reste la promesse du V4) | — |
+| **Album** (lot 4) | Trois pages **nouvelles** : `swaps` (12), `crosses` (11), `wildlife2` (4) ; aucune case ajoutée à une page existante ; « L'album complet » reste les 11 pages du lot 4 | Règle du V1 |
+| **Lanternes** | Inchangées (le critère « variété » compte des cultures, pas des variétés ; la beauté garde son plafond de 6 points nature) | — |
+| **Joseph** | 4 récits de la Grainothèque (§ 16.11) ; quêtes et cœurs inchangés | La quête « variété ancienne » de l'aperçu est écartée (§ 16.14) |
+| **Rangs, patrimoine** | Dépenses comptées à 100 % (Grainothèque, nichoirs) ; aucun objectif de rang ne dépend du V2 ; la Grainothèque apparaît dans les déblocages du rang 3, le nichoir à chauves-souris dans ceux du rang 4 | Règle du V1 |
+| **F1 « aider sans remplacer »** | L'équipe et le semoir sèment les variétés **sauvées** (V2 comprises) ; jamais de rencontre, jamais de graine | Règle du V1 |
+
+### 16.9 Écrans du téléphone (portrait, 412 × 915 et 360 × 740)
+
+Cibles ≥ 48 px, textes ≥ 14 px (12 px pour les mentions), traits en pictogramme **et** en mot, pause pendant la lecture,
+mouvements réduits partout, lecteurs d'écran (« 2 rencontres sur 3 », « sauvée », « troc fait »).
+
+#### 16.9.1 La fiche « La Grainothèque » (feuille haute)
+
+Ouverte par : le bâtiment (ou le panneau), la carte « La Grainothèque » en tête de l'onglet Graines de « La Vallée », la
+carte « Troc » du tableau du village (« Voir la Grainothèque »), la ligne « À faire ».
+
+```
+┌──────────────────────────────────────┐
+│ La Grainothèque                   ✕  │
+│ ┌────────┐ Niveau 2                  │  vignette library.2 × 2 (× 1,5 sur 360 px)
+│ │ [N2]   │ La petite grainothèque    │  16 px
+│ └────────┘ ✓ Troc de saison          │  effets en lignes cochées (14 px)
+│            ✓ 3 graines par récolte   │
+│ [ Agrandir · 10 000 · rang 5 ]       │  ≥ 48 px ; grisé + raison lue sinon
+│ [ L'étagère ][ Croisements ][ Troc ] │  segments ≥ 48 px
+│  … contenu du segment …              │  défilement interne
+└──────────────────────────────────────┘
+```
+
+- **Avant construction** (le panneau) : grande vignette du site, trois lignes (« Une maison pour vos graines ; le troc
+  toute l'année ; vos bocaux rangés »), bouton « Construire · 2 000 » (ou « Rang 3 requis »). Les segments se voient déjà
+  (l'étagère et les croisements sont consultables ; le troc dit « Le troc de la foire, en attendant »).
+- **L'étagère** : trois étagères dessinées, « Du pays 12 / 12 », « Du village 4 / 12 », « De la ferme 1 / 11 » ; une
+  grille de **4 bocaux par rangée** (tuile 72 × 72 : la variété dans un bocal de verre, pastille d'état : ✓ sauvée,
+  « 3 » graines, silhouette grise « ? » à trouver) ; toucher un bocal → la fiche de la variété (V1, avec ses deux traits
+  et, pour une variété du village, « De la part de Lili »).
+- **Croisements** : 11 lignes (≥ 72 px) : `[icône pays] + [icône village] → [bocal doré ou ?]`, nom (connu) ou « ? », barre
+  à segments « 2 / 3 rencontres » lue, bouton **« Semer la paire »** quand on a les deux parents ; sinon une ligne douce
+  (« Il faut d'abord la Carotte violette : Lili la garde dans son jardin ») ; trouvée : « Sauvée ✓ » ou « 3 graines · 2 / 7 ».
+- **Troc** : la proposition en attente en tête (carte comme au tableau), puis les **12 voisins** en grille de 3 (portrait
+  48 px, icône de leur variété, ✓ ou cadenas doux « Grainothèque niveau 2 » / « Il faut un verger ») ; « 4 trocs sur 12 ».
+
+#### 16.9.2 La feuille « Troc avec … » (feuille basse)
+
+```
+┌──────────────────────────────────────┐
+│ [portrait 48] Mme Rose, la fleuriste │
+│ « Mon tournesol velours rouge,        │
+│   contre une graine qui fleurit ? »   │
+│ Elle vous donne :                     │
+│  [icône] Tournesol velours rouge      │
+│          ★ Généreuse · 3 graines      │
+│ Vous lui donnez (au choix) :          │
+│  ○ [icône] Fraise Reine des Vallées ♥ │  lignes ≥ 56 px ; ♥ « Elle adore les fraises : 4 graines »
+│  ○ [icône] Navet Boule d'or           │
+│  ○ [icône] Carotte de la Ferme…  ✦    │
+│ Ça ne vous coûte rien : la            │  12 px
+│ grainothèque en garde toujours.       │
+│ [          Échanger          ]        │  ≥ 56 px, actif dès qu'un choix est fait
+└──────────────────────────────────────┘
+```
+
+Les préférées (♥) sont en tête ; puis les variétés du pays, du village, croisées. Après l'échange : le sachet glisse vers
+la boîte (son « pop »), merci du voisin, « Semer » (montre une parcelle qui convient) ou « Plus tard ».
+
+#### 16.9.3 Un croisement (popup, ≤ 50 % de l'écran)
+
+```
+┌──────────────────────────────────────┐
+│     [sachet doré qui s'ouvre 64 px]   │
+│         Un croisement !               │
+│  Tomate de la Ferme des Tilleuls      │  16 px, va à la ligne
+│  ★ Généreuse   ♥ Savoureuse           │  deux pastilles trait (picto + mot)
+│  Née de Cœur de bœuf et Noire de      │
+│  Crimée · 3 graines                   │
+│ [ Semer ]           [ Plus tard ]     │  ≥ 48 px
+└──────────────────────────────────────┘
+```
+
+Le premier croisement ouvre ensuite le récit « Le premier croisement » (§ 16.11).
+
+#### 16.9.4 Fiches existantes enrichies
+
+- **La Vallée › Graines** : en tête, la carte **« La Grainothèque »** (vignette, niveau, « Voir ») ; puis la proposition de
+  troc s'il y en a une ; puis la liste du V1, **groupée** « En cours » (ouvert) · « Du pays » · « Du village » · « De la
+  ferme » (repliés, ≥ 48 px, « 9 / 12 ») ; en bas, le bouton **« Revoir la boîte en fer »** (§ 16.10).
+- **La Vallée › Habitants** : les 4 du V2 à la suite (même ligne que le V1) ; **› Aménager** : la carte du nichoir à
+  chauves-souris.
+- **Fiche d'une variété** : deux pastilles de traits pour une croisée ; « De la part de Lili » ; « Croisement avec … :
+  2 / 3 rencontres » + « Semer la paire ».
+- **Fiche d'une parcelle** : « Croisement avec Carotte violette (à côté) : 2 / 3 rencontres · récoltez-la à la main » ; « à
+  côté : rien » → « Semez la Carotte violette juste à côté pour la croiser ».
+- **Feuille des graines** : variétés du village et croisées dans « Graines anciennes » (sceau doré pour les croisées),
+  ligne « Semer la paire » quand un croisement est possible.
+- **Tableau du village** : carte « Troc » en tête (§ 16.3).
+- **Ligne « À faire »** : `vl-troc` « Mme Rose propose un troc », `vl-story` « Joseph a quelque chose à vous dire » (récits).
+  Aucune ligne pour pousser à acheter un niveau (aucune envie fabriquée).
+- **Prochain indice** (toujours un seul), ordre : bête à voir ; chapitre ou récit ; **troc en attente** ; bocal ; planche
+  d'essai mûre (« récoltez-la à la main : + 1 rencontre » si sa jumelle est à côté) ; **« semez la paire »** (une variété du
+  village en main dont le croisement n'est pas trouvé et qu'aucune paire ne pousse) ; graines à semer (rien de semé) ;
+  recette la plus proche ; **la Grainothèque** (construire, seulement si on peut la payer en gardant 2 saisons de charges) ;
+  étape suivante.
+- **Résumé du matin** : « Mme Rose a épinglé un sachet au tableau » ; « Hier : 2 rencontres au champ de départ ».
+- **Bilan de l'année**, bloc « La vallée cette année » : + trocs, croisements, niveau de la Grainothèque.
+- **Conseils « première fois »** : `valley.library` (premier niveau), `valley.troc` (première proposition), `valley.pair`
+  (première paire semée), `valley.cross` (premier croisement), `valley.scented` (première variété parfumée semée).
+
+#### 16.9.5 Scène
+
+- La Grainothèque (2 × 2 tuiles, 5 dessins) ou son panneau ; touchable (cible agrandie ≥ 48 px).
+- Le sachet épinglé au tableau du village quand un troc attend (le toucher ouvre la feuille du tableau, carte « Troc » en
+  tête).
+- L'abeille (ou le point de pollen) entre deux parents voisins ; le sachet doré d'un croisement.
+- Le mode « paire » : parcelles valides en pointillé épais avec « + » (lisible sans la couleur), défilement, pincement et
+  boutons + / − actifs, « Terminer » dans la barre.
+- Les 4 habitants du V2 (indices, « ? », promenade douce comme au V1 ; 6 bêtes dessinées au plus, inchangé) ; le nichoir à
+  chauves-souris ; au niveau 5, des visiteurs s'arrêtent devant la porte (décor).
+
+### 16.10 « Revoir la boîte » (fiche de la boîte de Joseph relisible)
+
+Constat du V1 : un toucher pendant la fenêtre « La boîte en fer » la fermait, et le détail des graines ne se revoyait plus.
+
+- Un bouton **« Revoir la boîte en fer »** en bas de l'onglet Graines, et la ligne « La boîte en fer » des récits de Joseph
+  (chapitre 0) ouvre désormais **la même fenêtre** que le premier jour, reconstruite depuis l'état : vignette, les trois
+  lignes de Joseph, les **trois variétés** avec leur trait et leur **état actuel** (« 3 graines » · « 4 / 7 récoltes à la
+  main » · « Sauvée ✓ »), la haie de Joseph (« Le champ de départ, côté gauche ») et la ligne du melon (« Le melon, lui,
+  dort trop profond… », promesse du V4), bouton « Fermer ».
+- La fenêtre du premier jour ne se ferme plus d'un toucher hors d'elle (il faut « Merci, Joseph ») : la règle de la veillée.
+- Requête `valley().box` (contrat V2) ; aucun état nouveau.
+
+### 16.11 Les récits de la Grainothèque (Joseph)
+
+Fenêtre comme les chapitres (vignette, trois lignes, « Merci, Joseph »), qui **attendent** d'être lus (ligne « À faire ») ;
+relisibles dans « Les récits de Joseph ». Ce ne sont pas des étapes (les étapes restent comptées en signes de vie).
+
+| id | Titre | Quand | Vignette | Trois lignes |
+|---|---|---|---|---|
+| `heritage0` | Une idée de Joseph | première aube au rang 3 (Vallée commencée) ; le panneau apparaît | `story.library` | « Toutes ces graines, il leur faudrait une maison. » · « Derrière chez toi, il y a la place pour une petite remise en pierre. » · « Et les gens du village gardent des graines, eux aussi : on pourrait échanger. » |
+| `heritage1` | La remise aux graines | Grainothèque niveau 1 | `story.library` | « Ma mère aurait aimé ça : des bocaux bien rangés, des étiquettes. » · « Ici, aucune graine ne se perdra plus. » · « Les voisins viendront épingler leurs sachets au tableau, tu verras. » |
+| `heritage2` | Le premier croisement | premier croisement | `story.cross` | « Deux fleurs côte à côte, une abeille entre les deux… » · « Et voilà une graine qui n'existait nulle part ailleurs. » · « Elle porte le nom de ta ferme, maintenant. C'est ton héritage, petit. » |
+| `heritage3` | La grainothèque vivante | Grainothèque niveau 5 | `story.library5` | « Les gens viennent de loin pour voir tes bocaux, tu sais. » · « Ma mère disait : une graine qu'on garde, c'est une graine qui dort. » · « Une graine qu'on donne, c'est une graine qui vit. » |
+
+### 16.12 Équilibrage
+
+#### 16.12.1 Repères (V1, § 12.7 et trace `--seed 3 --strategy casual --years 18`)
+
+Joueur tranquille : rang 3 à 4 à l'an 3, rang 5 à l'an 5, Domaine à l'an 7 ; argent en caisse ≈ 2 000 à 17 000 des ans 3 à
+10 (il investit), puis **50 000 (an 11) → 175 000 (an 14) → 340 000 (an 18)** ; revenu ≈ 50 000 par an après l'an 8 ;
+récoltes à la main de variétés anciennes ≈ 20 à 35 par an ; nouveautés de la Vallée : **65 %** des saisons (ans 2 à 10).
+
+#### 16.12.2 Calendrier visé du joueur tranquille
+
+| An | Ce qui arrive (V2) | Nouveautés de saison apportées |
+|---|---|---|
+| 2 à 3 | troc de la foire (dès une variété sauvée) | l'hiver |
+| 4 | Grainothèque **N1** (2 000) ; trocs de saison du cercle 1 ; premières variétés du village sauvées | 3 à 4 saisons |
+| 5 | fin du cercle 1 ; premiers croisements (carotte, navet, courgette, pomme de terre) ; lézard (été) | 3 à 4 saisons |
+| 6 | **N2** (5 000) ; cercle 2 ; osmie (printemps) ; croisements | 4 saisons |
+| 7 | trocs du cercle 2 ; merle (hiver) ; variétés du village et croisées sauvées | 4 saisons |
+| 8 | **N3** (10 000) ; cercle 3 ; croisements d'été (tomate, tournesol, maïs) | 4 saisons |
+| 9 | derniers trocs (Léon avec le verger) ; pipistrelle ; étape 5 | 3 à 4 saisons |
+| 10 à 11 | **N4** (16 000) ; derniers croisements (citrouille, chou) ; variétés croisées sauvées | 3 saisons |
+| 11 à 13 | **N5** (25 000) ; V2 complet | — |
+
+Le V3 (chantiers ≈ 175 000, terres sauvages ≈ 194 000) prend le relais à partir de l'an 10 : la Vallée complète vers
+l'**an 18** pour le joueur tranquille (décision de l'utilisateur).
+
+#### 16.12.3 D'où viendrait le revenu en plus (estimation, à mesurer)
+
+| Source | Estimation (tranquille, 10 ans) |
+|---|---|
+| Traits des variétés du village et croisées semées (savoureuse, géante, généreuse…) | + 0,3 % |
+| Parfumée (produits d'atelier + 15 %, sur les seules récoltes de variétés) | + 0,1 % |
+| Étapes 3 à 5 un an plus tôt (pollinisation, sol vivant) | + 0,2 à + 0,4 % |
+| Merle (4 trouvailles des haies), lézard (canicule), pipistrelle (équipe jamais lasse l'été) | + 0,3 % |
+| Grainothèque N5 (touristes + 15 %) ; stand (+ 1 point) | + 0,1 % |
+| N2 (3 graines par récolte), N5 (graines × 1) : moins de dépenses de semis | ≈ 0 sur le revenu (un peu de bénéfice) |
+| **Total** | **≈ + 1 à + 1,5 %** (cible + 0 à + 4 %) |
+
+#### 16.12.4 Cibles du V2 (`--compare-valley2` : V1 seul → V1 + V2, même graine ; 60 carrières × 10 ans, Détente, saisons de 7 jours ; `--years 14` et `--years 18` pour la traîne)
+
+| Mesure | Cible |
+|---|---|
+| Tranquille : revenu sur 10 ans | **+ 0 à + 4 %** par rapport au V1 seul ; toute la Vallée ≤ + 8 % par rapport à sans |
+| Tranquille : dépenses du V2 | 10 ans : **15 000 à 35 000** (N1 à N3 ou N4) ; 14 ans : ≈ 58 000 (Grainothèque complète) |
+| Tranquille : rangs, Domaine | identiques **à un an près** (dépenses à 100 % au patrimoine ; achat de niveaux avec une réserve de charges) |
+| Tranquille : argent en caisse à l'an 14 | **≤ 70 %** de ce qu'il serait sans la Vallée (cible d'ensemble du § 12.6 ; le V1 seul : 97 %) |
+| Tranquille : nouveautés | **≥ 80 %** des saisons avec au moins une nouveauté (ans 2 à 10, médiane) ; **≥ 75 %** sur les seuls ans 6 à 10 |
+| Tranquille : collection | 12 trocs entre l'an 8 et l'an 10 ; 11 croisements trouvés vers l'an 11 ; 35 variétés sauvées et N5 entre l'an 11 et l'an 13 ; 16 habitants vers l'an 12 |
+| Tranquille : gestes par jour (ans 5 à 10) | + 0,3 à + 1 de plus que le V1 ; part des récoltes à la main ≥ 50 % |
+| Débutant | rang 3 à l'an 5 dans ≥ 70 % (inchangé) ; à l'an 10 : ≥ 4 trocs et ≥ 1 croisement (médiane) |
+| Appliqué | V2 complet vers l'an 8 ou 9 ; revenu ≤ + 6 % par rapport à sans la Vallée |
+| Ferme laissée seule (`handsOff`, ans 4 à 7) | bénéfice **≤ + 3 %** par rapport à sans la Vallée |
+| `automator` (aucun geste dès l'an 3) | **aucun troc, aucun croisement**, aucun habitant du V2 ; patrimoine à l'an 10 ≤ + 3 % |
+| Part des semis (appliqué) | aucune culture ne gagne plus de 10 points de part |
+| Carrière Classique, tranquille | faillites ≤ 20 % (inchangé) |
+| Niveaux | **identiques** : `node tools/simulate.js` octet pour octet, parité 400 / 400 |
+
+#### 16.12.5 Robots (par l'API publique et leur tirage propre `me.valleyRnd`, comme au V1)
+
+- **Tranquille** : Grainothèque — un regard par saison : **N1** au rang ≥ 3 si l'argent − 2 000 > 2 saisons de charges +
+  500 ; **N2** au rang ≥ 4 et **N3 à N5** au rang ≥ 5 si l'argent − prix > 4 saisons de charges (les aménagements de sa
+  liste passent d'abord) ; troc en attente fait **70 %** des jours joués (une préférée ♥ une fois sur deux si possible,
+  sinon la première variété sauvée) ; **sème la paire** au champ de départ avant ses autres graines anciennes quand il a
+  des graines d'une variété du village dont le croisement n'est pas trouvé (achète la graine du pays si elle est sauvée) ;
+  observe les habitants du V2 comme ceux du V1 (70 %) ; nichoir à chauves-souris dans sa liste après les berges.
+- **Débutant** : 30 % de tout cela ; Grainothèque N1 et N2 seulement (au rang ≥ 4).
+- **Appliqué** : tout, dès que possible (réserve de 4 saisons de charges), paires sur les champs tenus à la main ; plan de
+  culture avec les variétés sauvées dont un trait paie la graine (savoureuse, précoce, géante, rustique, parfumée).
+- **`automator`** : achète les niveaux (décision), ne fait aucun geste (ni troc, ni paire, ni observation).
+- **`handsOff`, `idle`** : rien après leur dernière année jouée.
+- Gestes : troc 2, semer la paire 1 par terrain, croisement (ouvrir le sachet) 0, observer 1 ; achat d'un niveau : 0
+  (décision de boutique, comme les aménagements).
+
+#### 16.12.6 Leviers si une cible n'est pas tenue (dans cet ordre)
+
+Rencontres pour croiser (3 → 2 ou 4) ; cercles du troc (4 / 4 / 4 → 6 / 6 ou 3 / 3 / 3 / 3 avec N4) ; jour de la
+proposition (une par saison → deux par saison avec N3) ; prix de la Grainothèque (× 0,8 à × 1,2, total entre 46 000 et
+70 000) ; effets des niveaux (graines par récolte 3 → 2 ; fixation 5 → 6) ; recettes des habitants du V2. **Jamais** les
+chiffres des niveaux, le rythme des rangs ni les tirages d'un flux existant.
+
+### 16.13 Cas limites
+
+| Cas | Ce qui se passe |
+|---|---|
+| Aucune variété sauvée | Pas de proposition de troc (ni foire ni saison) ; la fiche dit « Sauvez une première variété pour échanger ». |
+| Troc en attente depuis des saisons | Il attend (aucun rappel, aucune expiration) ; aucune autre proposition tant qu'il attend. |
+| Toutes les variétés sauvées sont celle du voisin | Impossible : la sienne n'est pas encore chez vous avant le troc. |
+| Léon sans verger | Il est passé dans l'ordre ; il propose dès qu'un verger existe ; la grille du troc dit « Il faut un verger ». |
+| Grainothèque jamais construite | Un troc par an (foire) ; croisements possibles ; niveaux 2 à 5 jamais : rien n'est bloqué pour toujours. |
+| Ancienne carrière riche (rang 6, an 14) reprise | Panneau et récit `heritage0` à la première aube ; elle peut acheter les 5 niveaux d'un coup (son choix) ; les cercles s'ouvrent, mais toujours **un troc par saison** ; rien de rétroactif. |
+| Parents voisins tous deux mûrs | Récolter l'un compte une rencontre ; l'autre, récolté ensuite, compte aussi si on a resemé un parent à côté entre-temps. |
+| Parcelle entourée de plusieurs parents | Une seule rencontre par récolte. |
+| Variété croisée à côté d'un parent | Rien (pas de génération suivante au V2). |
+| Planche de croisement gelée ou pourrie | La graine revient (règle du V1) ; les rencontres déjà faites restent. |
+| Récolte de l'équipe ou d'une machine | Jamais de rencontre, jamais de graine (F1). |
+| Croisement trouvé alors que ses graines du village manquent | Sans importance : la croisée est une variété à part. |
+| Nom de ferme sans article (« Chez Martin ») | « Tomate de Chez Martin » (règle `ofFarm`). |
+| Serre de 4 parcelles sur une ligne | Les voisines sont à gauche et à droite seulement. |
+| Tableau du village désactivé (test) | Le troc reste dans la Grainothèque et la ligne « À faire ». |
+| Fêtes du lot 4 désactivées | Le troc de la foire apparaît quand même le dernier jour d'hiver (comme l'étal du V1). |
+| Saisons de 10 ou 14 jours | Rien n'est compté en jours : proposition au 2ᵉ jour, dernier jour d'hiver, rencontres comptées par récolte. |
+| `createCareer({ valley: { heritage: false } })` | V1 seul, exactement : aucun tirage `valley2`, aucun champ V2 utilisé. |
+
+### 16.14 Ce qui change par rapport à l'aperçu du § 11.2
+
+| Aperçu | Conception V2 | Pourquoi |
+|---|---|---|
+| Grainothèque sur un emplacement de pré, de basse-cour ou de cour des ateliers (`build(lotId, slot, 'seedLibrary')`) | Emplacement **réservé dans la bande de la maison** ; ouvrage de la Vallée, pas un bâtiment de `BUILDINGS` | Rien ne peut la bloquer (emplacements pleins) ; 100 % au patrimoine sans exception |
+| Croisement : 15 % de chances par récolte du même jour (+ 5 points bourdons, osmie, N4 ; 30 % au plus), 1 graine | **3 rencontres** déterministes (2 au N4, double avec l'osmie), sachet de **3 graines** | « Rien d'aléatoire frustrant » ; barre lisible ; une graine seule se perdait trop vite en planche d'essai |
+| Les deux parcelles récoltées à la main le même jour | Récolter **l'une** à la main pendant que l'autre pousse à côté | Un seul geste ; marche quand les durées de pousse diffèrent |
+| Troc à la foire puis « toute l'année » avec N1 | Foire chaque année + **une proposition par saison** avec la Grainothèque, voisins ouverts par **cercles** (niveaux 1 à 3) | Étale les 12 trocs sur les ans 4 à 9 (le creux de nouveautés) |
+| N1 troc et croisements ; N2 + 1 graine ; N3 fixation en 5 ; N4 croisement + 5 points ; N5 graines × 1 et touristes + 15 % | Mêmes prix et presque mêmes effets ; N1 à N3 ouvrent aussi les cercles du troc ; N4 : croisement en 2 rencontres | Cohérent avec les croisements déterministes |
+| Navet long des Vertus ; Reinette grise du Canada pour Léon | **Navet des Vertus Marteau (†)** ; **Pomme Api étoilé (†)** | Nom exact de la variété ; la Reinette grise reste au verger conservatoire du V3 |
+| Merle « 4 haies » ; lézard « 2 tas de pierres » ; abeille sauvage « hôtel + 3 coins fleuris » ; pipistrelle « équipe joyeuse les soirs d'été » | Merle **d'hiver**, 6 haies + un arbre adulte ; lézard 3 tas + friche ou jachère ; osmie **au printemps**, 2 hôtels + 3 coins fleuris ; pipistrelle : **équipe jamais lasse l'été** | Un habitant d'hiver et un de printemps pour le creux ; recettes un peu plus tardives ; service sans gain de production pour une ferme automatisée |
+| Comice : « Présenter N variétés anciennes » ; Joseph : une quête « variété ancienne » par an | **Écartés** au V2 ; Joseph raconte 4 récits | Les épreuves du comice et le choix des quêtes passent par des flux existants (`events`) : un modèle de plus changerait leurs tirages ; le stand garde son lien (+ 1 point) |
+| « Trait en double → un troisième » | Inutile : traits du village toujours différents de ceux du pays | Table fixe |
+
+### 16.15 Points à trancher (recommandation en premier)
+
+1. **Emplacement de la Grainothèque** : (a) emplacement réservé dans la bande de la maison (recommandé : jamais bloquée,
+   toujours visible en bas de la ferme) ; (b) un emplacement de bâtiment de pré, de basse-cour ou de cour des ateliers,
+   comme l'aperçu (le joueur choisit, mais un emplacement d'abri en moins) ; (c) la boîte en fer du perron grandit et devient
+   la Grainothèque sur place (très lisible, mais place comptée près de la porte).
+2. **Les croisements** : (a) déterministes, 3 rencontres, barre visible (recommandé) ; (b) une chance par rencontre (15 %)
+   avec une garantie à la 5ᵉ rencontre (un peu de surprise) ; (c) une seule rencontre suffit (immédiat, moins de jeu).
+3. **Rythme du troc** : (a) une proposition par saison, voisins ouverts par cercles avec les niveaux 1 à 3 (recommandé :
+   comble les ans 4 à 9) ; (b) une par saison, les 12 voisins dès le niveau 1 (≈ 3 ans, fini vers l'an 7) ; (c) tous ouverts
+   au choix du joueur (rapide, mais plus rien à attendre après un an).
+4. **Signes de vie du V2 pour les étapes 1 à 5** : (a) ils comptent (recommandé : étape 5 un an plus tôt, le V3 compte sur ce
+   total) ; (b) seulement pour les étapes du V3 (étape 5 vers l'an 11 comme au V1).
+5. **Liens écartés** (comice, quête de Joseph) : (a) écartés au V2, Joseph raconte 4 récits (recommandé : aucun flux
+   existant ne bouge) ; (b) une quête « variété ancienne » par an (tirages du flux `events` changés pour les carrières avec
+   la Vallée).
+6. **Nom des variétés croisées** : (a) « Tomate de la Ferme des Tilleuls » (recommandé) ; (b) court : « Tomate des
+   Tilleuls » ; (c) le joueur baptise chaque croisée (clavier sur téléphone, plus de texte).
+
+## Décisions de l'utilisateur sur le V2 (2026-10-03)
+
+1. Grainothèque : **emplacement réservé près de la maison** (jamais bloquée, ne prend pas la place d'un abri).
+2. Croisements : **déterministes, 3 rencontres**, avec une barre visible.
+3. Troc : **progressif**, un par saison, voisins ouverts par groupes de 4 avec les niveaux 1 à 3.
+4. Nom des variétés croisées : **nom complet** (« Tomate de la Ferme des Tilleuls »).
+
+Points non posés, tranchés selon la recommandation (§ 16.15) : les signes de vie du V2 comptent pour les étapes 1 à 5 ; comice et quête de Joseph écartés (aucun flux existant ne bouge).
