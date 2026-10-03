@@ -1069,10 +1069,18 @@ pommier »), 1 par cour des ateliers (`<lot>.bat`, « sous l'avant-toit »). Pet
 ### 16.7 Les signes de vie et les étapes
 
 - Un signe de vie = une espèce installée ou une variété sauvée, **V2 compris** : 16 espèces + 35 variétés = **51** (au
-  lieu de 24). Les paliers des étapes 1 à 5 **ne changent pas** (2 / 6 / 11 / 17 / 24) : l'étape 5 « La vallée chante »
-  vient environ **un an plus tôt** (vers l'an 9 au lieu de l'an 11 pour le joueur tranquille) — c'est voulu : le V2
-  remplit les années où le V1 attendait ses dernières haies. Les étapes 6 et 7 du V3 (30 et 45 signes) s'appuient sur ce
-  total (§ 11.3, inchangé).
+  lieu de 24) — décision de l'utilisateur (§ 16.15, point 4).
+- **Paliers recalés à l'intégration (2026-10-03)** : avec les paliers du V1 (2 / 6 / 11 / 17 / 24), l'étape 5 « La vallée
+  chante » venait à l'**an 6** du joueur tranquille (les 23 variétés du V2 se sauvent au rythme de celles du pays). Quand
+  le V2 est ouvert (partie `heritage`), les paliers sont **2 / 6 / 11 / 22 / 38** (`STAGE_SIGNS_V2`,
+  `src/data/career/valley.js`) : étapes 1 à 4 aux mêmes années que le V1 (ans 2 / 3 / 4 / 6), étape 5 à l'**an 9** (au
+  lieu de l'an 11 au V1 seul) ; les étapes 1 à 3 ne changent pas, le débutant n'est pas retardé (étapes 1 et 2 aux ans 3
+  et 6, étape 3 vers l'an 13, comme avant). Sans le V2 (`{ heritage: false }`) : les paliers du V1, exactement.
+- **Jamais de recul** : une étape déjà atteinte (carrière du V1, ou du V2 avant ce recalage) reste acquise ; la
+  vérification des sauvegardes borne l'étape avec les paliers du V1 (les plus bas). La prochaine étape demande le
+  nouveau palier (une carrière à l'étape 4 avec 20 signes attend 38 signes pour l'étape 5).
+- **À reprendre au V3** : les étapes 6 et 7 (30 et 45 signes au § 11.3) doivent passer **au-dessus de 38** (par exemple
+  44 et 51) puisque l'étape 5 en demande désormais 38.
 - La rangée de silhouettes de la fiche « La Vallée » devient « 31 signes de vie · prochaine étape à 45 » (après l'étape 5,
   le compteur continue pour le V3 ; tant que le V3 n'est pas là : « 31 signes de vie sur 51 »).
 
@@ -1348,10 +1356,28 @@ collection ; greffons de l'Api étoilé plantés au verger comme le Calville.
 | Ferme laissée seule (ans 4 à 7) | bénéfice ≤ + 3 % par rapport à sans la Vallée | **− 3,8 %** (N1 achetée l'an 3) |
 | `automator` | aucun troc, croisement ni habitant du V2 ; patrimoine an 10 ≤ + 3 % | **aucun après l'an 2** (4 trocs les ans 1 et 2, quand il joue encore, comme les habitants du V1) ; 0 habitant du V2 ; patrimoine **− 4,9 %** |
 | Part des semis (appliqué) | aucune culture + 10 points | écart le plus grand **1,6 point** (maïs) |
-| Étape 5 « La vallée chante » (tranquille) | « environ un an plus tôt » (vers l'an 9) | **an 6** (V1 : an 11) — *plus tôt que prévu* : les 23 variétés du V2 se sauvent au rythme de celles du pays (signes de vie : décision de l'utilisateur, paliers inchangés) ; effet sur le revenu négligeable |
+| Étape 5 « La vallée chante » (tranquille) | « environ un an plus tôt » (vers l'an 9) | livraison CORE : **an 6** (paliers du V1) ; **après recalage des paliers (intégration) : an 9** (V1 : an 11) — étapes 1 à 5 aux ans 2 / 3 / 4 / 6 / 9 (V1 seul : 2 / 3 / 4 / 6 / 11) ; débutant inchangé (3 / 6 / 13 / — / —) ; appliqué an 5 (V1 : an 8) ; revenu, rangs, argent en caisse inchangés à 0,1 % près |
 | Carrière Classique, tranquille (30 × 10 ans) | faillites ≤ 20 % | **0 %** ; revenu − 0,2 % ; nouveautés 92 % ; 12 trocs an 9, 9 croisements à l'an 10 |
 | Traîne (60 × 18 ans) | — | tranquille : revenu sur 18 ans **+ 2,7 %** ; argent en caisse à l'an 18 : 88 % de sans la Vallée (le V3 prendra le relais) ; dépenses du V2 63 295 |
 | Niveaux | identiques | `node tools/simulate.js` **identique octet pour octet** ; parité 400 / 400 |
+
+**Intégration et vérification (2026-10-03)** — `node tools/simulate-career.js --compare-valley2 --runs 60 --years 14
+--jobs 4`, avant → après le recalage des paliers des étapes (le simulateur affiche maintenant l'année de chaque étape et
+les signes de vie par an) :
+
+| Mesure (médianes, 60 × 14 ans) | Avant (paliers du V1) | Après (2 / 6 / 11 / 22 / 38) |
+|---|---|---|
+| Tranquille : étapes 1-5 (an) | 2 / 3 / 4 / 5 / 6 | **2 / 3 / 4 / 6 / 9** (V1 seul : 2 / 3 / 4 / 6 / 11) |
+| Tranquille : signes de vie en fin d'année (ans 1 à 14) | 0 · 4,5 · 8 · 14 · 20 · 27 · 31 · 35 · 39,5 · 43 · 47 · 50 · 51 · 51 | identiques |
+| Débutant : étapes 1-5 | 3 / 6 / 13 / — / — | 3 / 6 / 13 / — / — (inchangé) |
+| Appliqué : étapes 1-5 | 1 / 2 / 3 / 3 / 4 | 1 / 2 / 3 / 4 / 5 (V1 seul : 1 / 2 / 3 / 4 / 8) |
+| Tranquille : revenu 10 ans (V1 → V1 + V2) | + 1,7 % | + 1,7 % |
+| Tranquille : argent en caisse an 14 (de sans la Vallée) | 70 % | 70 % |
+| Tranquille : nouveautés (ans 2-10 ; carrières ≥ 80 %) | 89 % ; 97 % | 89 % ; 98 % |
+| Toutes les autres lignes (rangs, Domaine, dépenses du V2, collection, `handsOff`, `automator`, part des semis) | — | identiques |
+
+`node tools/capture-parity.js --check` : parité exacte, 400 / 400 ; `node tools/simulate.js` : sortie identique octet pour
+octet à celle d'avant le V2 (commit `090ec5c`).
 
 ### 16.13 Cas limites
 

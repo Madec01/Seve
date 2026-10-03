@@ -4549,3 +4549,23 @@ src/main.js                  app.heritage ; frame, reset, Échap quitte le mode 
 - **Débogage** (`?debug=1`) : `__debug.valley2.{ on(), state(), site(), library(n), troc(clientId), swap(clientId),
   meet(cropId, n), cross(cropId), pair(cropId | null), pairPlots(cropId), links(), box(), story(id), open(tab), trocUI(),
   point(kind, id), ui(), stats() }` (les mêmes aussi sous `__debug.valley`).
+
+### Intégration et vérification du lot V2 (2026-10-03)
+
+- **Paliers des étapes avec le V2** : `src/data/career/valley.js` exporte `STAGE_SIGNS_V2` (`[0, 2, 6, 11, 22, 38]`) et
+  `stageSigns(n, heritage)` ; `STAGES[n].signs` (V1) ne change pas. `src/core/career/habitat.js` : `stageFor(signs,
+  heritage = false)`, `stageTarget(state)` (paliers du V2 si la partie `heritage` est ouverte), `stageSignsOf(state, n)`.
+  L'étape monte à l'aube vers `stageTarget` (jamais en baisse) ; `valley().stage.next.signs`, l'indice « Encore N signes de
+  vie » et `triggerValley('stage', n)` lisent les paliers de la carrière ; `checkValley` borne l'étape avec les paliers du
+  V1 (les plus bas) : une étape atteinte avant le recalage reste valide. Détail et chiffres : `docs/VALLEE.md` § 16.7 et
+  § 16.12.7.
+- **Fiche de la Grainothèque** : `libraryInfo().effects` résume les lignes du troc des niveaux 1 à 3 en une seule
+  (« Troc de saison : un voisin par saison (8 voisins) ») ; `next.unlocks` inchangé.
+- **Interface** : fiche d'une parcelle (`.tip-rows > .vl-plot` en grille : variété, traits, croisement et « À la main »
+  sur des lignes pleines au lieu de colonnes écrasées) ; carte de l'indice, carte « La Grainothèque » et carte « Troc »
+  qui passent à la ligne à 150 % sur 360 px ; onglets de « La Vallée » lisibles à 130–150 % sur petit écran ; « Ça ne
+  vous coûte rien » et le tampon ♥ de l'album à 14 px.
+- **Lot 3 (trouvé en vérifiant)** : la fenêtre courte de fin de saison de la carrière disait « Fin de l'automne » à la fin
+  de l'été (la saison était lue après l'aube suivante) ; `src/ui/variety.js` prend la saison de `billPaid.seasonId`, ou
+  la précédente au 1ᵉʳ jour.
+- `tools/simulate-career.js --compare-valley2` affiche aussi l'année de chaque étape (1 à 5) et les signes de vie par an.

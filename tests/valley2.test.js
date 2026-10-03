@@ -10,7 +10,7 @@ import { patrimony } from '../src/core/career/ranks.js';
 import { nextFloat } from '../src/core/rng.js';
 import {
   ALL_SPECIES, ALL_VARIETIES, ALL_VARIETIES_BY_ID, NATURE_ITEMS_BY_ID, SIGNS_ALL, SPECIES, TRAITS_BY_ID, VARIETIES, VARIETY_OF_CROP,
-  VALLEY_VERSION, varietyTraits,
+  VALLEY_VERSION, varietyTraits, STAGES, STAGE_SIGNS_V2, stageSigns,
 } from '../src/data/career/valley.js';
 import {
   CROSSES, CROSS_RULES, HERITAGE_HINTS, LIBRARY_MAX, SEED_LIBRARY, SPECIES_V2, STORIES, TROC, VILLAGE_VARIETIES, crossName, ofFarm,
@@ -194,7 +194,9 @@ test('Grainothèque : 5 niveaux, rangs, argent, plus haut ; dépense de la Vall�
   assert.deepEqual(g.state.career.valley.library.level, 5);
   const lib = Q(g).valley().library;
   assert.deepEqual([lib.level, lib.name, lib.vignette, lib.next], [5, 'La grainothèque vivante', 'library.5', null]);
-  assert.ok(lib.effects.length >= 8);
+  assert.equal(lib.effects.length, 7, 'les lignes du troc des niveaux 1 à 3 se résument en une');
+  assert.equal(lib.effects.filter((t) => /^Troc/.test(t)).length, 1);
+  assert.match(lib.effects[0], /les 12 voisins/);
   // Déblocages des rangs : la Grainothèque au rang 3, le nichoir à chauves-souris au rang 4.
   const ext = careerExtensions().find((e) => e.id === 'valley');
   assert.ok(ext.providers.unlocks(3).some((u) => u.kind === 'valley' && u.id === 'seedLibrary'));
@@ -430,7 +432,7 @@ test('progression : 3 pages d\'album (trocs ♥, croisées, habitants), 6 succè
   assert.equal(P.albumOverview(p).total, 175);
 });
 
-test('signes de vie du V2 comptés pour les étapes (paliers inchangés : 2 / 6 / 11 / 17 / 24)', () => {
+test('signes de vie du V2 comptés pour les étapes (étapes 1 à 3 : paliers inchangés 2 / 6 / 11)', () => {
   const g = startedCareer({}, 3);
   const ev = record(g);
   for (const id of ['carotteViolette', 'blancheDeVirginie']) A(g).triggerValley('fix', id);
@@ -464,4 +466,44 @@ test('simulation : --valley seeds,wildlife = le V1 seul ; un tranquille avec le 
   assert.ok((v.library?.level || 0) >= 1, 'la Grainothèque');
   assert.ok(v.stats.pairs >= 1, 'des paires');
   assert.ok(c.years.at(-1).valley.v2Spent > 0);
+});
+
+test('paliers des étapes avec le V2 : 2 / 6 / 11 / 22 / 38 (étape 5 vers l\'an 9 du tranquille) ; sans le V2 : 2 / 6 / 11 / 17 / 24', () => {
+  assert.deepEqual(STAGES.map((st) => st.signs), [0, 2, 6, 11, 17, 24], 'V1 inchangé');
+  assert.deepEqual(STAGE_SIGNS_V2, [0, 2, 6, 11, 22, 38]);
+  for (let n = 0; n <= 3; n++) assert.equal(stageSigns(n, true), stageSigns(n, false), `étape ${n} identique (débutant pas retardé)`);
+  for (let n = 1; n < STAGE_SIGNS_V2.length; n++) {
+    assert.ok(STAGE_SIGNS_V2[n] > STAGE_SIGNS_V2[n - 1], 'croissants');
+    assert.ok(STAGE_SIGNS_V2[n] >= STAGES[n].signs, 'jamais plus bas que le V1 (vérification des sauvegardes)');
+  }
+  assert.ok(STAGE_SIGNS_V2.at(-1) <= SIGNS_ALL);
+  // Avec le V2 : 17 signes ne donnent plus l'étape 4 ; 22 la donnent ; 38 l'étape 5 (et la fiche annonce le bon palier).
+  const g = startedCareer({}, 3);
+  const all = [...ALL_VARIETIES.map((x) => ['fix', x.id]), ...ALL_SPECIES.map((sp) => ['install', sp.id])];
+  let k0 = 0;
+  const to = (n) => { while (Q(g).valley().stage.signs < n) { A(g).triggerValley(...all[k0]); k0 += 1; } nextDay(g); };
+  to(17);
+  assert.equal(g.state.career.valley.stage, 3);
+  assert.equal(Q(g).valley().stage.next.signs, 22);
+  to(22);
+  assert.equal(g.state.career.valley.stage, 4);
+  assert.equal(Q(g).valley().stage.next.signs, 38);
+  to(37);
+  assert.equal(g.state.career.valley.stage, 4);
+  to(38);
+  assert.equal(g.state.career.valley.stage, 5);
+  // Sans le V2 : les paliers du V1.
+  const h = startedCareer({ valley: { heritage: false } }, 3);
+  for (const id of VARIETIES.map((x) => x.id).slice(0, 12)) A(h).triggerValley('fix', id);
+  for (const id of SPECIES.map((sp) => sp.id).slice(0, 5)) A(h).triggerValley('install', id);
+  nextDay(h);
+  assert.equal(h.state.career.valley.stage, 4, '17 signes : étape 4 au V1');
+  assert.equal(Q(h).valley().stage.next.signs, 24);
+});
+
+test('débogage triggerValley(\'stage\', 5) avec le V2 : atteint le palier de 38 signes', () => {
+  const g = startedCareer({}, 3);
+  const r = A(g).triggerValley('stage', 5);
+  assert.equal(r.stage, 5);
+  assert.ok(Q(g).valley().stage.signs >= 38);
 });

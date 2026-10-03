@@ -36,9 +36,11 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/avant-vallee-vivante-2026-10-03` | Avant « La Vallée vivante » (grand projet de carrière), après les 4 lots |
 | 2026-10-03 | `backup/vallee-v1-2026-10-03` | Vallée vivante V1 « La boîte en fer » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-vallee-v2-2026-10-03` | Avant le lot V2 « Le troc et les croisements » (grainothèque, troc, croisements), commit `090ec5c` |
+| 2026-10-03 | `backup/vallee-v2-2026-10-03` | Vallée V2 « Le troc et les croisements » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
+| 2026-10-03 | `backup/avant-qa-vallee2-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V2 de la Vallée, commit `a0c0e17` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -1032,6 +1034,14 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Vallée V1 : fiche d'une parcelle sauvée « À la main : + 2 graines gardées » (faux depuis l'écart CORE : plus de graine après fixation) ; étal de la foire « 3 graines » pour un greffon de Calville, sachet « dans la grainothèque » (bâtiment du V2) | Corrigé |
 | 2026-10-03 | Vallée V1 : texte à 150 % sur 360 px — puces de la feuille des graines (« Planche d'essai : récoltez-la à la main ») et cartes « Aménager » plus larges que l'écran ; lignes des habitants et plan de culture qui débordent de 3 px ; « Jachère fleurie » coupée à 100 % ; traits à 13 px dans la boîte de Joseph ; hors Vallée bouton « Installer : Moissonneuse 700 » | Corrigé (`valley.css`, `style.css`) |
 | 2026-10-03 | Vallée V1 : toucher la scène pendant la fenêtre « La boîte en fer » la ferme (comme toute feuille) ; le chapitre reste « à lire » (ligne « À faire », boîte du perron), mais le détail des trois graines ne se revoit pas | Noté (rien ne se perd) |
+| 2026-10-03 | Vallée V2 : l'étape 5 « La vallée chante » arrivait à l'an 6 du joueur tranquille au lieu de l'an 9 (les 23 variétés du V2 comptent comme signes de vie, paliers du V1 gardés) | Corrigé (paliers 2 / 6 / 11 / 22 / 38 avec le V2 ; étape 5 à l'an 9 ; jamais de recul) |
+| 2026-10-03 | Vallée V2 : fiche d'une parcelle d'essai — variété, traits, « Croisement avec … » et « À la main » rangés en colonnes écrasées (une lettre par ligne, débordement à droite) : `.tip-rows > div { display: flex }` l'emportait sur `.vl-plot` | Corrigé (`valley.css`) |
+| 2026-10-03 | Vallée V2 : « Ça ne vous coûte rien » (feuille du troc) à 13 px ; tampon ♥ de l'album (sans dessin) à 12 px | Corrigé (14 px) |
+| 2026-10-03 | Vallée V2 : texte à 150 % sur 360 px — bouton « Écouter Joseph » du prochain indice hors de la carte, carte « La Grainothèque » au nom coupé lettre à lettre, onglets « Habitants » / « Aménager » qui se chevauchent | Corrigé (cartes qui passent à la ligne, onglets à 16 px) |
+| 2026-10-03 | Lot 3 : en carrière, la fenêtre courte de fin de saison disait « Fin de l'automne » à la fin de l'été (saison lue après l'aube suivante) | Corrigé (`variety.js`) |
+| 2026-10-03 | Vallée V2 : au premier passage au tableau du village, le conseil du lot 3 (« Le tableau du village… », qui vise « Changer ») couvre le bouton « Choisir une graine » de la carte Troc | Noté (un toucher sur « Compris » suffit) |
+| 2026-10-03 | Vallée V2 : la case du troc dans l'album n'apparaît qu'à l'aube suivante (comme toutes les cases de l'album et les succès) | Noté (règle du lot 4) |
+| 2026-10-03 | Vallée V2 : au zoom minimal (toute la ferme visible), la Grainothèque et les parcelles du mode paire font 37 px à l'écran (comme toutes les parcelles à ce zoom) ; au zoom par défaut : 61 px (Pixel 7), 49 px (360 px) | Noté (choix du joueur ; zoom par défaut ≥ 48 px) |
 
 ### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
 
@@ -1419,3 +1429,50 @@ livraison dans « Écarts et précisions (livraison CORE V2) » ; chiffres : `do
   adaptés (8 traits, 9 aménagements, 16 pages, 30 succès, règle du V1 testée avec `{ heritage: false }`).
 - Idée : un compteur « 2 / 3 rencontres » sur l'abeille elle-même ; au V3, revoir les paliers des étapes 6 et 7 avec
   les 51 signes de vie mesurés ici.
+
+### 2026-10-03 — Vallée V2 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde : `backup/avant-qa-vallee2-2026-10-03` (branche + tag locaux, commit `a0c0e17`).
+
+- **Étapes de la vallée recalées** (décision gardée : les signes de vie du V2 comptent) : paliers **2 / 6 / 11 / 22 / 38**
+  quand le V2 est ouvert (`STAGE_SIGNS_V2`, `stageSigns`, `stageTarget`, `stageSignsOf`) ; sans le V2, ceux du V1. Une
+  étape déjà atteinte ne recule jamais (la vérification des sauvegardes borne avec les paliers du V1). Simulation 60 × 14
+  ans, avant → après : tranquille étapes 1-5 aux ans 2 / 3 / 4 / 5 / **6** → 2 / 3 / 4 / 6 / **9** (V1 seul : … / 11) ;
+  débutant inchangé (3 / 6 / 13) ; appliqué 4 → 5 ; revenu, rangs, argent en caisse, nouveautés inchangés.
+  `docs/VALLEE.md` § 16.7 et § 16.12.7, `docs/GAME_DESIGN.md` § 18.1, `docs/ARCHITECTURE.md` (« Intégration et
+  vérification du lot V2 »). À reprendre au V3 : étapes 6 et 7 au-dessus de 38 signes.
+- **Simulateur** : `--compare-valley2` affiche l'année de chaque étape et les signes de vie par an.
+- **Interface** : fiche d'une parcelle d'essai lisible (lignes pleines) ; textes du V2 à 14 px au moins (« Ça ne vous
+  coûte rien », tampon ♥ de l'album) ; cartes de l'indice, de la Grainothèque et du troc qui passent à la ligne à 150 % ;
+  onglets de « La Vallée » à 130–150 % sur petit écran ; fiche de la Grainothèque : les trois lignes du troc résumées en
+  une (« … (8 voisins) », 7 lignes au niveau 5 au lieu de 9) ; feuille du troc : le petit mot du voisin une seule fois,
+  puis « ♥ 4 graines au lieu de 3 ».
+- **Lot 3** : titre de la fenêtre de fin de saison en carrière (« Fin de l'été » à la fin de l'été).
+- **Cohérence CORE ↔ UI vérifiée** : prix 1 600 / 4 000 / 8 000 / 19 200 / 30 000 (boutons et dépenses réelles) ; planche
+  d'essai récoltée par l'équipe : la graine revient (aucun texte ne dit le contraire) ; « Gardien des semences » et « La
+  ferme accueillante » sur les 12 du pays / 12 habitants du V1 ; nichoir à chauves-souris seulement avec le V2 (9
+  aménagements contre 8, aucun emplacement `bat` sans `heritage`) ; ordre de l'indice (bête, récit, troc, bocal, graines,
+  Grainothèque).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : panneau → récit
+  « Une idée de Joseph » → Grainothèque construite puis agrandie jusqu'au niveau 5 (dépenses exactes ; N2 : + 3 graines par
+  récolte à la main ; N3 : croisée sauvée à la 5ᵉ récolte ; N4 : croisement du navet en 2 rencontres ; N5 : graine de
+  variété sauvée 5 → 4 pièces, touristes + 15 %) ; troc de saison proposé au 2ᵉ jour, qui attend 9 jours et une saison,
+  sachet du tableau touché dans la scène, carte « Troc » en tête du tableau, préférée en tête, ♥ 4 graines ; « Semer la
+  paire » d'un geste depuis la feuille des graines et par le mode paire ; 3 vraies rencontres (1 → 2 → 3), sachet doré
+  « Carotte de la Ferme des Tilleuls », semée puis sauvée, récit « Le premier croisement » (après le conseil) ; croisée
+  donnée en troc (phrase spéciale) ; Parfumée à l'atelier de confitures (rendement 1,15 contre 1) ; nichoir à
+  chauves-souris posé au doigt ; lézard accueilli au doigt (« Bienvenue, petit lézard ! ») ; « Revoir la boîte en fer »
+  (état actuel, un toucher dehors ne la ferme pas) ; album (pages du troc et des habitants (suite) à l'aube) ; **vraie
+  carrière du V1** fabriquée avec le code du commit `090ec5c` (rang 4, étape 2, 4 variétés, 3 habitants, 5 aménagements)
+  reprise sans rien perdre (étape gardée, prochaine à 11), panneau et récit à la première aube, rechargement identique ;
+  niveau 2 en Classique sans aucune trace du V2 ; mouvement réduit + texte 150 % ; zoom minimal et maximal (Grainothèque
+  et mode paire au toucher) ; paquet publié (`index.html`). Aucune erreur console ; cibles ≥ 48 px et textes ≥ 14 px dans
+  tous les écrans du V2 mesurés ; rien ne déborde (la bande des onglets de l'album défile, c'est voulu). Captures :
+  `scratchpad/screens/valley2-qa-*.png`.
+- **Vérifications** : `node --test tests/` 668 tests verts (3 nouveaux : paliers du V2, débogage de l'étape 5, carrière du
+  V1 à l'étape 4 qui la garde) ; `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate.js` identique
+  octet pour octet à celui du commit `090ec5c` ; `node tools/build.js --check` à jour.
+- Idées : la ligne « À faire » d'une carrière reprise peut compter 11 entrées (lot 3 surtout : cadeau, défis, charrette,
+  colporteur…) — un regroupement « Le village : 4 choses » serait plus doux ; le conseil du tableau du village pourrait
+  attendre que la carte Troc soit lue.
+

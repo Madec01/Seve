@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createCareer, loadCareer } from '../src/core/career/career.js';
 import { checkValley } from '../src/core/career/valley.js';
-import { VALLEY_VERSION } from '../src/data/career/valley.js';
+import { SPECIES, VALLEY_VERSION, VARIETIES } from '../src/data/career/valley.js';
 import { SEED_LIBRARY } from '../src/data/career/heritage.js';
 import { loadStaffHelper, playCareer } from '../tools/simulate-career.js';
 import { nextDay, record, setRank, startedCareer } from './valley-helpers.js';
@@ -155,4 +155,25 @@ test('flux : avec le V2, le flux valley du V1 et tous les autres tirent les mêm
   assert.equal(a.rng.valley2, undefined);
   assert.equal(b.money, a.money);
   assert.deepEqual(b.career.valley.species, a.career.valley.species);
+});
+
+test('recalage des étapes (V2) : une carrière du V1 déjà à l\'étape 4 avec 17 à 21 signes la garde (jamais de recul), sauvegarde valide, prochaine étape à 38', () => {
+  const g = startedCareer({ valley: { heritage: false } }, 4);
+  for (const x of VARIETIES.slice(0, 11)) A(g).triggerValley('fix', x.id);
+  for (const sp of SPECIES.slice(0, 7)) A(g).triggerValley('install', sp.id);
+  nextDay(g);
+  const signs = g.query.career.valley().stage.signs;
+  assert.ok(signs >= 17 && signs < 22, `signes ${signs}`);
+  assert.equal(g.state.career.valley.stage, 4);
+  const old = asV1(g.serialize());
+  assert.equal(checkValley(old), null);
+  const h = loadCareer(old);
+  const ev = record(h);
+  assert.equal(checkValley(h.serialize()), null, 'valide avec les paliers du V2');
+  for (let i = 0; i < 3; i++) nextDay(h);
+  assert.equal(h.state.career.valley.stage, 4, 'l\'étape 4 reste acquise');
+  assert.equal(ev.of('valleyStage').length, 0);
+  assert.equal(h.query.career.valley().stage.next.signs, 38);
+  const again = loadCareer(h.serialize());
+  assert.equal(again.state.career.valley.stage, 4);
 });

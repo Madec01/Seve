@@ -53,8 +53,22 @@ function notEnough(missing) {
 
 /** Lignes cochées des effets en cours (« ✓ Troc de saison »…). */
 function effectLines(level) {
+  // (intégration) Les lignes du troc des niveaux 1 à 3 se résument en une seule (« … (8 voisins) ») : moins à lire.
   const out = [];
-  for (const L of SEED_LIBRARY.levels) if (L.level <= level) out.push(...L.unlocks);
+  let circle = 0;
+  for (const L of SEED_LIBRARY.levels) if (L.level <= level && L.circle) circle = Math.max(circle, L.circle);
+  const per = TROC.order.filter((e) => e.circle === 1).length;
+  const total = TROC.order.filter((e) => e.circle <= circle).length || per;
+  for (const L of SEED_LIBRARY.levels) {
+    if (L.level > level) continue;
+    for (const t of L.unlocks) {
+      if (/^Troc\b/.test(t)) {
+        if (L.level === 1) out.push(t.replace(/\(\d+ voisins\)/, total >= TROC.order.length ? `(les ${TROC.order.length} voisins)` : `(${total} voisins)`));
+        continue;
+      }
+      out.push(t);
+    }
+  }
   return out;
 }
 

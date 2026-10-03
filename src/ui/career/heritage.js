@@ -3,7 +3,7 @@
 //
 // createHeritage(app) → app.heritage = {
 //   openLibrary(tab?)        fiche « La Grainothèque » (feuille haute, pause de lecture) : vignette, niveau, effets cochés,
-//                            « Construire · 2 000 » / « Agrandir · 5 000 », segments L'étagère · Croisements · Troc
+//                            « Construire · 1 600 » / « Agrandir · 4 000 », segments L'étagère · Croisements · Troc
 //   openTroc()               feuille « Troc avec … » : ce qu'on reçoit, ce qu'on donne (au choix, ♥ en tête), « Échanger »
 //   openCross(cropId)        popup du croisement (sachet doré, nom complet, deux traits, « Semer » / « Plus tard »)
 //   enterPair(cropId), leavePair(), pairing   mode « paire » (barre #vl-pairbar à la place des onglets)
@@ -425,6 +425,8 @@ export function createHeritage(app) {
     const order = { pays: 0, village: 1, cross: 2 };
     gifts.sort((a, b) => (b.fav ? 1 : 0) - (a.fav ? 1 : 0) || (order[a.group] ?? 0) - (order[b.group] ?? 0));
     if (trocPick && !gifts.some((g) => g.varietyId === trocPick)) trocPick = null;
+    // Le petit mot du voisin une seule fois (première préférée) ; les suivantes : « ♥ 4 graines au lieu de 3 ».
+    const firstFav = gifts.find((g) => g.fav) || null;
     const unit = t.unit || 'graine';
     return el(
       'div.vl-troc',
@@ -451,7 +453,7 @@ export function createHeritage(app) {
               } },
               el('span.vl-radio', { 'aria-hidden': 'true' }),
               el('span.vl-gift-ico', varIcon(g, 'sprite--md')),
-              el('span.vl-gift-main', el('span.vl-gift-name', g.name, g.group === 'cross' ? el('span.vl-gold', { 'aria-hidden': 'true' }, ' ✦') : null), g.fav ? el('span.vl-gift-fav', el('span.vl-heart', { 'aria-hidden': 'true' }, '♥ '), t.favText || `${plural(g.seedsBack || 4, unit)} en retour`) : traitChips(g)),
+              el('span.vl-gift-main', el('span.vl-gift-name', g.name, g.group === 'cross' ? el('span.vl-gold', { 'aria-hidden': 'true' }, ' ✦') : null), g.fav ? el('span.vl-gift-fav', el('span.vl-heart', { 'aria-hidden': 'true' }, '♥ '), g === firstFav ? t.favText || `${plural(g.seedsBack || 4, unit)} en retour` : `${plural(g.seedsBack || 4, unit)} au lieu de ${t.seeds || 3}`) : traitChips(g)),
             )),
           )
         : el('p.vl-note', 'Sauvez une première variété pour échanger.'),

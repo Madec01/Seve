@@ -6,7 +6,7 @@
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import {
   ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, MAX_STAGE, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS,
-  RECIPE_NATURE, RECIPE_TEXTS, STAGES, BOON_TEXTS, agreeWith,
+  RECIPE_NATURE, RECIPE_TEXTS, STAGES, BOON_TEXTS, agreeWith, stageSigns,
 } from '../../data/career/valley.js';
 import { SEED_LIBRARY } from '../../data/career/heritage.js';
 import { inGreenhouse, isMature } from '../farm.js';
@@ -290,11 +290,24 @@ export function signsOfLife(state) {
   return installedSpecies(state).length + fixedVarieties(state).length;
 }
 
-/** Étape atteinte pour un nombre de signes de vie. */
-export function stageFor(signs) {
+/**
+ * Étape atteinte pour un nombre de signes de vie (paliers du V1, ou du V2 avec `heritage`). Les paliers du V1 sont les plus
+ * bas : `stageFor(signs)` borne toute étape légitimement atteinte (vérification des sauvegardes).
+ */
+export function stageFor(signs, heritage = false) {
   let n = 0;
-  for (const st of STAGES) if (signs >= st.signs) n = st.n;
+  for (const st of STAGES) if (signs >= stageSigns(st.n, heritage)) n = st.n;
   return Math.min(n, MAX_STAGE);
+}
+
+/** Étape visée par l'état (paliers du V2 si la partie `heritage` est ouverte). */
+export function stageTarget(state) {
+  return stageFor(signsOfLife(state), heritagePartOn(state));
+}
+
+/** Palier (signes de vie) de l'étape n pour cette carrière. */
+export function stageSignsOf(state, n) {
+  return stageSigns(n, heritagePartOn(state));
 }
 
 /** Services en cours (habitants installés, étapes) : [{ id, text }]. */
@@ -458,7 +471,7 @@ export function nextHint(state) {
   if (seedsHint) return seedsHint;
   const next = STAGES.find((st) => st.n === v.stage + 1);
   if (next) {
-    const left = next.signs - signsOfLife(state);
+    const left = Math.max(1, stageSignsOf(state, next.n) - signsOfLife(state));
     return { kind: 'stage', text: `Encore ${left} signe${left > 1 ? 's' : ''} de vie pour « ${next.name} ».`, icon: 'icon.signs', target: null };
   }
   return null;

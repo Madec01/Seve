@@ -788,7 +788,13 @@ export function createVariety(app) {
     game = g;
     const career = isCareer(g);
     // Carrière : la saison qui se termine est connue le soir (le cadeau n'est proposé qu'après l'aube suivante).
-    if (career && ['cartDeparted', 'challengesJudged', 'challengesOffered', 'billPaid'].includes(ev.type)) endingSeason = { id: SEASON_IDS[g.state.time.seasonIndex], at: performance.now() };
+    // Ces événements naissent le soir du dernier jour, mais l'aube suivante passe souvent dans la même mise à jour : au
+    // 1er jour de la saison suivante, la saison qui se termine est la précédente (sinon « Fin de l'automne » à la fin de l'été).
+    if (career && ['cartDeparted', 'challengesJudged', 'challengesOffered', 'billPaid'].includes(ev.type)) {
+      const t = g.state.time;
+      const si = ev.type === 'billPaid' && SEASON_IDS.includes(ev.seasonId) ? SEASON_IDS.indexOf(ev.seasonId) : t.dayOfSeason === 1 ? (t.seasonIndex + 3) % 4 : t.seasonIndex;
+      endingSeason = { id: SEASON_IDS[si], at: performance.now() };
+    }
     switch (ev.type) {
       case 'ordersRenewed': {
         const n = ev.added ?? (ev.slots || []).filter(Boolean).length;

@@ -1531,6 +1531,8 @@ function valleyYearOf(game, y) {
     known: Object.keys(v.varieties).length,
     installed: Object.values(v.species).filter((e) => e.state === 'installed').length,
     stage: v.stage,
+    // Signes de vie (habitants installés + variétés sauvées, V2 compris s'il est ouvert).
+    signs: Object.values(v.species).filter((e) => e.state === 'installed').length + Object.values(v.varieties).filter((e) => e.fixedAt).length,
     spent: v.spent,
     nature: Object.keys(v.nature).length,
     tapsPerDay: y.valleyTaps / Math.max(1, y.days),
@@ -1644,6 +1646,7 @@ function careerTable(careers, { runs, years, seasonLength }) {
               known: median(at.map((x) => x.valley.known)),
               installed: median(at.map((x) => x.valley.installed)),
               stage: median(at.map((x) => x.valley.stage)),
+              signs: median(at.map((x) => x.valley.signs || 0)),
               nature: median(at.map((x) => x.valley.nature)),
               spentMean: Math.round(at.reduce((s2, x) => s2 + x.valley.spent, 0) / at.length),
               taps: Math.round(median(at.map((x) => x.valley.tapsPerDay)) * 100) / 100,
@@ -1741,6 +1744,9 @@ function valleySummary(careers, years) {
     all12Fixed: median(careers.map((c) => firstYear(c, (v) => v.fixed >= 12))),
     all12Installed: median(careers.map((c) => firstYear(c, (v) => v.installed >= 12))),
     stage5: median(careers.map((c) => firstYear(c, (v) => v.stage >= 5))),
+    // Année (médiane) de chaque étape 1 à 5, et part des carrières à l'étape 5 avant la fin.
+    stageYears: [1, 2, 3, 4, 5].map((k) => median(careers.map((c) => firstYear(c, (v) => v.stage >= k)))),
+    stage5Share: pct(careers.filter((c) => c.years.some((y) => y.valley && y.valley.stage >= 5)).length, careers.length),
     started: median(careers.map((c) => firstYear(c, (v) => v.started))),
     finds: Math.round(careers.reduce((s2, c) => s2 + c.valley.finds, 0) / careers.length),
     sown,
@@ -1994,6 +2000,8 @@ export function printCompareValley2(none, off, on, years, title) {
     console.log(`            nouveautés (méd.) ans 2-10 : ${va ? `${va.noveltyShare210} → ` : ''}${vs.noveltyShare210} % (carrières ≥ 80 % : ${va ? `${va.noveltyAtLeast80of210} → ` : ''}${vs.noveltyAtLeast80of210} %) · ans 6-10 : ${va ? `${va.noveltyShare610} → ` : ''}${vs.noveltyShare610} %`);
     console.log(`            collection par an (trocs/croisements/sauvées pays-village-croisées/Grainothèque/habitants) ${b.rows.map((r) => (r.valley ? `${r.valley.swaps}/${r.valley.crosses}/${r.valley.fixedPays}-${r.valley.fixedVillage}-${r.valley.fixedCross}/N${r.valley.library}/${r.valley.installed}` : '—')).join(' ')}`);
     console.log(`            N1 ${yr(vs.library1)} · 12 trocs ${yr(vs.all12Swaps)} · 11 croisements ${yr(vs.all11Crosses)} · 35 variétés ${yr(vs.all35Fixed)} · N5 ${yr(vs.library5)} · 16 habitants ${yr(vs.all16Installed)} · V2 complet ${yr(vs.v2Complete)} · étape 5 ${va ? `${yr(va.stage5)} → ` : ''}${yr(vs.stage5)}`);
+    const stageLine = (t) => (t.valley?.stageYears || []).map((x) => (Number.isFinite(x) ? x : '—')).join('/');
+    console.log(`            étapes 1-5 (an, méd.) ${va ? `V1 ${stageLine(a)} → ` : ''}V1+V2 ${stageLine(b)} (étape 5 atteinte : ${vs.stage5Share} %) · signes de vie par an (méd.) ${b.rows.map((r) => r.valley?.signs ?? '—').join(' ')}`);
     const r10 = rowB(10);
     if (r10) console.log(`            an 10 : trocs ${r10.swaps} (≥ 4 : ${r10.swaps4} %), croisements ${r10.crosses} (≥ 1 : ${r10.crosses1} %), Grainothèque N${r10.library}, habitants du V2 ${r10.installedV2}`);
     if (strategy === 'handsOff') {

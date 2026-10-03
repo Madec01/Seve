@@ -1,8 +1,8 @@
 {
-  "id": "2e12f0ab8ba7",
+  "id": "828195f8fad0",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.b83fabc2f6.js",
-  "css": "dist/game.f97b1abe9c.css",
+  "js": "dist/game.a754555e06.js",
+  "css": "dist/game.8e2d760363.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -152,12 +152,12 @@
     "assets/sprites/v3.png": "897aacf1899d5794",
     "assets/sprites/valley1.png": "e1043eae1319e9fc",
     "assets/sprites/valley2.png": "b2661ef9d217f278",
-    "css/cozy.css": "096b9ffea0c439ff",
+    "css/cozy.css": "53756a793692ba6e",
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/guidance.css": "40cbbd0be7f99e99",
     "css/lot2.css": "abbc12b1669158cb",
     "css/style.css": "61bba55439eff2c0",
-    "css/valley.css": "9f5dc44eec88d93f",
+    "css/valley.css": "652fc4928c0e4bd6",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
@@ -174,10 +174,10 @@
     "src/core/career/effects.js": "3bb4c18721bed04a",
     "src/core/career/events.js": "278a705a2818ffce",
     "src/core/career/extensions.js": "d73bafac4910428b",
-    "src/core/career/habitat.js": "b938cc5b3c1a9a25",
+    "src/core/career/habitat.js": "12c91884ec4e12a6",
     "src/core/career/handwork.js": "ca63b1dc9ffbe89e",
     "src/core/career/heirlooms.js": "0b61bcc0505fdedf",
-    "src/core/career/heritage.js": "27514e46dbb4ff0a",
+    "src/core/career/heritage.js": "7f9517d80e13db49",
     "src/core/career/land.js": "4195383f82ffef10",
     "src/core/career/level.js": "369b1b4a616754a3",
     "src/core/career/machines.js": "f3cb2b22272f1105",
@@ -191,7 +191,7 @@
     "src/core/career/storage.js": "4ca4c2f7c600037f",
     "src/core/career/surprises.js": "ad2ae7b9583caa2b",
     "src/core/career/themes.js": "2966a641f85841d9",
-    "src/core/career/valley.js": "f5bed2ceb73be25f",
+    "src/core/career/valley.js": "834f318fd435bb8e",
     "src/core/career/variety-host.js": "232b679b70fb8eff",
     "src/core/career/variety.js": "98bcac3b51b18ddd",
     "src/core/career/work.js": "75ce736d96cf874e",
@@ -232,7 +232,7 @@
     "src/data/career/ranks.js": "b5930a5d8eef36d3",
     "src/data/career/staff.js": "7685179ad1eb19c1",
     "src/data/career/themes.js": "86744b07e300ccd2",
-    "src/data/career/valley.js": "3e51051be88c6fb3",
+    "src/data/career/valley.js": "8a89f78a7539dff5",
     "src/data/cosmetics.js": "21271765f67a1344",
     "src/data/cozy.js": "07d4fdf7cdfb2761",
     "src/data/crops.js": "0a9635c093c6dc20",
@@ -268,7 +268,7 @@
     "src/ui/buildings.js": "3935e0120d094ec7",
     "src/ui/career/buildings.js": "0a54ec028e45533a",
     "src/ui/career/events.js": "89e637e861bc33ee",
-    "src/ui/career/heritage.js": "69bc2e7fdd57dcf5",
+    "src/ui/career/heritage.js": "2de9a3836e271b3a",
     "src/ui/career/index.js": "87e109655aedea5c",
     "src/ui/career/journal.js": "cf89187869e94c5d",
     "src/ui/career/lots.js": "c19f9cde5bf7a7fc",
@@ -304,12 +304,20 @@
     "src/ui/tooltip.js": "b2da8b2d915163ab",
     "src/ui/tutorial.js": "b567fa8157c237dd",
     "src/ui/v3.js": "45edf2a4853e4468",
-    "src/ui/variety.js": "ebb1bcc98857b744",
+    "src/ui/variety.js": "286af181f69299d3",
     "src/ui/zoom.js": "93e4ccf42101d380",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "6435a9537b392ecd"
   },
   "history": [
+    {
+      "id": "828195f8fad0",
+      "files": [
+        "dist/game.a754555e06.js",
+        "dist/game.a754555e06.js.map",
+        "dist/game.8e2d760363.css"
+      ]
+    },
     {
       "id": "2e12f0ab8ba7",
       "files": [
@@ -340,14 +348,6 @@
         "dist/game.4913f47491.js",
         "dist/game.4913f47491.js.map",
         "dist/game.cf80c27a4b.css"
-      ]
-    },
-    {
-      "id": "aa13ae6e4523",
-      "files": [
-        "dist/game.4913f47491.js",
-        "dist/game.4913f47491.js.map",
-        "dist/game.a529f4da0b.css"
       ]
     }
   ]

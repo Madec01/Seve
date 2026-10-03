@@ -247,6 +247,20 @@ export const STAGES = [
 ];
 export const MAX_STAGE = STAGES.length - 1;
 
+/**
+ * (V2, intégration 2026-10-03) Paliers des étapes 1 à 5 quand le lot V2 est ouvert (partie `heritage`) : les 23 variétés et
+ * les 4 habitants du V2 comptent comme signes de vie (décision de l'utilisateur), alors les deux dernières étapes demandent
+ * davantage pour que « La vallée chante » arrive toujours vers l'an 9 du joueur tranquille (et pas vers l'an 6) ; les
+ * étapes 1 à 3 ne changent pas (le débutant n'est pas retardé). Une étape déjà atteinte ne recule jamais. Sans le V2 :
+ * `STAGES[n].signs` (2 / 6 / 11 / 17 / 24). docs/VALLEE.md § 16.7 et § 16.12.7.
+ */
+export const STAGE_SIGNS_V2 = [0, 2, 6, 11, 22, 38];
+/** Palier de l'étape n (signes de vie), selon que le V2 est ouvert ou non. */
+export function stageSigns(n, heritage = false) {
+  const k = Math.max(0, Math.min(MAX_STAGE, n));
+  return heritage ? STAGE_SIGNS_V2[k] : STAGES[k].signs;
+}
+
 /** Ce que rend chaque étape (une phrase, fiche « La Vallée »). */
 export const BOON_TEXTS = {
   hedgeFinds: 'Cueillette des haies : mûres, sureau, prunelles, noisettes, l\'été et l\'automne.',

@@ -2346,6 +2346,9 @@ V2 ». En bref :
   `wildlife2` ; 6 succès ; stand de la fête + 1 point par culture à variété ancienne.
 - **Aléatoire** : un flux nouveau `valley2` (4 nombres par aube, les habitants du V2) ; troc et croisements sans hasard ;
   aucun flux existant ne tire un nombre de plus. Niveaux et Classique strictement inchangés (parité).
+- **Étapes avec le V2** : les 51 signes de vie comptent (décision) ; paliers recalés à **2 / 6 / 11 / 22 / 38** pour que
+  « La vallée chante » arrive toujours vers l'**an 9** du joueur tranquille (et pas l'an 6) ; une étape déjà atteinte ne
+  recule jamais ; sans le V2, les paliers du V1 (2 / 6 / 11 / 17 / 24). Détail : `docs/VALLEE.md` § 16.7.
 - **Équilibre** (cibles `--compare-valley2`, V1 → V1 + V2) : tranquille **+ 0 à + 4 %** de revenu (estimé + 1 à + 1,5 %),
   rangs à un an près, argent en caisse à l'an 14 ≤ 70 % de sans la Vallée, **≥ 80 % des saisons avec une nouveauté** (le
   V1 seul : 65 %), ferme laissée seule ≤ + 3 %, `automator` sans troc ni croisement ; V2 complet vers l'an 11 à 13, toute

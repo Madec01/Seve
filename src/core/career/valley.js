@@ -44,7 +44,7 @@ import {
 } from './heirlooms.js';
 import {
   beePlotsGrowing, fixedVarieties, habitatCounts, installedSpecies, loneTreeStage, naturePrice, nextHint, recipeStatus, seasonsText, seasonsWhen,
-  signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, valleyServices, whereText, granaryBuilt,
+  signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, stageSignsOf, stageTarget, valleyServices, whereText, granaryBuilt,
 } from './habitat.js';
 import {
   boxInfo, canSupply, clientInfo, crossLinks, crossOfCrop, farmOf, heritageSeedsOn, isFavGift, libraryInfo, nextTrocClient,
@@ -137,6 +137,7 @@ export function checkValley(state) {
   if (!obj(v) || !int(v.v, 1, VALLEY_VERSION)) return 'Vallée (version)';
   if (!obj(v.parts) || !VALLEY_PARTS.every((k) => typeof v.parts[k] === 'boolean' || (k === 'heritage' && v.parts[k] === undefined && v.v === 1))) return 'Vallée (parties)';
   if (v.started !== null && !(obj(v.started) && int(v.started.year, 1) && int(v.started.day, 1) && int(v.started.abs, 1))) return 'Vallée (début)';
+  // Paliers du V1 (les plus bas) : une étape atteinte avant le recalage du V2 reste valide (elle ne recule jamais).
   if (!int(v.stage, 0, MAX_STAGE) || v.stage > stageFor(signsOfLife(state))) return 'Vallée (étape)';
   if (!obj(v.chapters) || !Array.isArray(v.chapters.read) || !v.chapters.read.every((n) => int(n, 0, MAX_STAGE))) return 'Vallée (chapitres)';
   if (!(typeof v.spent === 'number' && Number.isFinite(v.spent) && v.spent >= 0)) return 'Vallée (dépenses)';
@@ -476,7 +477,7 @@ function updateStage(api) {
   const { state } = api;
   const v = V(state);
   if (!v?.started) return;
-  const target = stageFor(signsOfLife(state));
+  const target = stageTarget(state);
   while (v.stage < target) {
     v.stage += 1;
     const st = STAGES[v.stage];
@@ -1126,12 +1127,14 @@ function triggerValley(api, kind, arg, arg2) {
     case 'stage': {
       const n = Math.max(0, Math.min(MAX_STAGE, Number(arg) || 0));
       // Signes de vie jusqu'au palier (variétés fixées d'abord, puis habitants), puis l'étape (comme à l'aube).
-      for (const x of VARIETIES) {
-        if (signsOfLife(state) >= STAGES[n].signs) break;
+      const need = stageSignsOf(state, n);
+      const h = heritagePartOn(state);
+      for (const x of h ? ALL_VARIETIES : VARIETIES) {
+        if (signsOfLife(state) >= need) break;
         if (!isFixed(state, x.id)) triggerValley(api, 'fix', x.id);
       }
-      for (const s of SPECIES) {
-        if (signsOfLife(state) >= STAGES[n].signs) break;
+      for (const s of h && v.parts.wildlife ? ALL_SPECIES : SPECIES) {
+        if (signsOfLife(state) >= need) break;
         if (v.species[s.id]?.state !== 'installed') triggerValley(api, 'install', s.id);
       }
       updateStage(api);
@@ -1301,7 +1304,7 @@ function valleyQuery(api) {
   const out = {
     started: clone(v.started),
     parts: { ...v.parts },
-    stage: { n: v.stage, name: st.name, signs, total: v2 ? SIGNS_ALL : SIGNS_V1, next: next ? { n: next.n, name: next.name, signs: next.signs } : null, vignette: `valley.stage.${v.stage}`, reward: clone(st.reward) },
+    stage: { n: v.stage, name: st.name, signs, total: v2 ? SIGNS_ALL : SIGNS_V1, next: next ? { n: next.n, name: next.name, signs: stageSignsOf(state, next.n) } : null, vignette: `valley.stage.${v.stage}`, reward: clone(st.reward) },
     hint: nextHint(state),
     chapters: STAGES.map((s) => ({ n: s.n, title: s.chapter.title, lines: [...s.chapter.lines], read: v.chapters.read.includes(s.n), available: s.n <= v.stage })),
     jars: { pending: jars.length, list: jars },
