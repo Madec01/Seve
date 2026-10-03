@@ -2327,8 +2327,8 @@ Conception complète : **`docs/VALLEE.md` § 16** ; contrats : `docs/ARCHITECTUR
 V2 ». En bref :
 
 - **La Grainothèque** : un ouvrage de la Vallée sur un emplacement réservé de la bande de la maison (panneau au rang 3,
-  récit « Une idée de Joseph »), **5 niveaux : 2 000 / 5 000 / 10 000 / 16 000 / 25 000** (rangs 3, 4, 5, 5, 6 ; **58 000**,
-  100 % au patrimoine) : N1 troc de saison ; N2 3 graines par récolte à la main ; N3 variété sauvée en 5 récoltes ; N4
+  récit « Une idée de Joseph »), **5 niveaux : 1 600 / 4 000 / 8 000 / 19 200 / 30 000** (rangs 3, 4, 5, 5, 6 ; **62 800**
+  après réglage — départ 2 000 / 5 000 / 10 000 / 16 000 / 25 000 —, 100 % au patrimoine) : N1 troc de saison ; N2 3 graines par récolte à la main ; N3 variété sauvée en 5 récoltes ; N4
   croisement en 2 rencontres ; N5 graines des variétés sauvées au prix normal et touristes + 15 %. Sa fiche est la
   vitrine de la collection (35 bocaux, croisements, voisins).
 - **Le troc** : chacun des **12 clients du tableau** garde une variété de son jardin (Carotte violette de Lili, Tomate

@@ -1,7 +1,7 @@
 {
-  "id": "5de5072e0a83",
+  "id": "2e12f0ab8ba7",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.2c8cf7d081.js",
+  "js": "dist/game.b83fabc2f6.js",
   "css": "dist/game.f97b1abe9c.css",
   "esbuild": "0.28.2",
   "sources": {
@@ -191,7 +191,7 @@
     "src/core/career/storage.js": "4ca4c2f7c600037f",
     "src/core/career/surprises.js": "ad2ae7b9583caa2b",
     "src/core/career/themes.js": "2966a641f85841d9",
-    "src/core/career/valley.js": "12351400eea85cf0",
+    "src/core/career/valley.js": "f5bed2ceb73be25f",
     "src/core/career/variety-host.js": "232b679b70fb8eff",
     "src/core/career/variety.js": "98bcac3b51b18ddd",
     "src/core/career/work.js": "75ce736d96cf874e",
@@ -311,6 +311,14 @@
   },
   "history": [
     {
+      "id": "2e12f0ab8ba7",
+      "files": [
+        "dist/game.b83fabc2f6.js",
+        "dist/game.b83fabc2f6.js.map",
+        "dist/game.f97b1abe9c.css"
+      ]
+    },
+    {
       "id": "5de5072e0a83",
       "files": [
         "dist/game.2c8cf7d081.js",
@@ -340,14 +348,6 @@
         "dist/game.4913f47491.js",
         "dist/game.4913f47491.js.map",
         "dist/game.a529f4da0b.css"
-      ]
-    },
-    {
-      "id": "93802834e5d7",
-      "files": [
-        "dist/game.5bcd1390c1.js",
-        "dist/game.5bcd1390c1.js.map",
-        "dist/game.03c27fb34a.css"
       ]
     }
   ]

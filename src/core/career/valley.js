@@ -28,10 +28,10 @@ import { careerFactor } from '../../data/cozy.js';
 import {
   ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, ARRIVAL, FAIR_STALL, HEDGE_FINDS, HEDGE_FINDS_BY_ID, HEDGE_FIND_RULES,
   JOSEPH_BOX, MAX_STAGE, NATURE_ITEMS, NATURE_ITEMS_BY_ID, SEED_RULES, SIGNS_ALL, SIGNS_V1, SPECIES, SPECIES_BY_ID, STAGES, TRAITS_BY_ID,
-  VALLEY_PARTS, VALLEY_START, VALLEY_TEXTS, VALLEY_VERSION, VARIETIES, VARIETIES_BY_ID, VARIETY_OF_CROP, agreeWith, savedText, varietyTraits,
+  VALLEY_PARTS, VALLEY_START, VALLEY_TEXTS, VALLEY_VERSION, VARIETIES, VARIETIES_BY_ID, VARIETY_OF_CROP, agreeWith, savedText,
 } from '../../data/career/valley.js';
 import {
-  CROP_LOVE, CROSSES, CROSSES_BY_ID, CROSS_RULES, HERITAGE_TEXTS, LIBRARY_MAX, SEED_LIBRARY, SPECIES_V2, STORIES, STORIES_BY_ID, TROC, TROC_BY_CLIENT,
+  CROP_LOVE, CROSSES, CROSS_RULES, HERITAGE_TEXTS, LIBRARY_MAX, SEED_LIBRARY, SPECIES_V2, STORIES_BY_ID, TROC, TROC_BY_CLIENT,
   VILLAGE_VARIETIES_BY_ID,
 } from '../../data/career/heritage.js';
 import { hashSeed, stream } from '../rng.js';
@@ -47,7 +47,7 @@ import {
   signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, valleyServices, whereText, granaryBuilt,
 } from './habitat.js';
 import {
-  boxInfo, canSupply, clientInfo, crossLinks, crossOfCrop, farmOf, heritageOn, heritageSeedsOn, isFavGift, libraryInfo, nextTrocClient,
+  boxInfo, canSupply, clientInfo, crossLinks, crossOfCrop, farmOf, heritageSeedsOn, isFavGift, libraryInfo, nextTrocClient,
   pairPartnerPlot, pairPlots, pairStatus, partnerOf, plotNeighbours, savedVarieties, storiesInfo, swapInfo, traitInfos, trocGifts, trocLock,
   trocRemaining, unitOf,
 } from './heritage.js';

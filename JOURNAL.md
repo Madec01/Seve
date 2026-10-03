@@ -1376,3 +1376,46 @@ Contrat : `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V2 » (+
   nichoirs, dessins, abeille, mode paire, toucher) ; `tests/valley-render.test.js` et `tests/lot2-render.test.js` mis à
   jour (nichoir sur la maison, 3 décors du V2).
 - Idée : un petit « + » flottant au-dessus de la parcelle voisine qui recevra la variété du pays, en mode paire.
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : paquet CORE (logique, simulation, équilibrage)
+
+Contrat : `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V2 » ; écarts et précisions notés au fil de la
+livraison dans « Écarts et précisions (livraison CORE V2) » ; chiffres : `docs/VALLEE.md` § 16.12.7.
+
+- **Données** : `src/data/career/heritage.js` (nouveau, pur) — Grainothèque (5 niveaux), 12 variétés du village (une par
+  client du tableau), troc (ordre fixe, cercles, textes des voisins), 11 croisements (deux traits hérités), 4 habitants
+  (osmie, merle noir, lézard des murailles, pipistrelle), 4 récits de Joseph, `ofFarm` / `crossName` (« Tomate de la
+  Ferme des Tilleuls »). `src/data/career/valley.js` : `VALLEY_VERSION` 2, partie `heritage`, trait **Parfumée**, nichoir
+  à chauves-souris (et ses emplacements, seulement avec le V2), tables `ALL_VARIETIES` (35), `ALL_SPECIES` (16),
+  `SIGNS_ALL` (51) — `VARIETIES` et `SPECIES` du V1 intacts (ordre des tirages).
+- **Cœur** : `src/core/career/heritage.js` (nouveau : Grainothèque, troc, voisinage des parcelles, croisements, mode
+  paire, boîte, récits) ; `heirlooms.js` : **traits en liste** (`traitsOf`, `hasTrait`), effets des niveaux, Parfumée
+  (rendement d'atelier × 1,15 dans `runtime.js`), merle, lézard, pipistrelle (`staff.js`), touristes du niveau 5 ;
+  `habitat.js` : 16 espèces, 35 variétés, nichoir, prochain indice (récit, troc, paire, Grainothèque) ; `valley.js` :
+  état v2 et migration sans perte des carrières V1, vérification, panneau et récits, troc (foire et saison), rencontres à
+  la récolte à la main, croisement (sachet doré de 3 graines), habitants du V2 sur le flux **`valley2`** (4 nombres par
+  aube, rien d'autre), actions `buildSeedLibrary`, `swapSeeds`, `sowPair` (atomique), `readStory`, requêtes (`valley()`
+  enrichie, `valleyCrossLinks`, `valleyPairPlots`, fiches de parcelle et des graines), bilan, succès et album ; stand de
+  la fête (+ 1 point) dans `cozy.js` ; `crew.js` / `land.js` (plan de culture avec les variétés du V2).
+- **Progression** : pages d'album « Le troc du village » (tampon ♥), « Les variétés de la ferme », « Les habitants
+  (suite) » ; 6 succès (145 écus) ; 3 décors trouvés. « Gardien des semences » et « La ferme accueillante » comptent
+  désormais les 12 variétés du pays et les 12 habitants du V1 (sinon le V2 les donnait).
+- **Simulation** : `--compare-valley2` (sans la Vallée → V1 seul → V1 + V2, même graine), `--jobs N` (fils de travail),
+  `--first-seed`, robots du V2 (`HERITAGE_STYLES`, tirage propre `me.heritageRnd`).
+- **Équilibrage** (60 carrières × 14 ans) : tranquille revenu **+ 1,7 %** (V1 → V1 + V2 ; toute la Vallée + 4,9 %),
+  argent en caisse à l'an 14 **70 %** de sans la Vallée, nouveautés **89 %** des saisons (ans 6-10 : 80 %), rangs
+  identiques, V2 complet **an 13** ; débutant 10 trocs et 1 croisement à l'an 10 ; appliqué V2 complet an 9 ; ferme
+  laissée seule − 3,8 % ; aucune faillite. Réglages : prix de la Grainothèque 1 600 / 4 000 / 8 000 / 19 200 / 30 000
+  (62 800) ; une planche d'essai récoltée par l'équipe rend sa graine (V2) ; robots précisés (« la ferme d'abord »,
+  paires, plan de culture du tranquille avec la Grainothèque).
+- **Vérifications** : `{ heritage: false }` = le V1 exactement (empreinte de l'état de 9 carrières de 10 ans identique
+  avant / après) ; `node tools/simulate.js` identique octet pour octet ; tous les autres flux tirent les mêmes nombres.
+- **Bug évité** : sans le retour de la graine, une croisée géante récoltée par l'équipe était perdue pour toujours
+  (4 carrières simulées sur 6 n'auraient jamais fini le V2).
+- **Écart** : l'étape 5 « La vallée chante » vient vers l'an 6 au lieu de « l'an 9 » visé (les 23 variétés du V2 comptent,
+  paliers inchangés : décision de l'utilisateur) — à surveiller pour les étapes 6 et 7 du V3 (30 et 45 signes).
+- Tests : `tests/valley2.test.js`, `tests/valley2-troc.test.js`, `tests/valley2-cross.test.js`,
+  `tests/valley2-migration.test.js` (nouveaux) ; `valley`, `valley-seeds`, `valley-habitat`, `album`, `career-save`
+  adaptés (8 traits, 9 aménagements, 16 pages, 30 succès, règle du V1 testée avec `{ heritage: false }`).
+- Idée : un compteur « 2 / 3 rencontres » sur l'abeille elle-même ; au V3, revoir les paliers des étapes 6 et 7 avec
+  les 51 signes de vie mesurés ici.

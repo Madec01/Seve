@@ -1306,6 +1306,53 @@ proposition (une par saison → deux par saison avec N3) ; prix de la Grainothè
 70 000) ; effets des niveaux (graines par récolte 3 → 2 ; fixation 5 → 6) ; recettes des habitants du V2. **Jamais** les
 chiffres des niveaux, le rythme des rangs ni les tirages d'un flux existant.
 
+#### 16.12.7 Résultats et réglages (livraison CORE V2, 2026-10-03)
+
+Mesures : `node tools/simulate-career.js --compare-valley2 --runs 60 --years 14 --jobs 4` (Détente, saisons de 7 jours ;
+**sans la Vallée → V1 seul → V1 + V2**, même graine ; robots du § 16.12.5 avec leur tirage propre `me.heritageRnd`) ;
+`--years 18` pour la traîne ; `--difficulty classique` pour les faillites. Le simulateur des niveaux (`node
+tools/simulate.js`) donne une sortie **identique octet pour octet** à celle d'avant le V2 ; `{ heritage: false }` donne
+**exactement** l'état du V1 (empreinte d'une carrière de 10 ans, `tests/valley2-migration.test.js`).
+
+**Réglages** (leviers du § 16.12.6 ; `src/data/career/heritage.js` fait foi) :
+
+| Réglage | Départ | Réglé | Pourquoi |
+|---|---|---|---|
+| Prix de la Grainothèque | 2 000 / 5 000 / 10 000 / 16 000 / 25 000 (58 000) | **1 600 / 4 000 / 8 000 / 19 200 / 30 000 (62 800)** | les trois niveaux qui ouvrent les cercles du troc à × 0,8 (l'argent des ans 3 à 8 manque à la ferme : revenu − 1,5 % au départ) ; les deux niveaux « pour la beauté » à × 1,2 (argent en caisse à l'an 14 ≤ 70 % de sans la Vallée) |
+| Planche d'essai récoltée par l'équipe | (règle du V1 : la graine est perdue) | **la graine revient** (V2) | sans cela, une variété du village (un seul troc) ou une croisée (un seul croisement) pouvait ne plus jamais se semer : 4 carrières sur 6 bloquées (citrouille et chou croisés, géants, récoltés par l'équipe) |
+| Rencontres, cercles, jour du troc, effets des niveaux, recettes du V2 | — | inchangés | les cibles sont tenues sans eux (3 rencontres : décision de l'utilisateur) |
+
+Robots (§ 16.12.5, précisions) : la Grainothèque au-delà du niveau 1 seulement si le prochain achat de la ferme (sa liste
+d'envies) reste payable après elle **et** si l'argent couvre trois fois son prix (« la ferme d'abord », tranquille et
+débutant ; l'appliqué : 4 saisons de charges seulement) ; une variété du village dont le croisement n'est pas trouvé garde
+ses graines pour les paires ; les planches d'essai sont réparties entre les variétés (35 : la variété pas encore sauvée
+qui pousse le moins d'abord) ; le débutant sème jusqu'à 2 paires par culture ; **le tranquille, avec la Grainothèque, met
+au plan de culture ses variétés sauvées dont un trait paie la graine** (savoureuse, précoce, géante, rustique, parfumée —
+une croisée avant la variété de sa culture), comme l'appliqué : sans cela, le V2 lui coûtait 1,5 % de revenu (les niveaux
+payés pendant les ans de croissance, les paires de cultures peu chères), et l'étagère est justement faite pour montrer la
+collection ; greffons de l'Api étoilé plantés au verger comme le Calville.
+
+**Résultats** (60 carrières × 14 ans ; « V1 → V1 + V2 » sauf mention) :
+
+| Mesure | Cible | Mesuré |
+|---|---|---|
+| Tranquille : revenu sur 10 ans | + 0 à + 4 % ; toute la Vallée ≤ + 8 % | **+ 1,7 %** (306 439 → 311 651) ; 14 ans : + 2,7 % ; toute la Vallée (sans → V1 + V2) **+ 4,9 %** |
+| Tranquille : dépenses du V2 | 10 ans : 15 000 à 35 000 ; 14 ans ≈ 58 000 | **17 243** (N1 à N3) ; **63 291** à l'an 14 (Grainothèque complète + nichoirs) |
+| Tranquille : rangs, Domaine | à un an près | rangs identiques chaque année ; Domaine **an 7** (V1 : an 7 ; sans la Vallée : an 8) |
+| Tranquille : argent en caisse à l'an 14 | ≤ 70 % de sans la Vallée | **70 %** (128 285 / 183 344 ; V1 seul : 97 %) — tenu de justesse ; an 10 : 70 % |
+| Tranquille : nouveautés | ≥ 80 % des saisons (ans 2-10) ; ≥ 75 % (ans 6-10) | **89 %** (97 % des carrières ≥ 80 % ; V1 : 65 %) ; ans 6-10 : **80 %** (V1 : 55 %) |
+| Tranquille : collection | 12 trocs an 8-10 ; 11 croisements vers l'an 11 ; 35 variétés et N5 an 11-13 ; 16 habitants vers l'an 12 | 12 trocs **an 8** ; 11 croisements **an 10** ; N5 **an 12** ; 35 variétés **an 13** ; 16 habitants **an 11** ; **V2 complet an 13** |
+| Tranquille : gestes par jour (ans 5-10) ; part à la main | + 0,3 à + 1 ; ≥ 50 % | **+ 0,5** (8,35 → 8,85) ; **91 %** |
+| Débutant | rang 3 à l'an 5 ≥ 70 % ; à l'an 10 : ≥ 4 trocs, ≥ 1 croisement (médiane) | **98 %** (inchangé) ; **10 trocs**, **1 croisement** (55 % des carrières) ; revenu − 0,1 % |
+| Appliqué | V2 complet vers l'an 8 ou 9 ; revenu ≤ + 6 % par rapport à sans la Vallée | V2 complet **an 9** ; revenu **− 2,1 %** (il achète toute la Grainothèque dès qu'il peut) |
+| Ferme laissée seule (ans 4 à 7) | bénéfice ≤ + 3 % par rapport à sans la Vallée | **− 3,8 %** (N1 achetée l'an 3) |
+| `automator` | aucun troc, croisement ni habitant du V2 ; patrimoine an 10 ≤ + 3 % | **aucun après l'an 2** (4 trocs les ans 1 et 2, quand il joue encore, comme les habitants du V1) ; 0 habitant du V2 ; patrimoine **− 4,9 %** |
+| Part des semis (appliqué) | aucune culture + 10 points | écart le plus grand **1,6 point** (maïs) |
+| Étape 5 « La vallée chante » (tranquille) | « environ un an plus tôt » (vers l'an 9) | **an 6** (V1 : an 11) — *plus tôt que prévu* : les 23 variétés du V2 se sauvent au rythme de celles du pays (signes de vie : décision de l'utilisateur, paliers inchangés) ; effet sur le revenu négligeable |
+| Carrière Classique, tranquille (30 × 10 ans) | faillites ≤ 20 % | **0 %** ; revenu − 0,2 % ; nouveautés 92 % ; 12 trocs an 9, 9 croisements à l'an 10 |
+| Traîne (60 × 18 ans) | — | tranquille : revenu sur 18 ans **+ 2,7 %** ; argent en caisse à l'an 18 : 88 % de sans la Vallée (le V3 prendra le relais) ; dépenses du V2 63 295 |
+| Niveaux | identiques | `node tools/simulate.js` **identique octet pour octet** ; parité 400 / 400 |
+
 ### 16.13 Cas limites
 
 | Cas | Ce qui se passe |

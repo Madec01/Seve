@@ -4442,6 +4442,14 @@ sauf mention contraire. Chiffres réglés : `src/data/career/heritage.js` et `do
 - **Graines par récolte** (niveau 2) et **fixation** (niveau 3) valent aussi pour le V1 ; une variété dont `hand` a déjà
   atteint le nouveau seuil est sauvée à sa prochaine récolte à la main.
 - **Stand de la fête des récoltes** : `year.heirloomCrops` n'est tenu qu'avec la partie `heritage` (V1 exact sinon).
+- **Rien ne se perd (V2)** : avec la partie `heritage`, une planche d'essai (variété pas encore sauvée) récoltée par
+  l'équipe ou une machine **rend sa graine** (sans graine en plus, sans compter vers la fixation ; `valleyHarvest` →
+  `seedBack: true`). Sans cela, une variété du village (un seul troc par voisin) ou une croisée (un seul croisement)
+  pouvait ne plus jamais se semer (mesuré en simulation : citrouille et chou croisés géants récoltés par l'équipe).
+  Avec `{ heritage: false }` : la règle du V1 (rien ne revient).
+- **Prix de la Grainothèque réglés** (levier « prix × 0,8 à × 1,2 » du § 16.12.6) : **1 600 / 4 000 / 8 000 / 19 200 /
+  30 000** (total **62 800** au lieu de 58 000) — les trois premiers niveaux (qui ouvrent les cercles du troc) moins
+  chers, les deux derniers (« pour la beauté ») plus chers. Détail : `docs/VALLEE.md` § 16.12.7.
 - **Indice** (`hint.kind`) : + `'story'` (target `{ type: 'story', id }`), `'troc'` (`{ type: 'troc', id: clientId }`),
   `'pair'` (`{ type: 'pair', id: cropId }` → mode paire), `'library'` (`{ type: 'library', id: null }`). Ordre du
   § 16.9.4, avec une précision : la Grainothèque passe **avant** une recette qui attend un aménagement verrouillé (rang)
@@ -4449,6 +4457,18 @@ sauf mention contraire. Chiffres réglés : `src/data/career/heritage.js` et `do
 - **Succès du V1** : « Gardien des semences » compte les **12 variétés du pays** (clé `fixedPays`), « La ferme
   accueillante » les **12 habitants du V1** (`installedV1`) — sinon les variétés et habitants du V2 les donneraient.
 - **Album** : tampon nouveau `heart` (♥, icône `album.stamp.heart` — repli : le caractère ♥) sur la page `swaps`.
+
+**Simulation** (`tools/simulate-career.js`)
+- `--compare-valley2` compare **trois** réglages, même graine : sans la Vallée → V1 seul (`{ heritage: false }`) →
+  V1 + V2 (`--no-none` : sans la première colonne) ; `--jobs N` (fils `node:worker_threads`, résultats identiques à un
+  seul fil) ; `--first-seed N` ; `--valley seeds,wildlife` = le V1 seul (`parseValley` lit aussi `heritage`).
+- Robots du V2 : `HERITAGE_STYLES` (tranquille, débutant, appliqué ; idle / handsOff / automator comme au V1), tirage
+  propre `me.heritageRnd` (les décisions du V1 tirent les mêmes nombres avec ou sans le V2). Précisions au § 16.12.5 :
+  la Grainothèque au-delà du niveau 1 seulement si le prochain achat de la ferme reste payable et si l'argent couvre
+  trois fois le prix (« la ferme d'abord », tranquille et débutant) ; une variété du village dont le croisement n'est pas
+  trouvé garde ses graines pour les paires ; les planches d'essai sont réparties entre les variétés (35) ; le débutant
+  sème jusqu'à 2 paires par culture (30 % des jours) ; le tranquille, avec la Grainothèque, met au plan de culture ses
+  variétés sauvées dont un trait paie la graine (comme l'appliqué) ; greffons de l'Api étoilé plantés comme le Calville.
 
 **Formes (champs ajoutés)**
 - `query.career.valley()` (V2 actif) : `crossRule` (texte de la règle) ; `library.siteLines`, `library.next.vignette` ;

@@ -452,3 +452,16 @@ test('niveaux : aucune donnée du V2 (partie de niveau sans state.career)', asyn
   assert.equal(touristBonusOf(lvl.state), 0);
   assert.equal(fixedSeedCost(8, lvl.state), 10);
 });
+
+test('simulation : --valley seeds,wildlife = le V1 seul ; un tranquille avec le V2 troque, bâtit la Grainothèque et sème des paires', async () => {
+  const { parseValley, playCareer, HERITAGE_STYLES } = await import('../tools/simulate-career.js');
+  assert.deepEqual(parseValley('seeds,wildlife'), { seeds: true, wildlife: true, heritage: false });
+  assert.deepEqual(parseValley('seeds,wildlife,heritage'), { seeds: true, wildlife: true, heritage: true });
+  for (const k of ['casual', 'novice', 'optimal', 'idle', 'automator', 'handsOff']) assert.ok(HERITAGE_STYLES[k], k);
+  const c = playCareer({ seed: 2, strategy: 'casual', years: 5, keepGame: true });
+  const v = c.game.state.career.valley;
+  assert.ok(Object.keys(v.swaps).length >= 2, 'des trocs');
+  assert.ok((v.library?.level || 0) >= 1, 'la Grainothèque');
+  assert.ok(v.stats.pairs >= 1, 'des paires');
+  assert.ok(c.years.at(-1).valley.v2Spent > 0);
+});

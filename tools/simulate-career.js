@@ -982,7 +982,7 @@ function valleyRng(me) {
 // (70 % des jours joués, une préférée ♥ une fois sur deux), paires semées avant les autres graines anciennes. Tirage
 // propre (me.heritageRnd) : les décisions du V1 tirent les mêmes nombres avec ou sans le V2.
 export const HERITAGE_STYLES = {
-  casual: { library: 'season', maxLevel: 5, n1Reserve: 2, reserve: 4, n2Rank: 4, look: 1, troc: 0.7, fav: 0.5, pair: 1, pairsPerCrop: 1, fields: 'start', farmFirst: 3 },
+  casual: { library: 'season', maxLevel: 5, n1Reserve: 2, reserve: 4, n2Rank: 4, look: 1, troc: 0.7, fav: 0.5, pair: 1, pairsPerCrop: 1, fields: 'start', farmFirst: 3, planWithLibrary: true },
   novice: { library: 'season', maxLevel: 2, n1Rank: 4, n1Reserve: 2, reserve: 4, n2Rank: 4, look: 0.3, troc: 0.21, fav: 0.5, pair: 0.3, pairsPerCrop: 2, fields: 'start', farmFirst: 3 },
   optimal: { library: 'day', maxLevel: 5, n1Reserve: 4, reserve: 4, n2Rank: 4, look: 1, troc: 1, fav: 1, pair: 1, pairsPerCrop: 2, fields: 'tended' },
 };
@@ -1190,7 +1190,9 @@ function valleyMorning(game, me, P, noGestures) {
     const natureFirst = game.state.career.rank >= VS.natureFromRank && me.natureKey !== natureKeyNow && !!nextNatureWish(game, me, VS) && VS.natureEvery !== 'day';
     libraryDecision(game, me, natureFirst);
   }
-  if (VS.plan) valleyPlans(game);
+  // (V2) Le tranquille, avec la Grainothèque (son étagère montre la collection), met aussi au plan de culture ses variétés
+  // sauvées dont un trait paie la graine (comme l'appliqué).
+  if (VS.plan || (v.parts.heritage !== false && HERITAGE_STYLES[me.strategy]?.planWithLibrary && (v.library?.level || 0) >= 1)) valleyPlans(game);
   return taps;
 }
 
