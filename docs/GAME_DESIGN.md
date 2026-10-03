@@ -2311,15 +2311,17 @@ Conception complète, chiffrée et découpée en lots : **`docs/VALLEE.md`** ; c
   fleurit, les oiseaux reviennent, cueillette des haies, pollinisation, sol vivant, décor « Le tilleul de la vallée ».
 - **Lots** : **V1** « La boîte en fer » (graines et premiers habitants, structurant) ; **V2** « Le troc et les croisements »
   (Grainothèque à 5 niveaux, troc avec les villageois, variétés croisées au nom de la ferme) ; **V3** « Le ruisseau »
-  (vue de la vallée, 6 lieux à restaurer par chantiers et conditions de vie, terres sauvages après les 16 terrains : le
-  grand puits d'argent) ; **V4** « Les cigognes » (légendes, visiteurs rarissimes, paysage et sons complets).
+  (vue de la vallée, 6 lieux à restaurer par chantiers, conditions de vie et temps de reprise, terres sauvages après les
+  16 terrains : le grand puits d'argent ; conception détaillée au § 18.2) ; **V4** « Les cigognes » (légendes, visiteurs
+  rarissimes, paysage et sons complets).
 - **Règles d'or** : carrière seulement (parité des niveaux intacte ; seules deux pages d'album se voient dans la grange),
   rien ne se perd, aucune monnaie nouvelle, gestes réservés au joueur (« aider sans remplacer »), un seul indice à la
   fois, aucune peur de rater, flux aléatoire unique `valley`.
 - **Équilibre** (cibles, `tools/simulate-career.js --compare-valley`) : V1 **+ 1 à + 5 %** de revenu pour le joueur
   tranquille (toute la Vallée ≤ + 8 %), rangs et Domaine à un an près, ferme laissée seule ≤ + 3 %, ≥ 1 nouveauté par
-  saison ; ≈ 450 000 pièces de puits « pour la beauté » sur l'ensemble des lots (argent en caisse à l'an 14 divisé par 2
-  au V3) ; dépenses comptées à 100 % au patrimoine (décidé : 100 %).
+  saison ; ≈ 340 000 pièces de puits « pour la beauté » sur l'ensemble des lots (V1 ≈ 27 000, V2 62 800, V3 ≈ 251 000 ;
+  l'aperçu disait ≈ 450 000, recalé pour finir vers l'an 18) ; argent en caisse à l'an 14 divisé par 2 au V3 ; dépenses
+  comptées à 100 % au patrimoine (décidé : 100 %).
 
 ### 18.1 Lot V2 « Le troc et les croisements » (conception détaillée, 2026-10-03)
 
@@ -2355,3 +2357,48 @@ V2 ». En bref :
   la Vallée vers l'an 18 avec le V3.
 - **À trancher** (`docs/VALLEE.md` § 16.15) : emplacement de la Grainothèque, croisements déterministes ou avec une part
   de chance, rythme du troc, signes de vie du V2 pour les étapes 1 à 5, liens écartés (comice, quête), nom des croisées.
+
+### 18.2 Lot V3 « Le ruisseau » (conception détaillée, 2026-10-03)
+
+Conception complète : **`docs/VALLEE.md` § 17** ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot
+V3 ». Décisions de l'utilisateur suivies : lieux = chantier payé + condition de vie + temps de reprise ; restauration
+complète vers l'an 18 ; terres sauvages au V3 après les 16 terrains ; dépenses à 100 % au patrimoine. En bref :
+
+- **La vue de la vallée** : à l'étape 5 (« La vallée chante »), Joseph emmène le joueur « Sur la colline » ; un poteau
+  « Vers la vallée » se plante en bas de la ferme. La vue est un **écran à part, en portrait** (panorama de 192 × 432 px
+  qu'on fait défiler au doigt, la ferme petite au milieu, temps en pause), avec une barre du bas (« ‹ La ferme », compte des
+  étapes, « Liste ») et une liste des lieux lisible sans le dessin.
+- **Six lieux, 19 étapes, 160 000 pièces** : le Ru des Saules (4 étapes, 45 500 : canicule, pêche au ruisseau, truites et
+  écrevisses, moulin à eau + 1 place), le bois de la Combe (21 500 : chauffage de la serre − 50 %, champignons d'automne, une
+  trouvaille d'hiver de plus), la prairie des Coquelicots (17 000 : entretien des animaux − 10 %, ruches + 1, jachère + 30 %),
+  l'étang du moulin (34 500 : poissons + 15 %, touristes + 10 %, abris + 5 %), le bocage du chemin creux (19 000 : cueillette
+  des haies × 1,5 puis × 2, corbeaux plus rares puis absents), le verger conservatoire (22 500 : Reinette grise du Canada,
+  cerisier Montmorency, poirier Louise-Bonne). Chaque étape : un **chantier** d'un geste, une **condition de vie** venue de la
+  ferme (haies, jachères, bandes fleuries, habitants installés, variétés sauvées, arbres adultes) et une **reprise** de 1, 2
+  ou 4 saisons, visible sur le dessin.
+- **Dix habitants de la vallée** (martin-pêcheur, écrevisses, loutre, héron cendré, pic noir, chevreuil, salamandre, alouette,
+  huppe, chouette chevêche), qui reviennent après les étapes et **attendent qu'on les touche dans la vue** ; ce sont eux qui
+  ouvrent les étapes suivantes (une vallée ne se restaure pas sans fermier). Hélène, la naturaliste, tient leur carnet.
+- **Pêche au ruisseau** (une par jour, en plus de la mare, flux `valley3`) et **champignons d'automne** (cèpe, girolle,
+  pied-de-mouton) : les deux gestes du V3.
+- **Terres sauvages** : une fois les **16 terrains** achetés, les **18 cases de forêt** restantes de la grille peuvent être
+  confiées à la nature, de proche en proche (bois, marais ou prairie sauvage, **2 500 + 300 × n**, 90 900 pour les 18) :
+  aucune production, aucune charge ; un bloc sans clôture qui reprend en 3 saisons et accueille des visiteurs ; couleur et
+  pictogramme sur la mini-carte.
+- **Étapes 6 et 7** au-dessus du palier 38 de l'étape 5 : « L'eau revient » (56 signes + le ruisseau à l'étape 2 ; + 0,1
+  jour de pousse sans arrosage, 60 écus) et « La vallée vivante » (76 signes + les six lieux à l'étape 2 ; banc du belvédère,
+  80 écus) ; 99 signes de vie avec le V3. 8 récits de Joseph, 2 pages d'album (« Le carnet d'Hélène », « Les lieux de la
+  vallée »), 8 succès, 3 décors.
+- **Restes du V2 intégrés** : zones de toucher ≥ 48 px en coordonnées écran même au zoom minimal (et zoom tactile posé par
+  les modes de visée) ; lignes « À faire » regroupées par famille, 5 au plus ; le conseil du tableau ne couvre plus le troc.
+- **Aléatoire** : un flux nouveau `valley3` (10 nombres par aube pour les habitants de la vallée, 3 en automne pour les
+  champignons, 2 par pêche au ruisseau) ; chantiers, reprises et terres sans hasard ; aucun flux existant ne tire un nombre
+  de plus ; « L'année de la vallée » (année à thème) **écartée** (elle changerait le tirage du thème). Niveaux et Classique
+  des niveaux strictement inchangés.
+- **Équilibre** (cibles `--compare-valley3`, V1 + V2 → V1 + V2 + V3, 60 carrières × 18 ans) : puits recalé à **≈ 251 000**
+  (l'aperçu en demandait 369 000, impossible à finir vers l'an 18 : le joueur tranquille dispose de ≈ 290 000 des ans 9 à
+  18) ; revenu du tranquille **+ 0 à + 4 %** (estimé + 1,5 à + 2,5 % sur les ans 10 à 18) ; argent en caisse à l'an 14 plus
+  bas qu'avec le V2 (visé ≈ 55 000 contre 128 000, ≤ 50 % de sans la Vallée) ; vallée complète **vers l'an 18** (étape 6
+  vers l'an 13, étape 7 vers l'an 16) ; ferme laissée seule ≤ + 3 % ; rangs à un an près ; aucune faillite.
+- **À trancher** (`docs/VALLEE.md` § 17.16) : taille du puits, moment d'ouverture de la vallée, chantiers en parallèle,
+  terres sauvages sans production, parcelles au zoom minimal, temps dans la vue.

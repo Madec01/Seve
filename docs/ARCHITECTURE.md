@@ -3747,7 +3747,9 @@ et après le lot.
   `valley`), trait `scented` (l'atelier garde `variety` dans ses places), 4 habitants (`wildBee`, `blackbird`, `lizard`,
   `bat`) et l'aménagement `batbox` ; pages d'album `swaps`, `crosses`, `wildlife2` ; épreuve du comice, point du stand,
   quête de Joseph ; planche `valley2.png`.
-- **V3 « Le ruisseau »** : `state.career.valley.places = { [placeId]: { step, startedAt, readyAt } }` (6 lieux, 4 étapes),
+- **V3 « Le ruisseau »** — *contrats écrits : section « Vallée vivante — contrats du lot V3 » (plus bas), qui remplace cet
+  aperçu (vue de la vallée, 6 lieux et 19 étapes, terres sauvages `rewild(cellId, kind)`, flux `valley3`, arbres
+  `VALLEY_TREES`, thème écarté)* : `state.career.valley.places = { [placeId]: { step, startedAt, readyAt } }` (6 lieux, 4 étapes),
   `actions.career.startWorks(placeId)` ; `state.career.valley.wilds = { [cellId]: { kind: 'wood' | 'marsh' | 'meadow',
   at } }` pour les **terres sauvages** (cases de forêt de `grid()`, seulement à 16 terrains), `actions.career.rewild(col,
   row, kind)` ; nouvelle vue plein écran `src/ui/career/valley-view.js` + `src/render/valley-view.js` (canevas en portrait,
@@ -4569,3 +4571,508 @@ src/main.js                  app.heritage ; frame, reset, Échap quitte le mode 
   de l'été (la saison était lue après l'aube suivante) ; `src/ui/variety.js` prend la saison de `billPaid.seasonId`, ou
   la précédente au 1ᵉʳ jour.
 - `tools/simulate-career.js --compare-valley2` affiche aussi l'année de chaque étape (1 à 5) et les signes de vie par an.
+
+## Vallée vivante — contrats du lot V3 (CORE · ART · UI/RENDER, conception 2026-10-03)
+
+« Le ruisseau » : la **vue de la vallée** (écran à part, portrait), **6 lieux** à restaurer (19 étapes : chantier payé +
+condition de vie + reprise), **10 habitants de la vallée**, la pêche au ruisseau et les champignons du bois, la Reinette
+grise (variété), le cerisier et le poirier (arbres hors de `CROPS`), les **terres sauvages** (18 cases de forêt après le
+16ᵉ terrain), les étapes 6 et 7, 8 récits, 2 pages d'album, 8 succès, 3 décors ; et les **trois restes du V2** (cibles au
+zoom minimal, lignes « À faire » regroupées, conseil du tableau). Règles chiffrées et contenus : **`docs/VALLEE.md` § 17**
+(résumé : `docs/GAME_DESIGN.md` § 18.2). Ce contrat **s'ajoute** aux contrats V1 et V2 et à leurs « Écarts et
+précisions » : rien n'y est retiré ni renommé ; seuls des champs, des données et des branches sont ajoutés. Tant que CORE
+n'a pas livré, UI/RENDER simulent les requêtes avec des objets factices de même forme ; tant qu'ART n'a pas livré, repli
+dessiné (`canDraw`, `spriteAny`, `vIcon` ; la vue de la vallée dessine des aplats de couleur par lieu).
+
+### Règles communes (en plus de celles du V1 et du V2)
+
+- **Carrière seulement**, gardé par `state.career?.valley` **et** `valley.parts.places` (nouvelle partie, absente = vraie)
+  **et** `valley.parts.heritage` (le V3 n'existe pas sans le V2 : `{ heritage: false }` = le V1 exact, `{ places: false }` =
+  le V1 + V2 exact). Lecture unique : `placesOn(state)` (`src/core/career/places.js`). Une partie de niveau n'a pas
+  `state.career` : aucun code nouveau n'y passe. `tests/parity.test.js`, `tools/capture-parity.js --check` (400 / 400) et
+  `node tools/simulate.js` (identique octet pour octet) inchangés ; **Classique des niveaux strictement inchangé**.
+- **Aléatoire** : un flux **nouveau, `state.rng.valley3`** (`hashSeed(seed, 'valley3')`), créé par l'extension `valley`
+  (`init` / `migrate`) seulement avec la partie `places`. Tirages fixes :
+  1. **à chaque aube** une fois la vue ouverte (`view.open`), si `parts.wildlife` : **10 nombres**, un par espèce de
+     `VALLEY_SPECIES` (ordre des données, candidate ou non) ;
+  2. **à chaque aube d'automne** où le bois de la Combe est à l'étape ≥ 2 : **3 nombres** (champignons : chance, sorte,
+     emplacement), qu'il y ait de la place ou non ;
+  3. **action `fishRiver()`** : **2 nombres** (poisson, valeur).
+  **Rien d'autre** : chantiers, reprises, terres sauvages, arbres, récits, étapes sont déterministes ; habitants qui
+  passent et visiteurs des terres : hachage pur `(absDay, id)` (comme les habitants du jour du V1). `valley` (V1),
+  `valley2` (V2), `orders`, `variety`, `events`, `cozy`, `quality`, `surprise`, `sky`, `staff`, `career`, météo et marché
+  tirent **exactement** les mêmes nombres qu'avant (les avantages des lieux changent des facteurs, des poids ou des
+  plafonds, jamais un nombre de tirages ; la pêche de la mare reste sur `events`, celle du ruisseau est sur `valley3`).
+- **Ordre des données = ordre des tirages** : `VARIETIES`, `SPECIES`, `VILLAGE_VARIETIES`, `CROSSES`, `SPECIES_V2` ne
+  changent pas ; les nouvelles données vivent à côté (`VALLEY_SPECIES`, `ORCHARD_VARIETIES`, `PLACES`, `WILD_KINDS`,
+  `VALLEY_TREES`) et rejoignent les tables `ALL_*` **à la fin**.
+- **Pur** : `src/data/career/places.js` et `src/core/career/places.js` n'importent ni DOM ni horloge ;
+  `src/data/career/places.js` n'importe ni `valley.js` ni `heritage.js` (c'est `valley.js` qui l'importe).
+- **Temps** : une reprise de `n` saisons dure `n × state.career.seasonLength` jours (`readyAt` = jour absolu) ; la croissance
+  des terres aussi. Jamais de jours de 7 en dur.
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (français). Identifiants en anglais, textes en français, accords par
+  `g` / `pl` / `the` (règle du V1).
+
+### Fichiers
+
+```
+src/data/career/places.js    (nouveau, pur)
+    PLACES (6, ordre fixe : brook, combe, poppies, millpond, bocage, oldOrchard) :
+      { id, name, short, icon 'icon.place.<id>', vignette 'place.<id>.<step>', steps: [{ n: 0, name, line }, { n, name, cost,
+        seasons, needs: [need], boon: { kind, value, text }, species?: [speciesId], story?: storyId, line }] }
+      need = { kind: 'nature', id: 'hedge'|'strip'|'woodpile'|'loneTreeAdult', n } | { kind: 'fallowsTotal', n }
+           | { kind: 'species', id } | { kind: 'place', id, step } | { kind: 'variety', id /* sauvée */ }
+           | { kind: 'treesAdult', n /* arbres fruitiers adultes en verger */ }
+      boon.kind : 'heatGrowth' (0.5 ; Classique 0.25) · 'riverFishing' · 'riverTrout' · 'millPlace' (1) · 'heating' (0.5) ·
+        'mushrooms' · 'winterFindsPlus' (1) · 'hay' (0.9) · 'meadowHives' (1) · 'orchidSoil' (0.3) · 'pondFish' (1.15) ·
+        'pondTourists' (0.10) · 'reedSwallows' (0.05) · 'hedgeCoins' (1.5) · 'crowsHalf' (0.5) · 'noCrows' (0 ; cueillette 2) ·
+        'graftReinette' (3) · 'cherry' · 'pear'
+    PLACES_BY_ID, PLACE_STEPS_TOTAL (19), PLACES_OPEN { stage: 5 } (étape de la vallée qui ouvre la vue)
+    VALLEY_SPECIES (10 : kingfisher, crayfish, otter, heron, blackWoodpecker, roeDeer, salamander, skylark, hoopoe, littleOwl —
+      même forme que SPECIES : the, g, pl, seasons, recipe [{ kind: 'place', id, step } | { kind: <genre du V1>, n }],
+      placeId (où elle attend dans la vue), hint, hintIcon, anecdote, welcome, opens /* texte : ce qu'elle ouvre */,
+      group 'valley')
+    RIVER_FISH (5 : minnow, gudgeon, chub, browntrout, crayfish : { id, name, icon, min, max, weight, weight3 })
+    MUSHROOMS (3 : cep 6, chanterelle 4, hedgehogMushroom 3 : { id, name, icon, coins, weight }) ;
+      MUSHROOM_RULES { chance: 0.5, max: 3, season: 'autumn', minStep: 2, spots: 5 }
+    ORCHARD_VARIETIES (1 : reinetteGrise — forme de VARIETIES : cropId 'apple', trait 'fine', traits ['fine'], label « Du
+      verger de la commune », anecdote, icon, ripe, tint, group 'orchard', graft: true)
+    VALLEY_TREES (2 : cherry « Cerisier Montmorency », pear « Poirier Louise-Bonne » — forme de CROPS, kind 'tree',
+      seasons, growDays, fruitDays, fruitSeasons, seedCost, sellPrice, frostHardy true, needsWater false, valleyTree: true,
+      unlockedBy: { place: 'oldOrchard', step }, anecdote)
+    WILD_KINDS (3 : wood, marsh, grassland : { id, name, icon 'icon.wildland.<id>', text, stages: [3 noms], visitors:
+      [speciesId | 'butterflies' | 'frogs' …], mm: couleur })
+    WILD_RULES { price: { base: 2500, step: 300 }, youngSeasons: 1, grownSeasons: 3, needLots: 16 }
+    STAGES_V3 (2 : { n: 6, id 'waterBack', name 'L'eau revient', signs 56, needs: { place: 'brook', step: 2 }, reward
+      { ecus 60, boon 'waterBack' }, chapter } · { n: 7, id 'livingValley', name 'La vallée vivante', signs 76, needs:
+      { allPlacesStep: 2 }, reward { ecus 80, cosmeticId 'valley.bench' }, chapter }) ; WATER_BACK { dryGrowth: 0.1 }
+    STORIES_V3 (8 : hill, helene, brook3, combe3, poppies3, millpond3, bocage3, oldOrchard3 : id, title, vignette,
+      lines[3], when: 'open' | 'firstValleySpecies' | { place, step })
+    PLACES_HINTS (valley.view, valley.works, valley.valleyAnimal, valley.river, valley.wild), PLACES_TEXTS
+src/data/career/valley.js    VALLEY_VERSION 3 ; VALLEY_PARTS ['seeds', 'wildlife', 'heritage', 'places'] ;
+    MAX_STAGE reste 5 pour STAGES (V1) ; STAGES_ALL = [...STAGES, ...STAGES_V3] (8 entrées) ; STAGE_SIGNS_V3
+      [0, 2, 6, 11, 22, 38, 56, 76] ; stageSigns(n, heritage, places) ; maxStageOf(parts) (5 | 7) ;
+    ALL_VARIETIES + ORCHARD_VARIETIES (36), ALL_SPECIES + VALLEY_SPECIES (26), SIGNS_ALL_V3 (99 : 26 + 36 + 19 + 18) ;
+    SIGNS_ALL (51), VARIETIES, SPECIES… inchangés
+src/data/crops.js            getCrop(id) trouve aussi VALLEY_TREES (comme RARE_CROPS) ; isValleyTree(id) ; CROPS, CROPS_BY_ID,
+                             BASE_CROPS, NEW_CROPS INCHANGÉS (le marché, les trouvailles, l'herbier parcourent CROPS)
+src/core/career/places.js    (nouveau, pur, sans enregistrement)
+    placesOn(state), viewOpen(state), placeStep(state, id), placeWorks(state, id), needStatus(state, need) → { ok, have,
+    text }, placeNeeds(state, id) → [needStatus], canStartWorks(state, id) → { ok, reason, cost, seasons }, placeBoonActive(
+    state, kind) → valeur | 0 (lu par les modules partagés), placeInfo(state, id), placesInfo(state), placesSigns(state)
+    (étapes atteintes), valleySpeciesSpot(state, id), riverFishTable(state), mushroomsInfo(state), treesUnlocked(state) →
+    ['cherry'?, 'pear'?], wildOpen(state) → { open, reason }, wildCells(state) (case → { kind, stage, seasonsLeft }),
+    wildEligible(state) → [cellId] (forêt de la grille, non possédée, non sauvage, qui touche un terrain, la ferme ou une
+    terre sauvage), wildPrice(state), wildStage(state, cell) (0 | 1 | 2), wildSigns(state), viewInfo(state), stage6Ok(state),
+    stage7Ok(state)
+    Lecteurs des avantages (gardés) : heatDryGrowthOf(state) (0,5 | null), waterBackOf(state) (+ 0,1 | 0), millPlacesOf(state,
+    buildingId) (1 | 0), heatingFactorOf(state) (0,5 | 1), upkeepFactorOf(state) (0,9 | 1), meadowHivesOf(state) (1 | 0),
+    fallowGrowthOf(state, base) (0,3 | base), pondFishFactorOf(state) (1,15 | 1), placesTouristBonusOf(state) (0,10 | 0),
+    placesAnimalBonusOf(state) (0,05 | 0), crowsPlacesFactorOf(state) (0,5 | 0 | 1), hedgeCoinsFactorOf(state) (1 | 1,5 | 2),
+    winterFindsPlusOf(state) (1 | 0)
+src/core/career/heirlooms.js varietyOf / isFixed / planVariety lisent ALL_VARIETIES_BY_ID (Reinette comprise) ; growthBonusOf,
+    touristBonusOf, animalBonusOf, crowWeightFactor, fishFactor, winterFindsMax, hedgeFindsMaxOf : + les lecteurs du V3
+    ci-dessus (une seule porte d'entrée pour les modules partagés, comme au V2) ; dryGrowthOf + waterBackOf ; canicule +
+    heatDryGrowthOf ; FALLOW + fallowGrowthOf
+src/core/career/habitat.js   signsOfLife + placesSigns + espèces de la vallée + Reinette + wildSigns (partie places) ;
+    stageFor(signs, heritage, places, extra) : étapes 6 et 7 demandent aussi stage6Ok / stage7Ok ; stageTarget(state) ;
+    nextHint : ordre du § 17.11.3 (bête de la vallée, lieu prêt, ce qui manque, terre sauvage) ; installedSpecies sur ALL_*
+src/core/career/valley.js    extension 'valley' (même id, même place : après cozy) : V3 dans dawnEvents, actions, requêtes,
+    check, migrate (détail ci-dessous)
+src/core/career/land.js      gridInfo : cellules 'wildland' et 'wildable' (partie places) et étendue (cols, rows) qui les
+                             inclut ; frontierCells ignore toute case sauvage (jamais à vendre)
+src/core/career/effects.js   careerDailyCharges : chauffage × heatingFactorOf ; entretien des ANIMAUX × upkeepFactorOf
+src/core/career/staff.js     workshopCapacity(state, id) + millPlacesOf(state, id) (comme themeExtraPlaces)
+src/core/career/events.js    poissons de la mare × pondFishFactorOf (via fishFactor) ; corbeaux × crowsPlacesFactorOf (via
+                             crowWeightFactor) ; touristes (fournisseur touristBonus) — aucun tirage de plus
+src/core/cozy.js             trouvailles d'hiver : plafond + winterFindsPlusOf (via winterFindsMax)
+src/core/farm.js             (via heirlooms.js) pousse sans arrosage + waterBackOf ; canicule heatDryGrowthOf ; jachère
+                             fallowGrowthOf — gardé par state.career?.valley
+src/core/trees.js            les arbres de VALLEY_TREES suivent les règles du pommier (getCrop les trouve) ; aucun tirage
+src/core/game.js             plantableCrops (verger : cherry / pear débloqués ; Reinette dans heirlooms), achievementContext
+                             (career.valley + places, valleyInstalled, wilds, riverFish, stage)
+src/data/album.js            + pages `valleyWild` « Le carnet d'Hélène » (10, check { type: 'wildlifeInstalled', id }) et
+                             `places` « Les lieux de la vallée » (6, check { type: 'placeRestored', id }) — mode 'career'
+src/core/album.js            + fait `placeRestored` (ctx.career.valley.restored)
+src/data/achievements.js     + PLACES_ACHIEVEMENTS (8, catégorie 'career', écus) ; ALL_ACHIEVEMENTS les inclut
+src/data/cosmetics.js        + 3 décors found: true, price 0 : heron.vane (small), mill.wheel (large), valley.bench (small)
+tools/simulate-career.js     robots V3 (PLACES_STYLES, me.placesRnd), --valley …,places, --compare-valley3, robot handsOffLate
+tests/valley3.test.js, tests/valley3-places.test.js, tests/valley3-wild.test.js, tests/valley3-migration.test.js,
+tests/touch-targets.test.js, tests/todo-group.test.js (nouveaux)
+assets/sprites/generate-valley3.py → assets/sprites/valley3.png + bloc « // <valley3:auto> » d'atlas.js   (ART)
+src/render/valley-view.js    (RENDER, nouveau) disposition pure de la vue + dessin du panorama + hit-test de la vue
+src/render/layout-career.js  (RENDER) blocs des terres sauvages (layout.wildBands) ; poteau « Vers la vallée »
+src/render/valley-actors.js  (RENDER) poteau, terres sauvages (fond, objets, visiteurs), mode terres sauvages, clairières
+src/render/scene.js          (RENDER) hit-test, mini-carte, setWildPlacing, zoom tactile, zones agrandies
+src/render/camera-zoom.js    (RENDER) touchZoom(dpr), expandHitCss(rect, zoom, dpr, min = 48) — purs
+src/ui/career/valley-view.js (UI, nouveau) l'écran « La vallée » (canevas, barre du bas, liste des lieux, pause)
+src/ui/career/places.js      (UI, nouveau) fiche d'un lieu, segment Lieux, fiche et mode terres sauvages, pêche,
+                             récits du V3, conseils ; css/valley.css (règles V3 ajoutées, pas de fichier de plus)
+src/ui/todo-group.js         (UI, nouveau, pur) groupTodo(items, { max: 5 }) ; src/ui/todo.js l'appelle
+src/ui/hints.js              maybe(id, target, { avoid?: [() => rect] }) ; une bulle par ouverture de feuille
+src/ui/variety.js            ordre des conseils du tableau (valley.troc avant le conseil du lot 3)
+```
+
+### Activation et options
+
+```js
+createCareer({ …, valley })   // défaut true ; { seeds, wildlife, heritage, places } → absentes = true
+                              // { places: false } : le V1 + V2 exactement (aucun tirage valley3, aucune règle V3)
+                              // { heritage: false } : le V1 exactement (places ignorée)
+game.valley                   // inchangé (booléen)
+```
+
+Le V3 est « ouvert » (`view.open`) à la **première aube où la vallée est à l'étape ≥ `PLACES_OPEN.stage` (5)** avec
+`placesOn`. Avant : l'état existe (`view.open: false`), rien ne s'affiche (le segment Lieux n'existe pas, `valley().places`
+dit `{ open: false, opensAtStage: 5 }`). Terres sauvages : vue ouverte **et** `lotsBought ≥ WILD_RULES.needLots` (16).
+
+### État (`state.career.valley`, champs ajoutés ; `v: 3`)
+
+```js
+state.career.valley = {
+  v: 3,
+  parts: { seeds: true, wildlife: true, heritage: true, places: true },
+  // … tous les champs du V1 et du V2 …
+  view: { open: false, openedAt: null | abs, visits: 0 },          // vue ouverte (étape 5) ; visites (simulation, conseils)
+  places: { [placeId]: { step: 0..N, steps: { [n]: abs /* jour atteint */ }, works: null | { step, startedAt: abs,
+            readyAt: abs, cost } } },                              // absent = étape 0 sans chantier
+  wilds: { [cellId /* lotIdAt(col, row) */]: { kind: 'wood' | 'marsh' | 'grassland', col, row, at: abs } },
+  wildBought: 0,                                                   // prix croissant (n)
+  river: { fishedDay: 0 },                                         // jour absolu de la dernière pêche au ruisseau
+  mushrooms: [{ id, kind, spot /* 0..4 */, day }],                 // 3 au plus ; effacés au 1er jour d'hiver
+  // species : + 10 identifiants de VALLEY_SPECIES (états 'hint' | 'visible' | 'installed' ; spotId = placeId)
+  // varieties / seeds : + reinetteGrise (from: 'orchard') ; FROM + 'orchard'
+  // stories : + identifiants de STORIES_V3 (même tableau available / read) ; chapters.read : + 6, 7
+  // stage : 0..7 (jamais en baisse)
+  year: { …, works: 0, recovered: 0, valleyInstalled: 0, wilds: 0, river: 0, riverIncome: 0, mushrooms: 0 },
+  stats: { …, works: 0, recovered: 0, river: 0, riverIncome: 0, mushrooms: 0, wilds: 0, visits: 0 },
+}
+// Parcelles de verger : cropId 'cherry' | 'pear' (arbres de VALLEY_TREES, règles de trees.js) ; variety 'reinetteGrise'.
+// Pas de nouveau champ de parcelle.
+```
+
+`check(state)` (V3) : `v` entier 1..3 ; `parts.places` booléen ; `places` : identifiants de `PLACES`, `step` entier 0..max,
+`steps` cohérents (jours entiers, une entrée par étape atteinte), `works` null ou `{ step = step + 1, startedAt ≤ readyAt }` ;
+`wilds` : case dans la grille (`inLotGrid`), **non possédée**, sorte connue, `col` / `row` = la case de l'identifiant, au plus
+18, `wildBought` = nombre de terres ; `river.fishedDay` entier ≥ 0 ; `mushrooms` au plus 3, sortes connues ; identifiants
+d'espèces, de variétés et de récits sur les tables `ALL_*` / `STORIES_V3` ; `stage ≤ stageFor(signes, paliers les plus
+bas)` ; cultures `cherry` / `pear` seulement sur une parcelle de verger. Une sauvegarde V1 ou V2 reste valide.
+
+### Déroulé (extension `valley`)
+
+- **`dawnEvents`** — après les étapes du V1 et du V2, dans cet ordre :
+  1. **ouverture** : `placesOn`, `view.open` faux et `stage ≥ 5` → `view.open = true`, `openedAt`, récit `hill`
+     disponible → `storyAvailable { id: 'hill' }` + `valleyViewOpened { first: true }` ;
+  2. **reprises** : pour chaque lieu (ordre de `PLACES`), `works` et `absDay ≥ readyAt` → `step += 1`, `steps[step] = abs`,
+     `works = null` → `placeRecovered { placeId, step, name, boon, species, story }` ; dernière étape → récit du lieu
+     (`storyAvailable`) ; Reinette (verger 1) : 3 greffons ajoutés (`from: 'orchard'`) dans le même événement ;
+  3. **terres sauvages** : chaque terre qui passe à l'état 1 ou 2 ce matin → `wildLandGrown { cellId, kind, stage }` (une
+     terre reprise compte comme signe de vie à cet instant) ;
+  4. **champignons** (automne, bois ≥ 2 : 3 nombres `valley3`) : 1ᵉʳ jour d'hiver → `mushrooms = []` ; sinon, moins de 3 et
+     nombre < 0,5 → un champignon (sorte par poids, emplacement libre parmi 5) → `mushroomsGrew { finds }` ;
+  5. **habitants de la vallée** (si `parts.wildlife`, vue ouverte : 10 nombres `valley3`) : automate du V1 (`hint` →
+     `visible` → on touche) ; une seule venue annoncée par aube **toutes espèces confondues** (aucune si une espèce du V1 ou
+     du V2 s'est annoncée ce matin) ; recettes : étapes de lieux (+ genres du V1 pour la huppe et la chevêche) ;
+     événements `speciesHint` / `speciesVisible` (formes du V1, `spotId` = `placeId`, `where` « au ruisseau »).
+- **`dawn`** (fin de l'aube) : étape (`stageTarget` : paliers du V3, étapes 6 et 7 avec leurs conditions de lieux) →
+  `valleyStage` (même forme ; `chapter` des étapes 6 et 7).
+- **`incomes`** : prairie 2 → `{ source: 'valleyMeadow', amount: ruches × 1, kind: 'valley', key: 'honey' }` (hors hiver).
+- **`yearEnd`** : `report.valley` + `works`, `recovered`, `valleyInstalled`, `wilds`, `river`, `riverIncome`, `mushrooms` de
+  l'année, `places: [{ id, step }]` ; `year` remis à zéro.
+- **Fournisseurs** : `effects('touristBonus')` + `placesTouristBonusOf` ; `effects('animalBonus')` + `placesAnimalBonusOf` ;
+  `effects('growthBonus')` inchangé ; `patrimony` → `valley.spent` (chantiers, terres et jeunes plants compris, 100 %) ;
+  `unlocks(rank)` : rien de nouveau (le V3 s'ouvre par l'étape 5, pas par un rang).
+- **Lus directement** (gardés, par `heirlooms.js` / `places.js`) : `farm.js` (pousse sans arrosage, canicule, jachère),
+  `effects.js` (chauffage, entretien des animaux), `staff.js` (places du moulin), `events.js` (poissons de la mare,
+  corbeaux), `cozy.js` (trouvailles d'hiver), `valley.js` lui-même (cueillette des haies : pièces × `hedgeCoinsFactorOf`).
+
+### Actions (`game.actions.career.*`, Vallée commencée)
+
+```js
+openValleyView()                 → { ok, first: bool, story: null | 'hill' }
+    // compte une visite (view.visits) ; refus : 'La vallée s'ouvrira quand elle chantera (étape 5).' ;
+    //   'Vue de la vallée désactivée.' (places ou heritage off)
+startWorks(placeId)              → { ok, placeId, step /* visée */, name, cost, seasons, readyAt, daysLeft }
+    // refus : 'Lieu inconnu.' ; refus d'ouverture ; 'Ce lieu est déjà restauré.' ;
+    //   'Un chantier est déjà en cours ici : encore N jours.' ; 'Il manque : 2 haies, le martin-pêcheur.' (liste des
+    //   conditions non remplies, dans l'ordre des données) ; notEnoughMoney(n)
+fishRiver()                      → { ok, fishId, name, icon, amount }      // 2 nombres valley3 ; earn('valley', amount)
+    // refus : 'Le ruisseau est encore à sec.' ; 'Vous avez déjà pêché au ruisseau aujourd'hui : revenez demain !'
+pickMushroom(id)                 → { ok, kind, name, amount }              // earn('valley', coins × careerFactor(rang))
+    // refus : 'Rien à cueillir ici.'
+rewild(cellId, kind)             → { ok, cellId, col, row, name, kind, cost, n /* terres confiées */ }
+    // refus : 'Les terres sauvages viennent après le 16ᵉ terrain.' ; refus d'ouverture ; 'Case inconnue.' ;
+    //   'Cette case n'est pas une forêt libre.' ; 'Il faut une forêt qui touche la ferme.' ; 'Sorte inconnue.' ;
+    //   notEnoughMoney(n)
+triggerValley(kind, arg, arg2)   // + 'view' (ouvre), 'works' (placeId : lance sans payer ni condition), 'recover' (placeId :
+                                 //   la reprise se termine à la prochaine aube), 'place' (placeId, step : posé tout de
+                                 //   suite), 'wild' (cellId, kind), 'wildGrow' (cellId → reprise), 'mushrooms' (n),
+                                 //   'riverReset' ; 'visible' / 'install' acceptent VALLEY_SPECIES ; 'stage' va jusqu'à 7
+// Modifiées : observe(id) accepte VALLEY_SPECIES (fenêtre : `opens` à la place du service) ; readStory(id) et
+//   readChapter(6 | 7) ; sowHeirloom(i, 'reinetteGrise') (greffon, verger) ; plant(i, 'cherry' | 'pear') sur une parcelle
+//   de verger vide quand l'arbre est débloqué — refus 'Le cerisier vient du verger conservatoire.' ; developLot : une
+//   terre sauvage n'est jamais un terrain (aucun cas).
+```
+
+Dépenses : `spendValley(api, cost)` (poste « La Vallée », `valley.spent`, patrimoine 100 %). Gains (pêche, champignons) :
+`api.earn('valley', amount)` (`INCOME_LABELS.valley`). Les récits et l'observation ne coûtent ni ne rapportent rien.
+
+### Requêtes (`game.query.career.*`)
+
+```js
+valley() → V1 + V2 + {
+  places3: bool,                                   // partie places active
+  view: { open, opensAtStage: 5, visits },
+  places: [placeInfo],                             // 6, ordre de PLACES ; [] tant que la vue n'est pas ouverte
+  wilds: { open, reason, count, total: 18, nextPrice, kinds: [{ id, name, icon, text }], eligible: [cellId],
+           cells: [{ cellId, name, kind, kindName, stage, stageName, seasonsLeft, daysLeft }] },
+  river: { canFish, fishedToday, step },
+  mushrooms: [{ id, kind, name, icon, spot }],
+  // stage : + total 99, next.needs (texte de la condition de lieu : « et le Ru des Saules à l'étape 2 »)
+  // species : 26 entrées (+ group 'valley', placeId, opens) ; varieties : 36 (+ group 'orchard')
+  // stories : + STORIES_V3 ; chapters : + 6, 7
+}
+placeInfo = { id, name, short, icon, step, max, stepName, vignette, restored,
+              works: null | { step, name, startedAt, readyAt, daysLeft, seasonsLeft, progress /* 0..1 */ },
+              next: null | { step, name, cost, seasons, needs: [{ text, ok, have, target: null | { type: 'species' |
+                     'nature' | 'place' | 'variety' | 'lot', id } }], canStart, reason, boonText, line },
+              boons: [{ step, text, active }], species: [{ id, name, icon, state }], line /* Joseph, étape actuelle */ }
+valleyView() → null | { open, season, stage, farmTier /* 1..4 */, places: [{ id, step, works: bool, progress }],
+                        animals: [{ id, placeId, state: 'hint' | 'visible' | 'resident' }],   // 4 'resident' au plus
+                        mushrooms: [{ id, kind, spot }], river: { canFish, step }, joseph: bool /* récit à lire */,
+                        helene: bool /* passe aujourd'hui (hachage) */ }
+query.career.grid()      // cells : + state 'wildland' { wildKind, wildStage } | 'wildable' { price } ; cols / rows les incluent
+query.career.wildCell(cellId) → { cellId, col, row, name, state: 'wildland' | 'wildable' | 'forest', kind?, stage?,
+                                  stageName?, seasonsLeft?, visitors: [{ id, name, seen }], price?, canRewild, reason }
+query.plantableCrops(i)  // verger : + lignes cherry / pear (débloqués) ; heirlooms : + reinetteGrise
+query.achievementContext().career.valley   // + places: { [id]: step }, restored: [id], valleyInstalled: [id], wilds: n,
+                                           //   riverFish: n, stage (0..7)
+query.career.yearReport().valley           // + works, recovered, valleyInstalled, wilds, river, riverIncome, mushrooms, places
+```
+
+### Événements (Vallée active, V3 ouvert)
+
+| Type | Données | Pour |
+|---|---|---|
+| `valleyViewOpened` | `{ first }` | poteau « Vers la vallée » planté (fondu), conseil `valley.view`, segment Lieux |
+| `storyAvailable` | formes du V2, identifiants de `STORIES_V3` | ligne « À faire », message « Joseph a quelque chose à vous dire » |
+| `worksStarted` | `{ placeId, step, name, cost, seasons, readyAt }` | panneau de chantier sur le lieu (vue), message info, conseil `valley.works` |
+| `placeRecovered` | `{ placeId, step, name, boon: { kind, text }, species: [id], story, grafts? }` | fondu du lieu vers son nouvel état, message important « Voir », résumé du matin, album (dernière étape) |
+| `riverFished` | `{ fishId, name, amount }` | petite fenêtre, son `splash` (synth existant `pop` en repli), conseil `valley.river` |
+| `mushroomsGrew` / `mushroomPicked` | `{ finds: [{ id, kind, spot }] }` / `{ id, kind, name, amount }` | étincelle dans le bois / panier |
+| `wildLandGiven` | `{ cellId, col, row, name, kind, cost }` | la case change sur la carte (terre retournée, pousses), mini-carte, conseil `valley.wild` |
+| `wildLandGrown` | `{ cellId, kind, stage }` | dessin de la terre (état 1 ou 2), message info |
+| `speciesHint` / `speciesVisible` / `speciesInstalled` | formes du V1, identifiants de `VALLEY_SPECIES` (`spotId` = placeId) | « ? » dans la vue, ligne « À faire » `vl-view-animal`, fenêtre d'observation dans la vue |
+| `valleyStage` | forme du V1, `n` 6 ou 7 | brume, clairières, écus, décor (étape 7), chapitre |
+| `heirloomHarvest`, `heirloomFixed` | formes du V1, `reinetteGrise` | comme au V1 |
+| `harvested` | + `cropId` 'cherry' / 'pear' | comme le pommier |
+
+Ordre à l'aube : (V1) … (V2) … `valleyViewOpened` / `storyAvailable`, `placeRecovered`, `wildLandGrown`, `mushroomsGrew`,
+habitants de la vallée, puis `valleyStage` en fin d'aube.
+
+### Progression (album et succès)
+
+- Pages `valleyWild` « Le carnet d'Hélène » (30 écus + `heron.vane`), `places` « Les lieux de la vallée » (40 écus +
+  `mill.wheel`) ; « L'album complet » reste les 11 pages du lot 4 ; `albumOverview().pages` = 18, `total` = 191.
+- `PLACES_ACHIEVEMENTS` (catégorie « Carrière », `careerValley { key, n }`) : `firstWorks` (10), `waterBack` (30),
+  `livingValley` (40), `sixPlaces` (40), `helenesBook` (30), `firstWild` (10), `forestBack` (40), `riverAngler` (10) ; 210
+  écus. `careerAchievementList` : 17 + 7 + 6 + 8 = 38.
+- Écus des étapes 6 et 7 → `recordCareerEcus` ; décor `valley.bench` par `recordValleyStage(progress, 7)` (meilleure étape
+  `progress.career.valleyStage` jusqu'à 7).
+- Pages et succès ajoutés par `normalizeProgress` (schéma inchangé, rien à rattraper).
+
+### Migration et sauvegardes
+
+- `migrate` : `state.career.valley` en `v: 1` ou `v: 2` → `completeValley` ajoute `view: { open: false, openedAt: null,
+  visits: 0 }`, `places: {}`, `wilds: {}`, `wildBought: 0`, `river: { fishedDay: 0 }`, `mushrooms: []`, compteurs `year` /
+  `stats` ; `parts.places = true` (si `parts.heritage` ; sinon `false`) ; `v = 3` ; `state.rng.valley3` créé (partie
+  places seulement). Rien n'est retiré ni réinterprété ; `stage` garde sa valeur.
+- Ancienne carrière déjà à l'étape 5 : récit `hill` et poteau à la première aube ; 16 terrains : terres sauvages ouvertes
+  du même coup. `state.career.valley === null` : reste `null`.
+- `CAREER_VERSION` inchangée ; `save.js` (via `checkValley`) accepte `cherry` / `pear` sur les parcelles de verger et
+  `reinetteGrise`.
+- Tests : aller-retour V2 → V3 → sauvegarde → chargement ; carrière V2 de l'intégration (`c958599`) reprise à l'étape 5 avec
+  16 terrains ; `{ places: false }` donne exactement les tirages et l'état du V1 + V2 sur 18 ans (empreinte comparée) ;
+  `{ heritage: false }` exactement le V1 ; parité des niveaux.
+
+### Simulation
+
+- `tools/simulate-career.js` : `--valley seeds,wildlife,heritage` (= V1 + V2), **`--compare-valley3`** (V1 + V2 → V1 + V2 +
+  V3, même graine ; `--no-none` / colonne « sans la Vallée » : revenu sur 18 ans et ans 10-18, rangs, Domaine, argent en
+  caisse aux ans 10, 14, 18, dépenses du V3 par an, année de chaque étape de lieu, des étapes 6 et 7, des 10 habitants et
+  des 18 terres, nouveautés par saison (ans 10-18), gestes par jour, faillites, `handsOff`, `handsOffLate`, `automator`,
+  débutant, appliqué) ; `--years 18` par défaut pour cette comparaison ; `--jobs N`.
+- Nouveautés comptées : celles du V1 et du V2 + `valleyViewOpened`, `worksStarted`, `placeRecovered`, `riverFished` (la
+  première de l'année), `mushroomsGrew`, `wildLandGiven`, `wildLandGrown`, et `speciesHint` / `speciesInstalled` des
+  habitants de la vallée.
+- Robots : `docs/VALLEE.md` § 17.12.6, par l'API publique et `me.placesRnd` (les décisions du V1 et du V2 tirent les mêmes
+  nombres avec ou sans le V3).
+- Après réglage : `PLACES` (prix, reprises), `WILD_RULES`, `STAGES_V3`, valeurs des avantages, et les tableaux de
+  `docs/VALLEE.md` § 17.12 remplis (section « Résultats »).
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- **La vue de la vallée** (`src/render/valley-view.js`, pur pour la disposition) :
+  `viewLayout({ cssW, cssH, dpr, insetTop, insetBottom })` → `{ zoom /* entier ≥ 3 : ⌊devW / 192⌋ */, worldW: 192, worldH:
+  432, x0 /* marge */, places: { [placeId]: { x, y, w, h } }, mill, river: { x, y, w, h }, pontoon, farm, mushroomSpots: [5],
+  animalAnchors: { [speciesId]: { x, y } }, bench, scrollMax }` (px monde ; brook 64 × 312 depuis (24, 120), combe 96 × 96
+  en (0, 40), oldOrchard 80 × 80 en (112, 56), millpond 80 × 64 en (8, 160) + mill 32 × 48 en (80, 168), poppies 80 × 80 en
+  (112, 156), farm 48 × 48 en (72, 256), bocage 192 × 64 en (0, 320)) ; `createValleyView(canvas, images, { reducedMotion })`
+  → `{ render(view /* valleyView() */, dt), resize(layout), scrollBy(dy), fling(vy), scrollTo(placeId, { animate }),
+  hitTest(cssX, cssY) → null | { type: 'place', id } | { type: 'viewAnimal', id } | { type: 'mushroom', id } |
+  { type: 'river' } | { type: 'farm' } | { type: 'joseph' }, placeRect(id) (px CSS, pour garder le lieu au-dessus d'une
+  feuille), stats() }`. Fond `view.bg.<saison>`, lieux `place.<id>.<step>` teintés par saison (recoloration du code), givre
+  l'hiver, panneau `place.works` + pousses `place.sprouts` pendant une reprise (nombre de pousses = progression), fondu de
+  1,2 s à l'arrivée d'une étape, eau animée (`fx.ripple`, 2 images), brume (`fx.mist`, étape ≥ 6), oiseaux (`fx.birds`,
+  étape ≥ 6), habitants installés qui passent (4 au plus), Hélène, Joseph sur le banc ; mouvements réduits : rien ne
+  bouge, changements directs. Cibles ≥ 48 px CSS (agrandies autour du centre) ; rectangles qui se recouvrent (le ruisseau passe devant l'étang et
+  sous le bocage) : dans l'ordre bête qui attend, champignon, ponton, Joseph, puis **le plus petit lieu** sous le doigt
+  (moulin et étang avant le ruisseau, ruisseau avant le bocage), puis la ferme.
+- **La ferme** : poteau « Vers la vallée » `view.signpost` (16 × 32) sur une tuile réservée de la bande de la maison, au
+  bord de la route à droite (réservée avant le décor quand `career.valley` existe ; test : aucun chevauchement avec la
+  maison, le grenier, l'étal, le puits, la mangeoire, le porte-lanternes, la boîte, la Grainothèque, les nichoirs, le
+  panneau du village, l'aire des machines) ; affiché seulement si `view.open`.
+- **Terres sauvages** (`layout-career.js`) : `layout.wildBands = [{ cellId, col, row, rect (px), kind, stage, sign: { x, y }
+  (tuiles) }]` — un bloc de 14 × 11 tuiles par case `wildland` (sans clôture, sans allée, sans panneau de terrain ; les
+  colonnes de lisière x 0 / x 13 restent forêt sauf vers un terrain ou une autre terre sauvage voisine, où le sol de la terre
+  continue) ; les cases `wildable` sont dessinées en forêt un peu plus claire avec le poteau `wildland.offer` en bas à
+  gauche, et entrent dans l'étendue du monde comme les terrains à vendre (`careerWorldRows` et `grid` les comptent). Objets
+  de chaque bloc tirés par `tileHash` (déterministe, sans flux) parmi les sprites de sa sorte et de son état ; visiteurs
+  (hachage du jour, 1 au plus par bloc repris, 3 au plus dans la vue).
+- **Clairières** (étape 7) : tuiles `forest.clearing.*` posées une sur ~6 sur la forêt qui borde la ferme (déterministe).
+- `scene.hitTest` : + `{ type: 'valleyView' }` (poteau), `{ type: 'wildLand', cellId }` (bloc repris ou en reprise, ou son
+  poteau), `{ type: 'wildCell', cellId }` (seulement en mode terres sauvages : `scene.setWildPlacing(on)`, qui fait
+  pulser les cases de `valley().wilds.eligible` ; seuls ces cibles, le défilement, le pincement et + / − répondent) ;
+  hors mode, toucher le poteau `wildland.offer` d'une case `wildable` → `{ type: 'wildCell', cellId }` aussi.
+- **Mini-carte** (`getMinimap`) : `MM_COLORS` + `wood` `#2e5a2a`, `marsh` `#3f6f6a`, `grassland` `#a3b64f` ; icônes
+  `icon.wildland.<sorte>` ; terre en reprise : trait clair en bas de la case ; case `wildable` : forêt + contour pointillé
+  vert clair `rgba(190,235,160,0.85)` + petite pousse ; en mode terres sauvages, point clair sur chaque case possible ;
+  clé du fond (`minimapBase`) + état des terres. `minimapLotAt` renvoie aussi un `cellId` de terre sauvage (appui long →
+  sa fiche).
+- **Zoom tactile et zones agrandies** (`camera-zoom.js`, purs) : `touchZoom(dpr)` = ⌈48 × dpr / 32⌉ (plus petit zoom entier où
+  une parcelle de 32 px monde fait ≥ 48 px CSS : 4 sur le Pixel 7, 5 sur un écran DPR 3) ; `expandHitCss(rect, zoom, dpr, min =
+  48)` → rectangle monde agrandi autour de son centre jusqu'à `min × dpr / zoom` dans chaque sens. `scene.ensureTouchZoom()`
+  / `scene.restoreZoom()` : appelés par l'entrée et la sortie des modes aménagement, paire et terres sauvages (zoom posé
+  sans animation en mouvement réduit ; le zoom du joueur est rendu à la sortie). Toutes les cibles isolées de
+  `hitTestCareer` passent par `expandHitCss` (bêtes, trouvailles, boîte, Grainothèque et panneau, emplacements, poteaux,
+  sachet du tableau) ; chevauchement : la plus proche du doigt, puis l'ordre existant ; les parcelles prennent leur case
+  entière (moitié de l'écart jusqu'à la voisine, clôture comprise).
+- Nouvelle planche `valley3` dans `SHEETS` et `assets.js` (facultative, `OPTIONAL_SHEETS`) ; `DECOR_SPRITES` : 3 décors.
+
+**UI** (`src/ui/career/valley-view.js`, `src/ui/career/places.js`, `src/ui/career/valley.js`, `css/valley.css`) :
+- `createValleyView(app) → app.valleyView = { open({ placeId?, speciesId?, mushrooms? }), close(), active, onEvent,
+  frame(dt), reset() }` : écran plein (`#valley-view`, `body.in-valley-view` : barre du haut, onglets, ligne « À faire »,
+  zoom et mini-carte cachés), **temps en pause** pendant la vue (`app.pauseFor('valleyView')`), ruban du haut, canevas,
+  barre du bas (`‹ La ferme` ≥ 56 px, compte « 7 / 19 étapes · 62 signes de vie », « Liste »), liste des lieux (feuille
+  basse, 6 lignes ≥ 72 px), gestes : glisser vertical = défiler (élan), toucher = `hitTest` ; Échap / bouton retour
+  d'Android = « La ferme ». Lecteurs d'écran : le canevas a `role=img` et un résumé ; la liste est la vraie navigation.
+- `createPlaces(app) → app.places = { openPlace(id), openWild(cellId), enterWild(), leaveWild(), wilding, openRiver(),
+  onEvent, onHit(hit), todoItems(game), lieuxTab(container) /* segment Lieux */, morningLines(ev), yearLines(report),
+  plotRows(plot), seedRows(rows), frame(), reset() }` ; `app.valley` lui délègue le segment **Lieux**, les récits du V3,
+  les habitants de la vallée (groupe « De la vallée ») et le prochain indice (`hint.kind` + `'valleyAnimal'`, `'place'`,
+  `'placeNeed'`, `'wild'`).
+- Écrans : `docs/VALLEE.md` § 17.3 et § 17.11 (fiche d'un lieu avec confirmation du chantier ; segment Lieux et ses quatre
+  segments en grille 2 × 2 sous 380 px à ≥ 130 % ; fiche d'une terre sauvage ; feuille « Confier à la nature » à trois
+  cartes ; mode terres sauvages avec barre `#vl-wildbar` « 🌿 Terre sauvage · 3 400 · Touchez une forêt · Terminer » ;
+  fenêtre de pêche ; fenêtre d'observation dans la vue).
+- Ligne « À faire » : `vl-view-animal`, `vl-mushrooms`, `vl-story` ; aucune ligne pour un chantier ou une terre à payer ;
+  résumé du matin ; messages (`placeRecovered`, bête de la vallée venue, étape : importants avec « Voir » ;
+  `worksStarted`, `riverFished`, `mushroomPicked`, `wildLandGrown` : infos) ; conseils « première fois » `PLACES_HINTS` ; sons
+  existants (`reveal` étape de lieu, `chirp` habitant, `pop` champignon et pêche, `magic` récit, `chime` étape de la vallée).
+- **Les trois restes du V2** :
+  1. Zones agrandies et zoom tactile (ci-dessus, RENDER) ; `tests/touch-targets.test.js` mesure au **zoom minimal** (Pixel
+     7 et 360 × 740) chaque cible isolée de la scène et de la vue : zone ≥ 48 × 48 px CSS ; en mode aménagement, paire et
+     terres sauvages, parcelle ou emplacement ≥ 48 px une fois le zoom tactile posé.
+  2. `src/ui/todo-group.js` (pur, testé) : `TODO_FAMILIES` (`village` : `board-*`, `troc` / `vl-troc`, `cart`, `peddler`,
+     `gift`, `challenge-*`, `order-*` ; `valley` : `vl-*` ; `fete` : `fete-*`, `winter-*`, `veillee` ; `joseph` : `quest*`) ;
+     `groupTodo(items, { max: 5 })` → les entrées de priorité ≤ 25 restent seules ; une famille de ≥ 2 entrées non urgentes
+     devient `{ id: 'group-<famille>', prio: min, text: 'Le village : 4 choses', items: [≤ 4], go: () => feuille }` ;
+     sortie triée, **5 entrées au plus**. `todo.items()` renvoie la liste regroupée ; la petite feuille (`openGroup(family)`)
+     montre 4 lignes ≥ 56 px qui appellent chacune leur `go()`. « Où en étais-je ? » : 3 lignes de la liste regroupée.
+  3. `src/ui/hints.js` : `maybe(id, target, { avoid })` (la bulle ne recouvre jamais une zone `avoid`) et **une bulle par
+     ouverture de feuille** (la suivante attend la prochaine ouverture) ; `src/ui/variety.js` (`openBoard`) : si la carte
+     « Troc » est en tête, `valley.troc` d'abord (cible « Choisir une graine »), le conseil du tableau du lot 3 attend la
+     prochaine ouverture du tableau ; sinon, l'ordre d'avant. Vérifié au doigt au premier passage (rien ne couvre « Choisir
+     une graine »).
+- Débogage (`?debug=1`) : `__debug.valley3.{ on(), state(), view(), open(placeId?), works(placeId), recover(placeId),
+  place(placeId, step), wild(cellId, kind), wildGrow(cellId), wildMode(on), mushrooms(n), fish(), riverReset(),
+  visible(id), install(id), stage(n), story(id), todo(), touch() /* mesure des cibles */, ui(), stats() }` (les mêmes
+  aussi sous `__debug.valley`).
+
+### Sprites (paquet ART : planche `assets/sprites/valley3.png`, `assets/sprites/generate-valley3.py`, bloc `// <valley3:auto>`)
+
+Même méthode que `generate-valley2.py` (palette Kenney, contour sombre (63, 38, 49), lumière en haut à gauche, tuiles de
+16 px). **16 × 16** sauf mention. Réutilisés : `portrait.joseph`, `nature.oak.<saison>`, `nature.reeds*`, `wild.hint.*` du
+V1 et du V2, `product.fish.*` (goujon), `tree.cherry.*` et `tree.pear.*` (planche `career`), `fx.birds`, `story.*`
+existants. Les lieux sont dessinés **en été** (le code les teinte selon la saison comme les planches de saison de la ferme
+et pose le givre l'hiver) ; le fond, lui, a ses quatre saisons.
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `view.bg.spring`, `.summer`, `.autumn`, `.winter` | 192 × 432 | **fond de la vue de la vallée** en portrait : ciel et collines bleues en haut, coteaux, chemins de terre entre les emplacements des lieux (laissés en herbe neutre), le chemin du village en bas et un petit clocher au loin à droite ; vert tendre et fleurs blanches (printemps), vert profond (été), roux et or (automne), neige et ciel pâle (hiver) |
+| `view.farm.1` … `.4` | 48 × 48 | la ferme vue de loin, au milieu de la vallée : petite ferme (maison, un champ) ; ferme moyenne (grange, champs en damier) ; grande ferme (verger, mare) ; le Domaine (manoir au fanion doré, haies tout autour) |
+| `place.brook.0` … `.4` | 64 × 312 | le **Ru des Saules**, ruban qui serpente du haut (source dans le bois) au bas de la vue : lit de cailloux blancs et herbe sèche ; mince filet d'eau entre les cailloux ; eau vive, petites cascades, saules jeunes ; eau claire et profonde, ombres de truites, saules feuillus ; même eau + un pont de pierre près du bas |
+| `place.mill.0`, `.1`, `.1.a` | 32 × 48 | le moulin sur la rive de l'étang : en ruine, roue cassée, toit troué ; restauré, toit de tuiles, roue à aubes (2 images de roue `.1` / `.1.a`) |
+| `place.combe.0` … `.3` | 96 × 96 | le **bois de la Combe** : coupe rase, souches et ronces ; jeunes plants tuteurés et noisetiers ; bois clair, bouleaux et jeunes chênes, sentier ; vieille futaie, grands chênes et hêtres, mousse au pied, rais de lumière |
+| `place.poppies.0` … `.3` | 80 × 80 | la **prairie des Coquelicots** : friche jaune et cailloux ; prairie verte et quelques fleurs ; prairie couverte de coquelicots et de bleuets ; prairie haute aux orchidées mauves, papillons, piquets de bois |
+| `place.millpond.0` … `.3` | 80 × 64 | l'**étang du moulin** : cuvette de vase craquelée et roseaux secs ; étang d'eau claire ; nénuphars blancs, un banc sur la berge ; grande roselière dorée et eau bleue, hirondelles en silhouette |
+| `place.bocage.0` … `.3` | 192 × 64 | le **bocage du chemin creux** (bande en bas de la vue) : talus nus et chemin creux poussiéreux ; jeunes haies replantées ; haies épaisses, talus fleuris, barrières de bois ; vieux saules têtards le long du chemin, haies hautes |
+| `place.oldOrchard.0` … `.3` | 80 × 80 | le **verger conservatoire** : vieux pommiers tordus, herbe haute, clôture tombée ; arbres taillés, petites étiquettes blanches ; tout le verger en fleurs blanches et roses ; verger soigné, étiquettes, banc, panneau « Verger conservatoire » |
+| `place.works` | 32 × 32 | chantier de la vallée : piquets et ficelle, brouette, pelle, petit panneau de bois |
+| `place.sprouts` | 16 × 16 | trois pousses vertes (semées sur un lieu en reprise) |
+| `view.pontoon` | 16 × 16 | petit ponton de bois avec une canne à pêche posée |
+| `view.signpost` | 16 × 32 | poteau de bois à flèche « La vallée » (au bord de la route de la ferme) |
+| `view.bench` | 32 × 16 | banc du belvédère (Joseph s'y assoit quand un récit attend) |
+| `view.helene`, `view.helene.1` | 16 × 16 | Hélène, ciré vert, jumelles (2 images : marche / jumelles levées) |
+| `fx.ripple`, `fx.ripple.1` | 16 × 16 | reflets d'eau qui coule (2 images) |
+| `fx.mist` | 32 × 16 | brume du matin, blanc translucide (étape 6) |
+| `wild.<id>`, `wild.<id>.1` (kingfisher, crayfish, otter, heron, blackWoodpecker, roeDeer, salamander, skylark, hoopoe, littleOwl) | 16 × 16 | 2 images, regard à gauche : martin-pêcheur bleu et orange (perché / plongeant) ; écrevisse grise à pinces blanches ; loutre brune (assise / glissant) ; héron cendré sur une patte (immobile / bec qui plonge) ; pic noir à calotte rouge (tambourinant) ; chevreuil roux (tête levée / broutant) ; salamandre noire tachée de jaune ; alouette brune striée (au sol / en vol chantant) ; huppe rose-orangé à huppe dressée (fermée / en éventail) ; chevêche ronde aux yeux jaunes (hochant la tête) |
+| `wild.hint.pincer`, `wild.hint.drum`, `wild.hint.hoof`, `wild.hint.webbed` | 16 × 16 | indices : petite pince sous un caillou ; trois traits de tambour sur une écorce ; empreinte en cœur ; empreinte palmée |
+| `find.cep`, `find.chanterelle`, `find.hedgehogMushroom` | 16 × 16 | cèpe brun au pied ventru ; girolles jaune d'œuf ; pied-de-mouton crème |
+| `fish.minnow`, `fish.chub`, `fish.browntrout`, `fish.crayfish` | 16 × 16 | vairon ; chevesne argenté ; truite fario tachetée de rouge ; écrevisse |
+| `heirloom.reinetteGrise.icon`, `heirloom.reinetteGrise.fruit` | 16 × 16 | pomme gris-roux rugueuse ; les mêmes pommes posées sur le pommier adulte |
+| `wildland.wood.ground`, `.ground.1` · `wildland.marsh.ground`, `.ground.1` · `wildland.grassland.ground`, `.ground.1` | 16 × 16 | sols des terres sauvages (2 variantes chacun) : humus et feuilles ; terre humide et joncs ras ; herbe haute claire |
+| `wildland.wood.sprout`, `wildland.wood.hazel`, `wildland.wood.birch` (16 × 32) | 16 × 16 · 16 × 32 | pousses d'arbres ; noisetier ; bouleau (le bois repris réutilise `nature.oak.<saison>`) |
+| `wildland.marsh.puddle`, `wildland.marsh.pool` (32 × 32), `wildland.marsh.iris` | 16 × 16 · 32 × 32 | flaque et joncs ; mare naturelle aux bords irréguliers ; iris jaunes (avec `nature.reeds*`) |
+| `wildland.grassland.tall`, `.tall.1`, `wildland.grassland.daisies`, `wildland.grassland.bush` | 16 × 16 | herbe haute (2) ; marguerites ; buisson d'églantier |
+| `wildland.sign` · `wildland.offer` | 16 × 16 | petit poteau de bois à feuille verte (terre sauvage) ; pousse dans un cercle pointillé (forêt à confier) |
+| `forest.clearing.0` … `.2` | 16 × 16 | tuiles de forêt avec clairière fleurie (étape 7) |
+| `icon.place.brook`, `.combe`, `.poppies`, `.millpond`, `.bocage`, `.oldOrchard` | 16 × 16 | pictos des lieux : vague et galet ; trois sapins ronds ; coquelicot ; nénuphar ; haie et chemin ; pomme et étiquette |
+| `icon.works`, `icon.view`, `icon.river` | 16 × 16 | pelle et pioche croisées ; colline et soleil ; canne à pêche et vague |
+| `icon.wildland.wood`, `.marsh`, `.grassland` | 16 × 16 | jeune arbre ; roseau et eau ; touffe d'herbe et fleur (aussi pour la mini-carte) |
+| `story.hill`, `story.helene`, `story.brook`, `story.combe`, `story.poppies`, `story.millpond`, `story.bocage`, `story.oldOrchard` | 48 × 32 | vignettes : Joseph et le fermier assis sur la colline, vallée grise en bas ; Hélène aux jumelles ; la roue du moulin qui tourne ; un chevreuil dans la futaie ; orchidées et papillons ; promeneurs autour de l'étang ; chevêche dans un têtard ; verger étiqueté et enfants |
+| `valley.stage.6`, `valley.stage.7` | 96 × 48 | la vallée des vignettes 0 à 5 : le ruisseau bleu revenu et la brume ; les bois, la prairie, l'étang, tout vert et vivant |
+| `album.page.valleyWild`, `album.page.places` | 16 × 16 | onglets : carnet aux jumelles ; petite roue de moulin |
+| `decor.heron.vane` (16 × 16), `decor.valley.bench` (16 × 16), `decor.mill.wheel` (32 × 32) | — | girouette au héron sur un poteau ; banc de bois du belvédère ; roue de moulin décorative en bois |
+| `icon.ach.<id>` (firstWorks, waterBack, livingValley, sixPlaces, helenesBook, firstWild, forestBack, riverAngler) | 16 × 16 | icônes des 8 succès (versions grisées par le code) |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `valley2.png`.
+
+### Découpage en 3 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/career/{places,valley}.js`, `src/data/crops.js` (getCrop + `VALLEY_TREES`), `src/core/career/{places,heirlooms,habitat,valley,land,effects,staff,events}.js`, `src/core/{cozy,farm,trees,game,album}.js` (ajouts gardés), `src/core/progression.js`, `src/data/{album,achievements,cosmetics}.js`, `tools/{simulate-career,sim-career-staff}.js`, `tests/valley3*.test.js` | état, actions, requêtes, événements, progression, migration ; simulation et réglage ; § 17.12 de `docs/VALLEE.md` rempli | rien (commence par `{ places: false }` = V1 + V2 exact, empreinte vérifiée sur 18 ans, puis : données → ouverture → lieux et reprises → avantages → habitants de la vallée → pêche, champignons → arbres → terres sauvages → étapes 6 et 7 → récits) |
+| **ART** | `assets/sprites/generate-valley3.py`, `assets/sprites/valley3.png`, bloc `// <valley3:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau ; planche de contrôle × 6 ; aperçu de la vue complète (fond + lieux à chaque étape) en 412 px de large | rien |
+| **UI/RENDER** | `src/ui/*` (nouveaux `src/ui/career/{valley-view,places}.js`, `src/ui/todo-group.js`), `css/valley.css`, `src/main.js`, `src/index.template.html`, `src/render/*` (nouveau `src/render/valley-view.js` ; hors bloc `valley3:auto`), `tests/{touch-targets,todo-group}.test.js` | vue de la vallée, fiches, segment Lieux, mode terres sauvages, terres sur la carte et la mini-carte, poteau, zoom tactile et zones agrandies, regroupement « À faire », conseils, débogage ; vérification au doigt | CORE : API (factices en attendant) ; ART : sprites (repli) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `placeInfo`, `valley().places / wilds / river / mushrooms`,
+`valleyView()`, `grid()` (cellules `wildland` / `wildable`), `wildCell()`, l'ordre des événements de l'aube
+(`valleyViewOpened`, `storyAvailable`, `placeRecovered`, `wildLandGrown`, `mushroomsGrew`, habitants de la vallée, puis
+`valleyStage`), les hits de la scène (`valleyView`, `wildLand`, `wildCell`) et de la vue (`place`, `viewAnimal`, `mushroom`,
+`river`, `farm`, `joseph`) — figés ici ; écarts notés par CORE dans « Écarts et précisions (livraison CORE V3) » ;
+(2) **ART → RENDER/UI** : noms du tableau des sprites, **cadrage commun de la vue** (positions et tailles des lieux du
+§ « La vue de la vallée » ci-dessus : ART dessine chaque lieu à sa taille exacte, RENDER le pose à ces coordonnées ; le
+fond laisse ces rectangles en herbe neutre) ; (3) **CORE ↔ ART** : identifiants des lieux, étapes, espèces, poissons,
+champignons, sortes de terres, arbres, récits, décors, succès (figés ici et au § 17 de `docs/VALLEE.md`) ; (4) **RENDER ↔
+CORE** : identifiants de cases `lotIdAt(col, row)` pour les terres, étendue de `grid()` ; (5) intégration (chef de projet) :
+sauvegarde `backup/avant-vallee-v3-…` (faite), `node --test tests/`, `node tools/simulate-career.js --compare-valley3` et
+`--compare-valley2`, `node tools/simulate.js` (identique), `node tools/capture-parity.js --check`, `node tools/build.js`,
+vérification au doigt (Pixel 7 et 360 × 740 : une carrière V2 reprise à l'étape 5 avec 16 terrains → récit « Sur la colline »,
+poteau, vue ; un chantier lancé, sa reprise, l'étape suivante bloquée par un habitant puis ouverte après l'avoir touché dans
+la vue ; pêche au ruisseau ; champignons ; Reinette, cerisier et poirier plantés ; une terre sauvage confiée en mode terres
+sauvages, vue sur la carte et la mini-carte, qui reprend ; étapes 6 et 7 forcées ; cibles mesurées **au zoom minimal** ;
+« À faire » regroupée (carrière reprise à 11 entrées → 5 au plus) ; premier passage au tableau avec un troc (rien ne couvre
+« Choisir une graine ») ; mouvements réduits, texte à 150 % ; une partie de niveau Classique identique), `JOURNAL.md`,
+sauvegarde `backup/vallee-v3-…` à la fin.

@@ -1477,3 +1477,45 @@ Sauvegarde : `backup/avant-qa-vallee2-2026-10-03` (branche + tag locaux, commit 
   colporteur…) — un regroupement « Le village : 4 choses » serait plus doux ; le conseil du tableau du village pourrait
   attendre que la carte Troc soit lue.
 
+
+### 2026-10-03 — Vallée V3 : conception
+
+Conception complète du lot V3 « Le ruisseau » et de ses contrats, sans code de jeu (rien de modifié dans `src/` ni
+`tests/`). Sauvegarde déjà faite avant le lot : `backup/avant-vallee-v3-2026-10-03` (commit `c958599`).
+
+- **`docs/VALLEE.md` § 17** (nouveau, remplace l'aperçu du § 11.3 là où ils diffèrent) : la **vue de la vallée** (écran à
+  part en portrait, panorama 192 × 432 px qu'on fait défiler, ferme petite au milieu, temps en pause, poteau « Vers la
+  vallée » en bas de la ferme, récit « Sur la colline » à l'étape 5) ; **6 lieux et 19 étapes** (Ru des Saules, bois de la
+  Combe, prairie des Coquelicots, étang du moulin, bocage du chemin creux, verger conservatoire), chacune avec chantier,
+  condition de vie, reprise, avantage réel, ligne de Joseph ; **10 habitants de la vallée** à toucher dans la vue (ils
+  ouvrent les étapes suivantes) ; pêche au ruisseau et champignons ; Reinette grise (variété), cerisier et poirier (arbres
+  hors de `CROPS`) ; **terres sauvages** (18 cases de forêt après le 16ᵉ terrain, bois / marais / prairie, carte et
+  mini-carte) ; **étapes 6 et 7** à 56 et 76 signes (au-dessus de 38) avec conditions de lieux ; 8 récits, Hélène la
+  naturaliste, 2 pages d'album, 8 succès, 3 décors ; maquettes ; équilibrage chiffré (repères de la trace `--seed 3`,
+  calendrier visé, sources de revenu, cibles `--compare-valley3`, robots, leviers) ; cas limites ; écarts avec l'aperçu ;
+  6 points à trancher. § 6, § 11.3, § 12.6 et § 16.7 renvoient au § 17.
+- **`docs/ARCHITECTURE.md`**, « Vallée vivante — contrats du lot V3 » : fichiers (nouveaux `src/data/career/places.js`,
+  `src/core/career/places.js`, `src/ui/career/{valley-view,places}.js`, `src/render/valley-view.js`,
+  `src/ui/todo-group.js`), état exact (`v: 3`), déroulé de l'aube, actions (`openValleyView`, `startWorks`, `fishRiver`,
+  `pickMushroom`, `rewild`), requêtes (`valley().places / wilds`, `valleyView()`, `grid()` avec cases `wildland` /
+  `wildable`, `wildCell()`), événements, flux **`valley3`** (10 + 3 + 2 nombres, rien d'autre ; tous les flux existants
+  inchangés), migration V2 → V3 sans perte (`{ places: false }` = V1 + V2 exact), simulation, rendu de la vue (cadrage
+  commun ART ↔ RENDER), terres sur la carte et la mini-carte, zoom tactile et zones agrandies, planche `valley3.png` (fond de
+  la vue en 4 saisons, chaque lieu dans chacun de ses états, habitants, terres sauvages, icônes, vignettes), découpage
+  CORE / ART / UI-RENDER et points de contact. L'aperçu V3 du contrat V1 renvoie à cette section.
+- **Restes du V2 intégrés au contrat UI** : cibles isolées ≥ 48 px en coordonnées écran même au zoom minimal (et zoom
+  tactile posé par les modes aménagement, paire et terres sauvages ; parcelles = case entière) ; « À faire » regroupée par
+  famille, 5 entrées au plus (`groupTodo`) ; une bulle de conseil par ouverture de feuille, `valley.troc` avant le conseil du
+  tableau du lot 3 (rien ne couvre « Choisir une graine »).
+- **`docs/GAME_DESIGN.md` § 18.2** : résumé du V3 ; § 18 : puits d'ensemble ≈ 340 000 (et non 450 000).
+- **Choix principaux** : puits **recalé à ≈ 251 000** (chantiers 160 000 + terres 90 900) — la trace du joueur tranquille
+  (≈ 290 000 disponibles des ans 9 à 18) montre que les 369 000 de l'aperçu ne finiraient que vers l'an 20-21 ; ouverture à
+  l'étape 5 ; habitants de la vallée comme conditions des étapes (le joueur au centre, `automator` bloqué) ; 2ᵉ pêche sur
+  le flux `valley3` (pas sur `events`) ; année à thème « L'année de la vallée » écartée (elle changerait le tirage du flux
+  `variety`) ; aucune recette ne dépend des terres sauvages.
+- **À trancher par l'utilisateur** (§ 17.16) : taille du puits (251 000 / 369 000 / 200 000) ; ouverture (étape 5 / rang 6 /
+  étape 4) ; chantiers en parallèle ; terres sauvages sans production ou avec une petite cueillette ; parcelles au zoom
+  minimal ; temps dans la vue.
+- **Idées** : confiture de cerises et jus de poire à l'atelier (les dessins `product.cherryJam` / `product.pearJuice`
+  existent) ; « avant / après » de la vue de la vallée au bilan (V4) ; Hélène qui commente les terres sauvages ; un
+  robot `handsOffLate` gardé pour mesurer les services passifs des lots suivants.
