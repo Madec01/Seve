@@ -31,6 +31,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-02 | `backup/lot2-surprises-2026-10-02` | Lot 2 toucher & surprises terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9 |
 | 2026-10-02 | `backup/avant-lot3-variete-2026-10-02` | Avant le lot 3 (variété : commandes du village, cadeau de saison, charrette, défis, années à thème, colporteur), commit `154a4fa` |
 | 2026-10-02 | `backup/lot3-variete-2026-10-02` | Lot 3 variété terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 9. La branche `backup/wip-lot3-2026-10-02` a servi de sauvegarde intermédiaire |
+| 2026-10-03 | `backup/avant-lot4-collection-2026-10-03` | Avant le lot 4 (album, lanternes, aider sans remplacer, fêtes participatives, hiver vivant), commit `581fa70` (main avec PR n° 9 fusionnée + lot 3) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -645,6 +646,49 @@ terminées.)*
   « À faire » qui le ramène dans la vue puis toucher → sa fiche ; commande semée au doigt (feuille des graines) →
   gardée d'office, mention dans la feuille. Aucune erreur de console, cibles ≥ 48 px, textes ≥ 14 px. Captures
   `lot3-fix-*.png`.
+
+### 2026-10-03 — Lot 4 « Collection & enjeux doux » : conception (D1, D3, F1, C6, C8)
+
+- **Conception écrite avant le code** (aucun fichier de `src/` ni de `tests/` modifié ; pas de sauvegarde `backup/…` :
+  documents seulement) : `docs/GAME_DESIGN.md` § 17 (règles, chiffres, contenus) et `docs/ARCHITECTURE.md`, « Lot 4 —
+  contrats » (fichiers, état `state.cozy`, actions, requêtes, événements, flux `cozy`, progression `album` / `lanterns`,
+  migration, options, sprites de la planche `lot4.png`, découpage CORE · ART · UI/RENDER).
+- **D1 Album de la ferme** : 11 pages, **124 cases** (potager avec tampons ★ dorée et ◆ géante, fait maison et basse-cour,
+  animaux, ciel, petits bonheurs, village, années à thème, fêtes, lisière en hiver, mangeoire et mare, veillées de Joseph),
+  une anecdote par case, un indice pour les cases à trouver, une récompense par page (écus + un décor « trouvé dans
+  l'album », 515 écus et 15 décors en tout) ; progression permanente commune aux deux modes ; **rattrapage** au premier
+  démarrage depuis `progress.lifetime`, les succès, les décors trouvés et les sauvegardes en cours (partie de niveau,
+  carrière).
+- **Décision Classique** : l'album **se remplit aussi en Classique**, parce qu'il vit dans la progression (comme les
+  cumuls et les succès) et ne lit que ce que la partie expose déjà ; seul ajout côté cœur : `achievementContext().weather`
+  (lecture). Fêtes, hiver vivant et lanternes sont **absents** du Classique (clé d'état absente, parité intacte).
+- **D3 Lanternes** : 1 à 4 lanternes sur 5 critères (variété, soin, voisinage, beauté, prospérité), barèmes distincts
+  niveaux / carrière, au moins une lanterne partout, aucun effet sur les étoiles ni l'argent ; meilleur total par niveau
+  (« 🏮 13 / 20 » sur les cartes), historique en carrière, porte-lanternes sur le perron ; écus pour un nouveau record,
+  décors de lanterne pour 4 lanternes dans un critère et pour 20 / 20.
+- **F1 Aider sans remplacer** (carrière) : prime « Cueilli main » **+25 %** (au lieu de +10 %), **la récolte attend le
+  joueur** (moissonneuse et cueilleuse à partir de la 2ᵉ aube après la maturité, jardiniers de la 4ᵉ), jardiniers aux
+  corvées (arroser, **désherber** — qui améliore la qualité de la récolte à la main —, semer), épreuves de récolte du comice
+  comptées à la main seulement. **Prototype au simulateur** (copie de travail jetable, 8 carrières) : ferme laissée seule
+  après l'an 3 ≈ **+3 000 → +950 par an (−68 %)** ; joueur tranquille −2 % de revenu sur 10 ans, Domaine toujours à l'an 8,
+  **69 à 91 % de récoltes à la main** (au lieu de 2 à 5 %), ≈ 8 gestes par jour au lieu de 2,5 à 4,8 ; `automator` :
+  Domaine an 6 → an 7, patrimoine de l'an 10 −30 % ; débutant −20 % de patrimoine (à surveiller).
+- **C6 Fêtes participatives** : 4 moteurs de mini-jeux sans chrono ni échec — **chasse** (8 œufs cachés, jeu en pause,
+  indice illimité, Lili trouve les derniers le soir), **marmite** (soupe de 1 à 3 légumes de l'année, 1 à 3 louches),
+  **étal** (stand de 5 cagettes jugé sur la variété et la qualité : ruban vert, bleu, rosette d'or ; gardé pour le comice
+  de la carrière : +25 % / +50 % d'un prix d'épreuve), **paniers** (Noël : 3 villageois et ce qu'ils aiment) ; rien n'est
+  consommé (« ce que la ferme a produit cette année ») ; calendrier commun niveaux Détente / carrière ; la « Foire aux
+  semis » du printemps devient la **foire aux graines** du dernier jour d'hiver (sachets prépayés à −25 %, avant les
+  semis) ; les 9 fêtes de thème du lot 3 gagnent un mini-jeu.
+- **C8 Hiver vivant** : cueillette en lisière (bois mort, pommes de pin, houx, châtaignes, pieds-bleus, gui ; traces dans
+  la neige), mangeoire (8 oiseaux), **12 veillées de Joseph** (la vallée d'autrefois : elles annoncent la Vallée vivante),
+  paniers de Noël ; carrière : serre au rang 2 pour 500 (au lieu du rang 3 pour 800), mare au rang 3, pêche l'hiver.
+- **Préparation de « La Vallée vivante »** (lot 5, non réalisée) : pages d'album réservées (`heirlooms`, `wildlife`),
+  premiers habitants (oiseaux, traces, truite, hérisson, renard), graines anciennes, récit de Joseph.
+- **Équilibre visé** : niveaux +2 à +5 % de revenu pour le joueur tranquille ; carrière −1 à +5 % ; ferme laissée seule
+  ≤ 50 % d'avant ; aucune faillite nouvelle ; seuils d'étoiles Détente à recalculer (§ 13.3).
+- **Points ouverts** : interrupteur « Fêtes et hiver » en Classique ; cuisine laissée au lot 5 (D4) ; foire aux graines
+  dans les niveaux ; désherbage et comice « à la main » à mesurer ; perte du débutant en carrière.
 
 ## Idées (à étudier plus tard)
 
