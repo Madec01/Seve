@@ -127,6 +127,15 @@
 //   scene.setFeteMode(on), scene.feteMode, scene.setLanterns(values | null) (niveaux : meilleur résultat du niveau),
 //   scene.cozySpots(), scene.cozyStats(), scene.cozyItemRect(kind, id) (px du monde), scene.cozySing()
 //
+// Vallée vivante, lot V1 (valley-actors.js, carrière seulement) : aménagements nature sur leurs emplacements
+// (layout.valley, layout-career.js), jachères, étiquettes des planches d'essai, dessin des variétés anciennes
+// (heirloom.<id>.<étape>), bêtes (indice, bête qui attend avec « ? », habitants en promenade), cueillette des haies,
+// boîte en fer, lisière fleurie, oiseaux et papillons selon l'étape. hitTest + { type: 'wildlife', id } |
+// { type: 'hedgeFind', id } | { type: 'valleyBox' } | { type: 'natureSpot', spotId } (mode aménagement : seulement
+// celles-ci). scene.setValleyStage(n), scene.setValleyPlacing(kind | null), scene.valleyPlacing,
+// scene.valleyItemRect(kind, id), scene.valleySpots(), scene.valleyStats() ; mini-carte : points des terrains qui ont un
+// emplacement libre en mode aménagement.
+//
 // La scène ne lit le jeu que par game.state et game.query ; elle ne modifie rien.
 
 import {
@@ -142,6 +151,7 @@ import { createEffects, canDraw, giantRect } from './effects.js';
 import { createLot2Actors } from './lot2-actors.js';
 import { createVarietyActors } from './variety-actors.js';
 import { createCozyActors } from './cozy-actors.js';
+import { createValleyActors } from './valley-actors.js';
 import { zoomBounds, snapZoom, stepZoom, clampZoom, pinchZoom, staticRegion, zoomRatio, zoomFromRatio } from './camera-zoom.js';
 
 const OUTLINE = '#3f2631';
@@ -227,6 +237,9 @@ export function createScene(canvas, images, level, opts = {}) {
   // (Lot 4) Fêtes, hiver vivant, porte-lanternes, badge « vous attend » (cozy-actors.js).
   const cozy = createCozyActors(effects);
   cozy.setImages(images);
+  // (Vallée vivante, lot V1) Aménagements nature, bêtes, cueillette des haies, boîte en fer, lisière (valley-actors.js).
+  const valley = createValleyActors(effects);
+  valley.setImages(images);
   /** Objet du lot 3 dans la liste triée par profondeur (sprite de l'atlas, ou repli dessiné : opts.img). */
   const pushVariety = (name, x, y, sortY, opts = {}) => {
     if (opts.img) {
@@ -976,8 +989,13 @@ export function createScene(canvas, images, level, opts = {}) {
     const slop = touch ? (TOUCH_SLOP_CSS * dpr) / zoom : 0;
     const cOpts = { feteMode: cozy.feteMode, minWorld: touch ? (48 * dpr) / zoom : 0 };
     if (cozy.feteMode) return cozy.hitTest(wx, wy, slop, cOpts); // (lot 4) mode fête : objets cachés seulement
+    // (Vallée) Mode aménagement : seuls les emplacements libres répondent (et le défilement).
+    if (valley.placing) return valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld });
     const a = actors.hitTest(wx, wy, slop);
     if (a) return a;
+    // (Vallée) Bête qui attend, trouvaille d'une haie, boîte en fer : cibles agrandies pour le doigt (≥ 48 px CSS).
+    const vlHit = valley.hitTest(wx, wy, 0, { minWorld: cOpts.minWorld });
+    if (vlHit) return vlHit;
     const cHit = cozy.hitTest(wx, wy, 0, { ...cOpts, minWorld: 0 }); // (lot 4) objets cachés, lisière, mangeoire…
     if (cHit) return cHit;
     const vHit = variety.hitTest(wx, wy, 0); // (lot 3) panneau, charrette, roulotte, visiteur du thème
@@ -989,7 +1007,7 @@ export function createScene(canvas, images, level, opts = {}) {
       const by = s0.bubble ? s0.bubble.y : s0.anchor.y - 30;
       if (wx >= bx - slop && wx < bx + 32 + slop && wy >= by - slop && wy < by + 32 + slop) return { type: 'shelter', buildingId: id };
     }
-    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) : null);
+    return layout.hitTestCareer(wx, wy, lastGame?.state || null, slop) || (slop > 0 ? cozy.hitTest(wx, wy, slop, cOpts) || variety.hitTest(wx, wy, slop) || valley.hitTest(wx, wy, slop, { minWorld: cOpts.minWorld }) : null);
   }
 
   /** (Carrière) Défile pour centrer un rectangle (px du monde) dans la partie visible (au-dessus de la feuille). */
@@ -1980,7 +1998,9 @@ export function createScene(canvas, images, level, opts = {}) {
       } else if (stage >= 2 && season !== 'winter') {
         dy += Math.sin(time * 1.3 + i * 0.9) > 0.8 ? -1 : 0;
       }
-      drawSprite(c, images, cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
+      // (Vallée) Variété ancienne : son propre dessin (heirloom.<id>.<étape>), sinon celui de la culture.
+      const hName = pv.variety?.id ? `heirloom.${pv.variety.id}.${stage}` : null;
+      drawSprite(c, images, hName && canDraw(images, hName) ? hName : cropSprite(pv.cropId, stage), r.x, r.y + dy * k - (k > 1 ? 2 : 0), sc);
       // Graine tout juste semée : une pousse bien lisible (forme), même sur une terre sombre.
       if (stage === 0) drawPixelMap(c, MARK_SPROUT, r.x + 5 * k, r.y + 7 * k, k);
       if (pv.mature) {
@@ -3510,6 +3530,17 @@ export function createScene(canvas, images, level, opts = {}) {
           mmSprite(c, 'icon.career.quest', p.x, p.y - icon * 0.4 - (pulse ? 1 : 0), icon);
         }
       }
+      // (Vallée) Mode aménagement : un point sur chaque terrain qui a un emplacement libre du genre choisi.
+      if (valley.placing) {
+        const pulse2 = Math.sin(time * 4) > 0;
+        const seen = new Set();
+        for (const s0 of valley.placingSpots()) {
+          if (seen.has(s0.lotId)) continue;
+          seen.add(s0.lotId);
+          const r = layout.valley?.spots?.[s0.spotId];
+          if (r) dot(map.toMap(r.x + r.w / 2, r.y + r.h / 2), pulse2 ? '#fff3b0' : '#8ee06a', Math.max(2, Math.round(cs / 10)));
+        }
+      }
       // Vue courante
       const v = visibleWorldRect();
       const a = map.toMap(v.x, v.y);
@@ -3861,6 +3892,7 @@ export function createScene(canvas, images, level, opts = {}) {
       lot2.clear();
       variety.clear();
       cozy.clear();
+      valley.clear();
       actors.reset();
       deferred.length = 0;
       clearing = null;
@@ -3897,6 +3929,7 @@ export function createScene(canvas, images, level, opts = {}) {
       lot2.shift(0, dy);
       variety.shift(0, dy);
       cozy.shift(0, dy);
+      valley.shift(0, dy);
     }
     computeCamera(keepY !== null ? keepY + dy : undefined, keepX !== null ? keepX : undefined);
     if (anim) scrollAnim = { ...anim, from: anim.from + dy * zoom, to: anim.to + dy * zoom, fromX: Math.round((anim.wX - xLo) * zoom), toX: Math.max(0, Math.min(maxScrollXDev, Math.round((anim.wToX - xLo) * zoom))) };
@@ -4001,6 +4034,7 @@ export function createScene(canvas, images, level, opts = {}) {
     actors.onEvent(type, payload, L);
     variety.onEvent(type, payload, L);
     cozy.onEvent(type, payload, L);
+    valley.onEvent(type, payload, L);
     effects.onEvent(type, payload, L);
   }
 
@@ -4051,6 +4085,7 @@ export function createScene(canvas, images, level, opts = {}) {
     lot2.sync(game, layout, { day: careerDay(game), dayProgress, career: true });
     variety.sync(game, layout, { time });
     cozy.sync(game, layout, { time });
+    valley.sync(game, layout, { time });
     initialized = true;
     flushDeferred();
 
@@ -4075,6 +4110,7 @@ export function createScene(canvas, images, level, opts = {}) {
     lot2.update(dt);
     variety.update(dt);
     cozy.update(dt);
+    valley.update(dt);
 
     const c = vctx;
     c.setTransform(1, 0, 0, 1, 0, 0);
@@ -4085,12 +4121,14 @@ export function createScene(canvas, images, level, opts = {}) {
     c.translate(ox, oy);
     drawWater();
     drawPlots(sheetsEnv, raining, season);
+    valley.drawGround(c, layout, fxState.view); // (Vallée) jachères, bandes fleuries, berges, indices
     drawGlass();
     effects.drawGround(c, images);
     drawClearing(season, sheetsEnv);
     collectCareer(owned, season, sheetsEnv);
     variety.collect(pushVariety);
     cozy.collect(pushVariety);
+    valley.collect(pushVariety);
     drawEntries();
     lot2.draw(c);
     effects.drawSmoke(c);
@@ -4101,6 +4139,7 @@ export function createScene(canvas, images, level, opts = {}) {
     drawCollectBubbles();
     drawPlotMarkers();
     cozy.drawOverlay(c, layout);
+    valley.drawOverlay(c, layout);
     effects.drawWorld(c);
     if (decorMode) drawDecorOverlay(season === 'winter' ? sheetsEnv : images);
     drawHover(owned);
@@ -4130,6 +4169,7 @@ export function createScene(canvas, images, level, opts = {}) {
     lot2.clear();
     variety.clear();
     cozy.clear();
+    valley.clear();
     userScrolled = false;
     stopFling();
     scrollAnim = null;
@@ -4164,6 +4204,7 @@ export function createScene(canvas, images, level, opts = {}) {
       lot2.setReducedMotion(reducedMotion);
       variety.setReducedMotion(reducedMotion);
       cozy.setReducedMotion(reducedMotion);
+      valley.setReducedMotion(reducedMotion);
     },
     get reducedMotion() {
       return reducedMotion;
@@ -4305,6 +4346,30 @@ export function createScene(canvas, images, level, opts = {}) {
     /** L'oiseau de la mangeoire chante (petit saut). */
     cozySing() {
       cozy.sing();
+    },
+    // ── (Vallée vivante, lot V1) ──
+    /** Étape de la vallée (0..5) : lisière fleurie, vols d'oiseaux, papillons l'été. */
+    setValleyStage(n) {
+      valley.setStage(n);
+    },
+    /** Mode aménagement : les emplacements libres du genre pulsent ; seuls eux répondent au toucher (null : fin). */
+    setValleyPlacing(kind) {
+      valley.setPlacing(kind || null);
+      if (kind) hover = null;
+    },
+    get valleyPlacing() {
+      return valley.placing;
+    },
+    /** Rectangle (px du monde) : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId). */
+    valleyItemRect(kind, id) {
+      return valley.itemRect(kind, id);
+    },
+    /** Repères de la Vallée de la disposition : { spots, box, animalAnchors } (px du monde), ou null. */
+    valleySpots() {
+      return careerMode ? layout.valley || null : null;
+    },
+    valleyStats() {
+      return valley.stats();
     },
     lot2Stats() {
       return { ...lot2.stats(), effects: effects.stats() };

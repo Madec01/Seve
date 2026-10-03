@@ -16,6 +16,7 @@ import { HAND_BONUS, HAND_BONUS_LEGACY } from '../../data/career/career.js';
 import { F1 } from '../../data/cozy.js';
 import { inGreenhouse, isMature } from '../farm.js';
 import { absDay } from '../surprises.js';
+import { survivesFrost } from './heirlooms.js';
 
 /** true si F1 est actif dans cette carrière. */
 export function helpersOn(state) {
@@ -52,7 +53,8 @@ function wouldFreezeTomorrow(state, p) {
   if (inGreenhouse(p)) return false;
   if (state.time.seasonIndex !== 2 || state.time.dayOfSeason !== state.career.seasonLength) return false;
   const crop = getCrop(p.cropId);
-  return !!crop && !isTreeCrop(crop) && !crop.frostHardy;
+  // (Vallée vivante) Une variété rustique passe le gel : elle attend le joueur comme les autres.
+  return !!crop && !isTreeCrop(crop) && !crop.frostHardy && !(state.career?.valley && survivesFrost(state, p));
 }
 
 /** Aubes passées depuis la maturité (0 le jour même ; ripeAt pas encore posé : 0). */

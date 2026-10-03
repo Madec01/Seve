@@ -141,6 +141,7 @@ export function createSceneInput(canvas, app) {
     app.audio.play('page', { volume: 0.7 });
     if (hit.type === 'plot') app.field.openPlotInfo(hit.index);
     else if (hit.type === 'investment') app.field.openInvestmentInfo(hit.id);
+    else if (app.valley?.onHit?.(hit)) return;
     else if (app.cozy?.onHit?.(hit)) return;
     else if (!app.variety?.onHit?.(hit)) app.careerUI?.onHit?.(hit, { long: true });
   }
@@ -148,6 +149,8 @@ export function createSceneInput(canvas, app) {
   /** Cibles propres à la carrière (terrains, abris, employés, corbeaux…) : src/ui/career/index.js. */
   function tapOther(hit) {
     if (!hit || hit.type === 'plot' || hit.type === 'investment') return false;
+    // (Vallée) Bête qui attend, trouvaille d'une haie, boîte en fer, emplacement du mode aménagement.
+    if (app.valley?.onHit?.(hit)) return true;
     // (Lot 4) Objets cachés des fêtes, trouvailles d'hiver, mangeoire, fenêtre de la veillée, porte-lanternes, stand.
     if (app.cozy?.onHit?.(hit)) return true;
     // (Lot 3) Tableau du village, charrette du marché, roulotte de Basile (les deux modes).

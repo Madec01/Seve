@@ -1770,6 +1770,8 @@ beauté 4 / 7 / 9 points ; prospérité inchangée (½ ★★, ★★, ★★★
 
 **Barèmes finaux de la carrière** *(réglés, 2026-10-03)* : variété 10 / 14 / 16 ; soin 65 / 74 / 80 % ; voisinage 9 / 16 / 19 ;
 beauté 8 / 13 / 15 ; prospérité 30 % / 65 % / 250 % (la croissance d'une jeune ferme est grande : la 4ᵉ lanterne reste rare).
+*(Vallée vivante, lot V1, 2026-10-03 : variété **11 / 16 / 18**, beauté **14 / 19 / 21** — aménagements nature + 1 chacun,
+6 au plus, paon-du-jour + 1 ; `docs/VALLEE.md` § 12.7.)*
 « Embellissement » (beauté, carrière) : un décor posé au coin d'un terrain acheté.
 
 Le « soin » de la carrière ne compte que les récoltes **à la main** : une ferme qui tourne seule a de belles récoltes,

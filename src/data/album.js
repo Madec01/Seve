@@ -14,9 +14,14 @@
 // Les icônes réutilisent les sprites existants (cultures, produits, animaux, météo, surprises, portraits) ; les
 // manquants sont dessinés par le paquet ART (planche lot4).
 
+import { SPECIES, VARIETIES } from './career/valley.js';
+
 export const ALBUM_VERSION = 1;
 
-/** Pages réservées au lot 5 (« La Vallée vivante ») : aucun état n'est créé à l'avance. */
+/**
+ * Pages réservées par le lot 4 à « La Vallée vivante » : remplies par le lot V1 (graines anciennes, habitants de la
+ * ferme). Les lots suivants de la Vallée ajoutent des pages NOUVELLES (jamais une case dans une page existante).
+ */
 export const RESERVED_PAGE_IDS = ['heirlooms', 'wildlife'];
 
 /** Tampons : ordre d'affichage et noms. */
@@ -222,7 +227,15 @@ const STORY_CASES = STORIES.map((s, k) => ({
   id: s.id, name: s.title, icon: 'icon.story', mode: 'dc', check: { type: 'story', n: k + 1 }, text: s.lines[0], hint: 'Un soir d\'hiver, chez Joseph.',
 }));
 
-/** Les 11 pages (124 cases). */
+// (Vallée vivante, lot V1) Graines anciennes (variété fixée) et habitants de la ferme (espèce installée) : carrière.
+const HEIRLOOM_CASES = VARIETIES.map((x) => ({
+  id: x.id, name: x.name, icon: x.icon, mode: 'career', check: { type: 'heirloomFixed', id: x.id }, text: x.anecdote, hint: 'Sauvez cette variété ancienne : 6 récoltes à la main.',
+}));
+const WILDLIFE_CASES = SPECIES.map((sp) => ({
+  id: sp.id, name: sp.name, icon: sp.icon, mode: 'career', check: { type: 'wildlifeInstalled', id: sp.id }, text: sp.anecdote, hint: 'Remplissez sa recette d\'habitat, puis allez le voir quand il vient.',
+}));
+
+/** Les 13 pages (148 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1). */
 export const ALBUM_PAGES = [
   { id: 'garden', name: 'Le potager', icon: 'album.page.garden', cases: GARDEN, reward: { ecus: 30, cosmeticId: 'scarecrow.flower' } },
   { id: 'homemade', name: 'Fait maison et basse-cour', icon: 'album.page.homemade', cases: HOMEMADE, reward: { ecus: 25, cosmeticId: 'jam.shelf' } },
@@ -235,7 +248,15 @@ export const ALBUM_PAGES = [
   { id: 'edge', name: 'La lisière en hiver', icon: 'album.page.edge', cases: EDGE, reward: { ecus: 20, cosmeticId: 'woodpile' } },
   { id: 'feeder', name: 'La mangeoire et la mare', icon: 'album.page.feeder', cases: FEEDER, reward: { ecus: 25, cosmeticId: 'heron.wood' } },
   { id: 'stories', name: 'Les veillées de Joseph', icon: 'album.page.stories', cases: STORY_CASES, reward: { ecus: 30, cosmeticId: 'rocking.chair' } },
+  { id: 'heirlooms', name: 'Graines anciennes', icon: 'album.page.heirlooms', cases: HEIRLOOM_CASES, reward: { ecus: 30, cosmeticId: 'seed.cabinet' } },
+  { id: 'wildlife', name: 'Les habitants de la ferme', icon: 'album.page.wildlife', cases: WILDLIFE_CASES, reward: { ecus: 30, cosmeticId: 'nestbox.painted' } },
 ];
+
+/**
+ * Pages de « L'album complet » : les 11 pages du lot 4 (les pages de la Vallée ne retirent jamais une récompense déjà
+ * prête : elles ont chacune la leur).
+ */
+export const ALBUM_COMPLETE_PAGES = ['garden', 'homemade', 'animals', 'sky', 'luck', 'village', 'years', 'fetes', 'edge', 'feeder', 'stories'];
 
 export const ALBUM_PAGES_BY_ID = Object.fromEntries(ALBUM_PAGES.map((p) => [p.id, p]));
 
@@ -254,7 +275,7 @@ export const ALBUM_EXTRA_REWARDS = [
   { id: 'years.stamps', pageId: 'years', name: 'La page des grandes années', stamps: ['fete', 'visitor'], ecus: 15, cosmeticId: null },
 ];
 
-/** Album complet (les 11 pages). */
+/** Album complet (les 11 pages du lot 4, ALBUM_COMPLETE_PAGES). */
 export const ALBUM_COMPLETE_REWARD = { id: 'complete', name: 'L\'album complet', ecus: 100, cosmeticId: 'herbarium' };
 
 /** Message du rattrapage (§ 17.1.4). */

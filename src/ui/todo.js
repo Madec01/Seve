@@ -246,6 +246,9 @@ export function createTodo(app) {
       add(it);
     }
 
+    // (Vallée vivante) Bête qui attend, chapitre de Joseph, bocaux, planche d'essai mûre, cueillette des haies.
+    if (career) for (const it of safe(() => app.valley?.todoItems?.(game), []) || []) add(it);
+
     if (career) {
       // Terrain à acheter (si l'argent suffit en gardant les charges de saison).
       const next = cq(game, 'nextLot', null);
@@ -413,7 +416,8 @@ export function createTodo(app) {
     if (app.hints?.active) return false;
     if (app.tutorial?.active && app.tutorial.stepId !== 'wait-winter') return false;
     if (app.decor?.active) return false;
-    if (app.cozy?.feteMode) return false; // (lot 4) mode fête : la barre de la chasse remplace les onglets
+    if (app.cozy?.feteMode) return false;
+    if (app.valley?.placing) return false; // (Vallée) mode aménagement : la barre remplace les onglets // (lot 4) mode fête : la barre de la chasse remplace les onglets
     if (document.body.classList.contains('is-rotated')) return false;
     return true;
   }

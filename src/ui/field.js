@@ -161,15 +161,18 @@ export function createField(app) {
         )
       : null;
 
+    // (Vallée vivante) « Graines anciennes » en tête, « Jachère fleurie » (carrière, Vallée commencée).
+    const valley = app.valley?.seedRows?.(crops, index, { close: () => close(false) }) || null;
     return el(
       'div.seed-picker',
+      valley,
       crops.length
         ? [
             el('div.seed-list', rows),
             everywhere,
             el('p.sheet-hint', `Une culture arrosée pousse ${waterEffect(game.level).faster}. Gain par jour = bénéfice ÷ jours de pousse.`),
           ]
-        : el('p.sheet-empty', `Rien ne se plante ${season(cal.seasonId, 'in')}.`),
+        : valley && (crops.heirlooms || []).length ? null : el('p.sheet-empty', `Rien ne se plante ${season(cal.seasonId, 'in')}.`),
     );
   }
 
@@ -284,6 +287,8 @@ export function createField(app) {
 
   function plotTitle(p) {
     if (!p.unlocked) return 'Parcelle en friche';
+    const vt = app.valley?.plotTitle?.(p);
+    if (vt) return vt;
     if (!p.cropId && p.forage) return p.forage.kind === 'ring' ? 'Cercle de fées' : 'Champignons à cueillir';
     if (!p.cropId) return 'Parcelle libre';
     if (p.giant) return `${p.cropName} ${agree(p.cropName, 1, 'géant')} !`;
@@ -295,7 +300,7 @@ export function createField(app) {
     const p = app.game?.query.plot(index);
     if (!p) return;
     if (!p.unlocked) return openUnlock(index, silent);
-    show('plot', { index }, { title: plotTitle(p), icon: p.cropId ? cropIcon(p.cropId, 'sprite--md') : icon('seed', 'md'), content: plotContent(index) }, silent);
+    show('plot', { index }, { title: plotTitle(p), icon: app.valley?.plotIcon?.(p) || (p.cropId ? cropIcon(p.cropId, 'sprite--md') : icon('seed', 'md')), content: plotContent(index) }, silent);
   }
 
   // ── Fiche d'un bâtiment ───────────────────────────────────────────────────────
@@ -370,7 +375,8 @@ export function createField(app) {
       if (verb) rows.push(el('div.tip-sub', `${verb} pour cueillir.`));
     } else if (!p.cropId) {
       if (!sheet) rows.push(el('div.tip-title', icon('seed', 'sm'), 'Parcelle libre'));
-      rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
+      if (!p.fallow) rows.push(el(sheet ? 'div' : 'div.tip-sub', sheet ? 'Rien ne pousse ici pour l\'instant.' : `${verb} pour semer.`));
+      valleyRows(rows, p);
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : évitez de replanter la même culture.'));
     } else if (p.kind === 'tree' && p.tree) {
       const t = p.tree;
@@ -394,6 +400,7 @@ export function createField(app) {
     } else if (p.mature) {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
+      valleyRows(rows, p);
       qualityRows(rows, p, sheet);
       careerRows(rows, p);
       claimRow(rows, p);
@@ -410,6 +417,7 @@ export function createField(app) {
             ? el('div.tip-ok', icon('water', 'xs'), 'Pousse sans arrosage (sauf en canicule)')
             : el('div.tip-note.warn', icon('water', 'xs'), game.state.weather.today === 'heatwave' ? ((game.level.dryHeatwaveGrowth ?? 0) > 0 ? 'Pas arrosée : pousse à peine (canicule) !' : 'Pas arrosée : ne poussera pas (canicule) !') : `Pas arrosée : pousse ${waterEffect(game.level).slower}`),
       );
+      valleyRows(rows, p);
       qualityRows(rows, p, sheet);
       claimRow(rows, p);
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
@@ -433,6 +441,12 @@ export function createField(app) {
     if (!c) return;
     const care = (ok, text) => el(`span.care${ok ? '.is-ok' : ''}`, `${ok ? '✓' : '·'} ${text}`);
     rows.push(el('div.tip-care', care(c.wateredEveryDay, 'arrosée chaque jour'), care(c.bees, 'ruche'), care(c.rotation, 'sol reposé')));
+  }
+
+  /** (Vallée vivante) Variété ancienne (planche d'essai, « À la main : + 2 graines (4 / 6) »), jachère, sol reposé. */
+  function valleyRows(rows, p) {
+    const n = app.valley?.plotRows?.(p);
+    if (n) rows.push(n);
   }
 
   /** (Lot 3) « À la récolte : → Lili (3 / 5) » : la récolte à la main part à une commande ou à la charrette. */
@@ -520,7 +534,8 @@ export function createField(app) {
     const p = g.query.plot(c.index);
     if (c.kind === 'seeds') {
       const free = g.query.plots().filter((q) => q.action === 'plant').length;
-      return JSON.stringify([p.cropId, p.unlocked, free, g.query.calendar().seasonId, g.query.plantableCrops(c.index).map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd, x.rare, x.seedsLeft, x.free, x.requested])]);
+      const pc = g.query.plantableCrops(c.index);
+      return JSON.stringify([p.cropId, p.unlocked, p.fallow, free, g.query.calendar().seasonId, pc.heirlooms || null, pc.fallow || null, pc.map((x) => [x.id, x.canAfford, x.sellPrice, x.marketMultiplier, x.willFreeze, x.fatigue, x.daysToMature, x.canAfford ? 0 : x.seedCost - g.state.money, x.product?.owned, x.tree?.harvestsBeforeYearEnd, x.rare, x.seedsLeft, x.free, x.requested])]);
     }
     if (c.kind === 'unlock') {
       const can = g.state.money >= (p.unlockCost ?? Infinity);
@@ -561,7 +576,7 @@ export function createField(app) {
       close(false);
       return;
     }
-    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'ordersRenewed', 'orderDone', 'orderRemoved', 'cartArrived', 'cartDeparted', 'merchantBought', 'cardPicked'].includes(ev.type) && !refreshQueued) {
+    if (['moneyChanged', 'dawn', 'seasonStart', 'planted', 'watered', 'harvested', 'plotUnlocked', 'frost', 'rot', 'purchased', 'processingStarted', 'productSold', 'processingSoldRaw', 'processingToggled', 'treeRemoved', 'ordersRenewed', 'orderDone', 'orderRemoved', 'cartArrived', 'cartDeparted', 'merchantBought', 'cardPicked', 'heirloomSown', 'heirloomHarvest', 'fallowSown', 'fallowEnded', 'jarOpened', 'fairHeirloomBought'].includes(ev.type) && !refreshQueued) {
       // Une aube émet plusieurs événements : une seule reconstruction par image.
       refreshQueued = true;
       requestAnimationFrame(() => {

@@ -834,6 +834,9 @@ export function createCozy(app) {
         ),
       );
     }
+    // (Vallée vivante) Étal « La grainothèque du pays » : un sachet ancien par an.
+    const vlFair = app.valley?.fairSection?.();
+    if (vlFair) parts.push(vlFair);
     if (bank.length) parts.push(el('section.cz-bank', el('h3.stats-title', czIcon(['icon.seedbank'], 'sprite--sm', '🥫'), 'Ma réserve de graines'), bank.map((b) => el('div.stats-line', el('span.stats-label', cropIcon(b.cropId, 'sprite--xs'), ` ${b.name}`), el('b.stats-value', plural(b.n, 'semis', 'semis'))))));
     // (La règle « vos semis prennent la réserve d'abord » est déjà dans les règles du cœur, en bas de la feuille.)
     if (app.careerUI?.open?.plan) {

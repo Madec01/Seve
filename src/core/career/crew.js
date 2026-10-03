@@ -13,6 +13,8 @@ import { MACHINES_BY_ID } from '../../data/career/machines.js';
 import { GARDENER_ACTIONS, MOODS, TRAITS_BY_ID, WORK } from '../../data/career/staff.js';
 import { daysLeftInSeason } from '../calendar.js';
 import { inGreenhouse, isMature, plotWateredRate } from '../farm.js';
+import { VARIETIES_BY_ID } from '../../data/career/valley.js';
+import { canHelpersSow, fixedSeedCost, planVariety, survivesFrost } from './heirlooms.js';
 
 export { DAY_SECONDS };
 
@@ -252,6 +254,26 @@ export function bestSafeCrop(api, plot) {
 }
 
 /**
+ * (Vallée vivante) Variété fixée que l'équipe ou le semoir sème : plan 'heirloom:<id>', ou 'same' quand la dernière
+ * récolte de la parcelle était une variété fixée. Graines gardées d'abord (gratuit), sinon prix × 1,25. → 'heirloom:<id>' | null
+ */
+function valleyChoice(api, p, want) {
+  const { state } = api;
+  let id = planVariety(want);
+  if (!id && want === 'same' && p.lastVariety && VARIETIES_BY_ID[p.lastVariety]?.cropId === p.lastHarvested) id = p.lastVariety;
+  if (!id || !canHelpersSow(state, id)) return null;
+  const crop = getCrop(VARIETIES_BY_ID[id].cropId);
+  if (!crop || isTreeCrop(crop)) return null;
+  if (!inGreenhouse(p) && !crop.seasons.includes(api.seasonId())) return null;
+  const hardy = survivesFrost(state, { ...p, variety: id });
+  if (!hardy && wouldFreeze(state, api.level, p, crop)) return null;
+  const seeds = state.career.valley.seeds[id] || 0;
+  const cost = seeds > 0 ? 0 : fixedSeedCost(api.seedCost(crop.id));
+  if (cost > state.money) return null;
+  return `heirloom:${id}`;
+}
+
+/**
  * Culture que le semoir ou un jardinier sème sur une parcelle vide, d'après le plan du terrain (§ 3.4) :
  *   null (« Rien ») → rien ; 'same' → la dernière culture récoltée sur la parcelle si elle se sème encore,
  *   sinon (parcelle neuve, changement de saison) la plus rentable de la saison ; un identifiant → cette
@@ -264,8 +286,17 @@ export function sowChoice(api, plotIndex) {
   if (!p || !p.unlocked || !p.env || p.env === 'orchard' || p.cropId) return null;
   const lot = api.lot(p.lot);
   if (!lot || !lot.plan) return null;
-  const want = lot.plan[api.seasonId()];
+  // (Vallée vivante) Jamais sur une jachère fleurie.
+  if (p.fallow !== undefined) return null;
+  let want = lot.plan[api.seasonId()];
   if (want === null || want === undefined) return null;
+  if (state.career.valley) {
+    const v = valleyChoice(api, p, want);
+    if (v) return v;
+    // Variété pas encore sauvée (ou pas semable aujourd'hui) : la culture ordinaire.
+    const planned = planVariety(want);
+    if (planned) want = VARIETIES_BY_ID[planned].cropId;
+  }
   const options = sowableCrops(api, p);
   let pick = null;
   if (want === 'same') pick = options.find((c) => c.id === p.lastHarvested) || null;

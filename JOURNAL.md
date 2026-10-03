@@ -1120,7 +1120,118 @@ textes ≥ 14 px, aucune erreur console. Captures `screens/pace-*.png`. Tests : 
 - Remarque : les messages (pleine largeur) passent devant les boutons + / − du zoom posés à droite (ils ne captent pas
   le toucher) ; à revoir avec le placement du zoom.
 
+### 2026-10-03 — Vallée vivante V1 : planche de sprites `valley1.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley1.py` (même méthode que `generate-lot4.py`) → `assets/sprites/valley1.png`
+  (16 × 19 tuiles, 155 sprites), bloc `// <valley1:auto>` d'`src/render/atlas.js` et `SHEETS.valley1` ; tous les noms du
+  tableau « Sprites » du contrat V1 (`docs/ARCHITECTURE.md`) existent (198 vérifiés sous Node), aucun nom ni aucune entrée
+  des autres planches touchés (le script refuse un heurt).
+- Variétés : icônes des 12, stade mûr `.4` et plant `.3` aux couleurs de la variété (cultures de base recolorées et
+  retouchées : côtes du cœur de bœuf, cloques du chou de Milan, courgettes rondes, vitelotte allongée, fraises des bois,
+  citrouille d'Étampes aplatie), étapes 0 à 2 et fané = alias de la culture de base (fin du bloc) ; citrouille géante
+  rouge vif ; pommes de Calville à poser sur `tree.apple.*`.
+- 12 habitants en 2 images (regard à gauche), 5 indices ; haies champêtres (autotuile verticale, 4 saisons, milieu qui se
+  raccorde), bandes fleuries répétables (2 variantes par saison), nichoirs, tas de bois, hôtel à insectes, roseaux, chêne
+  (plant, jeune, adulte × 4 saisons), jachères fleuries, fleurs de lisière, cueillette des haies, boîte en fer (fermée /
+  ouverte), étiquette, sachet, vignettes `story.box` et `valley.stage.0..5`, pictogrammes, vols d'oiseaux, papillon,
+  onglets d'album, 3 décors, 7 succès (+ `.locked`).
+- `tools/atlas-preview.html` : case « Vallée V1 seulement » (`?valley1=1`) et démonstration (haies et bandes raccordées,
+  étapes des variétés, pommes de Calville). `CREDITS.md` : ligne `valley1.png` (CC0, création originale).
+- Écart : pas de `heirloom.calvilleBlanc.<étape>` (le pommier garde `tree.apple.*` + le calque des pommes, comme le
+  contrat). Le paquet (`node tools/build.js`) reste à refaire au moment du commit.
+
 ### 2026-10-03 — Affichage : messages, zoom, mini-carte, barre du haut et titre des fenêtres
-- Les messages réservent la place des boutons de zoom et de la mini-carte : plus aucun recouvrement (droitier/gaucher, niveaux/carrière, 100/150 %).
-- Titre des fenêtres à ✕ (album à 150 % sur 360 px) : le ruban se décale, écart ≥ 12 px.
-- Carrière : la case du fermage rétrécit (le mot « couvert » s'efface d'abord) au lieu de recouvrir la météo ; mesure de la météo refaite quand l'argent change de longueur.
+
+Bugs corrigés (vérifiés au doigt, Pixel 7 et 360 × 740, texte 100 % et 150 %, droitier et gaucher, Niveaux et Carrière :
+16 combinaisons, rectangles mesurés sans aucun chevauchement, cibles ≥ 48 px, textes ≥ 14 px, aucune erreur console ;
+captures `screens/overlap-*.png`) :
+
+- **Messages devant les boutons + / − / 1:1 et la mini-carte** (remarque du travail précédent) : à 150 % sur 360 px,
+  les deux messages et la pastille « +N » couvraient les trois boutons du zoom, la mini-carte et ses boutons.
+  `src/ui/zoom.js` publie la hauteur occupée en bas par la colonne de zoom (comptée avec « 1:1 », pour que les messages
+  ne sautent pas quand on zoome) et la mini-carte (ou son bouton « Carte ») : `--float-reserve` + `body.has-float-ui`
+  (mesure à chaque changement d'état, au plus toutes les 250 ms sinon) ; `css/guidance.css` pose les messages juste
+  au-dessus (jamais sous la barre du haut). Même règle en droitier et en gaucher ; feuille ouverte, menu, grand écran :
+  inchangés.
+- **« 1:1 » en 13 px** → 14 px (0,875 rem).
+- **Titre de fenêtre contre le ✕** (« L'album de la ferme » à 150 % sur 360 px : 96 px de place dans le ruban pour 168,
+  le texte débordait sur le ✕ ; à 100 % : 6 px d'écart) : sur téléphone (≤ 439 px), le ruban d'une fenêtre fermable se
+  décale à gauche du ✕ et ses bouts passent à 32 px (échelle 1) ; un titre encore trop long serait coupé (…) dans le
+  ruban. Écart titre → ✕ mesuré : ≥ 12 px partout.
+- **Carrière : la case du fermage recouvrait l'icône de la météo** (argent à 5 chiffres, « couvert · 6 j ») : la colonne
+  de la météo était la seule à pouvoir rétrécir (`minmax(0, 1fr)`) alors que la case gardait 48 px minimum ; le fermage
+  débordait dessus (et en gaucher, la vitesse passée en tête décalait les colonnes). Grilles de la barre du haut
+  (Niveaux, Carrière, gaucher, vitesse en bas) : argent `max-content`, météo `minmax(48px, 1fr)`, fermage
+  `minmax(0, auto)`. `src/ui/hud.js` `fitRow()` (remplace `fitWeather`) : si la case du fermage est trop étroite, le mot
+  d'état s'efface (`is-tight` ; symbole ✓ / ! / ✗ et couleur restent), puis l'icône (`is-tighter`) ; rien n'est coupé.
+- **Météo « Ensol… » avec l'icône de demain hors de sa case** (360 px, 100 %) : la mesure se faisait avant que le
+  compteur d'argent ait fini de rouler (« 180 » → « 98 765 ») ; elle est refaite quand le compteur change de longueur et
+  au chargement de la police.
+
+- Remarque : en cours de vérification, avertissement console `ALBUM_COMPLETE_PAGES is not defined`
+  (`src/core/progression.js`) — travail en cours d'un autre paquet (Vallée), non touché ici.
+
+### 2026-10-03 — Vallée vivante V1 « La boîte en fer » : rendu et interface (paquet UI/RENDER)
+
+Contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V1 » ; ce qui a été fait et les choix : section
+« Vallée V1 — rendu et interface ». Aucun fichier du cœur, des données, des tests de logique ni des sprites modifié.
+
+- **Scène** (`src/render/valley-actors.js`, nouveau ; `layout-career.js`, `scene.js`, `cozy-actors.js`) : un emplacement
+  dessiné pour chacun des identifiants du cœur (`layout.valley`) — haies raccordées sur les colonnes de lisière de chaque
+  terrain (fleurs, vert, baies, givre selon la saison), bande fleurie au pied de la clôture des champs, nichoirs, tas de
+  bois, hôtels à insectes, nichoir à chouette sous le pignon du grenier, chêne qui grandit (jeune plant → jeune arbre →
+  chêne adulte), berges plantées autour de la mare ; jachères fleuries ; dessin propre des variétés anciennes
+  (`heirloom.<id>.<étape>`) et étiquette des planches d'essai ; boîte en fer sur le perron (ouverte quand un bocal ou un
+  chapitre attend) ; indice du matin au sol ; bête qui **attend** avec une étincelle et un « ? » (sans limite) ; habitants
+  du jour en promenade douce ; cueillette des haies ; lisière fleurie (étape 2 au printemps, 4 et 5 toute la belle saison),
+  vols d'oiseaux (0 à 5 par minute selon l'étape), papillons l'été dès l'étape 3 ; mode aménagement (emplacements libres
+  qui pulsent, seuls à répondre au doigt ; points sur la mini-carte). Replis dessinés si la planche `valley1` manque
+  (facultative au démarrage). Mouvements réduits : rien ne traverse, bêtes immobiles, fondus.
+- **Interface** (`src/ui/career/valley.js`, `css/valley.css`, nouveaux) : fiche « La Vallée » (vignette de l'étape,
+  signes de vie lus, le prochain indice avec son bouton, segments Graines · Habitants · Aménager, récits de Joseph),
+  fenêtre « La boîte en fer » au rang 2, bocaux, fiche d'une variété (barre « 4 / 7 récoltes à la main »), fenêtre
+  « Le hérisson s'installe ! », chapitres, mode aménagement (barre « Haie champêtre · 280 · Touchez un emplacement ·
+  Terminer », petite feuille de confirmation), section « Nature » de la fiche d'un terrain, lignes de la fiche de
+  parcelle, « Graines anciennes » et « Jachère fleurie » en tête de la feuille des graines (« Semer partout » jusqu'au
+  bout du stock), variétés sauvées dans le plan de culture, étal de la foire, bloc « La vallée cette année » du bilan,
+  carte « La Vallée » en tête du Carnet › Ferme, section du Carnet › Bilan, « La Vallée » dans le menu de pause,
+  7 succès sous leur titre dans la grange, pages d'album (onglets), lignes « À faire » (`vl-observe`, `vl-chapter`,
+  `vl-jar`, `vl-trial`, `vl-finds`), résumé du matin, messages classés (important : bête venue, variété sauvée, étape,
+  cueillette, geai ; info : planche d'essai semée), conseils « première fois », sons (`pop`, `chime`, `magic`, `reveal`,
+  `chirp`), écus et décor des étapes (`recordValleyStage`). Débogage : `__debug.valley.{…}`.
+- **Tests** : `tests/valley-render.test.js` (10 tests : un rectangle par identifiant, aucun chevauchement, cibles ≥ 48 px
+  CSS à tout zoom, tuiles par saison, chêne, lisière, oiseaux, toucher exclusif du mode aménagement, décors).
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : boîte de Joseph, semis
+  d'une variété depuis la feuille des graines puis 7 récoltes à la main jusqu'à « Sauvée ! », haie posée par le mode
+  aménagement, hérisson venu touché au doigt (fenêtre, album), étape 2 et son chapitre, album, zoom maximal (bête touchée
+  juste), zoom minimal, bocal, Carnet, fiche de terrain, plan de culture, menu de pause ; mouvements réduits ; aucune
+  erreur dans la console. Captures : `scratchpad/screens/valley1-ui-*.png`.
+- Ajustement : le nichoir de la maison est cherché à droite de l'allée du champ, pour laisser la mangeoire et le
+  porte-lanternes du lot 4 à leur place (test du lot 4 vert).
+- **Idées** : un « avant / après » de la vallée au bilan ; la bête qui attend pourrait faire un petit bruit quand la vue
+  passe près d'elle ; afficher la recette d'habitat directement dans la fiche d'un aménagement.
+
+### 2026-10-03 — Vallée vivante V1 « La boîte en fer » : paquet CORE
+
+- **Nouveaux fichiers** : `src/data/career/valley.js` (12 variétés, 7 traits, 8 aménagements et leurs emplacements, 12
+  habitants, étapes 0 à 5, cueillette des haies, étal de la foire, textes), `src/core/career/heirlooms.js` (lectures
+  pures : traits, services), `src/core/career/habitat.js` (emplacements, recettes, signes de vie, indice unique),
+  `src/core/career/valley.js` (extension `valley`, enregistrée après `cozy` ; état `state.career.valley`, flux `valley`).
+- **Règles** : boîte de Joseph à la première aube au rang 2 (3 variétés, première haie offerte) ; bocaux (dont ceux
+  déjà gardés aux lots 2 et 3), récolte à la main + 2 graines, variété sauvée à 7 récoltes à la main, puis l'équipe et le
+  semoir la sèment (plan `heirloom:<id>` ou « même culture ») sans jamais garder de graine ; jachère fleurie (sol reposé
+  + 10 / + 20 %) ; aménagements sur emplacements `<lotId>.<slot>` (prix croissants, réserve au réaménagement) ; bêtes
+  qui s'annoncent, viennent, puis **attendent qu'on les touche** sans limite de temps ; 12 services ; étapes et
+  chapitres ; cueillette des haies ; geai ; étal de la foire ; 2 pages d'album, 7 succès, 3 décors ; dépenses comptées à
+  100 % au patrimoine ; beauté des lanternes. Migration : les carrières existantes reçoivent la Vallée à la reprise.
+- **Fichiers partagés** (gardés par `state.career?.valley`) : `farm.js`, `surprises.js`, `cozy.js`, `game.js`,
+  `album.js`, `progression.js`, carrière `runtime/crew/land/save/events/animals/handwork/career/extensions.js`, données
+  `album/achievements/cosmetics/cozy.js`. Niveaux : parité 400 / 400, `node tools/simulate.js` identique octet pour octet.
+- **Simulation** : `tools/simulate-career.js --compare-valley` (+ `--valley`), robots du § 12.4 avec tirage propre.
+  Réglages et résultats : `docs/VALLEE.md` § 12.7 (tranquille + 3,0 % de revenu, 17 950 dépensés en 10 ans, Domaine
+  an 8 → 7, 12 + 12 à l'an 9 / 11, ferme laissée seule − 0,4 %). Non tenu : nouveautés 65 % des saisons (cible 80 %),
+  gestes + 0,3 par jour (cible + 0,5).
+- **Tests** : `tests/valley.test.js`, `valley-seeds`, `valley-habitat`, `valley-migration` (42 tests) ; tests existants
+  ajustés (album 13 pages, succès de carrière 24 dans la liste, décors de la Vallée).
+- Écarts au contrat : `docs/ARCHITECTURE.md`, « Écarts et précisions (livraison CORE V1) ».
+- Bug passager signalé par un autre paquet (`ALBUM_COMPLETE_PAGES is not defined`) : import ajouté juste après, corrigé.

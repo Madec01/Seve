@@ -13,11 +13,11 @@ import { nextDay } from './helpers.js';
 
 const NOW = 1_700_000_000_000;
 
-test('données : 11 pages, 124 cases, identifiants uniques, anecdotes ≤ 110 caractères, récompenses connues', () => {
-  assert.equal(ALBUM_PAGES.length, 11);
-  assert.equal(ALBUM_CASES.length, 124);
-  assert.deepEqual(ALBUM_PAGES.map((p) => p.cases.length), [15, 12, 11, 8, 13, 13, 9, 9, 9, 13, 12]);
-  assert.equal(new Set(ALBUM_CASES.map((c) => c.caseId)).size, 124);
+test('données : 13 pages (11 du lot 4 + 2 de la Vallée), 148 cases, identifiants uniques, anecdotes ≤ 110 caractères, récompenses connues', () => {
+  assert.equal(ALBUM_PAGES.length, 13);
+  assert.equal(ALBUM_CASES.length, 148);
+  assert.deepEqual(ALBUM_PAGES.map((p) => p.cases.length), [15, 12, 11, 8, 13, 13, 9, 9, 9, 13, 12, 12, 12]);
+  assert.equal(new Set(ALBUM_CASES.map((c) => c.caseId)).size, 148);
   for (const c of ALBUM_CASES) {
     assert.ok(['all', 'dc', 'career'].includes(c.mode), c.caseId);
     assert.ok(c.text.length <= 110, `${c.caseId} : anecdote trop longue (${c.text.length})`);
@@ -31,7 +31,7 @@ test('données : 11 pages, 124 cases, identifiants uniques, anecdotes ≤ 110 ca
   assert.ok(STORIES.every((s) => s.lines.length === 3));
   assert.equal(ALBUM_CASES.find((c) => c.caseId === 'garden.apple').stamps.join(), 'gold', 'le pommier n\'a pas de tampon géant');
   // 20 décors trouvés du lot 4 (14 de l'album, 6 des lanternes), sans prix.
-  const lot4 = COSMETICS.filter((c) => c.found && c.price === 0 && !['owl.carved', 'statue.small', 'lantern.peddler', 'weathervane.rooster', 'sign.magazine'].includes(c.id));
+  const lot4 = COSMETICS.filter((c) => c.found && c.price === 0 && !['owl.carved', 'statue.small', 'lantern.peddler', 'weathervane.rooster', 'sign.magazine', 'seed.cabinet', 'nestbox.painted', 'valley.linden'].includes(c.id));
   assert.equal(lot4.length, 20);
   assert.equal(COZY_ACHIEVEMENTS.length, 12);
   assert.equal(COZY_ACHIEVEMENTS.reduce((s, a) => s + a.reward.ecus, 0), 255);
@@ -128,10 +128,10 @@ test('pages, récompenses (écus et décor ajoutés à la progression renvoyée)
   assert.equal(P.albumPages(seen).find((pg) => pg.id === 'sky').cases.find((x) => x.id === 'storm').isNew, false);
   // Succès « Première page ».
   assert.ok(P.checkAchievements(c.progress, null).includes('albumPage'));
-  // Album complet : toutes les cases → les 11 pages, la récompense « complete » et le succès.
+  // Album complet : toutes les cases → les 13 pages ; la récompense « complete » (les 11 pages du lot 4) et le succès.
   const all = P.recordAlbum(P.defaultProgress(), { cases: ALBUM_CASES.map((x) => x.caseId), stamps: [] }, NOW).progress;
   const o = P.albumOverview(all);
-  assert.deepEqual([o.found, o.total, o.pagesDone, o.complete.ready], [124, 124, 11, true]);
+  assert.deepEqual([o.found, o.total, o.pagesDone, o.complete.ready], [148, 148, 13, true]);
   const done = P.claimAlbumReward(all, 'complete');
   assert.equal(done.rewards.cosmeticId, 'herbarium');
   assert.ok(P.checkAchievements(all, null).includes('albumComplete'));

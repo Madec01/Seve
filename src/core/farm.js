@@ -22,6 +22,7 @@ import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
 import { SKY } from '../data/surprises.js';
 import { posterFactor } from './variety-effects.js';
+import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, survivesFrost, winterGrowthOf } from './career/heirlooms.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -144,13 +145,19 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
     if (crop && isTreeCrop(crop)) {
       growTree(state, p, season, bonus);
     } else if (crop && !isMature(p)) {
+      // (Vallée vivante, carrière) Précoce, sol reposé (× vf) ; sobre (pousse sans arrosage) ; rustique l'hiver (× 0,5).
+      const valley = career && !!state.career?.valley;
+      const vf = valley ? growthFactorOf(state, p) : 1;
       if (career && inGreenhouse(p)) {
         // Serre : la météo n'y entre pas (pas de canicule) ; pousse du niveau de la serre.
-        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, false, level);
-        p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex));
+        const dry = valley ? heirloomDryGrowth(state, p, crop, false) : null;
+        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, false, level);
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus * greenhouseFactor(state, p, seasonIndex) * vf);
       } else {
-        const base = p.watered ? GROWTH.watered : dryGrowthOf(crop, heatwave, level);
-        p.growth = Math.min(crop.growDays, p.growth + base * bonus);
+        const dry = valley ? heirloomDryGrowth(state, p, crop, heatwave) : null;
+        const base = p.watered ? GROWTH.watered : dry ?? dryGrowthOf(crop, heatwave, level);
+        const winter = valley && season === 'winter' ? winterGrowthOf(state, p) : 1;
+        p.growth = Math.min(crop.growDays, p.growth + base * bonus * vf * winter);
       }
     }
     p.watered = false;
@@ -161,7 +168,8 @@ export function growPlots(state, seasonIndex, weatherId, level = null) {
 export function applyFrost(state) {
   const lost = [];
   state.plots.forEach((p, i) => {
-    if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p)) {
+    // (Vallée vivante, carrière) Une variété rustique passe le gel.
+    if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p) && !(state.career?.valley && survivesFrost(state, p))) {
       lost.push({ plotIndex: i, cropId: p.cropId });
       clearPlot(p);
     }
@@ -226,6 +234,9 @@ export function clearPlot(p) {
   if (p.ripeAt !== undefined) delete p.ripeAt;
   if (p.weeded !== undefined) delete p.weeded;
   if (p.weededBy !== undefined) delete p.weededBy;
+  // (Vallée vivante, carrière) variété et sol reposé : propres à la culture en place (lastVariety et jachère : gardés).
+  if (p.variety !== undefined) delete p.variety;
+  if (p.rested !== undefined) delete p.rested;
 }
 
 /** Facteur de rendement de la fatigue du sol pour une parcelle. */

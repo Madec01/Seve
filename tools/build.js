@@ -39,7 +39,7 @@ const KEEP_BUILDS = 5;
 // fichiers de travail (scripts de génération, licences, police source).
 const ASSET_EXCLUDED_DIRS = new Set(['assets/screenshots']);
 const ASSET_EXCLUDED_EXT = new Set(['.md', '.py', '.txt', '.pyc', '.map', '.log', '.ttf', '.otf', '.xcf', '.aseprite']);
-const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css'];
+const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css', 'css/valley.css'];
 const TEMPLATE = 'src/index.template.html';
 const LOADER = 'src/loader.js';
 const ENTRY = 'src/main.js';

@@ -643,6 +643,14 @@ export function createCareerLayout(level, opts = {}) {
   if (start.fence) decorSlots.push(decorSlot('field.corner', 'small', 3, start.y0 + 1));
   addSlot('pond', 4, H + 11, 'large', 2, 2, true);
 
+  // ── (Vallée vivante, lot V1) Emplacements des aménagements nature, boîte en fer, ancrages des bêtes ─────────
+  // Un rectangle (px) pour CHAQUE identifiant `<lotId>.<slot>` que le cœur peut renvoyer (NATURE_SPOTS) ; les tuiles
+  // de la bande de la maison et de la friche sont réservées avant le décor quand la Vallée existe (career.valley).
+  const valley = careerValleySpots({ bands, house, storage, free, H });
+  if (career.valley) {
+    for (const [, r] of Object.entries(valley.tiles)) if (r.reserve) mark(r);
+  }
+
   // ── Décor fixe (graine du niveau) ─────────────────────────────────────────────────
   const deco = [];
   const rnd = seededRandom(0xca7ee + (career.farmName ? [...String(career.farmName)].reduce((a, ch) => a + ch.charCodeAt(0), 0) : 0));
@@ -1097,6 +1105,7 @@ export function createCareerLayout(level, opts = {}) {
     conveyors,
     machineParking,
     collectors,
+    valley: { spots: valley.spots, box: valley.box, animalAnchors: valley.animalAnchors, reserved: !!career.valley },
     route,
     bandAt,
     lotRect(id) {
@@ -1104,6 +1113,74 @@ export function createCareerLayout(level, opts = {}) {
       return l ? { ...l.rect } : null;
     },
   };
+}
+
+/**
+ * (Vallée vivante) Emplacements nature d'une disposition de carrière (tuiles, puis px) : haies sur les colonnes de lisière
+ * du bloc (x 0 et x 13), bande fleurie au pied de la clôture du champ (à gauche du portail), nichoirs, tas, hôtels, chênes
+ * et berges sur des tuiles libres du gabarit de chaque type de terrain ; maison : nichoir et boîte en fer sur des tuiles
+ * libres proches de la façade (cherchées dans l'ordre), nichoir à chouette sous le pignon du grenier.
+ * → { spots: { [spotId]: { x, y, w, h, kind } } (px), box: rect (px), animalAnchors: { [spotId]: { x, y } } (px),
+ *     tiles: { [spotId | 'box']: rect (tuiles) + reserve } }
+ */
+export function careerValleySpots({ bands, house, storage, free, H }) {
+  const tiles = {};
+  const put = (id, kind, x, y, w = 1, h = 1, reserve = false) => {
+    tiles[id] = { x, y, w, h, kind, reserve };
+  };
+  const firstFree = (cands, fallback) => cands.find(([x, y]) => free(x, y)) || fallback;
+  for (const b of bands) {
+    if (!b || b.forSale) continue;
+    const { ox, y0, id } = b;
+    if (b.type === 'home') {
+      // À droite de l'allée du champ (x 7) : la gauche, au-dessus du toit, reste à la mangeoire et au porte-lanternes (lot 4).
+      const n = firstFree([[9, H + 2], [10, H + 1], [8, H + 2], [11, H + 2], [9, H + 1], [10, H + 3], [house.x + house.w + 2, H + 2], [6, H + 1]], [9, H + 1]);
+      put(`${id}.nest`, 'nestbox', n[0], n[1], 1, 1, true);
+      const sw = storage.w || 2;
+      put(`${id}.owl`, 'owlbox', storage.x + Math.floor((sw - 1) / 2), storage.y + 1, 1, 1);
+      const bx = firstFree([[house.x + house.w + 1, H + 5], [house.x + house.w, H + 5], [house.x + house.w + 2, H + 5], [house.x + house.w + 1, H + 4], [house.x + house.w + 2, H + 4], [house.x - 1, H + 5]].filter(([x, y]) => !(x === n[0] && y === n[1])), [6, H + 5]);
+      put('box', 'box', bx[0], bx[1], 1, 1, true);
+      continue;
+    }
+    // Haies : colonnes de lisière du bloc (le champ de départ, plus haut, a 12 lignes de clôture).
+    const hh = b.start ? 12 : 10;
+    put(`${id}.hedgeL`, 'hedge', ox, y0, 1, hh);
+    put(`${id}.hedgeR`, 'hedge', ox + 13, y0, 1, hh);
+    if (b.type === 'field') {
+      put(`${id}.strip`, 'strip', ox + 2, y0 + (b.start ? 11 : 9), 5, 1);
+      if (b.start) put(`${id}.hotel`, 'insectHotel', ox + 1, y0 + 9, 1, 2);
+    } else if (b.type === 'meadow' || b.type === 'yard') {
+      put(`${id}.nest`, 'nestbox', ox + 6, y0 + 1);
+      put(`${id}.pile`, 'woodpile', ox + 1, y0 + 1);
+      if (b.type === 'meadow') put(`${id}.tree`, 'loneTree', ox + 2, y0 + 5, 2, 2);
+    } else if (b.type === 'orchard') {
+      put(`${id}.nest`, 'nestbox', ox + 4, y0 + 3);
+      put(`${id}.pile`, 'woodpile', ox + 10, y0 + 7);
+      put(`${id}.hotel`, 'insectHotel', ox + 10, y0 + 1, 1, 2);
+    } else if (b.type === 'workshops') {
+      put(`${id}.hotel`, 'insectHotel', ox + 11, y0 + 1, 1, 2);
+    } else if (b.type === 'pond') {
+      put(`${id}.reeds`, 'reeds', ox + 3, y0 + 1, 8, 1);
+    } else if (b.type === 'wild') {
+      put(`${id}.pile`, 'woodpile', ox + 3, y0 + 7, 1, 1, true);
+      put(`${id}.tree`, 'loneTree', ox + 7, y0 + 3, 2, 2, true);
+    }
+  }
+  const spots = {};
+  const animalAnchors = {};
+  for (const [id, t] of Object.entries(tiles)) {
+    if (id === 'box') continue;
+    const r = { x: t.x * T, y: t.y * T, w: t.w * T, h: t.h * T, kind: t.kind };
+    spots[id] = r;
+    let a;
+    if (t.kind === 'hedge') a = { x: (/hedgeL$/.test(id) ? r.x + T + 6 : r.x - 6), y: r.y + Math.floor(t.h / 2) * T + 12 };
+    else if (t.kind === 'strip' || t.kind === 'reeds') a = { x: r.x + Math.floor(r.w / 2), y: r.y + T - 1 };
+    else if (t.kind === 'loneTree') a = { x: r.x + r.w + 4, y: r.y + r.h - 1 };
+    else a = { x: r.x + r.w + 6, y: r.y + r.h - 1 };
+    animalAnchors[id] = a;
+  }
+  const b = tiles.box;
+  return { spots, box: b ? { x: b.x * T, y: b.y * T, w: T, h: T } : null, animalAnchors, tiles };
 }
 
 function unionTiles(a, b) {

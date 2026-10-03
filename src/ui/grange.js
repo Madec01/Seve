@@ -259,7 +259,12 @@ export function createGrange(app) {
 
   function achievementsTab() {
     const list = P().achievementList(null);
-    const career = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
+    const careerAll = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
+    // (Vallée vivante) Les 7 succès de la Vallée, rangés sous leur propre titre.
+    const valleyIds = new Set((v3.achievements?.VALLEY_ACHIEVEMENTS || []).map((a) => a.id));
+    const career = careerAll.filter((a) => !valleyIds.has(a.id));
+    const valley = careerAll.filter((a) => valleyIds.has(a.id));
+    const vdone = valley.filter((a) => a.done).length;
     // (Lot 4) « Album et fêtes » : écus seulement.
     let cozy = [];
     try {
@@ -276,15 +281,17 @@ export function createGrange(app) {
       'div.grange-ach',
       el(
         'div.ach-head',
-        el('b.ach-score', `${done + cdone + zdone} / ${list.length + career.length + cozy.length}`),
+        el('b.ach-score', `${done + cdone + zdone + vdone} / ${list.length + career.length + cozy.length + valley.length}`),
         el('span', 'succès obtenus'),
-        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length + career.length + cozy.length ? Math.round(((done + cdone + zdone) / (list.length + career.length + cozy.length)) * 100) : 0}%` } })),
+        el('span.ach-headbar', el('span.ach-bar-fill', { style: { width: `${list.length + career.length + cozy.length + valley.length ? Math.round(((done + cdone + zdone + vdone) / (list.length + career.length + cozy.length + valley.length)) * 100) : 0}%` } })),
       ),
       el('h3.farm-sec-title.ach-sec', `Les niveaux · ${done} / ${list.length}`),
       el('div.ach-list', list.map(achievementRow)),
       career.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-career' }, `Ma ferme (carrière) · ${cdone} / ${career.length}`) : null,
       career.length ? el('p.sheet-hint', 'Les succès de la carrière rapportent des écus (pas d\'étoile).') : null,
       career.length ? el('div.ach-list', career.map(achievementRow)) : null,
+      valley.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-valley' }, `La Vallée · ${vdone} / ${valley.length}`) : null,
+      valley.length ? el('div.ach-list', valley.map(achievementRow)) : null,
       cozy.length ? el('h3.farm-sec-title.ach-sec', { id: 'ach-cozy' }, `Album et fêtes · ${zdone} / ${cozy.length}`) : null,
       cozy.length ? el('div.ach-list', cozy.map(achievementRow)) : null,
       archive.length

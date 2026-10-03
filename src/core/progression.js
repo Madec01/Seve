@@ -25,7 +25,7 @@
 //
 // Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
-import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, VALLEY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
 import { CAREER_ARCHIVE_MAX, CAREER_ECUS } from '../data/career/career.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
 import { getCrop } from '../data/crops.js';
@@ -33,7 +33,8 @@ import { LEVELS, getLevel } from '../data/levels.js';
 import { PERKS, PERK_TIERS, getPerk, perkMaxRank } from '../data/perks.js';
 import { getProduct } from '../data/products.js';
 import { DEFAULT_DIFFICULTY, isDifficulty } from '../data/difficulty.js';
-import { ALBUM_PAGES } from '../data/album.js';
+import { ALBUM_COMPLETE_PAGES, ALBUM_PAGES, ALBUM_PAGES_BY_ID } from '../data/album.js';
+import { STAGES as VALLEY_STAGES } from '../data/career/valley.js';
 import { BIRDS_BY_ID, LANTERN_CRITERIA, LANTERN_REWARDS } from '../data/cozy.js';
 import {
   albumClaimable, albumFacts, albumOverview, albumPages, albumRetro, checkAlbum, claimAlbumReward, defaultAlbum, markAlbumSeen, normalizeAlbum,
@@ -247,6 +248,8 @@ export function normalizeProgress(raw) {
     p.career.bestRank = Math.min(6, nonNegInt(c.bestRank));
     p.career.bestYear = nonNegInt(c.bestYear);
     p.career.years = nonNegInt(c.years);
+    // (Vallée vivante) Meilleure étape de la vallée (seulement quand il y en a une).
+    if (nonNegInt(c.valleyStage) > 0) p.career.valleyStage = Math.min(VALLEY_STAGES.length - 1, nonNegInt(c.valleyStage));
     if (Array.isArray(c.archive)) {
       p.career.archive = c.archive
         .filter((e) => isObj(e))
@@ -541,6 +544,13 @@ function evaluate(check, p, f) {
       const v = Math.max(ctx?.career?.yearNet ?? 0, ctx?.career?.bestYearNet ?? 0);
       return ctx?.career ? counter(Math.max(0, v), check.n) : { done: false, progress: null };
     }
+    // ── (Vallée vivante) ctx.career.valley ──
+    case 'careerValley': {
+      const v = ctx?.career?.valley;
+      if (!v) return { done: false, progress: null };
+      const val = { started: v.started ? 1 : 0, fixed: (v.fixed || []).length, installed: (v.installed || []).length, stage: v.stage || 0, hand: v.hand || 0 }[check.key] ?? 0;
+      return counter(val, check.n);
+    }
     // ── (lot 4) Album et fêtes (écus seulement) ──
     case 'albumPage': {
       const a = normalizeAlbum(p.album);
@@ -554,7 +564,7 @@ function evaluate(check, p, f) {
     }
     case 'albumComplete': {
       const a = normalizeAlbum(p.album);
-      return counter(ALBUM_PAGES.filter((pg) => pageDone(a, pg)).length, ALBUM_PAGES.length);
+      return counter(ALBUM_COMPLETE_PAGES.filter((id) => pageDone(a, ALBUM_PAGES_BY_ID[id])).length, ALBUM_COMPLETE_PAGES.length);
     }
     case 'lanternsYear':
       return counter(bestLanterns(p), check.n);
@@ -618,7 +628,8 @@ export function achievementList(p, ctx) {
  * achievementList + category: 'career'. ctx : game.query.achievementContext() d'une carrière, ou null.
  */
 export function careerAchievementList(p, ctx) {
-  return listOf(CAREER_ACHIEVEMENTS, p, ctx, true);
+  // (Vallée vivante) Les 7 succès de la Vallée sont dans la catégorie « Carrière », à la suite.
+  return listOf([...CAREER_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS], p, ctx, true);
 }
 
 /** (lot 4) Liste pour la catégorie « Album et fêtes » de la grange (écus seulement), même forme + category: 'cozy'. */
@@ -822,6 +833,28 @@ export function recordCareerEcus(p, amount) {
   const ecus = Math.max(0, Math.min(1000, Math.floor(Number(amount) || 0)));
   progress.ecus = (progress.ecus || 0) + ecus;
   return { progress, rewards: { ecus }, achievements: [] };
+}
+
+/**
+ * (Vallée vivante) Étape de la vallée atteinte (événement valleyStage) : décor de l'étape (étape 5 : « Le tilleul de la
+ * vallée ») débloqué, meilleure étape gardée. Les écus de l'étape passent par recordCareerEcus (comme feteDone) : ils ne
+ * sont PAS ajoutés ici. → { progress, rewards: { cosmeticId, already } }
+ */
+export function recordValleyStage(p, n) {
+  let progress = clone(p);
+  if (!progress.career) progress.career = defaultCareerProgress();
+  const k = Math.max(0, Math.min(VALLEY_STAGES.length - 1, Math.floor(Number(n) || 0)));
+  progress.career.valleyStage = Math.max(progress.career.valleyStage || 0, k);
+  const cosmeticId = VALLEY_STAGES[k]?.reward?.cosmeticId || null;
+  let already = false;
+  if (cosmeticId) {
+    const r = unlockCosmetic(progress, cosmeticId);
+    if (r.ok) {
+      progress = r.progress;
+      already = r.already;
+    }
+  }
+  return { progress, rewards: { cosmeticId, already } };
 }
 
 /**

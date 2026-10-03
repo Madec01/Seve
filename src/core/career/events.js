@@ -23,7 +23,8 @@ import {
 } from '../../data/career/events.js';
 import { buildingLevelData, getCareerInvestment } from './effects.js';
 import { itemMax, shelterCapacity, storageCapacity } from './buildings.js';
-import { careerFlag, registerCareerExtension } from './registry.js';
+import { careerFlag, providedSum, registerCareerExtension } from './registry.js';
+import { crowWeightFactor, fishFactor } from './heirlooms.js';
 import { isMature } from '../farm.js';
 import { stockUsed } from './storage.js';
 import { cheerStaff } from './staff.js';
@@ -450,7 +451,9 @@ function startEvent(api, id, ctx) {
     case 'tourists': {
       const a = attractiveness(state);
       // (lot 3) Boom touristique : + 50 % par passage.
-      active.data = { perPass: Math.round(TOURISTS.perPass * (1 + a) * themeTouristPass(state)), passes: TOURISTS.passes.length, done: 0, attractiveness: a };
+      // (Vallée vivante) Paon-du-jour installé : + 15 % par passage (fournisseur effects 'touristBonus').
+      const vt = state.career.valley ? 1 + providedSum('effects', state, 'touristBonus') : 1;
+      active.data = { perPass: Math.round(TOURISTS.perPass * (1 + a) * themeTouristPass(state) * vt), passes: TOURISTS.passes.length, done: 0, attractiveness: a };
       break;
     }
     case 'crows': {
@@ -826,7 +829,8 @@ function fish(api) {
   const rng = api.rng('events');
   const f = pickWeighted(rng, FISH, (x) => x.weight);
   // (lot 3) Canne de Firmin (année des grenouilles) : poissons + 50 %.
-  const amount = Math.round(rng.int(f.min, f.max) * themeFishFactor(state));
+  // (Vallée vivante) Libellules installées : poissons + 25 %.
+  const amount = Math.round(rng.int(f.min, f.max) * themeFishFactor(state) * (state.career.valley ? fishFactor(state) : 1));
   e.fishedDay = today;
   e.year.fish += 1;
   e.year.fishIncome += amount;
@@ -890,7 +894,8 @@ function dawnEvents(api, { seasonId, weather }) {
     if (rng.chance(state.variety ? RANDOM_EVENT_RULES.chanceWithVariety : RANDOM_EVENT_RULES.chance)) {
       const ctx = { seasonId, weather };
       const options = RANDOM_EVENTS.filter((d) => d.id !== e.lastKind && eventPossible(api, d.id, ctx));
-      const pick = pickWeighted(rng, options, (d) => d.weight * (state.variety ? themeEventWeight(state, d.id) : 1));
+      // (Vallée vivante) Chouette hulotte installée : corbeaux deux fois plus rares (même tirage).
+      const pick = pickWeighted(rng, options, (d) => d.weight * (state.variety ? themeEventWeight(state, d.id) : 1) * (d.id === 'crows' && state.career.valley ? crowWeightFactor(state) : 1));
       if (pick) startEvent(api, pick.id, ctx);
     }
   }

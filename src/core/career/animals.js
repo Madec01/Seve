@@ -19,7 +19,7 @@ import { MAX_ANIMALS } from '../../data/career/career.js';
 import { BUILDINGS_BY_ID, SHELTERS } from '../../data/career/buildings.js';
 import { CAREER_ANIMALS, CAREER_ANIMALS_BY_ID, COLLECT } from '../../data/career/animals.js';
 import { aboutFields } from '../../data/career/descriptions.js';
-import { registerCareerExtension } from './registry.js';
+import { providedSum, registerCareerExtension } from './registry.js';
 import { animalCount, shelterCapacity } from './buildings.js';
 import { absDay, addWorkStat, ensureWork, keeperBonus } from './crew.js';
 import { hayFactor } from '../variety-effects.js';
@@ -46,7 +46,9 @@ function dailyValue(state, shelterId, seasonId, units = null) {
   const per = a.truffles ? a.truffles.value * a.truffles.chance : a.income[seasonId] || 0;
   // (lot 3) Carte « Du foin parfumé » : production des abris + 15 % (pas les truffes).
   const hay = state.variety && !a.truffles ? hayFactor(state) : 1;
-  return n * per * (1 + keeperBonus(state, b.lotId)) * hay;
+  // (Vallée vivante) Hirondelles installées : + 5 % au printemps et en été (fournisseur effects 'animalBonus', pas les truffes).
+  const swallows = state.career.valley && !a.truffles ? 1 + providedSum('effects', state, 'animalBonus') : 1;
+  return n * per * (1 + keeperBonus(state, b.lotId)) * hay * swallows;
 }
 
 /**

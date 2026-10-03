@@ -22,7 +22,7 @@ import { v3 } from './v3.js';
 
 const STAMP_EMOJI = { gold: '★', giant: '◆', fete: '🎪', visitor: '✉', best: '🏅' };
 const STAMP_NAMES = { gold: 'Récolte dorée', giant: 'Légume géant', fete: 'Fête jouée', visitor: 'Visiteur accueilli', best: 'Le meilleur résultat' };
-const PAGE_EMOJI = { garden: '🥕', homemade: '🍯', animals: '🐔', sky: '⛅', luck: '🍀', village: '🏠', years: '📅', fetes: '🎏', edge: '🌿', feeder: '🐦', stories: '🕯' };
+const PAGE_EMOJI = { garden: '🥕', homemade: '🍯', animals: '🐔', sky: '⛅', luck: '🍀', village: '🏠', years: '📅', fetes: '🎏', edge: '🌿', feeder: '🐦', stories: '🕯', heirlooms: '🌱', wildlife: '🦔' };
 const SRC_NAMES = { levels: 'Les niveaux', career: 'Ma ferme', retro: 'avant l\'album' };
 
 const MOD = { album: null, data: null };

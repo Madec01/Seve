@@ -150,6 +150,7 @@ export const INCOME_LABELS = {
   cart: 'La charrette',
   fetes: 'Fêtes du village',
   winter: 'Trouvailles d\'hiver',
+  valley: 'La Vallée (cueillette)',
   other: 'Autres',
 };
 export const SPENT_LABELS = {
@@ -166,6 +167,7 @@ export const SPENT_LABELS = {
   animals: 'Animaux',
   items: 'Ruches et panneaux',
   water: 'Arrosage',
+  valley: 'La Vallée',
   other: 'Autres',
 };
 export const CHARGE_LABELS = {

@@ -40,12 +40,15 @@ export const LANTERN_RULES = {
     prosperity: [0.5, 1, 'stars3'],
   },
   career: {
-    variety: [10, 14, 16],
+    // (Vallée vivante, lot V1) Recalibrés avec la Vallée (règle du § 17.2.1, simulation 60 × 10 ans) : la beauté relevée
+    // des points nature (+ 6, + 1 paon-du-jour) ; la variété relevée des cultures en plus que sèment les graines anciennes.
+    variety: [11, 16, 18],
     care: [0.65, 0.74, 0.8],
     neighbours: [9, 16, 19],
-    beauty: [8, 13, 15],
+    beauty: [14, 19, 21],
     neighbourPoints: { order: 1, crate: 1, quest: 3, fete: 2, heart: 1, visitor: 2, story: 1 },
-    beautyPoints: { decor: 1, decorMax: 12, path: 1, fence: 1, hive: 1, hiveMax: 4, tree: 1, treeMax: 4, embellish: 2, giant: 1, feeder: 1, feederDays: 3, birds: 1, birdsN: 3, pet: 1 },
+    // (Vallée vivante) nature : + 1 par aménagement nature posé (natureMax au plus) ; butterfly : le paon-du-jour installé.
+    beautyPoints: { decor: 1, decorMax: 12, path: 1, fence: 1, hive: 1, hiveMax: 4, tree: 1, treeMax: 4, embellish: 2, giant: 1, feeder: 1, feederDays: 3, birds: 1, birdsN: 3, pet: 1, nature: 1, natureMax: 6, butterfly: 1 },
     prosperity: [0.3, 0.65, 2.5],
     prosperityFloor: 1000,
   },

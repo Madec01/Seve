@@ -65,6 +65,8 @@ function farmTab(ui) {
   const n = s.nextRank;
   const prevThreshold = 0;
   const parts = [
+    // (Vallée vivante) Carte « La Vallée » en tête du Carnet › Ferme.
+    ui.app.valley?.journalCard?.(ui) || null,
     el(
       'div.c-crest',
       el('span.c-crest-icon', rankIcon(s.rank, 'sprite--hero')),
@@ -231,6 +233,8 @@ function reportTab(ui) {
   // (Lot 4) Les lanternes : l'année en cours (aperçu), les années passées en petites colonnes, la meilleure.
   const lanterns = ui.app.cozy?.lanternSection?.(ui);
   if (lanterns) parts.push(lanterns);
+  const valley = ui.app.valley?.reportSection?.(ui);
+  if (valley) parts.push(valley);
   void game;
   return el('div.c-jreport', parts);
 }

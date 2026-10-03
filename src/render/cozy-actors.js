@@ -104,6 +104,12 @@ function occupancy(layout) {
     if (s.sign && Number.isFinite(s.sign.x)) mark({ x: s.sign.x, y: s.sign.y, w: 1, h: 1 });
   }
   for (const h of layout.hives || []) mark({ x: h.x, y: h.y, w: 1, h: 1 });
+  // (Vallée vivante) Emplacements nature et boîte en fer (seulement quand la Vallée existe : les autres fermes gardent
+  // leurs cachettes).
+  if (layout.valley?.reserved) {
+    for (const r of Object.values(layout.valley.spots || {})) markPx(r);
+    markPx(layout.valley.box);
+  }
   // Lot 3 : panneau du village, charrette et caisses, roulotte (repères calculés par variety-actors.js).
   try {
     const v = varietySpots(layout);

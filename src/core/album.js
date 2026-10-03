@@ -13,7 +13,7 @@
 // écus et décors des récompenses sont déjà ajoutés à la progression renvoyée (comme unlockAchievements).
 
 import {
-  ALBUM_CASES, ALBUM_CASES_BY_ID, ALBUM_COMPLETE_REWARD, ALBUM_EXTRA_REWARDS, ALBUM_MODE_NOTES, ALBUM_PAGES, ALBUM_PAGES_BY_ID, ALBUM_STAMPS,
+  ALBUM_CASES, ALBUM_CASES_BY_ID, ALBUM_COMPLETE_PAGES, ALBUM_COMPLETE_REWARD, ALBUM_EXTRA_REWARDS, ALBUM_MODE_NOTES, ALBUM_PAGES, ALBUM_PAGES_BY_ID, ALBUM_STAMPS,
   ALBUM_TEXTS, STORIES,
 } from '../data/album.js';
 import { COSMETICS, getCosmetic } from '../data/cosmetics.js';
@@ -66,7 +66,7 @@ function emptyFacts() {
     crops: S(), cropGold: S(), cropGiant: S(), products: S(), animalProducts: S(), animals: S(), pets: S(), weather: S(), special: S(),
     surprises: S(), finds: S(), forage: false, wish: false, clients: S(), merchantMet: false, themes: S(), themeFetes: S(), themeVisitors: S(),
     fetes: S(), feteBest: S(), comice: false, contest: false, cartFull: false, goldMedal: false, winterFinds: S(), traces: S(), birds: S(),
-    fish: S(), stories: 0,
+    fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(),
   };
 }
 
@@ -117,6 +117,9 @@ function addContext(f, ctx) {
     addAll(f.themeFetes, ctx.career?.themesPlayed);
     if ((ctx.career?.contestGoalsMet || 0) > 0 || ctx.career?.contestAll) f.comice = true;
     if ((ctx.career?.truffles || 0) > 0) f.animalProducts.add('truffle');
+    // (Vallée vivante) Variétés fixées, habitants installés.
+    addAll(f.heirloomsFixed, ctx.career?.valley?.fixed);
+    addAll(f.wildlifeInstalled, ctx.career?.valley?.installed);
   } else if (!ctx.cozy) {
     // Classique (rien de plus n'est exposé) : un poulailler à l'aube donne des œufs, une vache ou une chèvre du lait,
     // des moutons de la laine après la tonte du dernier jour de printemps.
@@ -252,6 +255,10 @@ export function caseDone(c, f) {
       return f.fish.has(ch.id);
     case 'story':
       return f.stories >= ch.n;
+    case 'heirloomFixed':
+      return f.heirloomsFixed.has(ch.id);
+    case 'wildlifeInstalled':
+      return f.wildlifeInstalled.has(ch.id);
     default:
       return false;
   }
@@ -314,6 +321,11 @@ export function recordAlbum(progress, found, now = Date.now(), src = 'levels') {
   return { progress: out, cases, stamps };
 }
 
+/** « L'album complet » : les 11 pages du lot 4 (ALBUM_COMPLETE_PAGES). */
+export function completeReady(a) {
+  return ALBUM_COMPLETE_PAGES.every((id) => pageDone(a, ALBUM_PAGES_BY_ID[id]));
+}
+
 /** Une page est-elle complète (toutes ses cases trouvées) ? */
 export function pageDone(a, page) {
   return page.cases.every((c) => !!a.found[`${page.id}.${c.id}`]);
@@ -373,7 +385,7 @@ export function albumOverview(progress) {
   const total = ALBUM_CASES.length;
   const found = ALBUM_CASES.filter((c) => a.found[c.caseId]).length;
   const pagesDone = ALBUM_PAGES.filter((p) => pageDone(a, p)).length;
-  const ready = pagesDone === ALBUM_PAGES.length;
+  const ready = completeReady(a);
   const claimable = albumClaimable(progress).length;
   return {
     found,
@@ -393,7 +405,7 @@ export function albumClaimable(progress) {
   const out = [];
   for (const p of ALBUM_PAGES) if (pageDone(a, p) && !a.claimed.includes(p.id)) out.push(p.id);
   for (const r of ALBUM_EXTRA_REWARDS) if (extraReady(a, r) && !a.claimed.includes(r.id)) out.push(r.id);
-  if (ALBUM_PAGES.every((p) => pageDone(a, p)) && !a.claimed.includes(ALBUM_COMPLETE_REWARD.id)) out.push(ALBUM_COMPLETE_REWARD.id);
+  if (completeReady(a) && !a.claimed.includes(ALBUM_COMPLETE_REWARD.id)) out.push(ALBUM_COMPLETE_REWARD.id);
   return out;
 }
 
@@ -419,7 +431,7 @@ export function claimAlbumReward(progress, rewardId) {
     ready = pageDone(a, page);
   } else if (rewardId === ALBUM_COMPLETE_REWARD.id) {
     def = ALBUM_COMPLETE_REWARD;
-    ready = ALBUM_PAGES.every((p) => pageDone(a, p));
+    ready = completeReady(a);
   } else {
     const r = ALBUM_EXTRA_REWARDS.find((x) => x.id === rewardId);
     if (r) {
@@ -486,6 +498,14 @@ export function contextFromSave(saved) {
       contestGoalsMet: c.contest?.result?.goalsMet?.length || 0,
       contestAll: (c.lifetime?.contestsWon || 0) > 0,
     };
+    // (Vallée vivante) Variétés fixées, habitants installés.
+    if (isObj(c.valley)) {
+      ctx.career.valley = {
+        fixed: Object.entries(c.valley.varieties || {}).filter(([, e]) => isObj(e) && e.fixedAt).map(([id]) => id),
+        installed: Object.entries(c.valley.species || {}).filter(([, e]) => isObj(e) && e.state === 'installed').map(([id]) => id),
+        stage: c.valley.stage || 0,
+      };
+    }
   }
   return ctx;
 }

@@ -3306,6 +3306,10 @@ src/ui/zoom.js       createZoomControls(app) → { frame(), changed(), root, sto
   `z-index` 18 ; à droite au-dessus de `--inset-bottom + --todo-h` ; `[data-minimap=shown|collapsed]` : à gauche de la
   mini-carte (et de son bouton « Cacher ») ; `html.left-handed` : à gauche ; grand écran : en bas à droite de la
   scène, à gauche du panneau ouvert. Cachés sous une feuille (téléphone), une fenêtre, une bulle, au menu.
+- **Place des messages** : `frame()` publie la hauteur occupée depuis le bas de l'écran par la colonne de zoom (comptée
+  avec « 1:1 », 3 × 48 + 2 × 4 px) et la mini-carte (cadre, boutons, ou bouton « Carte ») : `--float-reserve` sur
+  `<html>` et `body.has-float-ui` ; `#toasts` se pose au-dessus (`css/guidance.css`), plafonné sous la barre du haut.
+  Les messages ne recouvrent ni les boutons, ni la mini-carte, ni la ligne « À faire » (droitier comme gaucher).
 - **Mouvement réduit** (`reducedMotion` ou `html.reduced-motion`) : `setZoom` et la fin du pincement posent le zoom
   sans animation.
 - **Préférence** : `localStorage` `une-annee-a-la-ferme.zoom` = `{ levels?: r, career?: r }` (rapport au défaut ; absent =
@@ -3751,6 +3755,175 @@ et après le lot.
 - **V4 « Les cigognes »** : légendes (`LEGENDS`, 3ᵉ génération, melon de la mère de Joseph), visiteurs rarissimes, étape
   8, forêt de la carte en 4 états (RENDER), ambiance sonore en couches (sons CC0), « avant / après » au bilan (vignettes
   composées par RENDER), page `legends` ; aucun effet sur le revenu ; planche `valley4.png`.
+
+### Écarts et précisions (livraison CORE V1)
+
+Section tenue par le paquet CORE **pendant** la livraison (UI/RENDER et ART travaillent en parallèle) : tout ce qui
+précise ou s'écarte du contrat ci-dessus. Aucun nom ni forme du contrat n'est retiré ; seulement des champs **ajoutés**,
+sauf mention contraire. Chiffres réglés : `src/data/career/valley.js` et `docs/VALLEE.md` § 12.
+
+**Fichiers et enregistrement**
+- `src/core/career/valley.js` ne s'enregistre pas lui-même : `extensions.js` l'importe et l'enregistre **après** `cozy`
+  (comme `variety` et `cozy`). Exporte aussi `valleyHarvest`, `valleySow`, `heirloomSeedCost`, `valleyPlotExtras`,
+  `valleyPlantable`, `valleyAchievementContext`, `lotNature`, `careerValleyYear`, `enableCareerValley`, `checkValley`.
+- `src/core/career/heirlooms.js` : en plus du contrat, `valleyOf`, `valleyStarted`, `partOn`, `seasonAbs`,
+  `isFixed`, `speciesInstalled`, `stageOf`, `giantBonusOf`, `fixedSeedCost(prixDuJour)`, services lus par les modules
+  partagés (`winterFindsMax`, `winterCoinsFactor`, `crowWeightFactor`, `fishFactor`, `touristBonusOf`,
+  `animalBonusOf`, `growthBonusOf`). `priceFactorOf(state, plot)` prend l'état (contrat : `priceFactorOf(plot)`).
+  `seedCostOf` du contrat = `heirloomSeedCost(api, varietyId)` (valley.js : il lui faut le prix du jour de la culture).
+- `src/core/career/habitat.js` : en plus, `spotDef`, `whereText`, `spotLabel`, `ofLot`, `loneTreeStage`,
+  `reserveLotNature`, `fallowPlots`, `beePlotsGrowing`, `installedSpecies`, `fixedVarieties`, `natureBeauty`,
+  `seasonsText`, `inSeason`, `granaryBuilt`.
+- Fichiers partagés touchés en plus de la liste : `src/core/career/crew.js` (`sowChoice` : jamais sur une jachère ;
+  variété fixée → `'heirloom:<id>'`), `src/core/career/handwork.js` (une variété rustique ne « gèlerait » pas le dernier
+  jour d'automne), `src/core/game.js` (`game.valley`, lignes de `plantableCrops`, `achievementContext`).
+
+**Règles précisées**
+- **Semis** : `api.plant(i, 'heirloom:<id>', { by })` sème une variété (plan de culture, semoir, jardiniers) ; une
+  variété ancienne se sème **quel que soit le rang** de sa culture (la citrouille de la boîte au rang 2). Graines gardées
+  d'abord (gratuit, équipe comprise), sinon (fixée) prix de la culture × 1,25 (greffon : jeune plant × 1,25). Le semis
+  ne prend ni la réserve de la foire ni un semis offert.
+- **Récolte à la main après fixation** : ne rend **plus** de graine (une variété sauvée a des graines illimitées en
+  vente ; celles déjà gardées restent gratuites) mais compte toujours pour « Les mains dans les graines »
+  (`heirloomHarvest` n'est plus émis). L'équipe et les machines ne gardent **jamais** de graine. *(Lecture du § 3.4 :
+  « graines illimitées au prix × 1,25, les graines déjà gardées restent gratuites » ; sans cela, une variété sauvée
+  donnerait des semis gratuits à vie, contre la rareté voulue au § 12.3.)*
+- **Réglages de la simulation** (`src/data/career/valley.js`, détail : `docs/VALLEE.md` § 12.7) : fixation à **7**
+  récoltes à la main (`SEED_RULES.fixHand`) ; `ARRIVAL.hintChance` **0,2** : recette remplie et saison d'arrivée → 20 %
+  par aube que la bête s'annonce (le nombre de l'espèce, déjà tiré : aucun tirage de plus) ; recettes : bourdons 3 coins
+  fleuris, paon-du-jour **2** bandes fleuries, hirondelles + **2 nichoirs**, grenouille + **3** haies, lièvre + **4**
+  haies, écureuil + **5** haies, geai + **4** haies ; « cultures différentes » (paon-du-jour) : champs, serre **et
+  verger**, une variété ancienne comptant à part de sa culture. Lanternes (carrière) : variété 11 / 16 / 18, beauté
+  14 / 19 / 21.
+- **Rustique** : le « cours hors saison × 1,25 » d'hiver est déjà le `OFF_SEASON_FACTOR` de la carrière (le maïs ne se
+  sème pas l'hiver) : aucun facteur en plus.
+- **Sobre** : `query.plot(i)` d'une variété sobre (hors canicule) : `needsWater: false`, `action: null` au lieu de
+  `'water'`.
+- **Bocal du geai** : `cropId` choisi **sans tirage** à l'aube (première variété pas encore obtenue de la saison
+  suivante) ; l'ouverture tire comme les autres bocaux.
+- **Étal de la foire** : tiré au dernier jour d'hiver **même sans le lot 4** (fêtes désactivées) ; `fair.varietyId`
+  vaut `null` quand toutes les variétés sont chez vous ; l'achat est une dépense de la Vallée (patrimoine 100 %).
+- **Habitants** : avec `parts.wildlife === false`, aucun des 12 nombres n'est tiré. Une espèce passée à `hint` va
+  jusqu'à `visible` même si sa recette n'est plus remplie (jachère finie). `speciesSpot` peut renvoyer un emplacement
+  **libre** du terrain préféré (hirondelles près de l'abri, grenouille au bord de la mare) : RENDER a un ancrage pour
+  chaque identifiant de `valleySpots()`.
+- **Cueillette des haies** : effacée à l'aube du 1ᵉʳ jour d'hiver (dans `dawnEvents`, pas au soir).
+- **Beauté (lanternes)** : `beautyPoints.nature` 1 (`natureMax` 6) + `beautyPoints.butterfly` 1 (paon-du-jour).
+- **Album** : « L'album complet » reste les **11 pages du lot 4** (`ALBUM_COMPLETE_PAGES` ; succès « Album complet »
+  aussi) : les 2 pages de la Vallée ont leur propre récompense, rien de déjà prêt ne se perd. `albumOverview().pages`
+  = 13, `total` = 148.
+- **Succès** : `careerAchievementList` renvoie les 17 succès de carrière **puis** les 7 de la Vallée (24).
+- **Progression** : `recordValleyStage(progress, n)` → `{ progress, rewards: { cosmeticId, already } }` (décor de l'étape,
+  `progress.career.valleyStage` = meilleure étape) ; les écus de l'étape passent par `recordCareerEcus`.
+
+**Formes (champs ajoutés)**
+- `query.career.valley()` : `stage.total` (24), `nature.placed`, `fixed: [id]`, `installed: [id]` ; `hint.kind` peut
+  valoir `'chapter'` (ordre : bête à voir, chapitre, bocal, planche mûre, recette, graines, étape) ; `hint.target`
+  `{ type: 'nature', id: 'fallow' }` (jachère) ou `{ type: 'lot', id: null }` (il faut un terrain : mare, verger…).
+  `varietyInfo` : `tint`, `from`, `tree`, `unit` ('graine' | 'greffon') ; `name` d'une variété inconnue = le nom de la
+  culture (pas de révélation). `speciesInfo` : `seasonsText`, `recipeOk`, `hintIcon`. `natureInfo` : `bought` ; `locked`
+  n'est vrai que pour le rang, le grenier ou la mare (pas l'argent : `reason`). `fair` : `stall`, `bought`.
+- `query.career.valleySpots(kind)` : `label` (« Le Haut-Champ, côté gauche »), `stage` du chêne posé.
+- `query.career.valleyAnimals()` : `hintIcon` pour un indice.
+- `query.plot(i).variety` : `ripeIcon`, `tint`, `unit` ; `fallow.text` ; `query.plantableCrops(i)` : `heirlooms` et
+  `fallow` sont des **propriétés du tableau** renvoyé (pas copiées par `JSON.stringify`) ; lignes `icon`, `trial`, `tree` ;
+  `fallow.growth`.
+- `query.career.yearReport().valley` (et `report.valley`) : `{ started, stage, stageName, signs, year, installed, fixed,
+  natureTotal }`.
+- `query.achievementContext().career.valley` : `started` en plus.
+- Événements : `valleyStarted.hedgeLine` ; `heirloomHarvest.tree` ; `heirloomFixed.text` ; `heirloomSown.by` ;
+  `speciesHint.icon` ; `speciesVisible.name` ; `speciesInstalled.anecdote`, `.spotId` ; `hedgePicked.spotId` ;
+  `jayGift.text` ; `fairHeirloomBought.name` ; `harvest()` renvoie aussi `fixed`. Ordre à la récolte : `harvested`, puis
+  `heirloomHarvest`, puis `heirloomFixed`. `developLot` renvoie `natureReserved: [kind]` quand il y en a.
+- `triggerValley(kind, arg, arg2)` : `'seeds'` prend `(varietyId, n)` ; `'stage'` fixe des variétés puis installe des
+  habitants jusqu'au palier (l'étape reste cohérente avec les signes de vie).
+
+## Vallée V1 — rendu et interface (UI/RENDER, 2026-10-03)
+
+Code contre le contrat « Vallée vivante — contrats du lot V1 » et ses « Écarts et précisions (livraison CORE V1) ».
+Carrière seulement : tout est gardé par `state.career.valley` (et `started` pour la scène) ; en Niveaux, rien (seules
+les 2 pages d'album se voient dans la grange). Un sprite de `valley1` absent → repli dessiné (scène) ou emoji décoratif
+caché aux lecteurs d'écran (`vIcon`). Planche `valley1` facultative au démarrage (`OPTIONAL_SHEETS` de `main.js`).
+Styles : **`css/valley.css`** (dans `CSS_FILES`). Tests : `tests/valley-render.test.js`.
+
+```
+src/render/layout-career.js  careerValleySpots({ bands, house, storage, free, H }) (pur, exporté) →
+                             layout.valley = { spots: { [spotId]: { x, y, w, h, kind } }, box, animalAnchors, reserved }
+src/render/valley-actors.js  purs : oakStage, hedgeTileName, stripTileName, oakSpriteName, fallowSpriteName,
+                             edgeFlowersOn, birdsPerMinute, butterfliesOn, edgeTiles, findRect, growRect ;
+                             createValleyActors(effects) : sync, onEvent, update, drawGround, collect, drawOverlay,
+                             hitTest, itemRect, setStage, setPlacing, placingSpots, clear, shift, stats
+src/render/scene.js          setValleyStage(n), setValleyPlacing(kind | null), valleyPlacing, valleyItemRect(kind, id),
+                             valleySpots(), valleyStats() ; hitTest + wildlife | hedgeFind | valleyBox | natureSpot ;
+                             heirloom.<id>.<étape> pour une parcelle à variété ; points de la mini-carte en mode aménagement
+src/render/cozy-actors.js    occupation : emplacements et boîte de la Vallée (quand `layout.valley.reserved`)
+src/render/atlas.js          DECOR_SPRITES : seed.cabinet, nestbox.painted, valley.linden
+src/ui/career/valley.js      createValley(app) → app.valley (voir l'en-tête du fichier)
+src/main.js                  app.valley ; onGameEvent (carrière) → app.valley.onEvent ; frame, reset ; menu de pause
+                             « La Vallée » ; Échap quitte le mode aménagement ; __debug.valley
+src/ui/{field,gestures,todo,grange,album,cozy}.js, src/ui/career/{lots,journal,windows,util}.js   points d'accroche
+```
+
+- **Emplacements** (tuiles du bloc, `ox` = colonne du bloc, `y0` = sa première ligne) : haies `hedgeL` / `hedgeR` sur
+  les colonnes de lisière x 0 / x 13, lignes 0 à 9 (champ de départ : 12 lignes, toute la clôture) ; bande fleurie
+  (`strip`) au pied de la clôture du champ, x 2 à 6 (à gauche du portail, loin de la moissonneuse garée) ; champ de
+  départ : hôtel (1 × 2) en x 1, lignes 9-10 (sous les ruches) ; pré et basse-cour : tas en (1, 1), nichoir en (6, 1)
+  (entre les bâtiments) ; pré : chêne 2 × 2 « au milieu » de l'enclos de gauche (3 × 2 tuiles une fois adulte, la
+  couronne déborde vers le haut) ; verger : nichoir (4, 3), tas (10, 7), hôtel (10, 1) ; ateliers : hôtel (11, 1) ;
+  friche : tas (3, 7), chêne (7, 3) ; mare : berges = rangée du haut (3 à 10, ligne 1), roseaux dessinés aussi sur les
+  côtés ; maison : nichoir sur la première tuile libre à droite de l'allée du champ (la mangeoire et le porte-lanternes
+  du lot 4 restent à gauche, au-dessus du toit), nichoir à chouette sous le pignon du grenier (sur le bâtiment, par
+  conception), **boîte en fer** sur une tuile libre contre la façade, à droite de la maison. Les tuiles de la maison et
+  de la friche sont réservées avant le décor quand `career.valley` existe (`reserved`) : aucun arbre ne pousse dessus ;
+  les fermes sans Vallée gardent exactement leur décor.
+- **Ancrages des bêtes** : côté intérieur d'une haie (mi-hauteur), sur la bande ou la berge, à côté d'un nichoir, d'un
+  tas, d'un hôtel ou au pied du chêne ; plusieurs bêtes au même endroit se décalent. Habitant du jour : aller-retour de
+  ± 12 px avec des pauses (dessins regardant à gauche, retournés vers la droite) ; oiseaux et insectes un peu en l'air.
+- **Dessin** : au sol (après les parcelles) jachères (`nature.fallow.<saison>`), bandes, berges, indices du matin ;
+  triés avec la scène : haies (tuile par tuile), nichoirs, tas, hôtels, chênes, trouvailles, boîte, bêtes ; au-dessus :
+  lisière fleurie (`edgeTiles` : tuiles de forêt voisines du sol, une sur ~3, déterministe), étiquettes `valley.label`,
+  « ? » des bêtes qui attendent, cœurs à l'installation, emplacements du mode aménagement (contour pointillé épais + « + »,
+  remplissage clair qui pulse ; lisible sans la couleur), oiseaux (`fx.birds`), papillons (`fx.butterfly`). Pose d'un
+  aménagement : fondu de 0,9 s + étincelles + terre ; récolte à la main d'une variété : « +2 graines · 4/7 » ; variété
+  sauvée : gerbe dorée « Sauvée ! ». Seul ce qui est près de la vue est dessiné.
+- **Toucher** (au zoom courant, `screenToWorld`) : en carrière, après les personnages, la bête qui attend, la trouvaille
+  et la boîte sont cherchées avec leur cible agrandie (`minWorld = 48 × dpr / zoom`) **avant** les parcelles et les
+  enclos (une bête au bord d'un enclos reste touchable) ; mode aménagement : seuls les emplacements libres du genre choisi
+  répondent (le défilement, le pincement et les boutons + / − restent).
+- **Fiche « La Vallée »** (`openLive`, feuille haute, pause de lecture) : vignette `valley.stage.<n>` × 3 (× 2 sur petit
+  écran), « Étape n · nom », rangée de signes de vie lue (« 6 signes de vie sur 11 »), le prochain indice (un seul,
+  bouton : Aller voir · Écouter Joseph · Ouvrir · Voir · Semer · Aménager · Jachère · La carte), segments ; Graines :
+  bocaux à ouvrir, étal de la foire (dernier jour d'hiver), une ligne ≥ 72 px par variété (silhouette grise et « À
+  retrouver… », barre de fixation à segments lue, « Sauvée ✓ ») → fiche de la variété (grand dessin, anecdote, trait
+  expliqué, « Semer » vers la première parcelle libre qui convient) ; Habitants : recette en lignes cochées (✓ / ✗ et
+  « 1 / 2 »), saison, état (indice, « Vous attend près de… » + Aller voir, « Installé ✓ — service ») et « Ce que la
+  vallée vous rend » ; Aménager : une carte par aménagement (prix ou « gratuit (à replacer) », emplacements libres,
+  verrou « Rang 3 »…) → mode aménagement, et la jachère fleurie ; en bas, les récits de Joseph (relire).
+- **Fenêtres** : « La boîte en fer » (file d'attente : s'ouvre quand aucune fenêtre, feuille, conseil, tutoriel, mode
+  fête ou décoration n'est affiché ; trois lignes qui apparaissent, les trois variétés, la haie de Joseph ; « Merci,
+  Joseph » lit le chapitre 0 et montre la boîte du perron par un conseil) ; bocal (étiquette à demi effacée →
+  « Ouvrir le bocal » → la variété, son trait, ses graines → Semer / Bocal suivant / Plus tard) ; observation (feuille
+  basse, la bête recentrée au-dessus : « Le hérisson s'installe ! », anecdote, service, « ✓ Album », « Bienvenue, petit
+  hérisson ! » ≥ 56 px ; accords : les coccinelles s'installent…) ; chapitre (vignette de l'étape, trois lignes,
+  bienfait de l'étape, « Merci, Joseph »).
+- **Étapes** : `valleyStage` → écus (`careerEcus`), `recordValleyStage` (décor de l'étape 5), `scene.setValleyStage`,
+  message important « La vallée : … » avec « Écouter », note du matin, conseil `valley.stage`. L'étape de la scène suit
+  aussi l'état à chaque image (reprise d'une partie).
+- **Messages** : importants — bête venue (« Voir » ; retiré quand elle s'installe), variété sauvée (« Voir »), étape,
+  aménagements à replacer, geai, cueillette ramassée, sachet de la foire ; infos — planche d'essai semée (« il reste 2
+  graines »). Résumé du matin : indices (`speciesHint.text`), « Hier : 4 graines anciennes gardées », sol reposé,
+  cueillette des haies, boîte de Joseph.
+- **Fiches existantes** : parcelle (titre « Navet Boule d'or mûre », « Variété ancienne (planche d'essai) », trait en
+  pictogramme et en mot, « À la main : + 2 graines » + barre ; jachère : `fallow.text` ; sol reposé) ; feuille des
+  graines (section « Graines anciennes » en tête, badge « Planche d'essai : récoltez-la à la main », raison quand on ne
+  peut pas semer ; « Jachère fleurie (gratuit) » ; « Semer partout » sème la variété jusqu'au bout du stock — ou de
+  l'argent, une fois sauvée — puis s'arrête) ; terrain (section « Nature » : chaque emplacement, ✓ ou « Planter ·
+  280 ») ; plan de culture (rubrique « Variétés sauvées », valeur `heirloom:<id>`, libellé dans la fiche du terrain) ;
+  bilan annuel (« La vallée cette année ») ; Carnet › Ferme (carte « La Vallée », pastille quand quelque chose attend) ;
+  Carnet › Bilan (cumul, dépenses au patrimoine) ; grange › Succès (« La Vallée · n / 7 ») ; postes `valley` du bilan.
+- **Débogage** (`?debug=1`) : `__debug.valley.{ on(), state(), start(), jar(cropId), seeds(id, n), fix(id), visible(id),
+  install(id), stage(n), finds(), fair(), tree(spotId), place(kind, spotId?), open(tab), placing(kind | null),
+  point(kind, id), ui(), stats() }`.
 
 ## Rythme, personnages et messages (2026-10-03)
 

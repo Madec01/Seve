@@ -70,6 +70,7 @@ import { createLot2 } from './ui/lot2.js';
 import { createVariety } from './ui/variety.js';
 import { createCozy } from './ui/cozy.js';
 import { createAlbum } from './ui/album.js';
+import { createValley } from './ui/career/valley.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -151,6 +152,9 @@ app.variety = createVariety(app);
 app.storage = storage;
 app.album = createAlbum(app);
 app.cozy = createCozy(app);
+// La Vallée vivante, lot V1 « La boîte en fer » (carrière seulement : rien sans state.career.valley) : fiche « La Vallée »,
+// mode aménagement, boîte de Joseph, bocaux, observation des bêtes, lignes des fiches existantes (src/ui/career/valley.js).
+app.valley = createValley(app);
 
 applyDisplaySettings();
 
@@ -399,6 +403,11 @@ function addPauseGuidance(node) {
     const n = app.album.badge();
     const album = app.dialogs.btn([el('span', 'L\'album'), n ? el('span.pause-count', ` (${n} nouveauté${n > 1 ? 's' : ''})`) : null], () => app.album.open(), 'btn--big', { id: 'pause-album' });
     guide.after(album);
+  }
+  // (Vallée vivante) La fiche « La Vallée » (carrière, une fois commencée).
+  if (app.valley?.started?.() && !list.querySelector('#pause-valley')) {
+    const vb = app.dialogs.btn('La Vallée', () => { app.dialogs.closeTop(); app.valley.open(); }, 'btn--big', { id: 'pause-valley' });
+    (list.querySelector('#pause-album') || guide).after(vb);
   }
 }
 
@@ -868,7 +877,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
-    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall'].includes(hit?.type)) pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -910,6 +919,7 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.valley.placing) return app.valley.leavePlacing(); // (Vallée) fin du mode aménagement
     if (!app.inMenu && app.game) app.openPauseMenu();
     return;
   }
@@ -991,6 +1001,13 @@ function onGameEvent(ev, game) {
       app.cozy.onEvent(ev, game);
     } catch (err) {
       console.warn('Lot 4 (événement) :', err);
+    }
+    if (career) {
+      try {
+        app.valley.onEvent(ev, game);
+      } catch (err) {
+        console.warn('Vallée (événement) :', err);
+      }
     }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
@@ -1554,6 +1571,7 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.lot2.reset(game);
   app.variety.reset(game);
   app.cozy.reset(game);
+  app.valley.reset(game);
   app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
@@ -1704,6 +1722,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.lot2.reset(null);
   app.variety.reset(null);
   app.cozy.reset(null);
+  app.valley.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1930,6 +1949,7 @@ function frame(t) {
   app.lot2.frame();
   app.variety.frame();
   app.cozy.frame();
+  app.valley.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1940,7 +1960,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2539,7 +2559,52 @@ if (DEBUG) {
   };
 }
 
-if (DEBUG) window.__debug.lot3 = window.__debug.variety;
+if (DEBUG) {
+  /**
+   * (Vallée vivante, lot V1) Aides de vérification : chaque situation passe par l'action de débogage du cœur
+   * (actions.career.triggerValley) ou par les actions publiques ; les fenêtres en attente s'ouvrent ensuite.
+   */
+  const VL = () => app.game?.actions?.career;
+  const vlTrigger = (kind, arg, arg2) => {
+    const fn = VL()?.triggerValley;
+    if (typeof fn !== 'function') return { ok: false, reason: 'triggerValley indisponible' };
+    const r = fn(kind, arg, arg2);
+    processPending();
+    app.careerUI?.refresh?.();
+    return r;
+  };
+  window.__debug.valley = {
+    on: () => !!app.game?.state?.career?.valley,
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    start: () => vlTrigger('start'),
+    jar: (cropId = 'carrot') => vlTrigger('jar', cropId),
+    seeds: (id, n = 3) => vlTrigger('seeds', id, n),
+    fix: (id) => vlTrigger('fix', id),
+    visible: (id) => vlTrigger('visible', id),
+    install: (id) => vlTrigger('install', id),
+    stage: (n) => vlTrigger('stage', n),
+    finds: () => vlTrigger('finds'),
+    fair: () => vlTrigger('fair'),
+    tree: (spotId) => vlTrigger('tree', spotId),
+    /** Pose un aménagement : premier emplacement libre du genre (vraie action du joueur). */
+    place(kind, spotId = null) {
+      const g = app.game;
+      const sid = spotId || (g?.query.career.valleySpots?.(kind) || []).find((s) => s.free)?.spotId;
+      if (!sid) return { ok: false, reason: 'aucun emplacement libre' };
+      return g.actions.career.placeNature(sid, kind);
+    },
+    open: (tab) => app.valley.open(tab),
+    placing: (kind) => (kind ? app.valley.enterPlacing(kind) : (app.valley.leavePlacing(), false)),
+    /** Point (px de la page) d'une cible : 'wildlife' (id) | 'hedgeFind' (id) | 'valleyBox' | 'natureSpot' (spotId). */
+    point(kind, id) {
+      const r = app.scene?.valleyItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    ui: () => app.valley.debugState(),
+    stats: () => app.scene?.valleyStats?.() || null,
+  };
+  window.__debug.lot3 = window.__debug.variety;
+}
 if (DEBUG) window.__debug.lot4 = window.__debug.cozy;
 
 // Application installable : service worker (hors ligne, mises à jour), invitation à installer.

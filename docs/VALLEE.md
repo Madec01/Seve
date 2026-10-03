@@ -182,8 +182,8 @@ le navet et la courgette, les moins chères ; § 12.3 le vérifie).
 | Semer une graine ancienne (avant fixation) | consomme 1 graine, **gratuit** ; parcelle de champ ou de serre (pommier : parcelle de verger) ; saisons de la culture (serre : toutes) |
 | Récolte **à la main** d'une variété | la récolte est vendue normalement (trait compris) **+ 2 graines** de la variété, et **+ 1** vers la fixation |
 | Récolte par l'équipe ou une machine | vendue normalement (trait compris), **sans graine** et sans compter pour la fixation (F1 : elles n'y touchent qu'après 3 à 4 aubes d'attente) |
-| **Fixée** | après **6 récoltes à la main** (cumulées, de n'importe quelle parcelle) ; message « La tomate Cœur de bœuf est sauvée ! » |
-| Après fixation | graines **illimitées** au prix de la graine de la culture **× 1,25** (les graines déjà gardées restent gratuites) ; la variété entre dans le plan de culture et la feuille des graines ; l'équipe et le semoir peuvent la semer |
+| **Fixée** | après **6 récoltes à la main** (cumulées, de n'importe quelle parcelle) ; message « La tomate Cœur de bœuf est sauvée ! » — *réglé à **7** (§ 12.7)* |
+| Après fixation | graines **illimitées** au prix de la graine de la culture **× 1,25** (les graines déjà gardées restent gratuites ; la récolte à la main n'en rend plus) ; la variété entre dans le plan de culture et la feuille des graines ; l'équipe et le semoir peuvent la semer |
 | Pommier Calville | un « greffon » (jeune plant) au lieu de graines : **+ 1 greffon** par panier cueilli à la main ; fixé après **6 paniers** |
 | Légume géant d'une variété, récolté à la main | chaque parcelle compte comme une récolte à la main (+ 2 graines, + 1 vers la fixation) |
 | Variété ancienne et grenier | une récolte de variété ancienne **ne va jamais au grenier** (elle est vendue tout de suite, ou part à l'atelier, à une commande, à la quête) : son trait ne se perd pas dans le stock |
@@ -276,6 +276,12 @@ comptent que des choses **positives** (jamais « pas de machine » ni « moins d
 | `squirrel` | Écureuil roux | 1 verger + 2 haies | automne, hiver | trouvailles d'hiver : pièces **× 2** | dans le verger |
 | `jay` | Geai des chênes | un chêne isolé adulte + 1 haie | automne | chaque automne, il « oublie » **un bocal de graines anciennes** (§ 3.5) | au pied du chêne |
 
+*Recettes réglées par la simulation (§ 12.7, `src/data/career/valley.js` fait foi)* : bourdons **3** coins fleuris ;
+paon-du-jour **2** bandes fleuries (+ friche ou jachère + 4 cultures différentes, verger et variétés anciennes comptant
+chacune à part) ; hirondelles + **2 nichoirs** (le nichoir sert enfin à une recette) ; grenouille la mare + **3** haies ;
+lièvre friche ou jachère + **4** haies ; écureuil le verger + **5** haies ; geai le chêne adulte + **4** haies. Les autres
+recettes sont celles du tableau.
+
 Indices (la veille de la venue) et anecdotes :
 
 | Espèce | Indice | Anecdote |
@@ -300,6 +306,7 @@ rappelle (« Vous l'avez déjà vu à la mangeoire »).
 
 1. **Recette remplie** et saison d'arrivée → à l'aube, **indice** (message du matin, petite trace dessinée à
    l'emplacement : empreintes, plume, coquilles). Une seule nouvelle venue annoncée par aube (la première de la liste).
+   *Réglé : 20 % de chances par aube que la bête s'annonce (§ 12.7).*
 2. Les aubes suivantes, **50 %** de chances que la bête soit **là** (au plus tard la 3ᵉ aube) : elle se montre à son
    emplacement, avec une petite étincelle « ? », et **reste là jusqu'à ce qu'on vienne la voir** (aucune limite de temps,
    même si la saison change).
@@ -667,6 +674,57 @@ rythme des rangs.
 | Tout restauré | — | — | an 16 à 20 (appliqué : an 11 à 14) | idem |
 
 ---
+
+### 12.7 Résultats et réglages (livraison CORE V1, 2026-10-03)
+
+Mesures : `node tools/simulate-career.js --compare-valley --runs 60 --years 10` (Détente, saisons de 7 jours, sans → avec,
+même graine ; robots du § 12.4 avec leur tirage propre) ; `--years 14 --runs 30` pour la traîne ; `--difficulty
+classique` pour les faillites ; `--lanterns` pour la beauté. Le simulateur des niveaux (`node tools/simulate.js`) donne
+une sortie **identique octet pour octet** à celle d'avant la Vallée ; parité `node tools/capture-parity.js --check` :
+400 / 400.
+
+**Réglages** (dans l'ordre des leviers du § 12.5 ; `src/data/career/valley.js` fait foi) :
+
+| Réglage | Départ | Réglé | Pourquoi |
+|---|---|---|---|
+| Récoltes à la main pour fixer | 6 | **7** | 12 variétés à l'an 8 → an 9 ; à 8, le débutant n'en avait plus 4 à l'an 8 |
+| Graines après fixation | (non dit) | **aucune** | lecture du § 3.4 ; sinon semis gratuits à vie (rareté du § 12.3) |
+| Venue : chance qu'une bête s'annonce, recette remplie | 100 % à l'aube | **20 % par aube** | étale les venues (même nombre tiré qu'avant) |
+| Recettes tardives | — | bourdons 3 coins fleuris ; paon-du-jour 2 bandes ; hirondelles + 2 nichoirs ; grenouille + 3 haies ; lièvre + 4 haies ; écureuil + 5 haies ; geai + 4 haies | 10 habitants à l'an 5 → 7 ; les derniers viennent avec les aménagements des rangs 5 et 6 |
+| « Cultures différentes » (paon-du-jour) | champs et serre | + verger, variété ancienne à part | sinon le paon-du-jour ne venait presque jamais (plans d'une seule culture) |
+| Lanternes (carrière) | variété 10 / 14 / 16, beauté 8 / 13 / 15 | **11 / 16 / 18**, **14 / 19 / 21** | règle du § 17.2.1 (beauté + 6 points nature + 1 paon-du-jour ; les graines anciennes font semer plus de cultures) |
+
+Robots (§ 12.4, précisions) : le tranquille pose un aménagement par saison (sa liste, puis dès le rang 5 ce qui est libre ;
+deux par saison au rang 6), décide une jachère au printemps et en été (30 % chacun) et la pose dès qu'une parcelle de
+champ tenue à la main est vide, plante le greffon du Calville au verger (en arrachant un pommier ordinaire s'il le faut) ;
+l'appliqué ne met au plan que les variétés dont le trait paie la graine × 1,25 (savoureuse, précoce, géante, rustique) et
+garde 4 saisons de charges avant d'aménager.
+
+**Résultats** (60 carrières × 10 ans, sauf mention) :
+
+| Mesure | Cible | Mesuré |
+|---|---|---|
+| Tranquille : revenu sur 10 ans | + 1 à + 5 % | **+ 3,0 %** (297 051 → 306 024) ; 14 ans : + 3,5 % |
+| Tranquille : dépenses de la Vallée sur 10 ans | 8 000 à 20 000, surtout après le rang 5 | **17 950** (1 870 à l'an 5) ; 24 200 à l'an 14 |
+| Tranquille : rangs, Domaine | à un an près ; Domaine an 8 (± 1) | rangs identiques sauf an 7 (5 → 6) ; Domaine **an 8 → 7** |
+| Tranquille : collection | 6 + 6 à l'an 5 ; 12 + 12 entre l'an 9 et l'an 11 ; étape 5 vers l'an 10 | **7 + 7** à l'an 5 ; 12 variétés **an 9**, 12 habitants **an 11**, étape 5 **an 11** (14 ans) |
+| Tranquille : nouveautés | ≥ 1 par saison dans ≥ 80 % des saisons (ans 2 à 10) | **65 %** (médiane) — *non tenu*, voir ci-dessous |
+| Tranquille : gestes par jour (ans 5 à 10) ; part à la main | + 0,5 à + 2 ; ≥ 50 % | **+ 0,3** (8,0 → 8,3) — *un peu bas* ; **92 %** |
+| Débutant | rang 3 à l'an 5 ≥ 70 % ; ≥ 4 variétés et ≥ 4 habitants à l'an 8 | **100 %** ; médiane **4 et 4** (55 % et 62 % des carrières) ; revenu + 2,5 % |
+| Appliqué | 12 + 12 vers l'an 6 ou 7 ; revenu ≤ + 6 % | 12 variétés an 5, 12 habitants et étape 5 **an 8** ; revenu **+ 0,1 %** |
+| Ferme laissée seule (ans 4 à 7) | bénéfice ≤ + 3 % | **− 0,4 %** |
+| `automator` | Domaine pas avant l'an 7 ; patrimoine an 10 ≤ + 3 % ; aucun habitant | Domaine jamais (inchangé) ; **+ 0,5 %** ; 3 habitants, tous observés les ans 1 et 2 (il joue encore) — **aucun après l'an 2** |
+| Part des semis (appliqué) | aucune culture + 10 points | écart le plus grand **1,3 point** (chou) |
+| Carrière Classique, tranquille | faillites ≤ 20 % | **0 %** (30 carrières ; revenu + 3,6 %) |
+| Argent en caisse (tranquille) | an 14 ≤ 85 % de sans (cible d'ensemble, § 12.6) | an 10 : 95 % ; an 14 : **97 %** — le V1 seul ne crée pas le puits (V2, V3) |
+| Lanternes (tranquille, carrière) | § 17.2.1 ; total médian ≈ 11 | total médian **12 / 20** ; beauté 17 / 33 / 33 / 17 % ; variété 13 / 53 / 25 / 9 % |
+
+**Nouveautés : pourquoi 65 % et pas 80 %.** Toutes les saisons d'automne ont leur nouveauté dès l'arrivée du geai (son
+bocal), les ans 2 à 5 en ont ≥ 75 % ; le creux est aux ans 6 et 7 (rang 5, plus rien de la liste à poser, les dernières
+recettes attendent des haies) et aux printemps et hivers des ans 8 à 10 (tout ce qui vient au printemps est déjà là).
+Étaler davantage demanderait des venues bien plus lentes, au détriment du débutant (déjà juste à 4 + 4 à l'an 8).
+Pistes pour le V2, qui ajoute justement des nouveautés « de saison » : troc avec les clients toute l'année, croisements
+(l'été), 4 habitants du V2 dont un d'hiver.
 
 ## 13. Sauvegardes et migrations
 
