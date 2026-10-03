@@ -19,6 +19,12 @@
 //   staticRegion({ worldX0, worldX1, worldH, minZoom, devW, devH, bandCx }) → { x0, y0, w, h }
 //       couche fixe (px du monde) qui couvre l'écran pour tout zoom ≥ minZoom et tout défilement :
 //       elle ne dépend pas du zoom courant (pas de reconstruction pendant un pincement).
+//   (Vallée V3, reste du V2 n° 1 : cibles ≥ 48 px même au zoom minimal)
+//   touchZoom(dpr)                    plus petit zoom entier où une parcelle de 32 px du monde fait ≥ 48 px CSS :
+//                                     ⌈48 × dpr / 32⌉ (4 sur le Pixel 7, 5 sur un écran DPR 3)
+//   expandHitCss(rect, zoom, dpr, min = 48)   rectangle du monde agrandi autour de son centre jusqu'à
+//                                     min × dpr / zoom px du monde dans chaque sens (≥ min px CSS à l'écran)
+//   minWorldFor(zoom, dpr, min = 48)  taille du monde (px) qui fait min px CSS au zoom donné
 
 export const ZOOM_MAX_FACTOR = 2.5;
 export const ZOOM_MIN_FACTOR = { levels: 0.4, career: 0.5 };
@@ -84,4 +90,26 @@ export function staticRegion({ worldX0 = 0, worldX1, worldH, minZoom, devW, devH
   const x0 = Math.floor(worldX0 - left);
   const y0 = -vert;
   return { x0, y0, w: Math.ceil(worldX1 + right) - x0, h: Math.ceil(worldH + vert) - y0 };
+}
+
+export const TOUCH_MIN_CSS = 48;
+export const PLOT_WORLD = 32;
+
+export function touchZoom(dpr) {
+  const d = Number(dpr) > 0 ? Number(dpr) : 1;
+  return Math.max(1, Math.ceil((TOUCH_MIN_CSS * d) / PLOT_WORLD - 1e-9));
+}
+
+export function minWorldFor(zoom, dpr, min = TOUCH_MIN_CSS) {
+  const z = Number(zoom) > 0 ? Number(zoom) : 1;
+  const d = Number(dpr) > 0 ? Number(dpr) : 1;
+  return (min * d) / z;
+}
+
+export function expandHitCss(rect, zoom, dpr, min = TOUCH_MIN_CSS) {
+  if (!rect) return null;
+  const m = minWorldFor(zoom, dpr, min);
+  const w = Math.max(rect.w, m);
+  const h = Math.max(rect.h, m);
+  return { x: rect.x + rect.w / 2 - w / 2, y: rect.y + rect.h / 2 - h / 2, w, h };
 }

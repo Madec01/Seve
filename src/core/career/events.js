@@ -896,6 +896,9 @@ function dawnEvents(api, { seasonId, weather }) {
       const options = RANDOM_EVENTS.filter((d) => d.id !== e.lastKind && eventPossible(api, d.id, ctx));
       // (Vallée vivante) Chouette hulotte installée : corbeaux deux fois plus rares (même tirage).
       const pick = pickWeighted(rng, options, (d) => d.weight * (state.variety ? themeEventWeight(state, d.id) : 1) * (d.id === 'crows' && state.career.valley ? crowWeightFactor(state) : 1));
+      // (Vallée V3) Vieux têtards : plus aucun corbeau (poids 0). Si les corbeaux étaient le seul tirage possible, le nombre
+      // qu'ils auraient tiré est tiré quand même (le flux `events` tire toujours autant de nombres).
+      if (!pick && state.career.valley && options.some((d) => d.id === 'crows' && d.weight * (state.variety ? themeEventWeight(state, d.id) : 1) > 0)) rng.float();
       if (pick) startEvent(api, pick.id, ctx);
     }
   }

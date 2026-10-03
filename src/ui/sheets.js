@@ -135,6 +135,7 @@ export function createSheets(layer, app) {
   let closeTimer = null;
   let paused = false; // raison de pause « sheet » posée par cette feuille
   let released = false; // le joueur a relancé le temps, feuille ouverte
+  let openCount = 0; // (Vallée V3) nombre d'ouvertures : une seule bulle de conseil par ouverture (src/ui/hints.js)
 
   function syncPause() {
     const want = !!current && !released && current.opts.pauses !== false && pauseOnSheetActive(app) && !(current.opts.kind === 'panel' && document.body.classList.contains('layout-wide'));
@@ -194,6 +195,7 @@ export function createSheets(layer, app) {
       prev.onClose('replace');
     }
     current = { id: opts.id, opts };
+    openCount += 1;
     clear(headIcon);
     if (opts.icon) headIcon.append(opts.icon);
     title.textContent = opts.title || '';
@@ -262,6 +264,10 @@ export function createSheets(layer, app) {
     box,
     get current() {
       return current ? current.id : null;
+    },
+    /** Nombre d'ouvertures de feuille depuis le début (chaque ouverture, remplacement compris). */
+    get openCount() {
+      return openCount;
     },
     /** Remplace le contenu de la feuille ouverte (sans l'animation d'ouverture). */
     setContent(node, keepScroll = true) {

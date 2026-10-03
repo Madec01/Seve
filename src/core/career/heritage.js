@@ -16,8 +16,9 @@ import {
   VILLAGE_VARIETIES_BY_ID, ofFarm,
 } from '../../data/career/heritage.js';
 import {
-  crossNeedOf, fixHandOf, handSeedsOf, heritagePartOn, isFixed, libraryEffectsOf, libraryLevelOf, valleyOf, varietyName,
+  crossNeedOf, fixHandOf, handSeedsOf, heritagePartOn, isFixed, libraryEffectsOf, libraryLevelOf, placesOn, valleyOf, varietyName,
 } from './heirlooms.js';
+import { STORIES_V3 } from '../../data/career/places.js';
 import { inGreenhouse } from '../farm.js';
 
 const CLIENTS_BY_ID = Object.fromEntries(CLIENTS.map((c) => [c.id, c]));
@@ -115,9 +116,9 @@ function hasGreenhouse(state) {
   return state.career.lots.some((l) => l.type === 'greenhouse');
 }
 
-/** Variétés sauvées (fixées), dans l'ordre des données (pays, village, croisées). */
+/** Variétés sauvées (fixées), dans l'ordre des données (pays, village, croisées ; (V3) Reinette grise). */
 export function savedVarieties(state) {
-  return ALL_VARIETIES.filter((x) => isFixed(state, x.id)).map((x) => x.id);
+  return ALL_VARIETIES.filter((x) => isFixed(state, x.id) && (x.group !== 'orchard' || placesOn(state))).map((x) => x.id);
 }
 
 /** Voisins encore à échanger (ordre fixe). */
@@ -418,19 +419,24 @@ export function boxInfo(state) {
   };
 }
 
-/** Récits de la Grainothèque : [{ id, title, vignette, lines, available, read }]. */
+/** Récits de la carrière : ceux de la Grainothèque (V2), puis (V3, partie `places`) ceux de la vallée. */
+export function storiesOf(state) {
+  return placesOn(state) ? [...STORIES, ...STORIES_V3] : STORIES;
+}
+
+/** Récits de Joseph : [{ id, title, vignette, lines, available, read }] (V2, puis V3). */
 export function storiesInfo(state) {
   const v = valleyOf(state);
   const av = v?.stories?.available || [];
   const rd = v?.stories?.read || [];
-  return STORIES.map((s) => ({ id: s.id, title: s.title, vignette: s.vignette, lines: [...s.lines], available: av.includes(s.id), read: rd.includes(s.id) }));
+  return storiesOf(state).map((s) => ({ id: s.id, title: s.title, vignette: s.vignette, lines: [...s.lines], available: av.includes(s.id), read: rd.includes(s.id), ...(STORIES.includes(s) ? {} : { v3: true }) }));
 }
 
 /** Récit disponible pas encore lu (le premier) ou null. */
 export function unreadStory(state) {
   const v = valleyOf(state);
   if (!v?.stories) return null;
-  return STORIES.find((s) => v.stories.available.includes(s.id) && !v.stories.read.includes(s.id)) || null;
+  return storiesOf(state).find((s) => v.stories.available.includes(s.id) && !v.stories.read.includes(s.id)) || null;
 }
 
 /** Graines rendues par une récolte à la main (lu par l'indice et les fiches). */

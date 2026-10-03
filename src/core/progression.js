@@ -25,7 +25,7 @@
 //
 // Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
-import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, HERITAGE_ACHIEVEMENTS, VALLEY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, HERITAGE_ACHIEVEMENTS, PLACES_ACHIEVEMENTS, VALLEY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
 import { CAREER_ARCHIVE_MAX, CAREER_ECUS } from '../data/career/career.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
 import { getCrop } from '../data/crops.js';
@@ -34,7 +34,7 @@ import { PERKS, PERK_TIERS, getPerk, perkMaxRank } from '../data/perks.js';
 import { getProduct } from '../data/products.js';
 import { DEFAULT_DIFFICULTY, isDifficulty } from '../data/difficulty.js';
 import { ALBUM_COMPLETE_PAGES, ALBUM_PAGES, ALBUM_PAGES_BY_ID } from '../data/album.js';
-import { STAGES as VALLEY_STAGES } from '../data/career/valley.js';
+import { STAGES_ALL as VALLEY_STAGES } from '../data/career/valley.js';
 import { BIRDS_BY_ID, LANTERN_CRITERIA, LANTERN_REWARDS } from '../data/cozy.js';
 import {
   albumClaimable, albumFacts, albumOverview, albumPages, albumRetro, checkAlbum, claimAlbumReward, defaultAlbum, markAlbumSeen, normalizeAlbum,
@@ -553,6 +553,8 @@ function evaluate(check, p, f) {
         // (Vallée V2) Comptes par groupe ; une sauvegarde d'avant le V2 n'a que fixed / installed (tous du V1).
         fixedPays: v.fixedPays ?? (v.fixed || []).length, installedV1: v.installedV1 ?? (v.installed || []).length,
         swaps: (v.swaps || []).length, crosses: (v.crossesFound || []).length, fixedCross: v.fixedCross || 0, library: v.library || 0, installedV2: v.installedV2 || 0,
+        // (Vallée V3) chantiers, lieux restaurés, habitants de la vallée, terres confiées, pêches au ruisseau.
+        works: v.works || 0, restoredN: (v.restored || []).length, valleyInstalledN: (v.valleyInstalled || []).length, wilds: v.wilds || 0, riverFish: v.riverFish || 0,
       }[check.key] ?? 0;
       return counter(val, check.n);
     }
@@ -634,7 +636,7 @@ export function achievementList(p, ctx) {
  */
 export function careerAchievementList(p, ctx) {
   // (Vallée vivante) Les 7 succès de la Vallée sont dans la catégorie « Carrière », à la suite.
-  return listOf([...CAREER_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS], p, ctx, true);
+  return listOf([...CAREER_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS, ...PLACES_ACHIEVEMENTS], p, ctx, true);
 }
 
 /** (lot 4) Liste pour la catégorie « Album et fêtes » de la grange (écus seulement), même forme + category: 'cozy'. */

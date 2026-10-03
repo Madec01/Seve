@@ -158,7 +158,23 @@ function cozy(id, name, description, ecus, check) {
  * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
  * category: 'cozy'.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS];
+/**
+ * (Vallée vivante, lot V3) Les 8 succès du ruisseau (catégorie « Carrière », écus seulement ; rangés sous « La Vallée »).
+ * careerValley { key, n } : works (chantiers lancés), stage (étape), restoredN (lieux restaurés), valleyInstalledN
+ * (habitants de la vallée), wilds (terres confiées), riverFish (pêches au ruisseau).
+ */
+export const PLACES_ACHIEVEMENTS = [
+  career('firstWorks', 'Le premier chantier', 'Lancer un premier chantier dans la vallée.', 10, { type: 'careerValley', key: 'works', n: 1 }),
+  career('waterBack', 'L\'eau revient', 'Atteindre l\'étape 6 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 6 }),
+  career('livingValley', 'La vallée vivante', 'Atteindre l\'étape 7 de la vallée.', 40, { type: 'careerValley', key: 'stage', n: 7 }),
+  career('sixPlaces', 'La vallée restaurée', 'Restaurer les six lieux de la vallée jusqu\'à leur dernière étape.', 40, { type: 'careerValley', key: 'restoredN', n: 6 }),
+  career('helenesBook', 'Le carnet d\'Hélène', 'Installer les 10 habitants de la vallée.', 30, { type: 'careerValley', key: 'valleyInstalledN', n: 10 }),
+  career('firstWild', 'Une terre rendue', 'Confier une première terre à la nature.', 10, { type: 'careerValley', key: 'wilds', n: 1 }),
+  career('forestBack', 'La forêt revient', 'Confier les 18 terres sauvages.', 40, { type: 'careerValley', key: 'wilds', n: 18 }),
+  career('riverAngler', 'Pêcheur du ruisseau', '20 pêches au ruisseau.', 10, { type: 'careerValley', key: 'riverFish', n: 20 }),
+];
+
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS, ...PLACES_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

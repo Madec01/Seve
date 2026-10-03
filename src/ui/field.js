@@ -90,7 +90,9 @@ export function createField(app) {
       const warnings = [];
       if (isTree) {
         warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Ne gèle pas · sans arrosage'));
-        if (c.tree && c.tree.harvestsBeforeYearEnd === 0) warnings.push(el('span.warn-chip.is-frost', 'Aucune pomme avant la fin de l\'année'));
+        if (c.tree && c.tree.harvestsBeforeYearEnd === 0) warnings.push(el('span.warn-chip.is-frost', c.id === 'apple' ? 'Aucune pomme avant la fin de l\'année' : 'Aucun fruit avant la fin de l\'année'));
+        // (Vallée V3) Cerisier et poirier : sceau « du verger conservatoire ».
+        if (c.valleyTree || c.id === 'cherry' || c.id === 'pear') warnings.push(el('span.warn-chip.is-product.vl3-seal', el('span', { 'aria-hidden': 'true' }, '🌳 '), 'du verger conservatoire'));
       }
       if (c.noWater) warnings.push(el('span.warn-chip.is-hardy', icon('water', 'xs'), 'Pousse sans arrosage'));
       if (c.product?.owned) warnings.push(el('span.warn-chip.is-product', productIcon(c.product.productId, 'sprite--xs'), `Atelier : ${fmt(c.product.value)}`));

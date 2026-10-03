@@ -10,10 +10,17 @@
 // deux) : chaque règle de trait passe par hasTrait. Effets de la Grainothèque (graines par récolte, fixation, prix des
 // graines sauvées, touristes) et services des habitants du V2 (merle, lézard, pipistrelle) : lus ici, gardés par
 // `parts.heritage` (absent = vrai). Contrat : docs/ARCHITECTURE.md, « Vallée vivante — contrats du lot V2 ».
+//
+// (V3, « Le ruisseau ») Les avantages des lieux de la vallée (canicule, l'eau revient, places du moulin, chauffage,
+// entretien des animaux, ruches de la prairie, jachère, poissons, touristes, abris, corbeaux, cueillette des haies,
+// trouvailles d'hiver) sont lus ICI (une seule porte d'entrée pour les modules partagés, comme au V2), gardés par
+// `parts.places` (absente = vraie) et `parts.heritage` ; src/core/career/places.js les ré-exporte. Habitants de la vallée
+// (group 'valley') et Reinette grise (group 'orchard') : seulement avec la partie `places`.
 
 import { SEASONS } from '../../data/balance.js';
 import { ALL_SPECIES_BY_ID, ALL_VARIETIES_BY_ID, FALLOW, SEED_RULES, SPECIES_BY_ID, STAGE_FINE, TRAITS_BY_ID, varietyTraits } from '../../data/career/valley.js';
 import { CROSS_RULES, SEED_LIBRARY, crossName } from '../../data/career/heritage.js';
+import { PLACES, WATER_BACK } from '../../data/career/places.js';
 
 /** La Vallée de la partie (null : niveau, ou carrière sans la Vallée). */
 export function valleyOf(state) {
@@ -98,11 +105,29 @@ export function isTrial(state, plot) {
   return !!v && !!valleyOf(state) && !isFixed(state, v.id);
 }
 
-/** Habitant installé (observé) ? (Habitants du V2 : seulement avec la partie `heritage`.) */
+/** Habitant installé (observé) ? (Habitants du V2 : seulement avec la partie `heritage` ; de la vallée : `places`.) */
 export function speciesInstalled(state, id) {
   const v = valleyOf(state);
   if (!v || v.parts?.wildlife === false || v.species?.[id]?.state !== 'installed') return false;
-  return ALL_SPECIES_BY_ID[id]?.group !== 'v2' || v.parts?.heritage !== false;
+  return speciesInPart(state, ALL_SPECIES_BY_ID[id]);
+}
+
+/** L'habitant existe-t-il dans cette partie ? (V1 toujours ; V2 : `heritage` ; vallée : `places`.) */
+export function speciesInPart(state, s) {
+  if (!s) return false;
+  const g = s.group || 'v1';
+  if (g === 'v1') return true;
+  if (!heritagePartOn(state)) return false;
+  return g !== 'valley' || placesOn(state);
+}
+
+/** La variété existe-t-elle dans cette partie ? (Du pays toujours ; V2 : `heritage` ; du verger de la commune : `places`.) */
+export function varietyInPart(state, x) {
+  if (!x) return false;
+  const g = x.group || 'pays';
+  if (g === 'pays') return true;
+  if (!heritagePartOn(state)) return false;
+  return g !== 'orchard' || placesOn(state);
 }
 
 // ── (V2) La Grainothèque et ses effets ─────────────────────────────────────────────────────
@@ -180,12 +205,15 @@ export function stageOf(state) {
   return valleyOf(state)?.stage || 0;
 }
 
-/** Multiplicateur de pousse d'une parcelle : précoce (× 1,15), sol reposé après une jachère (× 1,10 ; étape 4 : × 1,20). */
+/**
+ * Multiplicateur de pousse d'une parcelle : précoce (× 1,15), sol reposé après une jachère (× 1,10 ; étape 4 : × 1,20 ;
+ * (V3) prairie aux orchidées : × 1,30).
+ */
 export function growthFactorOf(state, plot) {
   if (!valleyOf(state)) return 1;
   let f = 1;
   if (hasTrait(state, plot, 'early')) f *= 1 + TRAITS_BY_ID.early.growth;
-  if (plot.rested) f *= 1 + (stageOf(state) >= 4 ? FALLOW.growthStage4 : FALLOW.growth);
+  if (plot.rested) f *= 1 + fallowGrowthOf(state, stageOf(state) >= 4 ? FALLOW.growthStage4 : FALLOW.growth);
   return f;
 }
 
@@ -266,9 +294,9 @@ export function planVariety(value) {
 
 // ── Services des habitants (lus par les modules partagés) ──────────────────────────────────
 
-/** Trouvailles d'hiver à la fois (rouge-gorge : 4 au lieu de `base`). */
+/** Trouvailles d'hiver à la fois (rouge-gorge : 4 au lieu de `base` ; (V3) vieille futaie : + 1). */
 export function winterFindsMax(state, base) {
-  return speciesInstalled(state, 'robin') ? Math.max(base, SPECIES_BY_ID.robin.service.value) : base;
+  return (speciesInstalled(state, 'robin') ? Math.max(base, SPECIES_BY_ID.robin.service.value) : base) + winterFindsPlusOf(state);
 }
 
 /** Pièces des trouvailles d'hiver (écureuil : × 2). */
@@ -276,26 +304,26 @@ export function winterCoinsFactor(state) {
   return speciesInstalled(state, 'squirrel') ? SPECIES_BY_ID.squirrel.service.value : 1;
 }
 
-/** Poids des corbeaux (chouette hulotte : × 0,5). */
+/** Poids des corbeaux (chouette hulotte : × 0,5 ; (V3) bocage : × 0,5, puis vieux têtards : 0). */
 export function crowWeightFactor(state) {
-  return speciesInstalled(state, 'tawnyOwl') ? SPECIES_BY_ID.tawnyOwl.service.value : 1;
+  return (speciesInstalled(state, 'tawnyOwl') ? SPECIES_BY_ID.tawnyOwl.service.value : 1) * crowsPlacesFactorOf(state);
 }
 
-/** Valeur des poissons (libellules : × 1,25). */
+/** Valeur des poissons (libellules : × 1,25 ; (V3) étang du moulin : × 1,15). */
 export function fishFactor(state) {
-  return speciesInstalled(state, 'dragonfly') ? SPECIES_BY_ID.dragonfly.service.value : 1;
+  return (speciesInstalled(state, 'dragonfly') ? SPECIES_BY_ID.dragonfly.service.value : 1) * pondFishFactorOf(state);
 }
 
-/** Touristes : bonus par passage (paon-du-jour : 0,15 ; Grainothèque niveau 5 : + 0,15). */
+/** Touristes : bonus par passage (paon-du-jour : 0,15 ; Grainothèque niveau 5 : + 0,15 ; (V3) nénuphars : + 0,10). */
 export function touristBonusOf(state) {
-  return (speciesInstalled(state, 'butterfly') ? SPECIES_BY_ID.butterfly.service.value : 0) + libraryEffectsOf(state).touristBonus;
+  return (speciesInstalled(state, 'butterfly') ? SPECIES_BY_ID.butterfly.service.value : 0) + libraryEffectsOf(state).touristBonus + placesTouristBonusOf(state);
 }
 
-/** Production des abris (hirondelles : + 5 % au printemps et en été). */
+/** Production des abris (hirondelles : + 5 % au printemps et en été ; (V3) roselière : + 5 % de plus, mêmes saisons). */
 export function animalBonusOf(state) {
-  if (!speciesInstalled(state, 'swallow')) return 0;
   const s = SPECIES_BY_ID.swallow.service;
-  return s.seasons.includes(SEASONS[state.time.seasonIndex]) ? s.value : 0;
+  if (!s.seasons.includes(SEASONS[state.time.seasonIndex])) return 0;
+  return (speciesInstalled(state, 'swallow') ? s.value : 0) + placesAnimalBonusOf(state);
 }
 
 /**
@@ -311,4 +339,114 @@ export function growthBonusOf(state) {
   // (V2) Lézard des murailles : + 0,10 les jours de canicule.
   if (speciesInstalled(state, 'lizard') && state.weather?.today === 'heatwave') g += ALL_SPECIES_BY_ID.lizard.service.value;
   return g;
+}
+
+// ── (V3) Les lieux de la vallée et leurs avantages ─────────────────────────────────────────
+
+/** Le V3 est-il actif (parties `places` et `heritage`, absentes = vraies) ? */
+export function placesOn(state) {
+  const v = valleyOf(state);
+  return !!v && v.parts?.heritage !== false && v.parts?.places !== false;
+}
+
+/** Étape atteinte d'un lieu (0 : pas commencé, ou V3 désactivé). */
+export function placeStepOf(state, placeId) {
+  if (!placesOn(state)) return 0;
+  return valleyOf(state).places?.[placeId]?.step || 0;
+}
+
+/** Avantage → { placeId, step, value } (tiré des données : une étape = un avantage). */
+const BOONS = {};
+for (const p of PLACES) for (const st of p.steps) if (st.boon) BOONS[st.boon.kind] = { placeId: p.id, step: st.n, value: st.boon.value };
+
+/** Valeur d'un avantage de lieu s'il est atteint, 0 sinon (lu par les modules partagés). */
+export function placeBoonActive(state, kind) {
+  const b = BOONS[kind];
+  return b && placeStepOf(state, b.placeId) >= b.step ? b.value : 0;
+}
+
+/**
+ * Canicule (Ru des Saules ≥ 1) : pousse d'une parcelle non arrosée un jour de canicule = `base` + 0,25 (Détente : ½ jour au
+ * lieu de ¼ ; Classique : ¼ au lieu de 0), au plus 1 ; null sans l'avantage.
+ */
+export function heatDryGrowthOf(state, base = 0) {
+  const add = placeBoonActive(state, 'heatGrowth');
+  return add ? Math.min(1, base + add) : null;
+}
+
+/** « L'eau revient » (étape 6 de la vallée) : + 0,1 jour de pousse un jour sans arrosage (0 sinon). */
+export function waterBackOf(state) {
+  return placesOn(state) && stageOf(state) >= 6 ? WATER_BACK.dryGrowth : 0;
+}
+
+/**
+ * Pousse d'un jour sans arrosage avec les avantages de la vallée (V3) : canicule (Ru 1) ou l'eau revient (étape 6) ; `base`
+ * est la pousse ordinaire (culture, niveau, variété sobre). Au plus une journée arrosée (1). Sans le V3 : `base`.
+ */
+export function valleyDryGrowth(state, base, heat) {
+  if (!placesOn(state)) return base;
+  if (heat) {
+    const h = heatDryGrowthOf(state, base);
+    return h === null ? base : Math.max(base, h);
+  }
+  const w = waterBackOf(state);
+  return w ? Math.min(1, base + w) : base;
+}
+
+/** Moulin à eau (Ru des Saules ≥ 4) : + 1 place au moulin de la ferme (fournisseur extraPlaces). */
+export function millPlacesOf(state, buildingId) {
+  return buildingId === 'mill' ? placeBoonActive(state, 'millPlace') : 0;
+}
+
+/** Bois mort (bois de la Combe ≥ 1) : chauffage de la serre × 0,5 (1 sinon). */
+export function heatingFactorOf(state) {
+  return placeBoonActive(state, 'heating') || 1;
+}
+
+/** Foin (prairie ≥ 1) : entretien des animaux × 0,9 (1 sinon). */
+export function upkeepFactorOf(state) {
+  return placeBoonActive(state, 'hay') || 1;
+}
+
+/** Prairie fleurie (≥ 2) : + 1 pièce par ruche et par jour hors hiver (0 sinon). */
+export function meadowHivesOf(state) {
+  return placeBoonActive(state, 'meadowHives');
+}
+
+/** Sol vivant de la prairie aux orchidées (≥ 3) : + 0,3 après une jachère (sinon `base`). */
+export function fallowGrowthOf(state, base) {
+  const o = placeBoonActive(state, 'orchidSoil');
+  return o ? Math.max(base, o) : base;
+}
+
+/** Étang du moulin (≥ 1) : poissons × 1,15 (1 sinon). */
+export function pondFishFactorOf(state) {
+  return placeBoonActive(state, 'pondFish') || 1;
+}
+
+/** Nénuphars (étang ≥ 2) : touristes + 0,10 (0 sinon). */
+export function placesTouristBonusOf(state) {
+  return placeBoonActive(state, 'pondTourists');
+}
+
+/** Roselière (étang ≥ 3) : abris + 0,05 au printemps et en été (0 sinon). */
+export function placesAnimalBonusOf(state) {
+  const b = placeBoonActive(state, 'reedSwallows');
+  return b && ['spring', 'summer'].includes(SEASONS[state.time.seasonIndex]) ? b : 0;
+}
+
+/** Corbeaux (bocage ≥ 2 : × 0,5 ; vieux têtards ≥ 3 : 0, plus aucun) ; 1 sinon. */
+export function crowsPlacesFactorOf(state) {
+  if (placeBoonActive(state, 'noCrows')) return 0;
+  return placeBoonActive(state, 'crowsHalf') || 1;
+}
+
+/** Cueillette des haies : pièces × 1,5 (bocage ≥ 1), × 2 (≥ 3) ; 1 sinon. */
+export function hedgeCoinsFactorOf(state) {
+  return placeBoonActive(state, 'noCrows') || placeBoonActive(state, 'hedgeCoins') || 1;
+}
+
+/** Vieille futaie (bois ≥ 3) : une trouvaille d'hiver de plus à la fois (0 sinon). */
+export function winterFindsPlusOf(state) {
+  return placeBoonActive(state, 'winterFindsPlus');
 }

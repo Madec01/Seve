@@ -79,6 +79,7 @@ import { RANKS } from '../src/data/career/ranks.js';
 import { COZY_STYLES, HUMAN_PROFILES, parseCozy, parseVariety, sowRare, varietyChoices, varietyDay, cozyDay } from './simulate.js';
 import { ALL_VARIETIES_BY_ID, NATURE_ITEMS_BY_ID, SPECIES_BY_ID } from '../src/data/career/valley.js';
 import { SEED_LIBRARY } from '../src/data/career/heritage.js';
+import { PLACES, VALLEY_SPECIES_BY_ID, WILD_RULES } from '../src/data/career/places.js';
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
@@ -96,10 +97,15 @@ export function parseValley(value) {
   if (['off', 'false', '0', 'non'].includes(v)) return false;
   if (['on', 'true', '1', 'oui'].includes(v)) return true;
   const parts = v.split(',');
-  // (V2) « seeds,wildlife » : le V1 seul ; « seeds,wildlife,heritage » : tout.
-  return { seeds: parts.includes('seeds'), wildlife: parts.includes('wildlife'), heritage: parts.includes('heritage') };
+  // (V2) « seeds,wildlife » : le V1 seul ; « seeds,wildlife,heritage » : le V1 + V2 ; (V3) « …,places » : tout.
+  return { seeds: parts.includes('seeds'), wildlife: parts.includes('wildlife'), heritage: parts.includes('heritage'), places: parts.includes('places') };
 }
 export const STRATEGIES = ['casual', 'novice', 'optimal', 'idle', 'automator', 'handsOff'];
+/**
+ * (Vallée V3) + handsOffLate : le tranquille les ans 1 à 12 (exactement : mêmes tirages, même ferme), puis plus rien (ni
+ * geste, ni achat) les ans 13 à 16 — les services passifs du V3 doivent rester petits (docs/VALLEE.md § 17.12.5).
+ */
+export const STRATEGIES_V3 = [...STRATEGIES, 'handsOffLate'];
 
 // ── Profils ────────────────────────────────────────────────────────────────────────────────
 const C = HUMAN_PROFILES.casual;
@@ -134,6 +140,8 @@ CAREER_PROFILES.idle = { ...CAREER_PROFILES.casual, idleFrom: 2 };
 CAREER_PROFILES.automator = { ...CAREER_PROFILES.optimal, noGesturesFrom: 3 };
 // (lot 4) La ferme laissée seule : le tranquille les ans 1 à 3, puis plus rien.
 CAREER_PROFILES.handsOff = { ...CAREER_PROFILES.casual, idleFrom: 4 };
+// (Vallée V3) La ferme laissée seule tard : le tranquille les ans 1 à 12, puis plus rien (joue sous le nom « casual »).
+CAREER_PROFILES.handsOffLate = { ...CAREER_PROFILES.casual, idleFrom: 13 };
 
 /** (lot 4) Décor posé par le joueur simulé (critère « beauté » des lanternes). */
 const DECOR3 = { 'porch.left': 'flowers.red', 'porch.right': 'bench', 'yard.1': 'birdhouse' };
@@ -1247,6 +1255,171 @@ function valleySowing(game, me, P, lots) {
   return taps;
 }
 
+
+// (Vallée V3) docs/VALLEE.md § 17.12.6 : la vue de la vallée (un jour joué sur trois ; appliqué : chaque jour où quelque
+// chose l'attend), une bête de la vallée observée (70 %), la pêche au ruisseau (50 % des jours joués), les champignons
+// (50 %, un geste chacun) ; un regard par saison sur les lieux (le chantier le moins cher dont la condition est remplie,
+// réserve de 4 saisons de charges, « la ferme d'abord », deux par saison au plus) ; les terres sauvages (16 terrains :
+// une par saison avec 6 saisons de charges, deux après l'an 15, sortes en tour) ; 2 cerisiers et 2 poiriers plantés quand
+// une parcelle de verger se libère ; les haies, bandes et tas qui manquent à une condition. Tirage propre (me.placesRnd) :
+// les décisions du V1 et du V2 tirent les mêmes nombres avec ou sans le V3. Gestes : vue 1, observer 1, pêcher 1,
+// cueillir 1 ; chantier, terre, plant : 0 (décisions de boutique).
+export const PLACES_STYLES = {
+  casual: { view: 1 / 3, observe: 0.7, fish: 0.5, mushroom: 0.5, works: 'season', worksPerSeason: 2, reserve: 4, farmFirst: true, wild: 'season', wildReserve: 6, wildFastFrom: 15, trees: 2, nature: true, look: 1, budget: 4 },
+  novice: { view: 0.1, observe: 0.21, fish: 0.15, mushroom: 0.15, works: 'season', worksPerSeason: 1, reserve: 4, farmFirst: true, cover: 3, wild: 'season', wildReserve: 6, wildFastFrom: 99, trees: 2, nature: false, look: 0.3, budget: 2 },
+  optimal: { view: 'waiting', observe: 1, fish: 1, mushroom: 1, works: 'day', worksPerSeason: 6, reserve: 4, farmFirst: false, wild: 'day', wildReserve: 4, wildFastFrom: 0, trees: 3, nature: true, look: 1, budget: 6 },
+};
+if (process.env.SIM_V3_COVER) PLACES_STYLES.casual.cover = Number(process.env.SIM_V3_COVER);
+PLACES_STYLES.idle = PLACES_STYLES.casual;
+PLACES_STYLES.handsOff = PLACES_STYLES.casual;
+PLACES_STYLES.automator = PLACES_STYLES.optimal;
+
+function placesRng(me) {
+  if (!me.placesRnd) me.placesRnd = humanRng((me.seedBase ?? 1) ^ 0x27d4eb2f);
+  return me.placesRnd;
+}
+
+const WILD_ORDER = ['wood', 'grassland', 'marsh'];
+
+/** Chantiers (décision de boutique) : le moins cher dont la condition est remplie. */
+function placesWorks(game, me, PS) {
+  const cal = game.query.calendar();
+  const key = PS.works === 'day' ? `${game.state.time.year}/${cal.day}` : `${game.state.time.year}/${cal.seasonId}`;
+  if (me.worksKey !== key) {
+    me.worksKey = key;
+    me.worksDone = 0;
+    me.worksLook = placesRng(me)() < PS.look;
+  }
+  if (!me.worksLook || me.worksDone >= PS.worksPerSeason) return;
+  const places = game.query.career.valley().places || [];
+  const ready = places.filter((p) => p.next && !p.works && p.next.needs.every((n) => n.ok)).sort((a, b) => a.next.cost - b.next.cost);
+  for (const p of ready) {
+    if (me.worksDone >= PS.worksPerSeason) break;
+    const cost = p.next.cost;
+    const reserve = PS.reserve * seasonCharge(game);
+    if (game.state.money - cost <= reserve) break;
+    if (PS.cover && game.state.money < PS.cover * cost) break;
+    if (PS.farmFirst) {
+      const w = nextWishCost(game, me);
+      if (w !== null && game.state.money - cost - w < reserve) break;
+    }
+    const r = game.actions.career.startWorks(p.id);
+    if (r.ok) {
+      me.worksDone += 1;
+      me.placesStats.works += cost;
+    }
+  }
+}
+
+/** Terres sauvages (16 terrains) : une par saison (deux après l'an 15), sortes en tour. */
+function placesWild(game, me, PS) {
+  const w = game.query.career.valley().wilds;
+  if (!w?.open || !w.eligible.length) return;
+  const cal = game.query.calendar();
+  const fast = game.state.time.year >= PS.wildFastFrom;
+  const half = Math.max(1, Math.floor(game.state.career.seasonLength / 2));
+  const key = PS.wild === 'day' ? `${game.state.time.year}/${cal.day}` : fast ? `${game.state.time.year}/${cal.seasonId}/${Math.floor((cal.dayOfSeason - 1) / half)}` : `${game.state.time.year}/${cal.seasonId}`;
+  if (me.wildKey === key) return;
+  // La vallée d'abord : tant qu'un chantier est prêt (conditions remplies) et attend l'argent, la forêt attend.
+  const places = game.query.career.valley().places || [];
+  if (places.some((p) => p.next && !p.works && p.next.needs.every((n) => n.ok))) return;
+  if (game.state.money - w.nextPrice <= PS.wildReserve * seasonCharge(game)) return;
+  if (PS.cover && game.state.money < PS.cover * w.nextPrice) return;
+  me.wildKey = key;
+  if (placesRng(me)() >= PS.look) return;
+  const kind = WILD_ORDER[w.count % WILD_ORDER.length];
+  const r = game.actions.career.rewild(w.eligible[0], kind);
+  if (r.ok) me.placesStats.wilds += r.cost;
+}
+
+/** Cerisiers et poiriers : plantés sur une parcelle de verger libre (jamais d'arrachage), `trees` de chaque au plus. */
+function placesTrees(game, me, PS) {
+  for (const id of ['cherry', 'pear']) {
+    const have = game.state.plots.filter((p) => p.cropId === id).length;
+    if (have >= PS.trees) continue;
+    const i = game.state.plots.findIndex((p, k) => p.env === 'orchard' && p.unlocked && !p.cropId && game.query.plantableCrops(k).some((r) => r.id === id));
+    if (i < 0) continue;
+    const r = game.actions.plant(i, id);
+    if (r.ok) me.placesStats.trees += r.cost || 0;
+  }
+}
+
+/** Aménagements qui manquent à une condition de lieu (haies, bandes, tas de bois) : un par saison, décision de boutique. */
+function placesNature(game, me) {
+  const cal = game.query.calendar();
+  const key = `${game.state.time.year}/${cal.seasonId}`;
+  if (me.placesNatureKey === key) return;
+  const places = game.query.career.valley().places || [];
+  const want = [];
+  for (const p of places) for (const n of p.next?.needs || []) if (!n.ok && n.target?.type === 'nature' && n.target.id !== 'fallow') want.push(n.target.id);
+  for (const s of game.query.career.valley().species.filter((x) => x.group === 'valley' && x.state === 'unknown')) for (const it of s.recipe) if (!it.ok && it.kind === 'woodpile') want.push('woodpile');
+  for (const kind of want) {
+    const spot = game.query.career.valleySpots(kind).find((x) => x.free && x.canPlace);
+    if (!spot || game.state.money - spot.price <= 2 * seasonCharge(game) + 50) continue;
+    me.placesNatureKey = key;
+    if (game.actions.career.placeNature(spot.spotId).ok) me.valleyStats.placed++;
+    return;
+  }
+}
+
+
+/**
+ * Une condition demande des jachères fleuries (Ru des Saules → « Le ruisseau chante ») : une par saison (printemps, été),
+ * sur une parcelle de champ que le robot vient de libérer (même tenue par un jardinier : seul le joueur sème une jachère),
+ * 0,5 geste — après la récolte, avant « semer partout ».
+ */
+function placesFallow(game, me) {
+  const PS = PLACES_STYLES[me.strategy];
+  const v = game.state.career.valley;
+  if (!PS || !v?.view?.open || v.parts.places === false || v.parts.heritage === false) return 0;
+  const cal = game.query.calendar();
+  const key = `${game.state.time.year}/${cal.seasonId}`;
+  if (!(cal.seasonId === 'spring' || cal.seasonId === 'summer') || me.placesFallowKey === key || cal.daysLeftInSeason <= 1) return 0;
+  const needs = (game.query.career.valley().places || []).flatMap((p) => p.next?.needs || []);
+  if (!needs.some((n) => !n.ok && n.target?.id === 'fallow')) return 0;
+  if (placesRng(me)() >= PS.look) {
+    me.placesFallowKey = key;
+    return 0;
+  }
+  const i = game.state.plots.findIndex((p) => p.env === 'field' && p.unlocked && !p.cropId && p.fallow === undefined);
+  if (i < 0 || !game.actions.career.sowFallow(i).ok) return 0;
+  me.placesFallowKey = key;
+  return 0.5;
+}
+
+/** Gestes et décisions de la vue de la vallée (V3), après ceux du V1 et du V2. */
+function placesMorning(game, me, P, noGestures) {
+  const PS = PLACES_STYLES[me.strategy];
+  const v = game.state.career.valley;
+  if (!PS || !v?.started || v.parts.places === false || v.parts.heritage === false || !v.view?.open) return 0;
+  const rnd = placesRng(me);
+  const A = game.actions.career;
+  let taps = 0;
+  const budget = noGestures ? 0 : PS.budget;
+  const tap = (n) => {
+    if (taps + n > budget + 1e-9) return false;
+    taps += n;
+    return true;
+  };
+  if (!noGestures) {
+    const view = game.query.career.valleyView();
+    const waiting = view.animals.some((a) => a.state === 'visible');
+    const canFish = view.river.canFish;
+    const fishWant = canFish && rnd() < PS.fish;
+    const look = PS.view === 'waiting' ? waiting || canFish || view.mushrooms.length > 0 || view.joseph : rnd() < PS.view;
+    if ((look || fishWant) && tap(1) && A.openValleyView().ok) {
+      for (const a of view.animals) if (a.state === 'visible' && rnd() < PS.observe && tap(1)) A.observe(a.id);
+      if (fishWant && tap(1)) A.fishRiver();
+      for (const m of [...view.mushrooms]) if (rnd() < PS.mushroom && tap(1)) A.pickMushroom(m.id);
+    }
+  }
+  placesWorks(game, me, PS);
+  placesWild(game, me, PS);
+  if (PS.nature) placesNature(game, me);
+  if (!noGestures) placesTrees(game, me, PS);
+  return taps;
+}
+
 // ── Une journée ───────────────────────────────────────────────────────────────────────────
 function playDay(game, me) {
   const P = me.profile;
@@ -1287,10 +1460,14 @@ function playDay(game, me) {
   if (me.staffHelper) me.staffHelper(game, me);
   // (Vallée vivante) Bocal, bête, cueillette, foire, jachère, aménagement (budget de gestes à part).
   if (game.state.career.valley) t.valley += valleyMorning(game, me, P, noGestures);
+  // (Vallée V3) La vue de la vallée, les chantiers, les terres sauvages (tirage propre, budget de gestes à part).
+  if (game.state.career.valley) t.valley += placesMorning(game, me, P, noGestures);
   const ctx = noGestures ? null : fieldWork(game, me, spend);
   if (!noGestures) collectShelters(game, me, spend);
   // (Vallée vivante) Graines anciennes semées à la main avant « semer partout ».
   if (ctx && game.state.career.valley) t.valley += valleySowing(game, me, P, ctx.lots);
+  // (Vallée V3) Jachère fleurie demandée par un lieu (après la récolte, avant « semer partout »).
+  if (ctx && game.state.career.valley) t.valley += placesFallow(game, me);
   if (ctx) sowAndWater(game, me, spend, ctx);
   sellStock(game, me);
   return t;
@@ -1307,9 +1484,12 @@ export async function loadStaffHelper() {
 }
 
 export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true, cozy = true, valley = true, keepGame = false } = {}) {
-  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises, variety, cozy, valley, cosmetics: SIM_CAREER_DECOR[strategy] || null });
   const profile = CAREER_PROFILES[strategy];
   if (!profile) throw new Error(`Stratégie inconnue : ${strategy}`);
+  const outStrategy = strategy;
+  // (Vallée V3) handsOffLate joue exactement le tranquille (mêmes tirages humains, mêmes décisions) jusqu'à l'an 12.
+  if (strategy === 'handsOffLate') strategy = 'casual';
+  const game = createCareer({ seed, difficulty, seasonLength, farmName: 'Ferme simulée', surprises, variety, cozy, valley, cosmetics: SIM_CAREER_DECOR[strategy] || null });
   const me = {
     rnd: humanRng(humanSeed(seed, strategy)), profile, strategy, matureSince: {}, day: 0, wishes: numberWishes(WISHES[strategy]),
     planned: {}, seenOffers: new Set(), seenQuests: new Set(), contestFocus: false, contestKey: null, lastSeasonKey: null,
@@ -1319,9 +1499,10 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     seedBase: humanSeed(seed, strategy),
     springPlan: PLANS[profile.plan]?.spring ? [PLANS[profile.plan].spring] : [],
     valleyStats: { placed: 0 },
+    placesStats: { works: 0, wilds: 0, trees: 0 },
   };
   game.actions.career.setStorageMode('low');
-  const out = { seed, strategy, years: [], bankrupt: false, loans: 0, hardships: 0, rescues: 0, quests: 0, contests: 0, domaineYear: null, overdraftStreakMax: 0 };
+  const out = { seed, strategy: outStrategy, years: [], bankrupt: false, loans: 0, hardships: 0, rescues: 0, quests: 0, contests: 0, domaineYear: null, overdraftStreakMax: 0 };
   // (lot 3) gains de la variété (pièces, toute la carrière) et écus.
   out.variety = { orders: 0, cart: 0, cards: 0, medals: 0, merchant: 0, ecus: 0, ordersDone: 0, medalsN: 0, themes: 0 };
   // (lot 4) fêtes et hiver (pièces), écus, lanternes par année, comice (stand).
@@ -1356,6 +1537,14 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   };
   // (V2) + Grainothèque, troc proposé et fait, croisement.
   for (const type of ['valleyStarted', 'jarOpened', 'heirloomFixed', 'speciesHint', 'speciesInstalled', 'valleyStage', 'jayGift', 'fairHeirloomBought', 'seedLibraryBuilt', 'trocOffered', 'seedSwapped', 'crossFound']) game.on(type, novelty);
+  // (V3) + vue ouverte, chantier, étape de lieu, première pêche au ruisseau de l'année, champignons, terres sauvages.
+  for (const type of ['valleyViewOpened', 'worksStarted', 'placeRecovered', 'mushroomsGrew', 'wildLandGiven', 'wildLandGrown']) game.on(type, novelty);
+  game.on('riverFished', () => {
+    if (me.riverYear !== game.state.time.year) {
+      me.riverYear = game.state.time.year;
+      novelty();
+    }
+  });
   game.on('hedgePicked', (e) => (out.valley.finds += e.amount || 0));
   game.on('planted', (e) => (out.valley.sownCrops[e.cropId] = (out.valley.sownCrops[e.cropId] || 0) + 1));
   let y = newYearAcc(game);
@@ -1532,7 +1721,7 @@ function valleyYearOf(game, y) {
     installed: Object.values(v.species).filter((e) => e.state === 'installed').length,
     stage: v.stage,
     // Signes de vie (habitants installés + variétés sauvées, V2 compris s'il est ouvert).
-    signs: Object.values(v.species).filter((e) => e.state === 'installed').length + Object.values(v.varieties).filter((e) => e.fixedAt).length,
+    signs: game.query.career.valley()?.stage?.signs ?? 0,
     spent: v.spent,
     nature: Object.keys(v.nature).length,
     tapsPerDay: y.valleyTaps / Math.max(1, y.days),
@@ -1549,6 +1738,38 @@ function valleyYearOf(game, y) {
     // Dépenses du V2 : Grainothèque (niveaux achetés) et nichoirs à chauves-souris.
     v2Spent: SEED_LIBRARY.levels.filter((L) => L.level <= (v.library?.level || 0)).reduce((a, L) => a + L.price, 0)
       + Array.from({ length: v.bought?.batbox || 0 }, (_, k) => NATURE_ITEMS_BY_ID.batbox.price.base + NATURE_ITEMS_BY_ID.batbox.price.step * k).reduce((a, b) => a + b, 0),
+    // (V3) étapes des lieux (somme et par lieu), habitants de la vallée, terres sauvages (confiées, reprises), pêches,
+    // dépenses du V3 (chantiers, terres, jeunes plants).
+    ...v3YearOf(game, v),
+  };
+}
+
+/** (Vallée V3) Collection et dépenses du V3 en fin d'année ({} sans le V3). */
+function v3YearOf(game, v) {
+  if (v.parts.places === false || v.parts.heritage === false || !v.view) return {};
+  const steps = Object.fromEntries(PLACES.map((p) => [p.id, v.places?.[p.id]?.step || 0]));
+  const L = game.state.career.seasonLength;
+  const abs = (game.state.time.year - 1) * 4 * L + game.state.time.day;
+  let worksSpent = 0;
+  for (const p of PLACES) {
+    const e = v.places?.[p.id];
+    if (!e) continue;
+    for (let k = 1; k <= e.step; k++) worksSpent += p.steps[k].cost;
+    if (e.works) worksSpent += e.works.cost || 0;
+  }
+  const wilds = Object.values(v.wilds || {});
+  const wildSpent = Array.from({ length: wilds.length }, (_, k) => WILD_RULES.price.base + WILD_RULES.price.step * k).reduce((a, b) => a + b, 0);
+  const trees = game.state.plots.filter((p) => p.cropId === 'cherry' || p.cropId === 'pear').length;
+  return {
+    viewOpen: !!v.view.open,
+    placeSteps: Object.values(steps).reduce((a, b) => a + b, 0),
+    steps,
+    valleyInstalled: Object.entries(v.species).filter(([id, e]) => e.state === 'installed' && VALLEY_SPECIES_BY_ID[id]).length,
+    wilds: wilds.length,
+    wildsGrown: wilds.filter((e) => abs - e.at >= WILD_RULES.grownSeasons * L).length,
+    river: v.stats.river || 0,
+    trees,
+    v3Spent: worksSpent + wildSpent + trees * 60,
   };
 }
 
@@ -1663,6 +1884,13 @@ function careerTable(careers, { runs, years, seasonLength }) {
               v2SpentMean: Math.round(at.reduce((s2, x) => s2 + (x.valley.v2Spent || 0), 0) / at.length),
               swaps4: pct(at.filter((x) => (x.valley.swaps || 0) >= 4).length, at.length),
               crosses1: pct(at.filter((x) => (x.valley.crosses || 0) >= 1).length, at.length),
+              // (V3) médianes : étapes de lieux, habitants de la vallée, terres ; dépenses du V3 (moyenne).
+              placeSteps: median(at.map((x) => x.valley.placeSteps || 0)),
+              valleyInstalled: median(at.map((x) => x.valley.valleyInstalled || 0)),
+              wilds: median(at.map((x) => x.valley.wilds || 0)),
+              v3SpentMean: Math.round(at.reduce((s2, x) => s2 + (x.valley.v3Spent || 0), 0) / at.length),
+              v3SpentMedian: Math.round(median(at.map((x) => x.valley.v3Spent || 0))),
+              moneyMedian: Math.round(median(at.map((x) => x.money))),
             }
           : null,
       });
@@ -1733,6 +1961,7 @@ function valleySummary(careers, years) {
     noveltyAtLeast80: pct(shares.filter((x) => x >= 0.8).length, shares.length),
     noveltyShare210: Math.round(100 * median(shares210)),
     noveltyShare610: Math.round(100 * median(shares610)),
+    noveltyShare1018: Math.round(100 * median(careers.map((c) => shareOf(c, 10, years)))),
     noveltyAtLeast80of210: pct(shares210.filter((x) => x >= 0.8).length, shares210.length),
     all12Swaps: median(careers.map((c) => firstYear(c, (v) => (v.swaps || 0) >= 12))),
     all11Crosses: median(careers.map((c) => firstYear(c, (v) => (v.crosses || 0) >= 11))),
@@ -1750,6 +1979,25 @@ function valleySummary(careers, years) {
     started: median(careers.map((c) => firstYear(c, (v) => v.started))),
     finds: Math.round(careers.reduce((s2, c) => s2 + c.valley.finds, 0) / careers.length),
     sown,
+    // (V3) Année (médiane) : vue ouverte, chaque étape de chaque lieu, étapes 6 et 7, 10 habitants de la vallée, 19 étapes,
+    // 18 terres, vallée complète ; nouveautés des ans 10 à 18.
+    v3: careers[0].years.some((y) => y.valley?.viewOpen !== undefined)
+      ? {
+          viewOpen: median(careers.map((c) => firstYear(c, (v) => v.viewOpen))),
+          placeYears: Object.fromEntries(PLACES.map((p) => [p.id, p.steps.slice(1).map((st) => median(careers.map((c) => firstYear(c, (v) => (v.steps?.[p.id] || 0) >= st.n))))])),
+          stage6: median(careers.map((c) => firstYear(c, (v) => v.stage >= 6))),
+          stage7: median(careers.map((c) => firstYear(c, (v) => v.stage >= 7))),
+          stage6Share: pct(careers.filter((c) => c.years.some((y) => y.valley && y.valley.stage >= 6)).length, careers.length),
+          stage7Share: pct(careers.filter((c) => c.years.some((y) => y.valley && y.valley.stage >= 7)).length, careers.length),
+          all10Valley: median(careers.map((c) => firstYear(c, (v) => (v.valleyInstalled || 0) >= 10))),
+          all19Steps: median(careers.map((c) => firstYear(c, (v) => (v.placeSteps || 0) >= 19))),
+          all18Wilds: median(careers.map((c) => firstYear(c, (v) => (v.wilds || 0) >= 18))),
+          complete: median(careers.map((c) => firstYear(c, (v) => (v.placeSteps || 0) >= 19 && (v.valleyInstalled || 0) >= 10 && (v.wilds || 0) >= 18))),
+          completeShare: pct(careers.filter((c) => c.years.some((y) => y.valley && (y.valley.placeSteps || 0) >= 19 && (y.valley.valleyInstalled || 0) >= 10 && (y.valley.wilds || 0) >= 18)).length, careers.length),
+          noveltyShare1018: Math.round(100 * median(careers.map((c) => shareOf(c, 10, years)))),
+          noveltyAtLeast80of1018: pct(careers.map((c) => shareOf(c, 10, years)).filter((x) => x >= 0.8).length, careers.length),
+        }
+      : null,
   };
 }
 
@@ -2011,6 +2259,61 @@ export function printCompareValley2(none, off, on, years, title) {
   }
 }
 
+
+/**
+ * (Vallée V3) Sans la Vallée → V1 + V2 → V1 + V2 + V3 (même graine) : cibles de docs/VALLEE.md § 17.12.5. `none` peut
+ * être null (pas de colonne « sans »).
+ */
+export function printCompareValley3(none, off, on, years, title) {
+  console.log(`\n${title}`);
+  const sumIncome = (t, from = 1, to = years) => t.rows.filter((r) => r.year >= from && r.year <= to).reduce((s2, r) => s2 + r.income, 0);
+  const late = (t, k, from = 10, to = years) => {
+    const rows = t.rows.filter((r) => r.year >= from && r.year <= to);
+    return rows.length ? rows.reduce((s2, r) => s2 + r[k], 0) / rows.length : 0;
+  };
+  const sign = (d) => `${d >= 0 ? '+' : ''}${d.toFixed(1)} %`;
+  const delta = (a, b) => (a ? sign((100 * (b - a)) / Math.abs(a)) : '—');
+  const yr = (x) => (Number.isFinite(x) ? `an ${x}` : 'jamais');
+  const row = (t, yv) => t.rows.find((r) => r.year === yv);
+  for (const strategy of Object.keys(on)) {
+    const n = none?.[strategy] || null;
+    const a = off[strategy];
+    const b = on[strategy];
+    const ranks = a.rows.map((r, k) => `${r.rankMedian}→${b.rows[k]?.rankMedian ?? '—'}`).join(' ');
+    console.log(`  ${strategy.padEnd(12)} revenu ${years} ans : V1+V2 ${Math.round(sumIncome(a))} → V3 ${Math.round(sumIncome(b))} (${delta(sumIncome(a), sumIncome(b))}) · ans 10-${years} ${delta(sumIncome(a, 10), sumIncome(b, 10))}${n ? ` · toute la Vallée / sans : ${delta(sumIncome(n), sumIncome(b))}` : ''}`);
+    console.log(`               Domaine ${n ? `${n.domaineYear}→` : ''}${a.domaineYear}→${b.domaineYear} · faillites ${n ? `${n.bankrupt}→` : ''}${a.bankrupt}→${b.bankrupt} % · rang 3 à l'an 5 : ${a.rank3By5}→${b.rank3By5} % · rangs ${ranks}`);
+    console.log(`               gestes/j (ans 10-${years}) ${late(a, 'taps').toFixed(2)} → ${late(b, 'taps').toFixed(2)} (${(late(b, 'taps') - late(a, 'taps')).toFixed(2)}) · à la main ${Math.round(late(a, 'handShare'))} → ${Math.round(late(b, 'handShare'))} %`);
+    const money = [10, 14, 18].filter((yv) => yv <= years).map((yv) => {
+      const mn = n ? row(n, yv)?.moneyMean ?? null : null;
+      const ma = row(a, yv)?.moneyMean;
+      const mb = row(b, yv)?.moneyMean;
+      const med = (t) => row(t, yv)?.valley?.moneyMedian;
+      return `an ${yv} : ${mn !== null ? `sans ${mn} · ` : ''}V1+V2 ${ma} (méd. ${med(a) ?? '—'}) · V3 ${mb} (méd. ${med(b) ?? '—'})${mn ? ` (${Math.round((100 * mb) / mn)} % de sans)` : ''}`;
+    });
+    console.log(`               argent en caisse (moy.) ${money.join(' ; ')}`);
+    const vs = b.valley?.v3;
+    if (!vs) continue;
+    console.log(`               dépenses du V3 (moy., cumul) ${b.rows.map((r) => r.valley?.v3SpentMean ?? 0).join(' ')} · méd. an 14 ${row(b, 14)?.valley?.v3SpentMedian ?? '—'} · an ${years} ${row(b, years)?.valley?.v3SpentMedian ?? '—'}`);
+    const py = Object.entries(vs.placeYears).map(([id, ys]) => `${id} ${ys.map((x) => (Number.isFinite(x) ? x : '—')).join('/')}`).join(' · ');
+    console.log(`               vue ${yr(vs.viewOpen)} · étapes des lieux (an, méd.) ${py}`);
+    console.log(`               étape 6 ${yr(vs.stage6)} (${vs.stage6Share} %) · étape 7 ${yr(vs.stage7)} (${vs.stage7Share} %) · 10 habitants de la vallée ${yr(vs.all10Valley)} · 19 étapes ${yr(vs.all19Steps)} · 18 terres ${yr(vs.all18Wilds)} · vallée complète ${yr(vs.complete)} (${vs.completeShare} %)`);
+    console.log(`               étapes / habitants de la vallée / terres par an (méd.) ${b.rows.map((r) => (r.valley ? `${r.valley.placeSteps}/${r.valley.valleyInstalled}/${r.valley.wilds}` : '—')).join(' ')} · signes ${b.rows.map((r) => r.valley?.signs ?? '—').join(' ')}`);
+    console.log(`               nouveautés ans 10-${years} (méd.) ${a.valley?.noveltyShare1018 ?? '—'} → ${vs.noveltyShare1018} % (carrières ≥ 80 % : ${vs.noveltyAtLeast80of1018} %) · étape 5 ${yr(b.valley.stage5)}`);
+    if (strategy === 'handsOff') {
+      const prof = (t) => t.rows.filter((r) => r.year >= 4 && r.year <= 7).reduce((s2, r) => s2 + r.netMean, 0) / 4;
+      console.log(`               ferme laissée seule : bénéfice moyen par an (ans 4 à 7) V1+V2 ${Math.round(prof(a))} → V3 ${Math.round(prof(b))} (${delta(prof(a), prof(b))})`);
+    }
+    if (strategy === 'handsOffLate') {
+      const prof = (t) => t.rows.filter((r) => r.year >= 13 && r.year <= 16).reduce((s2, r) => s2 + r.netMean, 0) / Math.max(1, t.rows.filter((r) => r.year >= 13 && r.year <= 16).length);
+      console.log(`               ferme laissée seule tard : bénéfice moyen par an (ans 13 à 16) V1+V2 ${Math.round(prof(a))} → V3 ${Math.round(prof(b))} (${delta(prof(a), prof(b))})`);
+    }
+    if (strategy === 'automator') {
+      const p = (t) => row(t, years)?.patrimonyMean ?? 0;
+      console.log(`               automator : patrimoine an ${years} ${p(a)} → ${p(b)} (${delta(p(a), p(b))}) · habitants de la vallée (méd., an ${years}) ${row(b, years)?.valley?.valleyInstalled ?? '—'}`);
+    }
+  }
+}
+
 /** Part de chaque culture dans les semis (points de %) : sans → avec ; écart le plus grand. */
 export function sowShareShift(offCareersSown, onCareersSown) {
   const share = (sown) => {
@@ -2062,6 +2365,21 @@ async function run() {
     valley: arg('valley', null) === null ? true : parseValley(arg('valley')),
     firstSeed: Number(arg('first-seed', 1)),
   };
+  if (arg('compare-valley3', false)) {
+    // (Vallée V3) Sans la Vallée → V1 + V2 → V1 + V2 + V3 (même graine). 18 ans par défaut ; --jobs N : fils de travail.
+    const jobs = Number(arg('jobs', 1));
+    const o3 = { ...opts, years: Number(arg('years', 18)), strategies: arg('strategy', null) ? strategies : STRATEGIES_V3 };
+    const sim = (o) => (jobs > 1 ? simulateCareerParallel({ ...o, jobs }) : Promise.resolve(simulateCareer(o)));
+    const none = arg('no-none', false) ? null : await sim({ ...o3, valley: false });
+    const off = await sim({ ...o3, valley: { seeds: true, wildlife: true, heritage: true, places: false } });
+    const on = await sim({ ...o3, valley: true });
+    if (arg('json', false)) {
+      console.log(JSON.stringify({ none, off, on }, null, 2));
+      return;
+    }
+    printCompareValley3(none, off, on, o3.years, `Vallée vivante (lot V3) — carrière ${o3.difficulty}, saisons de ${o3.seasonLength} jours : sans → V1 + V2 → V1 + V2 + V3 · ${o3.runs} carrières × ${o3.years} ans`);
+    return;
+  }
   if (arg('compare-valley2', false)) {
     // (Vallée V2) Sans la Vallée → V1 seul → V1 + V2 (même graine). --jobs N : fils de travail.
     const jobs = Number(arg('jobs', 1));

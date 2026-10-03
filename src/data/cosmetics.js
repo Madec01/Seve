@@ -54,12 +54,17 @@ export const COSMETICS = [
   { id: 'swap.basket', name: 'Le panier de sachets', category: 'small', price: 0, found: true },
   { id: 'cross.sign', name: 'L\'enseigne « Ferme semencière »', category: 'small', price: 0, found: true },
   { id: 'lizard.wall', name: 'Le muret au lézard', category: 'small', price: 0, found: true },
+  // (Vallée vivante, lot V3) Page « Le carnet d'Hélène », étape 7 de la vallée.
+  { id: 'heron.vane', name: 'La girouette au héron', category: 'small', price: 0, found: true },
+  { id: 'valley.bench', name: 'Le banc du belvédère', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   { id: 'herbarium', name: 'Le grand herbier', category: 'large', price: 0, found: true },
   // (Vallée vivante, lot V1) Pages de l'album « Graines anciennes » et « Les habitants de la ferme », étape 5 de la vallée.
   { id: 'valley.linden', name: 'Le tilleul de la vallée', category: 'large', price: 0, found: true },
   { id: 'lantern.grand', name: 'Le grand lampion', category: 'large', price: 0, found: true },
+  // (Vallée vivante, lot V3) Page « Les lieux de la vallée ».
+  { id: 'mill.wheel', name: 'La roue du moulin', category: 'large', price: 0, found: true },
   // Allées
   { id: 'path.dirt', name: 'Allées de terre', category: 'path', price: 0, isDefault: true },
   { id: 'path.stone', name: 'Pavés de pierre', category: 'path', price: 40 },

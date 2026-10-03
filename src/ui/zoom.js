@@ -121,7 +121,7 @@ export function createZoomControls(app) {
     const s = app.scene;
     if (!s?.zoomInfo || app.inMenu || !app.game) return;
     const info = s.zoomInfo();
-    if (info.gesture) return;
+    if (info.gesture || info.forced) return; // (Vallée V3) zoom tactile d'un mode de visée : pas une préférence
     const r = info.ratio;
     if (r === lastRatio) return;
     lastRatio = r;
@@ -155,6 +155,7 @@ export function createZoomControls(app) {
     const wide = document.body.classList.contains('layout-wide');
     if ((app.sheets?.isOpen() && !wide) || app.dialogs?.isOpen()) return false;
     if (app.hints?.active || app.tutorial?.active) return false;
+    if (app.valleyView?.active) return false; // (Vallée V3) l'écran « La vallée »
     return !document.body.classList.contains('is-loading');
   }
 

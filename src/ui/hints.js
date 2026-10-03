@@ -2,8 +2,13 @@
 // système apparaît pour la première fois (atelier, pommier, chèvre, concours, grange, décor).
 // Mémorisés dans la progression (hintsSeen) : jamais deux fois le même.
 //
-// createHints(app) → { maybe(id, target?), frame(), relayout(), clear(), active }
+// createHints(app) → { maybe(id, target?, { avoid }?), frame(), relayout(), clear(), active }
 //   target : { selector } | { plot: index } | { investment: id } | { rect: () => rect de la page } | null
+//            + `sheet: id` facultatif : la bulle n'attend que cette feuille (elle ne s'affiche qu'avec elle ouverte)
+//   avoid  : [() => rect de la page | null] — zones que la bulle ne recouvre jamais (la cible aussi, toujours)
+// (Vallée V3, reste du V2 n° 3) Une seule bulle par ouverture de feuille : une bulle déjà montrée pendant cette ouverture
+// (sheets.openCount) fait attendre les suivantes jusqu'à la prochaine ouverture ; redemander un conseil déjà en file met
+// à jour sa cible.
 // Lot 1 « confort » : un conseil dont le sujet est déjà réglé (`relevant(app)` faux : « L'embauche » alors qu'un
 // employé est déjà embauché) n'est jamais montré (et compte comme vu) ; pendant une feuille ouverte, un conseil
 // n'attend que si sa cible est DANS la feuille (sinon il attend la fermeture : il ne couvre plus le haut de la
@@ -45,20 +50,30 @@ export function createHints(app) {
   layer.append(bubble);
   document.body.append(layer);
 
-  const queue = []; // { id, target }
-  let shown = null; // { id, target, def }
+  const queue = []; // { id, target, avoid }
+  let shown = null; // { id, target, def, avoid }
+  let sheetShown = -1; // ouverture de feuille (sheets.openCount) pendant laquelle une bulle a été montrée
   let lastKey = '';
   let textNode = null;
 
   const available = () => !!app.progression?.available();
 
   /** Demande un conseil ; renvoie true s'il sera montré (maintenant ou plus tard). */
-  function maybe(id, target = null) {
+  function maybe(id, target = null, opts = {}) {
     const def = HINTS[id];
     if (!def || !available()) return false;
     if (app.progression.hintSeen(id)) return false;
-    if (shown?.id === id || queue.some((q) => q.id === id)) return true;
-    queue.push({ id, target });
+    const avoid = Array.isArray(opts?.avoid) ? opts.avoid : [];
+    if (shown?.id === id) return true;
+    const queued = queue.find((q) => q.id === id);
+    if (queued) {
+      // Redemandé (autre écran) : la nouvelle cible remplace l'ancienne.
+      if (target) queued.target = target;
+      if (avoid.length) queued.avoid = avoid;
+      pump();
+      return true;
+    }
+    queue.push({ id, target, avoid });
     pump();
     return true;
   }
@@ -73,6 +88,8 @@ export function createHints(app) {
   function contextOk(def, target = null) {
     if (def.where === 'menu') return app.inMenu && app.dialogs.top() === 'main-menu';
     if (!app.game || app.inMenu || app.game.state.status !== 'playing' || app.dialogs.isOpen() || app.tutorial.active || app.decor?.active) return false;
+    // Conseil propre à une feuille : seulement quand elle est ouverte.
+    if (target?.sheet && app.sheets?.current !== target.sheet) return false;
     // Feuille ouverte (téléphone) : seuls les conseils qui visent quelque chose dans la feuille passent.
     if (app.sheets?.isOpen() && !app.isWide() && !inSheet(target)) return false;
     return true;
@@ -100,7 +117,9 @@ export function createHints(app) {
         queue.splice(k, 1);
       }
     }
-    const i = queue.findIndex((q) => contextOk(HINTS[q.id], q.target));
+    // Une bulle par ouverture de feuille : la suivante attend la prochaine ouverture.
+    const sheetBusy = !!app.sheets?.isOpen() && sheetShown === app.sheets.openCount;
+    const i = queue.findIndex((q) => contextOk(HINTS[q.id], q.target) && !(sheetBusy && app.sheets?.isOpen()));
     if (i === -1) return;
     const [q] = queue.splice(i, 1);
     show(q);
@@ -109,6 +128,7 @@ export function createHints(app) {
   function show(q) {
     const def = HINTS[q.id];
     shown = { ...q, def };
+    if (app.sheets?.isOpen()) sheetShown = app.sheets.openCount;
     const face = def.who === 'joseph' ? spriteAny(['portrait.joseph', 'npc.joseph', 'farmer'], 'sprite--avatar', 'info') : sprite('farmer', 'sprite--avatar');
     bubble.replaceChildren(
       el('div.tuto-avatar', face),
@@ -223,6 +243,16 @@ export function createHints(app) {
         y = roomTop > roomBottom ? top : bottom - b.height;
       }
     }
+    // Zones à ne jamais recouvrir (la cible, et celles qu'on a désignées) : on essaie l'autre bord.
+    const avoidRects = [rect, ...(shown.avoid || []).map((f) => { try { return f() || null; } catch { return null; } })].filter((r) => r && r.width > 0 && r.height > 0);
+    const covers = (yy) => avoidRects.some((r) => !(yy + b.height <= r.top || yy >= r.bottom || x + b.width <= r.left || x >= r.right));
+    if (covers(y)) {
+      const alt = [top, bottom - b.height].find((yy) => !covers(yy));
+      if (alt !== undefined) {
+        y = alt;
+        side = rect ? (alt === top ? 'top' : 'bottom') : 'none';
+      }
+    }
     bubble.style.left = `${x}px`;
     bubble.style.top = `${Math.round(y)}px`;
     if (rect && side !== 'none') {
@@ -238,8 +268,9 @@ export function createHints(app) {
     }
     // Une fenêtre (fin de saison…) ou une feuille s'ouvre par-dessus un conseil de partie : il attendra.
     if (!contextOk(shown.def, shown.target)) {
-      const q = { id: shown.id, target: shown.target };
+      const q = { id: shown.id, target: shown.target, avoid: shown.avoid };
       hide();
+      sheetShown = -1; // pas lue : elle pourra revenir pendant la même ouverture
       if (q && HINTS[q.id].where === 'game' && app.game && !app.inMenu) queue.unshift(q);
       return;
     }

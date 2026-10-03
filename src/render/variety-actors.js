@@ -651,9 +651,15 @@ export function createVarietyActors(effects) {
   }
 
   // ── Toucher ───────────────────────────────────────────────────────────────────
-  function hitTest(wx, wy, slop = 0) {
+  function hitTest(wx, wy, slop = 0, opts = {}) {
     if (!enabled || !sp) return null;
-    const within = (r, s) => r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
+    // (Vallée V3) Au doigt : chaque cible fait au moins `minWorld` px du monde (48 px CSS au zoom courant).
+    const m = opts.minWorld || 0;
+    const grow = (r) => (r && m > 0 ? { x: r.x + r.w / 2 - Math.max(r.w, m) / 2, y: r.y + r.h / 2 - Math.max(r.h, m) / 2, w: Math.max(r.w, m), h: Math.max(r.h, m) } : r);
+    const within = (r0, s) => {
+      const r = grow(r0);
+      return r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
+    };
     const targets = [];
     // En route vers sa place (« arriving ») aussi : l'animation s'arrête quand le jeu est en pause, et la roulotte
     // ou la charrette doivent rester touchables à leur place.

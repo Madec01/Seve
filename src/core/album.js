@@ -66,7 +66,7 @@ function emptyFacts() {
     crops: S(), cropGold: S(), cropGiant: S(), products: S(), animalProducts: S(), animals: S(), pets: S(), weather: S(), special: S(),
     surprises: S(), finds: S(), forage: false, wish: false, clients: S(), merchantMet: false, themes: S(), themeFetes: S(), themeVisitors: S(),
     fetes: S(), feteBest: S(), comice: false, contest: false, cartFull: false, goldMedal: false, winterFinds: S(), traces: S(), birds: S(),
-    fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(), swapsDone: S(), swapsFav: S(),
+    fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(), swapsDone: S(), swapsFav: S(), placesRestored: S(),
   };
 }
 
@@ -123,6 +123,8 @@ function addContext(f, ctx) {
     // (Vallée V2) Trocs faits (voisins) et ceux d'une préférée (♥).
     addAll(f.swapsDone, ctx.career?.valley?.swaps);
     addAll(f.swapsFav, ctx.career?.valley?.swapsFav);
+    // (Vallée V3) Lieux de la vallée à leur dernière étape.
+    addAll(f.placesRestored, ctx.career?.valley?.restored);
   } else if (!ctx.cozy) {
     // Classique (rien de plus n'est exposé) : un poulailler à l'aube donne des œufs, une vache ou une chèvre du lait,
     // des moutons de la laine après la tonte du dernier jour de printemps.
@@ -264,6 +266,8 @@ export function caseDone(c, f) {
       return f.wildlifeInstalled.has(ch.id);
     case 'swapDone':
       return f.swapsDone.has(ch.id);
+    case 'placeRestored':
+      return f.placesRestored.has(ch.id);
     default:
       return false;
   }

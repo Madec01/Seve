@@ -33,6 +33,7 @@ import { cropName as cropNameOf } from '../text.js';
 import { HINTS } from '../hints.js';
 import * as VD from '../../data/career/valley.js';
 import * as HD from '../../data/career/heritage.js';
+import { STORIES_V3_BY_ID } from '../../data/career/places.js';
 import { traitChip, fixBar, vIcon } from './valley.js';
 
 // ── Textes ──────────────────────────────────────────────────────────────────────────
@@ -601,6 +602,7 @@ export function createHeritage(app) {
     app.pushPause('valley-pair');
     document.body.classList.add('in-valley-place', 'in-valley-pair');
     app.scene?.setPairPlacing?.(cropId);
+    app.scene?.ensureTouchZoom?.({ animate: !reduced() }); // (V3) zoom tactile : parcelles ≥ 48 px
     paintBar();
     app.audio.play('open', { volume: 0.6 });
     app.onDecorChange?.(true);
@@ -635,6 +637,7 @@ export function createHeritage(app) {
     document.body.classList.remove('in-valley-pair');
     if (!app.valley?.placing) document.body.classList.remove('in-valley-place');
     app.scene?.setPairPlacing?.(null);
+    if (!app.valley?.placing && !app.places?.wilding) app.scene?.restoreZoom?.({ animate: !reduced() });
     app.popPause('valley-pair');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.onDecorChange?.(false);
@@ -661,7 +664,7 @@ export function createHeritage(app) {
     return stories(v).find((s) => s.available && !s.read)?.id || null;
   }
   function storyContent(id) {
-    const s = stories().find((x) => x.id === id) || (HD.STORIES || []).find((x) => x.id === id);
+    const s = stories().find((x) => x.id === id) || (HD.STORIES || []).find((x) => x.id === id) || STORIES_V3_BY_ID?.[id]; // (V3) récits du ruisseau
     if (!s) return el('p.sheet-empty', 'Récit inconnu.');
     return el(
       'div.vl-chapter.cz-veillee',
@@ -680,6 +683,7 @@ export function createHeritage(app) {
     app.vibrate?.(10);
     app.sheets.close();
     if (id === 'heritage0') setTimeout(() => hint('valley.library', rectTarget('seedLibrary')), 300);
+    app.places?.afterStory?.(id); // (V3) « Sur la colline » : la vue de la vallée s'ouvre une première fois
   }
   function openStory(id = firstUnreadStory()) {
     if (!on() || !id) return false;
@@ -1014,7 +1018,7 @@ export function createHeritage(app) {
       else if (bar) paintBar();
     }
     if (!g || app.inMenu || !enabled(g)) return;
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'cross') {
         showCross(w.data);

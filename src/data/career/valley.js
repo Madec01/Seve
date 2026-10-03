@@ -5,12 +5,16 @@
 // tables réunies `ALL_*` en bas de ce fichier ; VARIETIES et SPECIES du V1 ne changent jamais (ordre des tirages).
 
 import { CROSSES, SPECIES_V2, VILLAGE_VARIETIES } from './heritage.js';
+import { ORCHARD_VARIETIES, PLACE_STEPS_TOTAL, STAGES_V3, VALLEY_SPECIES, WILD_RULES } from './places.js';
 
-/** Version de state.career.valley (V1 : 1, V2 : 2 ; rien n'est jamais retiré). */
-export const VALLEY_VERSION = 2;
+/** Version de state.career.valley (V1 : 1, V2 : 2, V3 : 3 ; rien n'est jamais retiré). */
+export const VALLEY_VERSION = 3;
 
-/** Parties (tests, simulation) : graines anciennes, habitants, le V2 (Grainothèque, troc, croisements, habitants du V2). */
-export const VALLEY_PARTS = ['seeds', 'wildlife', 'heritage'];
+/**
+ * Parties (tests, simulation) : graines anciennes, habitants, le V2 (Grainothèque, troc, croisements, habitants du V2),
+ * le V3 (`places` : vue de la vallée, lieux, habitants de la vallée, terres sauvages ; n'existe pas sans `heritage`).
+ */
+export const VALLEY_PARTS = ['seeds', 'wildlife', 'heritage', 'places'];
 
 /** La Vallée commence à la première aube où la ferme est à ce rang (ou plus). */
 export const VALLEY_START = { rank: 2 };
@@ -255,8 +259,22 @@ export const MAX_STAGE = STAGES.length - 1;
  * `STAGES[n].signs` (2 / 6 / 11 / 17 / 24). docs/VALLEE.md § 16.7 et § 16.12.7.
  */
 export const STAGE_SIGNS_V2 = [0, 2, 6, 11, 22, 38];
-/** Palier de l'étape n (signes de vie), selon que le V2 est ouvert ou non. */
-export function stageSigns(n, heritage = false) {
+/**
+ * (V3) Paliers des étapes 0 à 7 quand le lot V3 est ouvert (partie `places`) : les étapes 1 à 5 sont celles du V2 ; les
+ * étapes 6 et 7 demandent aussi une condition de lieux (STAGES_V3[].needs, lue par src/core/career/habitat.js).
+ */
+export const STAGE_SIGNS_V3 = [...STAGE_SIGNS_V2, ...STAGES_V3.map((s) => s.signs)];
+/** Les 8 étapes (0 à 7) : celles du V1 puis les deux du V3. */
+export const STAGES_ALL = [...STAGES, ...STAGES_V3];
+/** Dernière étape possible : 5 (V1, V2), 7 (avec le V3). */
+export const MAX_STAGE_ALL = STAGES_ALL.length - 1;
+/** Étape la plus haute d'une partie selon ses parties actives (`places` exige `heritage`). */
+export function maxStageOf(parts) {
+  return parts && parts.places !== false && parts.heritage !== false ? MAX_STAGE_ALL : MAX_STAGE;
+}
+/** Palier de l'étape n (signes de vie), selon que le V2 (et le V3) est ouvert ou non. */
+export function stageSigns(n, heritage = false, places = false) {
+  if (heritage && places) return STAGE_SIGNS_V3[Math.max(0, Math.min(MAX_STAGE_ALL, n))];
   const k = Math.max(0, Math.min(MAX_STAGE, n));
   return heritage ? STAGE_SIGNS_V2[k] : STAGES[k].signs;
 }
@@ -325,8 +343,11 @@ export const SIGNS_V1 = SPECIES.length + VARIETIES.length;
 
 // ── (V2) Tables réunies : lectures par identifiant (VARIETIES et SPECIES du V1 restent l'ordre des tirages du V1) ─────
 
-/** Les 35 variétés : du pays (12), du village (12), croisées (11) ; champ `group` 'pays' | 'village' | 'cross'. */
-export const ALL_VARIETIES = [...VARIETIES, ...VILLAGE_VARIETIES, ...CROSSES];
+/**
+ * Les 36 variétés : du pays (12), du village (12), croisées (11), (V3) du verger de la commune (1) ; champ `group` 'pays' |
+ * 'village' | 'cross' | 'orchard'. Les tables du V2 et du V3 viennent à la fin (l'ordre du V1 ne change jamais).
+ */
+export const ALL_VARIETIES = [...VARIETIES, ...VILLAGE_VARIETIES, ...CROSSES, ...ORCHARD_VARIETIES];
 export const ALL_VARIETIES_BY_ID = Object.fromEntries(ALL_VARIETIES.map((x) => [x.id, x]));
 
 /** Traits d'une variété (identifiant ou définition) : V1 et village [trait] ; croisée : ses deux traits. */
@@ -336,9 +357,12 @@ export function varietyTraits(x) {
   return Array.isArray(v.traits) ? [...v.traits] : v.trait ? [v.trait] : [];
 }
 
-/** Les 16 habitants (12 du V1 puis 4 du V2). */
-export const ALL_SPECIES = [...SPECIES.map((s) => ({ ...s, group: 'v1' })), ...SPECIES_V2];
+/** Les 26 habitants (12 du V1, 4 du V2, puis (V3) les 10 de la vallée : group 'v1' | 'v2' | 'valley'). */
+export const ALL_SPECIES = [...SPECIES.map((s) => ({ ...s, group: 'v1' })), ...SPECIES_V2, ...VALLEY_SPECIES];
 export const ALL_SPECIES_BY_ID = Object.fromEntries(ALL_SPECIES.map((s) => [s.id, s]));
 
-/** Signes de vie, V2 compris (16 habitants + 35 variétés). */
-export const SIGNS_ALL = ALL_SPECIES.length + ALL_VARIETIES.length;
+/** Signes de vie, V2 compris (16 habitants + 35 variétés) — sans le V3. */
+export const SIGNS_ALL = SPECIES.length + SPECIES_V2.length + VARIETIES.length + VILLAGE_VARIETIES.length + CROSSES.length;
+
+/** (V3) Signes de vie avec le V3 : 26 habitants + 36 variétés + 19 étapes de lieux + 18 terres sauvages reprises = 99. */
+export const SIGNS_ALL_V3 = ALL_SPECIES.length + ALL_VARIETIES.length + PLACE_STEPS_TOTAL + WILD_RULES.total;

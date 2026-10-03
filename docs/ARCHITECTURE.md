@@ -5076,3 +5076,50 @@ sauvages, vue sur la carte et la mini-carte, qui reprend ; étapes 6 et 7 forcé
 « À faire » regroupée (carrière reprise à 11 entrées → 5 au plus) ; premier passage au tableau avec un troc (rien ne couvre
 « Choisir une graine ») ; mouvements réduits, texte à 150 % ; une partie de niveau Classique identique), `JOURNAL.md`,
 sauvegarde `backup/vallee-v3-…` à la fin.
+
+## Vallée V3 — rendu et interface (UI/RENDER, 2026-10-03)
+
+Code contre « Vallée vivante — contrats du lot V3 ». Carrière seulement : gardé par `state.career.valley`, `parts.heritage`,
+`parts.places` et `v ≥ 3` (`app.places.on()`), la vue et le segment Lieux par `view.open` (`app.places.placesOpen()`).
+Planches `valley3` et `valley3bg` facultatives (`OPTIONAL_SHEETS`) : replis dessinés. Styles ajoutés à `css/valley.css`.
+
+```
+src/render/valley-view.js     viewLayout, viewTargets, pickViewTarget, PLACE_RECTS, MILL_RECT, FARM_RECT, PONTOON_RECT,
+                              BENCH_RECT, MUSHROOM_SPOTS, ANIMAL_ANCHORS, placeSpriteName, millSpriteName, farmSpriteName,
+                              sproutCount (purs) ; createValleyView(canvas, images, { reducedMotion })
+src/render/places-actors.js   (nouveau) poteau, terres sauvages, forêts à confier, mode terres sauvages, visiteurs, clairières ;
+                              purs : wildGroundName, wildObjects, wildVisitor, clearingTiles
+src/render/layout-career.js   careerGridCells → wilds ; bandes 'wildland' / 'wildable' ; layout.wildBands, wildable,
+                              wildRect(id), plotCell(i), valley.signpost ; hitTestCareer(…, minWorld) ; careerIsolatedTargets
+src/render/camera-zoom.js     touchZoom(dpr), expandHitCss(rect, zoom, dpr, min), minWorldFor(zoom, dpr, min)
+src/render/scene.js           setWildPlacing, wildPlacing, placesItemRect, placesStats, ensureTouchZoom, restoreZoom ;
+                              zoomInfo().forced / touchZoom ; mini-carte des terres ; zones ≥ 48 px CSS
+src/render/variety-actors.js  hitTest(…, { minWorld })
+src/render/atlas.js           SHEETS.valley3 ; DECOR_SPRITES : heron.vane, mill.wheel, valley.bench
+src/ui/career/valley-view.js  createValleyView(app) → app.valleyView
+src/ui/career/places.js       createPlaces(app) → app.places
+src/ui/todo-group.js          groupTodo, familyOf, TODO_FAMILIES (pur)
+src/ui/{todo,hints,sheets,variety,zoom,field,grange,album}.js, src/ui/career/{valley,heritage,index,minimap}.js, src/main.js
+```
+
+- **Vue de la vallée** : ordre des touchers (petites cibles d'abord, la plus proche du doigt : bête qui attend, champignon,
+  ponton, Joseph ; puis moulin → `place brook`, étang, verger, prairie, bois, **la ferme**, le ruisseau, le bocage). Écart au
+  contrat : la ferme passe avant le ruisseau et le bocage (son carré chevauche le rectangle du ruisseau, où l'eau ne passe pas).
+  Ordre de dessin : bois, verger, étang, prairie, ruisseau (devant l'étang), bocage (le ruisseau dessous, bande transparente),
+  ferme ; lieux, moulin et ferme tirés des planches de saison (`buildSeasonSheets`), givre posé l'hiver. Le canevas couvre
+  l'écran ; ruban et barre posés dessus (`insetTop` / `insetBottom` mesurés à chaque image). Feuille ouverte : la vue reçoit
+  `setOverlay(hauteur au-dessus de la barre)` et `scrollTo` garde le lieu (ou la cible) visible (`app.valleyView.keepVisible`).
+  Retour d'Android : une entrée d'historique à l'ouverture, `popstate` ferme la vue.
+- **Terres sauvages** : un bloc de 14 × 11 tuiles par cellule `wildland` (sol, objets et poteau dans la couche fixe ; la clé de
+  la grille inclut l'état de chaque terre) ; les colonnes de lisière ne s'ouvrent que vers un terrain possédé ou une terre ; pas
+  d'allée ni de clôture ; une cellule `wildable` reste forêt (plus claire, poteau `wildland.offer`). `minimapLotAt` renvoie la
+  cellule ; un appui long ouvre sa fiche (`app.places.openWild`).
+- **« À faire »** : `todo.items()` = `groupTodo(rawItems())` ; familles réelles du code : village `v-*`, `offer-*`, `order-*`,
+  `vl-troc` ; vallée `vl-*` ; fêtes `cz-*` ; Joseph `quest*`. La ligne du bas, « Où en étais-je ? » et le résumé du matin lisent
+  la liste regroupée ; « Tout ramasser » lit la liste brute.
+- **Conseils** : `hints.maybe(id, target, { avoid })` ; `target.sheet` (seulement avec cette feuille ouverte) ; une bulle par
+  `sheets.openCount` ; une bulle cachée par une fenêtre peut revenir pendant la même ouverture.
+- **Débogage** (`?debug=1`) : `__debug.valley3.{ on, state, view, open(placeId?), close, works, recover, place, wild, wildGrow,
+  wildMode, mushrooms, fish, riverReset, visible, install, stage, story, list, placeUI, wildUI, todo, rawTodo, viewPoint(hit),
+  point(kind, id), touch() (zones en px CSS au zoom courant), ui, stats }` (ajoutés aussi sous `__debug.valley` quand le nom
+  est libre).

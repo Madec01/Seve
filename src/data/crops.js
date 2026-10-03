@@ -18,6 +18,8 @@
 //
 // Ordre : les 7 cultures d'origine d'abord (ordre inchangé depuis la v2), puis les nouveautés v3.
 
+import { VALLEY_TREES } from './career/places.js';
+
 export const CROPS = [
   { id: 'carrot', name: 'Carotte', seasons: ['spring', 'autumn'], growDays: 2, seedCost: 4, sellPrice: 10, frostHardy: false },
   { id: 'turnip', name: 'Navet', seasons: ['spring', 'autumn', 'winter'], growDays: 3, seedCost: 6, sellPrice: 14, frostHardy: true },
@@ -73,8 +75,20 @@ export const CROPS_BY_ID = Object.fromEntries(CROPS.map((c) => [c.id, c]));
 
 const RARE_BY_ID = Object.fromEntries(RARE_CROPS.map((c) => [c.id, c]));
 
+/**
+ * (Vallée V3) Le cerisier et le poirier du verger conservatoire (VALLEY_TREES, src/data/career/places.js) : HORS de CROPS,
+ * comme les graines rares ; getCrop les trouve (règles des arbres de src/core/trees.js).
+ */
+export { VALLEY_TREES };
+const VALLEY_TREES_BY_ID = Object.fromEntries(VALLEY_TREES.map((c) => [c.id, c]));
+
 export function getCrop(id) {
-  return CROPS_BY_ID[id] || RARE_BY_ID[id] || null;
+  return CROPS_BY_ID[id] || RARE_BY_ID[id] || VALLEY_TREES_BY_ID[id] || null;
+}
+
+/** true si c'est un arbre du verger conservatoire (cerisier, poirier : carrière, Vallée V3). */
+export function isValleyTree(id) {
+  return !!VALLEY_TREES_BY_ID[typeof id === 'string' ? id : id?.id];
 }
 
 /** true si c'est une graine rare du colporteur (pea, melon, leek). */
