@@ -2,7 +2,7 @@
 // Chaque accès est protégé (navigation privée, stockage plein ou désactivé) : en cas d'échec,
 // le jeu continue sans sauvegarde et les lectures renvoient des valeurs par défaut.
 
-import { PROGRESS_SCHEMA, archiveCareer, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
+import { PROGRESS_SCHEMA, albumRetro, archiveCareer, isLevelUnlocked as isUnlocked, migrateProgress, normalizeProgress } from './core/progression.js';
 import { CAREER_SCHEMA, checkCareerState, migrateCareer } from './core/career/save.js';
 
 const PREFIX = 'une-annee-a-la-ferme.';
@@ -155,17 +155,45 @@ export function clearCareer({ archive = null } = {}) {
 // premier chargement (écus et étoiles compris) ; progressMigration() dit lesquels (une seule fois).
 
 let lastMigration = null;
+let lastAlbumMigration = null;
 
 /** Progression complète (schéma 2), jamais d'exception. */
 export function loadProgress() {
   const raw = read(KEYS.progress);
+  let progress;
+  let changed = false;
   if (raw && typeof raw === 'object' && raw.schema !== PROGRESS_SCHEMA) {
     const res = migrateProgress(raw);
     if (res.retroactive.length) lastMigration = { retroactive: res.retroactive, rewards: res.rewards };
-    write(KEYS.progress, res.progress);
-    return res.progress;
+    progress = res.progress;
+    changed = true;
+  } else progress = normalizeProgress(raw);
+  // (lot 4) Premier démarrage avec l'album : les cases que la progression et les sauvegardes (partie de niveau, carrière ;
+  // lues sans être modifiées) prouvent déjà sont trouvées d'un coup, une seule fois (albumMigration()).
+  if (!progress.album.retroDone) {
+    if (!raw || typeof raw !== 'object') {
+      progress.album.retroDone = true; // nouvelle progression : rien à retrouver
+    } else {
+      const run = loadRun();
+      const career = loadCareer();
+      const res = albumRetro(progress, { levelSave: run?.state ?? null, careerSave: career?.state ?? null });
+      progress = res.progress;
+      if (res.cases.length) lastAlbumMigration = { cases: res.cases };
+      changed = true;
+    }
   }
-  return normalizeProgress(raw);
+  if (changed) write(KEYS.progress, progress);
+  return progress;
+}
+
+/**
+ * (lot 4) Cases de l'album retrouvées dans les anciennes parties au premier démarrage avec l'album
+ * (« 23 cases de l'album retrouvées dans vos anciennes parties ») : { cases: [caseId] } une seule fois, puis null.
+ */
+export function albumMigration() {
+  const m = lastAlbumMigration;
+  lastAlbumMigration = null;
+  return m;
 }
 
 /**

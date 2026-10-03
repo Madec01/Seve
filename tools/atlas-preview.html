@@ -36,6 +36,7 @@
   <label><input type="checkbox" id="onlycareer"> carrière seulement</label>
   <label><input type="checkbox" id="onlylot2"> lot 2 seulement</label>
   <label><input type="checkbox" id="onlylot3"> lot 3 seulement</label>
+  <label><input type="checkbox" id="onlylot4"> lot 4 seulement</label>
   <label>Filtre <input id="filter" placeholder="ex. crop.carrot"></label>
   <span id="count"></span>
 </div>
@@ -74,6 +75,11 @@ const isLot3 = (name) => {
   return s.sheet === 'lot3' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot3'));
 };
 
+const isLot4 = (name) => {
+  const s = SPRITES[name];
+  return s.sheet === 'lot4' || !!(s.layers && s.layers.some((l) => l.sheet === 'lot4'));
+};
+
 const out = document.getElementById('out');
 const uiOut = document.getElementById('ui');
 
@@ -108,6 +114,7 @@ function render() {
   const onlyCareer = document.getElementById('onlycareer').checked;
   const onlyLot2 = document.getElementById('onlylot2').checked;
   const onlyLot3 = document.getElementById('onlylot3').checked;
+  const onlyLot4 = document.getElementById('onlylot4').checked;
   out.textContent = '';
   const groups = new Map();
   let n = 0;
@@ -117,6 +124,7 @@ function render() {
     if (onlyCareer && !isCareer(name)) continue;
     if (onlyLot2 && !isLot2(name)) continue;
     if (onlyLot3 && !isLot3(name)) continue;
+    if (onlyLot4 && !isLot4(name)) continue;
     const g = name.split('.')[0];
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(name);
@@ -187,17 +195,19 @@ setInterval(() => {
 }, 180);
 
 // Préréglage par l'adresse : ?career=1 (carrière seulement), ?lot2=1 (lot 2 seulement), ?lot3=1 (lot 3 seulement),
+// ?lot4=1 (lot 4 seulement),
 // ?scale=6, ?bg=%2384c669, ?filter=staff.f
 {
   const q = new URLSearchParams(location.search);
   if (q.get('career')) document.getElementById('onlycareer').checked = true;
   if (q.get('lot2')) document.getElementById('onlylot2').checked = true;
   if (q.get('lot3')) document.getElementById('onlylot3').checked = true;
+  if (q.get('lot4')) document.getElementById('onlylot4').checked = true;
   if (q.get('scale')) document.getElementById('scale').value = q.get('scale');
   if (q.get('bg')) document.getElementById('bgsel').value = q.get('bg');
   if (q.get('filter')) document.getElementById('filter').value = q.get('filter');
 }
-for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2', 'onlylot3']) document.getElementById(id).addEventListener('input', render);
+for (const id of ['scale', 'bgsel', 'flip', 'filter', 'onlyv3', 'onlycareer', 'onlylot2', 'onlylot3', 'onlylot4']) document.getElementById(id).addEventListener('input', render);
 render();
 console.log('TILE =', TILE, '·', Object.keys(SPRITES).length, 'sprites');
 </script>

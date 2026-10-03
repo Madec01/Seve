@@ -14,9 +14,12 @@ import './staff.js';
 import './work.js';
 import './surprises.js';
 import { varietyExtension } from './variety.js';
+import { cozyExtension } from './cozy.js';
 import { registerCareerExtension } from './registry.js';
 
 // (lot 3) La variété après tous les autres (récoltes comptées : quête de Joseph, puis tableau et charrette).
 registerCareerExtension(varietyExtension);
+// (lot 4) Fêtes, hiver, lanternes, F1 : en dernier (après la variété).
+registerCareerExtension(cozyExtension);
 
 export {};

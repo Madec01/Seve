@@ -4,22 +4,37 @@
 // Les chiffres sont des valeurs de départ réglées avec tools/simulate-career.js.
 
 // ── 8.1 Le calendrier (chaque année, fixe) ──────────────────────────────────────────────────────
-//   day    : jour de la saison (le même quelle que soit la durée des saisons : 7, 10 ou 14 jours)
+//   day    : jour de la saison (le même quelle que soit la durée des saisons : 7, 10 ou 14 jours) ; 'last' (lot 4) :
+//            le dernier jour de la saison
+//   factorsRank : (lot 4) rang à partir duquel les facteurs de prix s'appliquent (défaut : rank)
 //   rank   : rang à partir duquel la fête a lieu
 //   factors: multiplicateurs de prix par genre de vente ('crop' récolte, 'product' produit transformé,
 //            'stock' vente du grenier) — fournisseur priceFactor ; seedFactor : prix des graines
 //   guestFactor : revenu de la chambre d'hôte ce jour-là ; joyful : employés joyeux (lu par CORE-B) ;
 //   questHeart : +1 ♥ de Joseph si une quête est en cours (acceptée, pas finie)
 export const CALENDAR_EVENTS = [
+  // (lot 4, § 17.4.7) La foire aux graines : le DERNIER jour de l'hiver (day: 'last', quelle que soit la durée des
+  // saisons), une boutique de sachets prépayés (src/core/cozy.js) — elle remplace la « Foire aux semis » du printemps
+  // (jour 3), arrivée trop tard. Plus de seedFactor.
   {
     id: 'seedFair',
-    name: 'Foire aux semis',
+    name: 'Foire aux graines',
+    seasonId: 'winter',
+    day: 'last',
+    rank: 1,
+    icon: 'fair.stand',
+    text: 'Des sachets de graines à −25 % pour préparer le printemps.',
+    factors: {},
+  },
+  // (lot 4, § 17.4.2) La fête du printemps : la chasse aux œufs (sans effet sur les prix).
+  {
+    id: 'springFete',
+    name: 'Fête du printemps',
     seasonId: 'spring',
     day: 3,
     rank: 1,
-    icon: 'fair.stand',
-    text: 'Graines à −25 % toute la journée (le semoir en profite aussi).',
-    seedFactor: 0.75,
+    icon: 'fete.egg.0',
+    text: 'Chasse aux œufs : 8 œufs peints sont cachés dans la ferme.',
     factors: {},
   },
   {
@@ -45,14 +60,16 @@ export const CALENDAR_EVENTS = [
     factors: { crop: 1.15, product: 1.15, stock: 1.15 },
     questHeart: 1,
   },
+  // (lot 4) Le marché de Noël dès le rang 1 (les paniers) ; ses facteurs de prix gardent le rang 2 (factorsRank).
   {
     id: 'christmasMarket',
     name: 'Marché de Noël',
     seasonId: 'winter',
     day: 4,
-    rank: 2,
+    rank: 1,
+    factorsRank: 2,
     icon: 'fair.chalet',
-    text: 'Produits transformés +50 % ce matin ; stock du grenier +25 % toute la journée.',
+    text: 'Paniers de Noël ; dès la Ferme familiale : produits transformés +50 % ce matin, stock du grenier +25 %.',
     factors: { product: 1.5, stock: 1.25 },
   },
 ];

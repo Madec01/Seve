@@ -24,7 +24,7 @@
 // disponible. » (réponse du cœur).
 
 import { el, fmt, plural } from '../dom.js';
-import { icon, sprite, cropIcon } from '../icons.js';
+import { icon, sprite, cropIcon, hasSprite } from '../icons.js';
 import { season } from '../text.js';
 import { cIcon, joseph, lotIcon, buildingIcon, portrait, animalProductIcon, animalIcon, capitalize } from './util.js';
 import { shopContent } from './shop.js';
@@ -639,7 +639,8 @@ export function createCareerUI(app) {
         break;
       case 'fishCaught':
         app.audio.play('coin');
-        t.show({ kind: 'money', sprite: cIcon('fishing'), title: ev.name ? `${ev.name} !` : 'Belle prise !', text: `+${fmt(ev.amount)} pièces`, duration: 3000 });
+        // (Lot 4) Le poisson dessiné (planche lot4), sinon la canne à pêche.
+        t.show({ kind: 'money', sprite: ev.fishId && hasSprite(`fish.${ev.fishId}`) ? sprite(`fish.${ev.fishId}`, 'sprite--sm') : cIcon('fishing'), title: ev.name ? `${ev.name} !` : 'Belle prise !', text: `+${fmt(ev.amount)} pièces`, duration: 3000 });
         break;
       case 'stored':
         grouped.stored += ev.n || 1;

@@ -102,7 +102,7 @@ test('aménagements : prix, rang, maximum ; les terrains fixes ne se réaménage
   const ids = g.state.career.lots.slice(3).map((l) => l.id);
   assert.equal(ids.length, 12);
   const types = Object.fromEntries(g.query.career.lotTypes('lot3').map((t) => [t.type, t]));
-  assert.deepEqual([types.field.cost, types.meadow.cost, types.orchard.cost, types.workshops.cost, types.pond.cost, types.greenhouse.cost], [150, 120, 100, 100, 400, 800]);
+  assert.deepEqual([types.field.cost, types.meadow.cost, types.orchard.cost, types.workshops.cost, types.pond.cost, types.greenhouse.cost], [150, 120, 100, 100, 300, 500]); // (lot 4) mare 300, serre 500
   assert.equal(types.field.count, 1, 'le champ de départ compte');
   assert.equal(types.field.max, 6);
   // Champs : 5 de plus au plus.
@@ -114,13 +114,13 @@ test('aménagements : prix, rang, maximum ; les terrains fixes ne se réaménage
   assert.equal(g.actions.career.developLot('home', 'field').ok, false);
   assert.equal(g.actions.career.developLot('start', 'meadow').ok, false);
   assert.equal(g.actions.career.developLot(ids[7], 'castle').ok, false);
-  // Rang : verger (2), serre (3), mare (4).
+  // Rang : verger (2), serre (2), mare (3) — lot 4 : serre et mare plus tôt.
   const h = newCareer();
   rich(h);
   h.actions.career.buyLot();
   assert.match(h.actions.career.developLot('lot3', 'orchard').reason, /Rang 2 requis/);
-  assert.match(h.actions.career.developLot('lot3', 'greenhouse').reason, /Rang 3 requis/);
-  assert.match(h.actions.career.developLot('lot3', 'pond').reason, /Rang 4 requis/);
+  assert.match(h.actions.career.developLot('lot3', 'greenhouse').reason, /Rang 2 requis/);
+  assert.match(h.actions.career.developLot('lot3', 'pond').reason, /Rang 3 requis/);
   assert.ok(h.actions.career.developLot('lot3', 'meadow').ok);
 });
 

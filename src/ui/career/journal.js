@@ -228,6 +228,9 @@ function reportTab(ui) {
       ),
     );
   }
+  // (Lot 4) Les lanternes : l'année en cours (aperçu), les années passées en petites colonnes, la meilleure.
+  const lanterns = ui.app.cozy?.lanternSection?.(ui);
+  if (lanterns) parts.push(lanterns);
   void game;
   return el('div.c-jreport', parts);
 }
@@ -257,7 +260,7 @@ function agendaTab(ui) {
   const ev = q('events', null) || { today: null, active: null, offers: [], calendar: [], contest: null };
   const quest = q('quest', null);
   // (Lot 3) Thème de l'année, cadeau, tableau du village, charrette, défis, colporteur (src/ui/variety.js).
-  const parts = [...(ui.app.variety?.agendaSections?.(ui) || [])];
+  const parts = [...(ui.app.cozy?.agendaSections?.(ui) || []), ...(ui.app.variety?.agendaSections?.(ui) || [])];
   if (ev.today) parts.push(el('div.c-today', cIcon('event', 'sprite--md', 'star'), el('div', el('b', `Aujourd'hui : ${ev.today.name}`), ev.today.text || ev.today.description ? el('small', ev.today.text || ev.today.description) : null)));
   if (ev.active) parts.push(el('div.c-today.is-active', cIcon(ev.active.kind === 'crows' ? 'crow' : 'event', 'sprite--md', 'star'), el('div', el('b', ev.active.name || ev.active.data?.name || 'Événement en cours'), el('small', ev.active.text || ev.active.data?.text || ''))));
   if (quest) parts.push(el('section.c-sec', el('h3.stats-title', cIcon('quest', 'sprite--sm', 'star'), 'Quête de Joseph'), questCard(ui, quest)));

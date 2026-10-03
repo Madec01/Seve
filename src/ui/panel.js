@@ -343,6 +343,10 @@ export function createPanel(app) {
     const village = app.variety?.statsSection?.(game);
     if (village) statsBody.append(village);
 
+    // (Lot 4) Fête du jour, fêtes à venir, hiver, lanternes de l'année (aperçu).
+    const cozy = app.cozy?.statsSection?.(game);
+    if (cozy) statsBody.append(cozy);
+
     const contest = contestSection();
     if (contest) statsBody.append(contest);
 

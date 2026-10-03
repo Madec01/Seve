@@ -308,6 +308,11 @@ export function acceptThemeVisitor(api, offer, ctx) {
       break;
   }
   if (t.visitor && t.visitor.offerId === offer.id) t.visitor.done = true;
+  // (lot 4) Lanternes (voisinage : visiteur accueilli) et album (tampon ✉ de l'année à thème).
+  if (state.cozy) {
+    state.cozy.year.visitor = true;
+    state.cozy.stats.themeVisitors[th.id] = 1;
+  }
   return { ok: true, gift };
 }
 

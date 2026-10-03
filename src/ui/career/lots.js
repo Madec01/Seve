@@ -325,10 +325,12 @@ function orchardSection(ui, lot) {
 
 function pondSection(ui) {
   const { app } = ui;
+  // (Lot 4) Hiver vivant : la mare gèle, la pêche continue (« pêche sous la glace »).
+  const ice = !!ui.game?.state?.cozy?.parts?.winter && ((ui.game.state.time?.seasonIndex ?? 0) % 4) === 3;
   return el(
     'section.c-sec',
-    el('h3.stats-title', cIcon('fishing', 'sprite--sm', 'water'), 'Pêche'),
-    el('p.stats-note', 'Une fois par jour, touchez le ponton pour pêcher (5 à 40 pièces).'),
+    el('h3.stats-title', cIcon('fishing', 'sprite--sm', 'water'), ice ? 'Pêche sous la glace' : 'Pêche'),
+    el('p.stats-note', ice ? 'La mare a gelé : une fois par jour, pêchez par le trou dans la glace (mêmes poissons).' : 'Une fois par jour, touchez le ponton pour pêcher (5 à 40 pièces).'),
     cBtn(app, 'Pêcher', () => ui.act('fish'), { id: 'c-fish', cls: 'btn--wide' }),
   );
 }

@@ -71,8 +71,8 @@ export const BUILDINGS = [
     lotType: 'greenhouse',
     upkeep: 0,
     levels: [
-      // Niveau 1 : payé avec l'aménagement « Serre » (800).
-      { name: 'Serre froide', cost: 0, rank: 3, plots: 4, growth: 1, winterGrowth: 0.5, heating: 0 },
+      // Niveau 1 : payé avec l'aménagement « Serre » (500 ; lot 4 : rang 2).
+      { name: 'Serre froide', cost: 0, rank: 2, plots: 4, growth: 1, winterGrowth: 0.5, heating: 0 },
       { name: 'Grande serre', cost: 1200, rank: 3, plots: 8, growth: 1, winterGrowth: 0.5, heating: 0 },
       { name: 'Serre chauffée', cost: 3000, rank: 4, plots: 8, growth: 1.1, winterGrowth: 1.1, heating: 3 },
     ],
@@ -99,8 +99,8 @@ export const BUILDINGS = [
   shelter('pigsty', ['Porcherie', 'Porcherie agrandie', 'Grande porcherie'], 'pig', [250, 400, 800], [2, 4, 6], 3, { the: 'La porcherie', fem: true }),
   shelter('hutch', ['Clapier', 'Clapier agrandi', 'Grand clapier'], 'rabbit', [120, 250, 500], [4, 8, 12], 3, { the: 'Le clapier', fem: false }),
   shelter('stable', ['Écurie', 'Écurie agrandie', 'Grande écurie'], 'horse', [400, 600, 1200], [1, 2, 4], 3, { the: 'L\'écurie', fem: true }),
-  // Mare : niveau 1 payé avec l'aménagement « Mare » (phase B).
-  shelter('duckPond', ['Mare aux canards', 'Mare agrandie', 'Grande mare'], 'duck', [0, 200, 500], [4, 8, 12], 4, { placement: 'lot', lotType: 'pond', phase: 'B', the: 'La mare', fem: true }),
+  // Mare : niveau 1 payé avec l'aménagement « Mare » (lot 4 : rang 3, 300).
+  shelter('duckPond', ['Mare aux canards', 'Mare agrandie', 'Grande mare'], 'duck', [0, 200, 500], [4, 8, 12], 3, { placement: 'lot', lotType: 'pond', the: 'La mare', fem: true }),
   // ── Ateliers (§ 4.7) : 5 niveaux, places 2 / 3 / 4 / 5 / 6, sur une cour des ateliers ──
   workshop('jamWorkshop', 'Atelier de confitures', [90, 120, 160, 320, 640], 1, 2),
   workshop('dairy', 'Fromagerie', [160, 130, 170, 340, 680], 2, 3),
@@ -199,7 +199,7 @@ export const FARM_ITEMS = [
 export const DEFAULT_ANIMALS = [
   animal('hen', 'Poule', 'coop', 30, 0, 2, 0, 1, 'Des œufs chaque jour, même en hiver.'),
   animal('rabbit', 'Lapin', 'hutch', 40, 0, 2, 0, 3, 'De la laine angora chaque jour.'),
-  animal('duck', 'Canard', 'duckPond', 45, 0, 3, 0, 4, 'Des œufs de cane chaque jour.'),
+  animal('duck', 'Canard', 'duckPond', 45, 0, 3, 0, 3, 'Des œufs de cane chaque jour.'),
   animal('goat', 'Chèvre', 'goatShed', 80, 5, 9, 1, 1, 'Du lait chaque jour (fromagerie).', { milk: true }),
   animal('cow', 'Vache', 'cowshed', 150, 10, 16, 3, 2, 'Du lait chaque jour (fromagerie).', { milk: true }),
   animal('sheep', 'Mouton', 'sheepfold', 110, 10, 0, 2, 1, 'Une tonte à la fin du printemps, de l\'été et de l\'automne.', { shearing: 90, shearingSeasons: ['spring', 'summer', 'autumn'] }),

@@ -67,6 +67,8 @@ import { speedCycle } from './ui/a11y.js';
 import { createJuice } from './ui/juice.js';
 import { createLot2 } from './ui/lot2.js';
 import { createVariety } from './ui/variety.js';
+import { createCozy } from './ui/cozy.js';
+import { createAlbum } from './ui/album.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -138,6 +140,12 @@ app.lot2 = createLot2(app);
 // Lot 3 « Variété » : tableau du village, cadeau et défis de la saison, charrette du marché, Basile le colporteur,
 // années à thème de la carrière (src/ui/variety.js ; rien n'apparaît sans state.variety, donc jamais en Classique).
 app.variety = createVariety(app);
+// Lot 4 « Collection & enjeux doux » : album de la ferme (progression permanente, aussi en Classique), fêtes
+// participatives et mode fête, hiver vivant, lanternes de fin d'année, « aider sans remplacer » (carrière)
+// (src/ui/album.js, src/ui/cozy.js ; rien de state.cozy en Classique).
+app.storage = storage;
+app.album = createAlbum(app);
+app.cozy = createCozy(app);
 
 applyDisplaySettings();
 
@@ -379,6 +387,12 @@ function addPauseGuidance(node) {
   const after = list.querySelector('#pause-resume');
   if (after) after.after(messages, guide);
   else list.prepend(messages, guide);
+  // (Lot 4) L'album de la ferme (le jeu reste en pause) : pastille quand une case est nouvelle.
+  if (app.album?.available?.() && !list.querySelector('#pause-album')) {
+    const n = app.album.badge();
+    const album = app.dialogs.btn([el('span', 'L\'album'), n ? el('span.pause-count', ` (${n} nouveauté${n > 1 ? 's' : ''})`) : null], () => app.album.open(), 'btn--big', { id: 'pause-album' });
+    guide.after(album);
+  }
 }
 
 // ── Onglets et feuilles ───────────────────────────────────────────────────────────
@@ -845,7 +859,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
-    else if (['villageBoard', 'cart', 'merchant'].includes(hit?.type)) pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -964,6 +978,11 @@ function onGameEvent(ev, game) {
     } catch (err) {
       console.warn('Variété (événement) :', err);
     }
+    try {
+      app.cozy.onEvent(ev, game);
+    } catch (err) {
+      console.warn('Lot 4 (événement) :', err);
+    }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
     app.tutorial.onEvent(ev);
@@ -1011,7 +1030,14 @@ function onGameEvent(ev, game) {
       default:
         break;
     }
-    if (ev.type === 'dawn') app.progression.checkGame(game);
+    if (ev.type === 'dawn') {
+      app.progression.checkGame(game);
+      try {
+        app.album.onDawn(game); // (lot 4) nouvelles cases de l'album, comme les succès
+      } catch (err) {
+        console.warn('Album :', err);
+      }
+    }
     scheduleRefresh();
   }
 }
@@ -1386,7 +1412,8 @@ function recordEnd(game, outcome, ev = null) {
   } catch {
     ctx = {};
   }
-  return app.progression.recordRunEnd({
+  const albumBefore = app.album?.available?.() ? app.album.snapshot() : null;
+  const rec = app.progression.recordRunEnd({
     levelId: game.level.id,
     outcome,
     stars: outcome === 'victory' ? ev?.stars || 0 : 0,
@@ -1397,7 +1424,11 @@ function recordEnd(game, outcome, ev = null) {
     investments: ctx.investments,
     availableInvestments: ctx.availableInvestments,
     dailyCharges: ctx.dailyCharges,
+    context: ctx, // (lot 4) l'album lit le contexte de la fin de partie
   });
+  // (Lot 4) Cases de l'album trouvées au bilan de fin (recordRunEnd lit summary.cozy et le contexte).
+  if (albumBefore && outcome !== 'abandon') app.album.announceSince(albumBefore);
+  return rec;
 }
 
 /** Une partie en cours est abandonnée (« Recommencer », ou nouvelle partie par-dessus) : cumul. */
@@ -1512,6 +1543,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.juice.reset();
   app.lot2.reset(game);
   app.variety.reset(game);
+  app.cozy.reset(game);
+  app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
   document.body.classList.remove('in-menu');
@@ -1603,7 +1636,10 @@ app.startLevel = async (levelId, { skipConfirm = false } = {}) => {
   const perks = app.progression.runPerks();
   // Mode choisi pour les nouvelles parties (Détente par défaut).
   const difficulty = app.difficulty();
-  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks, difficulty });
+  // (Lot 4) Détente : fêtes, hiver vivant, lanternes ; le décor de la progression compte pour la « beauté » (copié au
+  // lancement, comme les bonus). Classique : aucune option (clé state.cozy absente, parité).
+  const cozy = difficulty === 'classique' ? undefined : { decor: app.progression.decorSummary?.() || { placed: 0, path: false, fence: false } };
+  const game = createGame({ levelId, seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, perks, difficulty, ...(cozy ? { cozy } : {}) });
   startRun(game);
 };
 
@@ -1657,6 +1693,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.juice.reset();
   app.lot2.reset(null);
   app.variety.reset(null);
+  app.cozy.reset(null);
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1878,6 +1915,7 @@ function frame(t) {
   app.juice.frame(dt);
   app.lot2.frame();
   app.variety.frame();
+  app.cozy.frame();
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1888,7 +1926,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2051,6 +2089,7 @@ async function boot() {
     audio.playMusic('menu', { fade: 1 });
     app.dialogs.mainMenu();
     maybeDetenteNotice();
+    app.album.boot(); // (lot 4) « N cases de l'album retrouvées dans vos anciennes parties »
     if (legacyAchievements.length) {
       app.audio.play('unlock', { delay: 0.4, volume: 0.7 });
       app.toasts.show({ kind: 'achievement', icon: 'star', title: 'Grange aux souvenirs', text: `${plural(legacyAchievements.length, 'succès débloqué', 'succès débloqués')} grâce à vos anciennes parties !`, duration: 5200 });
@@ -2420,6 +2459,61 @@ if (DEBUG) {
       };
       return V;
     })(),
+    /**
+     * (Lot 4) Aides de vérification « Collection & enjeux doux » : chaque situation passe par l'action de débogage du
+     * cœur (actions.triggerCozy : 'fete' (id) | 'winter' | 'bird' (id) | 'trace' (kind) | 'story' | 'lanterns' |
+     * 'ripe' (aubes)) ou par les actions publiques (feteFind, cookSoup, presentStand, giveBaskets, …). Alias :
+     * __debug.lot4.
+     */
+    cozy: (() => {
+      const C = {
+        on: () => !!app.game?.state.cozy,
+        /** Requête complète (query.cozy()). */
+        state: () => (app.game?.state.cozy ? app.game.query.cozy?.() ?? null : null),
+        /** actions.triggerCozy(kind, arg) puis fenêtres en attente. */
+        trigger(kind, arg) {
+          const g = app.game;
+          if (!g) return { ok: false, reason: 'pas de partie' };
+          const fn = g.actions.triggerCozy;
+          if (typeof fn !== 'function') return { ok: false, reason: 'triggerCozy indisponible' };
+          const res = fn(kind, arg);
+          processPending();
+          return res;
+        },
+        fete: (id) => C.trigger('fete', id),
+        winter: () => C.trigger('winter'),
+        bird: (id) => C.trigger('bird', id),
+        trace: (kind) => C.trigger('trace', kind),
+        story: () => C.trigger('story'),
+        lanterns: () => C.trigger('lanterns'),
+        ripe: (n = 4) => C.trigger('ripe', n),
+        /** Trouve l'objet caché n° i (comme un toucher dans la scène). */
+        find(i) {
+          return app.cozy.onHit({ type: 'feteItem', index: i });
+        },
+        soup: (ids) => app.game?.actions.cookSoup?.((ids || []).map((id) => (typeof id === 'string' ? { kind: 'crop', id } : id))),
+        stand: (items) => app.game?.actions.presentStand?.(items || []),
+        baskets: (b) => app.game?.actions.giveBaskets?.(b || []),
+        /** Ouvre une feuille : 'fete' | 'winter' | 'story' | 'lanterns' | 'album'. */
+        open(kind = 'fete') {
+          if (kind === 'album') return !!app.album.open();
+          const f = { fete: 'openFete', winter: 'openWinter', story: 'openStory', lanterns: 'openLanterns' }[kind];
+          return f ? app.cozy[f]() : false;
+        },
+        feteMode: (on = true) => (on ? app.cozy.enterFeteMode() : (app.cozy.leaveFeteMode(), false)),
+        hint: () => app.cozy.showHint(),
+        album: () => !!app.album.open(),
+        albumAll: () => app.album.fillAll(),
+        /** Point (px de la page) d'une cible du lot 4 : 'feteItem' (index) | 'winterFind' (id) | 'feeder' | … */
+        point(kind, id) {
+          const r = app.scene?.cozyItemRect?.(kind, id);
+          return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+        },
+        ui: () => app.cozy.debugState(),
+        stats: () => app.scene?.cozyStats?.() || null,
+      };
+      return C;
+    })(),
     /** Centre du panneau d'un terrain (px de la page), si le rendu le connaît. */
     lotPoint(id) {
       const l = app.scene?.layout?.lots?.find?.((x) => x.id === id);
@@ -2432,6 +2526,7 @@ if (DEBUG) {
 }
 
 if (DEBUG) window.__debug.lot3 = window.__debug.variety;
+if (DEBUG) window.__debug.lot4 = window.__debug.cozy;
 
 // Application installable : service worker (hors ligne, mises à jour), invitation à installer.
 // (`?nosw` dans l'adresse : sans service worker, pour le débogage.)

@@ -13,6 +13,7 @@ import { CAREER_VERSION, DEFAULT_FARMER_GENDER, DEFAULT_SEASON_LENGTH, DIFFICULT
 import { createRngState, hashSeed } from '../rng.js';
 import { enableSurprises } from '../surprises.js';
 import { enableVariety } from '../variety.js';
+import { enableCareerCozy } from './cozy.js';
 import { createStats } from '../stats.js';
 import { drawWeather } from '../weather.js';
 import { tomorrowSeasonIndex } from '../calendar.js';
@@ -47,9 +48,11 @@ export function careerOptions({ difficulty = 'detente', farmName, farmerGender =
  * Nouvelle carrière.
  * @param opts { seed, difficulty ('detente' | 'classique'), farmName (18 caractères), farmerGender ('fermier' |
  *   'fermiere'), outfit (id de tenue ; l'interface ne propose que les tenues débloquées), seasonLength (7 | 10 | 14),
- *   cosmetics: { decor } (décor posé dans la progression : copie de départ de state.career.cosmetics.decor) }
+ *   cosmetics: { decor, path?, fence? } (décor posé dans la progression : copie de départ de state.career.cosmetics ;
+ *   path / fence (lot 4) : allée et clôture choisies, critère « beauté » des lanternes), surprises, variety,
+ *   cozy (lot 4 : true | false | { lanterns, fetes, winter, helpers }) }
  */
-export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, variety = true, ...rest } = {}) {
+export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, variety = true, cozy = true, ...rest } = {}) {
   const o = careerOptions(rest);
   const d = DIFFICULTY_CAREER[o.difficulty];
   const rng = createRngState(seed);
@@ -96,12 +99,17 @@ export function createCareer({ seed = Date.now(), cosmetics = null, surprises = 
     },
   };
   state.career.cosmetics = { decor };
+  if (cosmetics && typeof cosmetics.path === 'string' && COSMETICS_BY_ID[cosmetics.path]?.category === 'path') state.career.cosmetics.path = cosmetics.path;
+  if (cosmetics && typeof cosmetics.fence === 'string' && COSMETICS_BY_ID[cosmetics.fence]?.category === 'fence') state.career.cosmetics.fence = cosmetics.fence;
   // (lot 2) Surprises : actives par défaut (null = désactivées, gardé tel quel à la reprise).
   if (surprises) enableSurprises(state);
   else state.surprises = null;
   // (lot 3) Variété : active par défaut (null = désactivée, gardé tel quel à la reprise) ; parties { board, … }.
   if (variety) enableVariety(state, variety);
   else state.variety = null;
+  // (lot 4) Fêtes, hiver, lanternes, « aider sans remplacer » : actifs par défaut (null = désactivés, gardé tel quel) ;
+  // parties { lanterns, fetes, winter, helpers }.
+  enableCareerCozy(state, cozy);
   placeBuilding(state, 'house', 'home', null, 1, 0);
   placeBuilding(state, 'coop', 'yard', 0, 1, 0);
   for (const ext of careerExtensions()) if (typeof ext.init === 'function') ext.init(state);

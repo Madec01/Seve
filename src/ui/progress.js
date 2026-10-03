@@ -8,7 +8,7 @@
 //   achievementList(ctx), achievementDef(id), checkGame(game), checkBoot(), announce(ids, rewards),
 //   recordRunEnd(info), ecus(), cosmetics(), cosmeticsList(category?), buyCosmetic(id),
 //   placeDecor(slotId, itemId|null), setPath(id), setFence(id), setOutfit(id), setFarmName(text),
-//   farmName(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars(),
+//   farmName(), decorSummary(), hintSeen(id), markHint(id), isLevelUnlocked(id), levelInfo(id), canSpendStars(),
 //   difficulty(), setDifficulty(id), careerStart(), careerYear(run), careerRank(rank), careerEcus(n),
 //   careerAchievementList(ctx) }
 //
@@ -278,6 +278,17 @@ export function createProgress(app, storage) {
   const setOutfit = (id) => place('setOutfit', id);
   const setFarmName = (text) => place('setFarmName', text);
   const farmName = () => cosmetics().farmName || v3.cosmetics?.DEFAULT_FARM_NAME || DEFAULT_NAME;
+  /**
+   * (Lot 4) Résumé du décor pour le critère « beauté » des lanternes (niveaux), copié dans la partie au lancement :
+   * { placed: décorations posées, path: allée choisie (autre que celle de départ), fence: clôture choisie }.
+   */
+  function decorSummary() {
+    if (!available()) return { placed: 0, path: false, fence: false };
+    const c = cosmetics();
+    const def = v3.cosmetics?.DEFAULT_COSMETICS || { path: 'path.dirt', fence: 'fence.wood' };
+    const placed = Object.values(c.decor || {}).filter(Boolean).length;
+    return { placed, path: !!c.path && c.path !== def.path, fence: !!c.fence && c.fence !== def.fence };
+  }
 
   // ── Difficulté (mode des nouvelles parties) ───────────────────────────────────
   /** 'detente' | 'classique' : à passer à createGame({ difficulty }). Détente sans module de progression. */
@@ -334,6 +345,7 @@ export function createProgress(app, storage) {
     setOutfit,
     setFarmName,
     farmName,
+    decorSummary,
     hintSeen,
     markHint,
     isLevelUnlocked,

@@ -103,6 +103,8 @@ export function createField(app) {
       if (!c.canAfford) warnings.push(el('span.warn-chip.is-frost', `Il manque ${plural(c.seedCost - game.state.money, 'pièce')}`));
       // (Lot 3) Graines rares (« Rare · 4 graines »), semis offerts, culture demandée au tableau ou à la charrette.
       warnings.unshift(...(app.variety?.seedChips?.(c) || []));
+      // (Lot 4) Carrière : semis prépayés de la foire aux graines (« Réserve : 16 »).
+      warnings.unshift(...(app.cozy?.seedChips?.(c) || []));
       return el(
         `button.seed-row${c.canAfford ? '' : '.is-disabled'}${c.willFreeze ? '.will-freeze' : ''}`,
         {
@@ -445,7 +447,10 @@ export function createField(app) {
     if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
     else if (p.crowPenalty) rows.push(el('div.tip-note.warn', 'Le corbeau a abîmé la récolte : −50 %.'));
     if (p.storeTarget) rows.push(el('div.tip-sub', 'Cours bas : la récolte attendra au grenier.'));
-    else if (p.handBonus && p.handBonus > 1) rows.push(el('div.tip-ok', `Cueillie à la main : +${Math.round((p.handBonus - 1) * 100)} %`));
+    else if (p.handValue === undefined && p.handBonus && p.handBonus > 1) rows.push(el('div.tip-ok', `Cueillie à la main : +${Math.round((p.handBonus - 1) * 100)} %`));
+    // (Lot 4, F1) « À la main : 31 · par l'équipe : 25 », « Vous attend · la moissonneuse passera dans 1 jour », désherbée.
+    const cz = app.cozy?.plotRows?.(p);
+    if (cz) rows.push(cz);
     if (p.marketMultiplier && Math.abs(p.marketMultiplier - 1) > 0.01) rows.push(el('div.tip-sub', `Cours du jour ×${dec(p.marketMultiplier, 2)}${p.offSeason ? ' · hors saison ×1,25' : ''}`));
     else if (p.offSeason) rows.push(el('div.tip-sub', 'Hors saison : ×1,25'));
   }

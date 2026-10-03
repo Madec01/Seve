@@ -38,7 +38,7 @@
 
 import { DAY_SECONDS, EPSILON, SEASONS, WARNING_DAYS } from '../../data/balance.js';
 import { getCrop, isRareCrop, isTreeCrop } from '../../data/crops.js';
-import { CROW_PENALTY, HAND_BONUS, HARDSHIP, MAX_STAFF } from '../../data/career/career.js';
+import { CROW_PENALTY, HARDSHIP, MAX_STAFF } from '../../data/career/career.js';
 import { BUILDINGS, BUILDINGS_BY_ID } from '../../data/career/buildings.js';
 import { FARM_NAME_MAX } from '../../data/cosmetics.js';
 import { stream } from '../rng.js';
@@ -69,6 +69,8 @@ import { autoKeepOrders, checkMedals, consumeSow, freeSowKind, noteHarvest, note
 import { claimPreview, claimUnits } from '../requests.js';
 import { themeGiantValueFactor } from '../variety-effects.js';
 import { careerNextTheme, careerVarietyHost, careerVarietyYear } from './variety-host.js';
+import { handBonusOf, helpersOn, waitInfo, waitedDawns } from './handwork.js';
+import { noteCozyHarvest, noteCozyProduct, takeFromSeedBank } from '../cozy.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -184,8 +186,11 @@ export function createCareerRuntime(core) {
     if (!inGreenhouse(p) && !crop.seasons.includes(sid)) return fail(`${crop.name} : ne se plante pas ${seasonLabel(sid)}.`);
     // (lot 3) Semis offert (visiteur du thème) : à la main seulement, sans payer.
     const freeSow = state.variety && by === 'player' && !tree ? freeSowKind(state, crop.id) : null;
-    const cost = freeSow ? 0 : seedCost(crop);
+    // (lot 4) Réserve de graines (foire aux graines) : tout semis de cette culture la prend d'abord, sans payer.
+    const fromBank = !freeSow && !rare && !!state.cozy && (state.cozy.seedBank?.[crop.id] || 0) > 0;
+    const cost = freeSow || fromBank ? 0 : seedCost(crop);
     if (state.money < cost) return fail(notEnough(cost - state.money));
+    if (fromBank) takeFromSeedBank(state, crop.id);
     if (p.forage) {
       const f = takeForage(state, plotIndex);
       if (f) {
@@ -204,7 +209,7 @@ export function createCareerRuntime(core) {
     }
     addStat(state, 'cropsPlanted', 1);
     spend('seeds', cost);
-    const sow = freeSow ? consumeSow(state, crop.id) : null;
+    const sow = freeSow ? consumeSow(state, crop.id) : fromBank ? { fromBank: true, bankLeft: state.cozy.seedBank[crop.id] || 0 } : null;
     push('planted', { plotIndex, cropId: crop.id, amount: cost, fatigue: p.fatigued, watered: p.watered, by, ...(sow || {}) });
     if (state.variety && !tree) {
       noteVariety(state, 'sown', 1, crop.id);
@@ -233,7 +238,7 @@ export function createCareerRuntime(core) {
   /** Valeur de la récolte d'une parcelle pour `by` (avant ateliers / grenier / commandes). */
   function harvestAmount(p, by) {
     const unit = rawUnitPrice(state, L(), getCrop(p.cropId)) * yieldFactor(state, L(), p);
-    return Math.round(unit * (by === 'player' ? HAND_BONUS : 1) * (p.crowPenalty ? CROW_PENALTY : 1));
+    return Math.round(unit * (by === 'player' ? handBonusOf(state) : 1) * (p.crowPenalty ? CROW_PENALTY : 1));
   }
 
   /** (lot 2) Valeur d'un géant récolté à la main : 6 × une parcelle (prime « à la main » comprise). */
@@ -303,6 +308,8 @@ export function createCareerRuntime(core) {
       noteHarvest(state, { cropId, amount, units: g.plots.length });
       checkMedals(host);
     }
+    // (lot 4) Un géant : 4 récoltes (soignées à la main), tampon ◆ de l'album.
+    if (state.cozy) noteCozyHarvest(state, { cropId, cared: true, by, units: g.plots.length, giant: by === 'player' });
     const { plotIndex: _i, by: _b, ...out } = res;
     return { ok: true, ...out };
   }
@@ -320,6 +327,9 @@ export function createCareerRuntime(core) {
     const cropId = p.cropId;
     const sid = seasonId(state);
     const value = harvestAmount(p, by);
+    // (lot 4, F1) Aubes passées depuis la maturité ; prime « à la main » (pièces comprises dans amount quand elle est payée).
+    const waited = helpersOn(state) ? waitedDawns(state, plotIndex) : 0;
+    const handPart = by === 'player' && helpersOn(state) ? value - Math.round(rawUnitPrice(state, L(), crop) * yieldFactor(state, L(), p) * (p.crowPenalty ? CROW_PENALTY : 1)) : 0;
     // (lot 2) Qualité : belle × 1,5 ; dorée × 2 seulement à la main (salariés, machines : belle au plus).
     // La prime est versée tout de suite, même si la récolte part au grenier, à l'atelier ou à une commande.
     const q = state.surprises ? rollQuality(state, p, by === 'player') : null;
@@ -341,6 +351,7 @@ export function createCareerRuntime(core) {
     // main » et qualité comprises), ni atelier ni grenier.
     const sold = !!diverted && !!diverted.sell;
     const careWatered = state.variety && !tree ? careOf(state, p).wateredEveryDay : false;
+    const caredLot4 = state.cozy ? tree || careOf(state, p).wateredEveryDay : false;
     const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, yf);
     let stored = false;
     if (!diverted && !processed && wouldStore(state, cropId)) {
@@ -348,8 +359,11 @@ export function createCareerRuntime(core) {
       stored = true;
     }
     const amount = ((diverted && !sold) || processed || stored ? 0 : value) + qualityBonus;
-    if (tree) p.fruit = 0;
-    else {
+    const handBonus = (diverted && !sold) || processed || stored ? 0 : Math.max(0, handPart);
+    if (tree) {
+      p.fruit = 0;
+      if (p.ripeAt !== undefined) delete p.ripeAt;
+    } else {
       p.lastHarvested = cropId;
       clearPlot(p);
     }
@@ -376,6 +390,7 @@ export function createCareerRuntime(core) {
       ...(diverted ? { diverted: diverted.label || true } : {}),
       ...cf,
       ...(part > 0 ? { loanRepayment: part } : {}),
+      ...(helpersOn(state) ? { handBonus, waited } : {}),
     });
     if (stored) push('stored', { cropId, n: 1, plotIndex });
     if (processed) push('processingStarted', { ...processed, input: cropId, source: 'harvest', plotIndex });
@@ -385,7 +400,8 @@ export function createCareerRuntime(core) {
       noteHarvest(state, { cropId, amount, quality: q ? q.quality : 'normal', care: careWatered, tree });
       checkMedals(careerVarietyHost(api));
     }
-    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...cf, ...(part > 0 ? { loanRepayment: part } : {}) };
+    if (state.cozy) noteCozyHarvest(state, { cropId, quality: q ? q.quality : 'normal', cared: caredLot4, by, handBonus });
+    return { ok: true, amount, cropId, tree, processed, stored, handPicked: by === 'player', crowPenalty, ...qf, ...cf, ...(part > 0 ? { loanRepayment: part } : {}), ...(helpersOn(state) ? { handBonus, waited } : {}) };
   }
 
   function unlockPlot(plotIndex) {
@@ -653,6 +669,7 @@ export function createCareerRuntime(core) {
       account('income', 'products', sale.amount);
       c().lifetime.productsSold += 1;
       if (state.variety) noteVariety(state, 'products', 1);
+      if (state.cozy) noteCozyProduct(state, sale.productId);
       extraIncomes.push({ source: sale.buildingId, amount: sale.amount, owned: state.investments[sale.buildingId] || 0, kind: 'processed', productId: sale.productId, key: 'products' });
       push('productSold', sale);
     }
@@ -1048,11 +1065,21 @@ export function createCareerRuntime(core) {
       row: Math.floor(p.cell / cols),
       crow: p.crow,
       crowPenalty: p.crowPenalty,
-      handBonus: HAND_BONUS,
+      handBonus: handBonusOf(state),
       storeTarget: mature ? wouldStore(state, crop.id) : false,
       offSeason: crop ? isOffSeason(state, crop) : false,
       marketMultiplier: crop ? state.market[crop.id] ?? 1 : null,
       handValue: mature ? (p.giant !== undefined && state.surprises ? giantValue(p.giant) : harvestAmount(p, 'player')) : null,
+      // (lot 4, F1) Maturité, attente de l'équipe, valeur d'une récolte par l'équipe, désherbage.
+      ...(helpersOn(state)
+        ? {
+            ripeAt: p.ripeAt ?? null,
+            wait: waitInfo(state, i),
+            helperValue: mature && p.giant === undefined ? harvestAmount(p, 'staff') : null,
+            weeded: !!p.weeded,
+            weededBy: p.weededBy ?? null,
+          }
+        : {}),
     };
   }
 

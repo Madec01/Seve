@@ -98,8 +98,13 @@ export const DIFFICULTY_CAREER = {
 /** Amitié de Joseph qui change son prêt (§ 8.3) : 4 ♥ plafond × 2 ; 6 ♥ sans supplément. */
 export const JOSEPH_LOAN_HEARTS = { doubleCap: 4, noSurcharge: 6 };
 
-/** Récolte touchée par le joueur (§ 3.3). */
-export const HAND_BONUS = 1.1;
+/**
+ * Récolte touchée par le joueur (§ 3.3) : prime « Cueilli main ». (lot 4, F1) 1,25 quand « aider sans remplacer » est
+ * actif (state.cozy.parts.helpers, défaut des carrières) ; une carrière sans le lot 4 (cozy: false) garde
+ * HAND_BONUS_LEGACY (1,1) — voir docs/GAME_DESIGN.md § 17.3.
+ */
+export const HAND_BONUS = 1.25;
+export const HAND_BONUS_LEGACY = 1.1;
 
 /** Culture vendue dans une saison où elle ne peut pas être semée (hors serre) (§ 3.2). */
 export const OFF_SEASON_FACTOR = 1.25;
