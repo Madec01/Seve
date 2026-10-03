@@ -435,7 +435,7 @@ export function createCozy(app) {
     app.audio.play('open', { volume: 0.6 });
     app.onDecorChange?.(true); // la ligne « À faire » et les marges de la scène se recalculent
     const h = hiddenOf(f);
-    app.toasts.show({ kind: 'info', key: 'cz-hunt', sprite: czIcon(['icon.fete'], 'sprite--sm', h.txt.emoji), text: `Faites défiler la ferme et touchez les ${h.txt.name}. « Indice » montre le plus proche.`, duration: 4200, log: false });
+    app.toasts.show({ prio: 'important', kind: 'info', key: 'cz-hunt', sprite: czIcon(['icon.fete'], 'sprite--sm', h.txt.emoji), text: `Faites défiler la ferme et touchez les ${h.txt.name}. « Indice » montre le plus proche.`, duration: 4200, log: false });
     if (app.keyboardMode) requestAnimationFrame(() => bar.querySelector('#cz-bar-hint')?.focus());
     return true;
   }
@@ -935,7 +935,7 @@ export function createCozy(app) {
   function singBird(bird) {
     tone('chirp', { volume: 0.9, throttle: 400 });
     app.scene?.cozySing?.();
-    if (bird) app.toasts.show({ kind: 'info', key: 'cz-bird', sprite: czIcon([bird.icon, `bird.${bird.id}`], 'sprite--sm', '🐦'), text: `${bird.name} chante à la mangeoire.`, duration: 2600, log: false });
+    if (bird) app.toasts.show({ prio: 'info', kind: 'info', key: 'cz-bird', sprite: czIcon([bird.icon, `bird.${bird.id}`], 'sprite--sm', '🐦'), text: `${bird.name} chante à la mangeoire.`, duration: 2600, log: false });
   }
 
   // ── La veillée ───────────────────────────────────────────────────────────────
@@ -995,7 +995,7 @@ export function createCozy(app) {
     }
     storyShown = rec?.story || nextStory();
     const ecus = rec?.ecus || 0;
-    app.toasts.show({ kind: ecus ? 'achievement' : 'info', sprite: czIcon(['icon.story'], 'sprite--sm', '🕯'), title: storyShown ? `Veillée : ${storyShown.title}` : 'La veillée', text: ecus ? `Une histoire nouvelle : +${plural(ecus, 'écu')}` : 'Bonne nuit !', duration: 4200 });
+    app.toasts.show({ prio: 'important', kind: ecus ? 'achievement' : 'info', sprite: czIcon(['icon.story'], 'sprite--sm', '🕯'), title: storyShown ? `Veillée : ${storyShown.title}` : 'La veillée', text: ecus ? `Une histoire nouvelle : +${plural(ecus, 'écu')}` : 'Bonne nuit !', duration: 4200 });
   }
 
   // ── Les lanternes ─────────────────────────────────────────────────────────────
@@ -1253,7 +1253,7 @@ export function createCozy(app) {
         const fd = q('winter')?.feeder || {};
         if (fd.canFill) fill();
         else if (fd.bird) singBird(fd.bird);
-        else app.toasts.show({ kind: 'info', key: 'cz-feeder', sprite: czIcon(['icon.feeder', 'feeder'], 'sprite--sm', '🐦'), text: fd.filledToday ? 'Remplie : un oiseau viendra demain matin.' : 'Revenez demain pour la remplir.', duration: 2600, log: false });
+        else app.toasts.show({ prio: 'important', kind: 'info', key: 'cz-feeder', sprite: czIcon(['icon.feeder', 'feeder'], 'sprite--sm', '🐦'), text: fd.filledToday ? 'Remplie : un oiseau viendra demain matin.' : 'Revenez demain pour la remplir.', duration: 2600, log: false });
         return true;
       }
       case 'storyWindow':
@@ -1385,7 +1385,7 @@ export function createCozy(app) {
         const f = ev.fete || q('fete', g);
         resetSel(f);
         morning(`Aujourd'hui : ${lower(f?.name || 'jour de fête')} !`);
-        feteToast = app.toasts.show({ kind: 'info', key: 'cz-fete', sprite: feteIcon(f, 'sprite--sm'), title: f?.name || 'Jour de fête', text: ev.text || f?.text || 'Venez participer !', actionLabel: 'Voir', onClick: () => openFete(), duration: 6000 });
+        feteToast = app.toasts.show({ prio: 'info', kind: 'info', key: 'cz-fete', sprite: feteIcon(f, 'sprite--sm'), title: f?.name || 'Jour de fête', text: ev.text || f?.text || 'Venez participer !', actionLabel: 'Voir', onClick: () => openFete(), duration: 6000 });
         if (f?.engine === 'foire') hint('cozy.seedFair', null);
         else hint('cozy.fete', null);
         break;
@@ -1396,7 +1396,7 @@ export function createCozy(app) {
       case 'feteDone': {
         const e = grantEcus(ev.ecus);
         if (!app.sheets.isOpen('cz-fete')) {
-          app.toasts.show({ kind: 'money', sprite: czIcon([ev.ribbon ? `ribbon.${ev.ribbon}` : null, 'icon.fete'], 'sprite--sm', '🎉'), title: ev.text || 'Merci pour la fête !', text: `+${fmt(ev.amount || 0)}${e ? ` · +${plural(e, 'écu')}` : ''}`, duration: 4200 });
+          app.toasts.show({ prio: 'important', kind: 'money', sprite: czIcon([ev.ribbon ? `ribbon.${ev.ribbon}` : null, 'icon.fete'], 'sprite--sm', '🎉'), title: ev.text || 'Merci pour la fête !', text: `+${fmt(ev.amount || 0)}${e ? ` · +${plural(e, 'écu')}` : ''}`, duration: 4200 });
         }
         if (ev.engine === 'chasse' && feteMode) leaveFeteMode({ silent: true });
         break;
@@ -1413,7 +1413,7 @@ export function createCozy(app) {
         if (ev.trace) morning('Des traces dans la neige, ce matin…');
         break;
       case 'winterPicked':
-        app.toasts.show({ kind: 'money', key: 'cz-pick', sprite: czIcon([`winter.${ev.kind}`], 'sprite--sm', FIND_EMOJI[ev.kind] || '🍂'), text: `${ev.name || 'Trouvaille'} : +${fmt(ev.amount || 0)}`, duration: 2400 });
+        app.toasts.show({ prio: 'important', kind: 'money', key: 'cz-pick', sprite: czIcon([`winter.${ev.kind}`], 'sprite--sm', FIND_EMOJI[ev.kind] || '🍂'), text: `${ev.name || 'Trouvaille'} : +${fmt(ev.amount || 0)}`, duration: 2400 });
         break;
       case 'feederFilled':
         break;

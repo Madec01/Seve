@@ -73,7 +73,7 @@ export function farmNameForm(app, { onSaved } = {}) {
     app.audio.play('confirm');
     input.blur();
     app.applyCosmetics?.();
-    app.toasts.show({ kind: 'success', icon: 'star', text: `Votre ferme s'appelle désormais « ${P.farmName()} ».` });
+    app.toasts.show({ prio: 'important', kind: 'success', icon: 'star', text: `Votre ferme s'appelle désormais « ${P.farmName()} ».` });
     onSaved?.(P.farmName());
   };
   input.addEventListener('input', check);
@@ -153,7 +153,7 @@ export async function unlockFlow(app, item) {
   if (item.found) {
     // (lot 2) Ne s'achète pas (progression.buyCosmetic le refuse) : il se trouve en jouant.
     app.audio.play('click');
-    app.toasts.show({ kind: 'info', icon: 'star', title: item.name, text: `Cet objet ne s'achète pas : il se trouve à la ferme, ${foundHint(item)}.` });
+    app.toasts.show({ prio: 'important', kind: 'info', icon: 'star', title: item.name, text: `Cet objet ne s'achète pas : il se trouve à la ferme, ${foundHint(item)}.` });
     return false;
   }
   if (!item.price) return true;

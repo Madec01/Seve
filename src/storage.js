@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   leftHanded: false, // disposition miroir : bouton de vitesse à gauche
   highContrast: false, // contrastes renforcés (contours, fonds, couleurs d'état)
   pinchZoom: true, // zoom de la page à deux doigts (barres et fiches ; la scène garde ses gestes)
+  messages: 'important', // messages affichés : 'all' · 'important' (infos dans l'historique et le résumé du matin) · 'none'
   a11yOffered: false, // les réglages d'accessibilité ont été proposés au premier lancement
 });
 
@@ -237,6 +238,7 @@ export function loadSettings() {
   if (!SPEED_SETTINGS.includes(out.speed)) out.speed = DEFAULT_SETTINGS.speed;
   if (!TEXT_SCALES.includes(out.textScale)) out.textScale = DEFAULT_SETTINGS.textScale;
   if (!['auto', 'on', 'off'].includes(out.pauseOnSheet)) out.pauseOnSheet = DEFAULT_SETTINGS.pauseOnSheet;
+  if (!['all', 'important', 'none'].includes(out.messages)) out.messages = DEFAULT_SETTINGS.messages;
   return out;
 }
 

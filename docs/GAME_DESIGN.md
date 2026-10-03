@@ -8,18 +8,23 @@ Document de référence du gameplay. Les chiffres marqués *(équilibré)* ont �
 >
 > **Lot 4 « Collection & enjeux doux » (conception 2026-10-03)** : album de la ferme, lanternes de fin d'année, « aider sans remplacer » en carrière, fêtes participatives, hiver vivant — voir **§ 17** (fêtes, hiver et lanternes désactivés en Classique ; l'album se remplit dans tous les modes, hors partie).
 >
+> **La Vallée vivante (conception 2026-10-03)** : le grand projet long de la carrière — variétés anciennes à sauver, faune à faire revenir, étapes de la vallée, en 4 lots (V1 à V4) — voir **§ 18** et `docs/VALLEE.md` (carrière seulement ; niveaux inchangés).
+>
 > **Deux modes de difficulté (2026-09-30)** : les chiffres des § 3 à § 12 sont ceux du mode **classique**. Les nouvelles parties se jouent par défaut en mode **détente** (charges, fermages, départ, prix des récoltes, pousse sans arrosage et prêt du voisin) : voir **§ 13**.
 
 ## 1. Intention
 
 - Jeu de gestion **relaxant** : pas de réflexes, pas de combat, pas de punition brutale.
-- Une partie = **une année** (4 saisons), environ **10 à 12 minutes** en vitesse normale.
+- Une partie = **une année** (4 saisons), environ **17 à 20 minutes** en vitesse normale (×1), deux fois moins à ×2 (avant le 2026-10-03 : 10 à 12 minutes, jugé trop pressé sur téléphone).
 - Le plaisir vient de l'**arbitrage** : dépenser pour replanter (gain rapide) ou investir dans du **revenu quotidien automatique** (gain lent mais régulier), en préparant l'**hiver** où presque rien ne pousse.
 - Contrôle **100 % souris** (raccourcis clavier en bonus).
 
 ## 2. Le temps
 
-- 1 jour = **20 secondes** en vitesse ×1. Vitesses : pause, ×1, ×2, ×4.
+- 1 jour = **36 secondes réelles** en vitesse ×1 (*rythme 2026-10-03*, avant : 20 s). Vitesses : pause, ×½ (72 s, option), ×1 (36 s), ×2 (18 s), ×4 (9 s).
+  - Retour du joueur (téléphone, surtout en carrière) : « même en ×1 les jours passent trop vite ». Mesuré : 20 s par jour à ×1, 5 s à ×4 ; à ×1, à peine le temps de récolter et d'arroser un champ sans mettre en pause. Le jour est **1,8 fois plus long** en temps réel.
+  - Les **règles par jour ne changent pas** : le cœur compte toujours un jour comme `DAY_SECONDS` = 20 « secondes de jeu » (heures de travail des employés, passages des machines, sauvegardes, simulateurs, parité des captures) ; c'est la boucle de l'interface qui fait avancer ces secondes de jeu plus lentement (`REAL_DAY_SECONDS` = 36, `src/data/balance.js`).
+  - Les personnages suivent le **temps réel** : marche au pas (≈ 22 px monde/s), accélération modérée à ×2 (×1,25) et ×4 (×1,5) ; un employé dont la tâche suivante est trop loin « coupe » par un fondu au lieu de courir (docs/ARCHITECTURE.md, « Rythme et personnages »).
 - 1 saison = **7 jours** (modifiable par niveau), 1 année = 4 saisons : printemps → été → automne → hiver.
 - Chaque jour commence à l'**aube** : c'est là que tombent les revenus automatiques, les charges quotidiennes et la nouvelle météo.
 - Ordre exact de l'aube : (1) pousse des cultures d'après l'arrosage et la météo de la veille, puis remise à zéro de l'arrosage ; (2) nouveau jour — début de saison, et gel au 1er jour d'hiver ; (3) nouvelle météo ; (4) maladie (jour de pluie, niveau 3) ; (5) la pluie arrose tout ; (6) nouveau cours du marché (niveau 6) ; (7) arrosage automatique ; (8) revenus des investissements ; (9) charges quotidiennes ; (10) mensualité du prêt (niveau 7).
@@ -2278,3 +2283,38 @@ fêtes et de veillées.
   ferme) : le reste vient des bêtes, du miel et des ateliers, ramassés par l'équipe (corvées). Pistes, si l'on veut aller
   plus loin (décision de l'utilisateur) : les soigneurs ramassent mais le fermier vend ; ou une humeur de l'équipe qui
   baisse sans visite du fermier.
+
+---
+
+# 18. La Vallée vivante (conception, 2026-10-03)
+
+Le **grand projet long du mode Carrière**, choisi par l'utilisateur (« la Vallée qui revient » + « la Grainothèque
+vivante », `docs/analyse/5-idees-projet-long.md` § 4 ; pas de copie de la restauration du village de Stardew).
+Conception complète, chiffrée et découpée en lots : **`docs/VALLEE.md`** ; contrats du lot V1 : `docs/ARCHITECTURE.md`,
+« Vallée vivante — contrats du lot V1 ». En bref :
+
+- **Récit** : au rang 2, Joseph apporte la boîte en fer de sa mère (sa 1ʳᵉ veillée) : trois variétés anciennes et la
+  première haie. Chaque étape de la vallée a son chapitre ; le 5ᵉ répond à « La vallée qui chante ».
+- **Grainothèque vivante** : 12 variétés du pays (Carotte jaune du Doubs, Tomate Cœur de bœuf, Vitelotte…), chacune avec un
+  **trait** (précoce, sobre, rustique, généreuse, savoureuse, mellifère, géante). On les retrouve dans des **bocaux**
+  (défrichage, Basile, foire aux graines, le geai, et les bocaux déjà gardés depuis les lots 2 et 3), on les multiplie
+  (chaque récolte **à la main** rend 2 graines) et on les **fixe** (6 récoltes à la main) : ensuite graines illimitées et
+  équipe autorisée.
+- **La vallée qui revient** : 8 aménagements nature sur des emplacements prédéfinis (haies, bandes fleuries, nichoirs,
+  tas de bois, hôtels à insectes, nichoir à chouette, chêne isolé, berges de la mare) et la **jachère fleurie** ; 12
+  habitants à recette d'habitat lisible (rouge-gorge, hérisson, coccinelles, bourdons, paon-du-jour, hirondelles, chouette
+  hulotte, grenouille, libellules, lièvre, écureuil, geai) qui viennent puis **attendent que le joueur les touche** pour
+  s'installer, et rendent un service doux (qualité, pousse, corbeaux, pêche, hiver…).
+- **Étapes de la vallée** (0 à 5 au V1, 8 au V4), comptées en **signes de vie** (habitants + variétés fixées) : la lisière
+  fleurit, les oiseaux reviennent, cueillette des haies, pollinisation, sol vivant, décor « Le tilleul de la vallée ».
+- **Lots** : **V1** « La boîte en fer » (graines et premiers habitants, structurant) ; **V2** « Le troc et les croisements »
+  (Grainothèque à 5 niveaux, troc avec les villageois, variétés croisées au nom de la ferme) ; **V3** « Le ruisseau »
+  (vue de la vallée, 6 lieux à restaurer par chantiers et conditions de vie, terres sauvages après les 16 terrains : le
+  grand puits d'argent) ; **V4** « Les cigognes » (légendes, visiteurs rarissimes, paysage et sons complets).
+- **Règles d'or** : carrière seulement (parité des niveaux intacte ; seules deux pages d'album se voient dans la grange),
+  rien ne se perd, aucune monnaie nouvelle, gestes réservés au joueur (« aider sans remplacer »), un seul indice à la
+  fois, aucune peur de rater, flux aléatoire unique `valley`.
+- **Équilibre** (cibles, `tools/simulate-career.js --compare-valley`) : V1 **+ 1 à + 5 %** de revenu pour le joueur
+  tranquille (toute la Vallée ≤ + 8 %), rangs et Domaine à un an près, ferme laissée seule ≤ + 3 %, ≥ 1 nouveauté par
+  saison ; ≈ 450 000 pièces de puits « pour la beauté » sur l'ensemble des lots (argent en caisse à l'an 14 divisé par 2
+  au V3) ; dépenses comptées à 100 % au patrimoine (à trancher).

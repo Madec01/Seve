@@ -344,7 +344,7 @@ export function createGrange(app) {
                 onPick: async (it, st) => {
                   if (st === 'owned') {
                     app.audio.play('click');
-                    app.toasts.show({ kind: 'info', icon: 'star', text: `« ${it.name} » est débloqué : posez-le avec « Décorer la ferme ».` });
+                    app.toasts.show({ prio: 'important', kind: 'info', icon: 'star', text: `« ${it.name} » est débloqué : posez-le avec « Décorer la ferme ».` });
                     return;
                   }
                   if (await unlockFlow(app, it)) render();

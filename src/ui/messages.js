@@ -6,6 +6,7 @@
 // createMessages(app) → {
 //   add(entry), list(), unread, markRead(), clear(),
 //   open(),                      feuille « Messages » (id 'messages')
+//   modePicker()                 réglage « Messages à l'écran » : Tous · Importants (défaut) · Aucun (options, feuille)
 //   onChange(fn)                 appelé quand la liste ou le nombre de non-lus change
 // }
 // Rien n'est enregistré : l'historique vit le temps de la session (il repart à zéro à chaque partie).
@@ -86,10 +87,21 @@ export function createMessages(app) {
         return;
       }
     }
-    // Même texte que le précédent il y a moins de 2 s (ex. deux toucher refusés) : une seule ligne.
-    const last = items[0];
-    if (last && last.text === e.text && last.title === e.title && Date.now() - last.at < 2000) return;
-    items.unshift({ id: nextId++, at: Date.now(), day: dayLabel(), kind: e.kind || 'info', title: e.title || '', text: e.text || '', key: e.key || null, onClick: e.onClick || null, banner: !!e.banner });
+    // (2026-10-03) Répétitions : même titre (ou même texte sans titre) le même jour de jeu, dans les 5 dernières lignes
+    // → une seule ligne « ×N » (« Récolte au grenier ×4 »), mise à jour et remontée en tête.
+    const day = dayLabel();
+    const same = !e.banner && !e.onClick && items.slice(0, 5).find((x) => !x.banner && !x.onClick && x.kind === (e.kind || 'info') && x.day === day && (e.title ? x.title === e.title : !x.title && x.text === e.text));
+    if (same) {
+      same.count = (same.count || 1) + 1;
+      same.text = e.text || same.text;
+      same.at = Date.now();
+      items = [same, ...items.filter((x) => x !== same)];
+      // (Deux touchers refusés de suite, même texte : comptés une fois.)
+      if (app.sheets?.current === 'messages') refreshSheet();
+      notify();
+      return;
+    }
+    items.unshift({ id: nextId++, at: Date.now(), day, kind: e.kind || 'info', title: e.title || '', text: e.text || '', key: e.key || null, onClick: e.onClick || null, banner: !!e.banner, quiet: !!e.quiet, count: 1 });
     if (items.length > MAX) items.length = MAX;
     // Les bandeaux (saison) et les succès d'argent ordinaires ne comptent pas comme « non lus ».
     if (!e.banner && ['warn', 'frost', 'rot', 'error', 'achievement'].includes(e.kind || 'info')) unread += 1;
@@ -126,7 +138,7 @@ export function createMessages(app) {
       el('span.msg-ico', icon(KIND_ICON[m.kind] || 'info', 'md')),
       el(
         'div.msg-main',
-        m.title ? el('b.msg-title', m.title) : null,
+        m.title ? el('b.msg-title', m.count > 1 ? `${m.title} ×${m.count}` : m.title) : m.count > 1 ? el('b.msg-title', `×${m.count}`) : null,
         el('span.msg-text', m.text),
         el('small.msg-when', [m.day, timeText(m.at)].filter(Boolean).join(' · ')),
       ),
@@ -150,8 +162,68 @@ export function createMessages(app) {
   function content() {
     const intro = el('p.sheet-hint.msg-intro', 'Les derniers messages de la partie, du plus récent au plus ancien.');
     const morning = app.todo?.morningToggle?.() || null;
-    if (!items.length) return el('div.msg-sheet', intro, el('p.sheet-empty', 'Aucun message pour l\'instant.'), morning);
-    return el('div.msg-sheet', intro, el('ul.msg-list', items.map(row)), morning);
+    const picker = modePicker();
+    if (!items.length) return el('div.msg-sheet', intro, el('p.sheet-empty', 'Aucun message pour l\'instant.'), picker, morning);
+    return el('div.msg-sheet', intro, el('ul.msg-list', items.map(row)), picker, morning);
+  }
+
+  /**
+   * Réglage « Messages à l'écran » (options et feuille Messages) : Tous · Importants (par défaut) · Aucun.
+   * Les choix et les alertes restent toujours ici, dans la ligne « À faire » et derrière la cloche.
+   */
+  function modePicker() {
+    const choices = [
+      ['all', 'Tous', 'tout s\'affiche'],
+      ['important', 'Importants', 'conseillé'],
+      ['none', 'Aucun', 'refus seuls'],
+    ];
+    const current = () => app.settings?.messages || 'important';
+    const note = el('small.opt-sub');
+    const group = el('div.seg.seg--3', { role: 'radiogroup', 'aria-label': 'Messages à l\'écran', id: 'opt-messages' });
+    const buttons = choices.map(([id, label, sub]) =>
+      el(
+        'button.seg-btn',
+        {
+          type: 'button',
+          role: 'radio',
+          id: `opt-messages-${id}`,
+          'data-mode': id,
+          onclick: () => {
+            if (current() === id) return;
+            app.audio?.play('toggle');
+            app.updateSettings?.({ messages: id });
+            sync();
+          },
+        },
+        el('span.seg-sample', label),
+        el('span.seg-pct', sub),
+      ),
+    );
+    group.append(...buttons);
+    const NOTES = {
+      all: 'Chaque nouvelle s\'affiche un instant en bas de l\'écran.',
+      important: 'Seuls les messages à lire tout de suite s\'affichent (refus, alertes, choix à faire). Les autres nouvelles attendent ici, regroupées dans le résumé du matin.',
+      none: 'Rien ne s\'affiche, sauf les refus. Les alertes et les choix restent ici, derrière la cloche, et dans la ligne « À faire ».',
+    };
+    const sync = () => {
+      for (const b of buttons) {
+        const on = b.dataset.mode === current();
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      }
+      note.textContent = NOTES[current()] || '';
+    };
+    group.addEventListener('keydown', (e) => {
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+      e.preventDefault();
+      const i = Math.max(0, choices.findIndex((c) => c[0] === current()));
+      const j = Math.min(choices.length - 1, Math.max(0, i + (e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 1)));
+      buttons[j].click();
+      buttons[j].focus();
+    });
+    sync();
+    return el('div.opt-block.msg-mode', el('span.opt-label', el('b', 'Messages à l\'écran'), note), group);
   }
 
   function refreshSheet() {
@@ -177,6 +249,7 @@ export function createMessages(app) {
     clear,
     open,
     refresh: refreshSheet,
+    modePicker,
     onChange(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
