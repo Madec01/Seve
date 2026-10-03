@@ -131,7 +131,7 @@ button.vl-row:active { transform: translateY(var(--u)); }
 .vl-box-seed { display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 104px; padding: 6px 4px; text-align: center; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2); animation: vl-line-in 500ms var(--ease-out) both; animation-delay: calc(var(--cz-delay, 0) * 420ms); }
 .vl-box-seed b { font-size: 0.875rem; line-height: 1.2; }
 .vl-box-seed small { font-size: 0.875rem; color: var(--text-soft); }
-.vl-box-seed .vl-trait { font-size: 0.8125rem; }
+.vl-box-seed .vl-trait { font-size: 0.875rem; max-width: 100%; flex-wrap: wrap; justify-content: center; }
 .vl-hedge { margin: 8px 0 0; }
 .vl-hedge small { display: block; font-style: normal; font-size: 0.875rem; color: var(--text-soft); }
 @keyframes vl-line-in { from { opacity: 0; transform: translateY(6px); } }
@@ -244,7 +244,19 @@ body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom:
 }
 .seg.vl-seg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .vl-fallow-row .seed-facts { flex-wrap: wrap; white-space: normal; }
+.vl-fallow-row .seed-facts > span { white-space: normal; display: inline; }
 @media (max-width: 379px), (max-height: 780px) {
   .sprite--vl-vignette { --sk: 2; }
   .vl-head { margin-bottom: 6px; }
 }
+
+/* (Intégration V1) Texte à 150 % sur 360 px : rien ne déborde — les puces de la feuille des graines vont à la ligne,
+   les cartes d'aménagement restent dans la feuille (le bouton passe dessous si la place manque). */
+.seed-warns .warn-chip { white-space: normal; max-width: 100%; }
+.vl-cards { grid-template-columns: minmax(0, 1fr); }
+.vl-card { min-width: 0; flex-wrap: wrap; }
+.vl-card > .btn { margin-left: auto; }
+.vl-rows { grid-template-columns: minmax(0, 1fr); }
+.vl-row { min-width: 0; }
+.vl-recipe li, .vl-row-name { overflow-wrap: anywhere; }
+.c-plan-value .vl-plan-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -75,7 +75,7 @@ test('semer une graine ancienne : gratuit, consomme une graine ; refus ; quel qu
   const pv = g.query.plot(i).variety;
   assert.deepEqual([pv.id, pv.trial, pv.hand, pv.need, pv.seedsOnHand, pv.trait.id], ['bouleDOr', true, 0, FIX, 2, 'early']);
   g.state.career.valley.seeds.bouleDOr = 0;
-  assert.equal(A.sowHeirloom(j, 'bouleDOr').reason, 'Plus de graines de Navet Boule d\'or : récoltez-en une à la main.');
+  assert.equal(A.sowHeirloom(j, 'bouleDOr').reason, 'Plus de graines de Navet Boule d\'or pour l\'instant : chaque récolte à la main d\'une planche d\'essai en rend 2.');
   // Citrouille de la boîte (culture du rang 3) semée au rang 2, en été.
   toSeason(g, 1);
   assert.ok(!g.level.crops.includes('pumpkin'));
@@ -105,7 +105,7 @@ test('récolte à la main : + 2 graines et + 1 vers la fixation ; sauvée à 7 ;
   assert.ok(types.indexOf('heirloomHarvest') > types.indexOf('harvested'));
   const fixed = ev.of('heirloomFixed');
   assert.equal(fixed.length, 1);
-  assert.equal(fixed[0].text, 'Navet Boule d\'or est sauvée !');
+  assert.equal(fixed[0].text, 'Navet Boule d\'or est sauvé !');
   assert.ok(g.state.career.valley.varieties.bouleDOr.fixedAt);
   assert.equal(g.state.plots[i].lastVariety, 'bouleDOr');
   // Sauvée : la récolte à la main ne rend plus de graine, mais compte toujours (succès).

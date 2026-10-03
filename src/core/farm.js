@@ -22,7 +22,7 @@ import { careerCropPrice } from './career/market.js';
 import { START_FIELD } from '../data/career/lots.js';
 import { SKY } from '../data/surprises.js';
 import { posterFactor } from './variety-effects.js';
-import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, survivesFrost, winterGrowthOf } from './career/heirlooms.js';
+import { dryGrowthOf as heirloomDryGrowth, growthFactorOf, returnTrialSeed, survivesFrost, winterGrowthOf } from './career/heirlooms.js';
 
 /** Index des parcelles ouvertes au départ : bloc startArea centré horizontalement, en haut. */
 export function initialUnlockedIndices(level) {
@@ -171,6 +171,7 @@ export function applyFrost(state) {
     // (Vallée vivante, carrière) Une variété rustique passe le gel.
     if (p.cropId && !getCrop(p.cropId).frostHardy && !inGreenhouse(p) && !(state.career?.valley && survivesFrost(state, p))) {
       lost.push({ plotIndex: i, cropId: p.cropId });
+      if (state.career?.valley) returnTrialSeed(state, p); // (Vallée) la graine d'une planche d'essai revient
       clearPlot(p);
     }
   });
@@ -192,7 +193,10 @@ export function applyRot(state, rotChance, rng) {
     if (rng.chance(rotChance)) {
       lost.push({ plotIndex: i, cropId: p.cropId, tree });
       if (tree) p.fruit = 0;
-      else clearPlot(p);
+      else {
+        if (state.career?.valley) returnTrialSeed(state, p); // (Vallée) la graine d'une planche d'essai revient
+        clearPlot(p);
+      }
     }
   });
   return lost;

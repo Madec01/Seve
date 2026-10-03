@@ -21,7 +21,7 @@ import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
 import { lotFinds } from './surprises.js';
 import { reserveLotNature } from './habitat.js';
-import { isFixed, planVariety } from './heirlooms.js';
+import { isFixed, planVariety, returnTrialSeed } from './heirlooms.js';
 import { VARIETIES_BY_ID } from '../../data/career/valley.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
@@ -259,6 +259,12 @@ export function developLot(api, lotId, type) {
   // Ce que l'ancien aménagement laisse : parcelles retirées (index gardés), bâtiment du terrain retiré.
   for (const i of lotPlots(state, lot.id)) {
     const p = state.plots[i];
+    if (state.career.valley) {
+      // (Vallée) La graine d'une planche d'essai revient ; variété, jachère et sol reposé ne survivent pas au réaménagement
+      // (sinon la parcelle, réutilisée vide par ensureLotPlots, garderait une variété sans culture : sauvegarde refusée).
+      returnTrialSeed(state, p);
+      for (const k of ['variety', 'fallow', 'rested']) if (p[k] !== undefined) delete p[k];
+    }
     p.env = null;
     p.unlocked = false;
   }

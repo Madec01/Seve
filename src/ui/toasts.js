@@ -22,6 +22,13 @@
 // (error, warn, frost) ; info pour le reste (info, money, success, achievement, rot).
 // Un message non affiché passe au journal (setLogger, `quiet: true`) et au résumé du matin (setDigest :
 // `o.digest` = 'vente|ventes' regroupe les répétitions, « 3 ventes »). show() renvoie alors null.
+//
+// Feuille ouverte (intégration Vallée V1, règle générale) : sur téléphone, quand une feuille du bas est ouverte (fiche
+// « La Vallée », variété, bocal, observation, achats, bilan…), les messages ne s'empilent plus par-dessus elle : ils
+// passent à l'historique tout de suite et ATTENDENT (`held`) ; à la fermeture de la feuille, les plus récents (deux au
+// plus, de moins de HOLD_MAX_AGE) s'affichent, les autres sont signalés par la pastille « +N ». Les refus (`error`) et
+// les messages du système (`always`, `keepTouch`) s'affichent toujours. `forget(key)` oublie un message en attente
+// devenu sans objet (une bête observée entre-temps). Écran large (PC) : rien ne change.
 
 import { el, clear, typo } from './dom.js';
 import { icon } from './icons.js';
@@ -51,6 +58,25 @@ export function visibleIn(mode, prio) {
   return prio === 'important';
 }
 
+/** Âge maximal d'un message gardé pendant qu'une feuille est ouverte (au-delà : seulement dans l'historique). */
+export const HOLD_MAX_AGE = 45000;
+
+/** Le message attend-il la fermeture de la feuille ouverte ? (refus et messages du système : jamais) */
+export function holdsOnSheet(o, prio, kind = o.kind || 'info') {
+  return prio !== 'always' && kind !== 'error' && !o.keepTouch;
+}
+
+/**
+ * Messages gardés à montrer à la fermeture d'une feuille : les plus récents de moins de `maxAge`, `max` au plus
+ * (ceux qui proposent une action d'abord). → { show: [entrée], rest: n } (rest : gardés mais pas montrés).
+ */
+export function pickHeld(held, now, max = MAX_VISIBLE, maxAge = HOLD_MAX_AGE) {
+  const fresh = held.filter((h) => now - h.at <= maxAge);
+  const ranked = [...fresh].sort((a, b) => (b.o.onClick ? 1 : 0) - (a.o.onClick ? 1 : 0) || b.at - a.at);
+  const show = ranked.slice(0, max).sort((a, b) => a.at - b.at);
+  return { show, rest: fresh.length - show.length };
+}
+
 export function createToasts(stack, bannerNode) {
   const recent = new Map(); // texte → { node, timer }
   let bannerTimer = null;
@@ -59,6 +85,9 @@ export function createToasts(stack, bannerNode) {
   let mode = 'important';
   let modeActive = () => true; // le tri ne s'applique que pendant une partie (menu : tout s'affiche)
   let quietCount = 0;
+  let held = []; // messages en attente pendant qu'une feuille est ouverte : [{ o, at }]
+  let heldCount = 0;
+  let flushTimer = null;
   let moreHandler = null;
   let hidden = 0; // messages effacés faute de place depuis que la pastille est apparue
   let moreTimer = null;
@@ -148,6 +177,42 @@ export function createToasts(stack, bannerNode) {
    *   key : un message déjà affiché avec la même clé est mis à jour (titre, texte) au lieu d'en
    *         empiler un nouveau (ex. remboursements successifs du voisin).
    */
+  /** Une feuille du bas est-elle ouverte sur téléphone (pendant une partie) ? */
+  function sheetOpen() {
+    if (typeof document === 'undefined' || !document.body) return false;
+    const b = document.body.classList;
+    // (Mode aménagement de la Vallée : la scène est l'outil, les messages attendent aussi.)
+    return (b.contains('has-sheet') || b.contains('in-valley-place')) && !b.contains('layout-wide') && modeActive();
+  }
+
+  /** Feuille fermée : les messages gardés les plus récents s'affichent (sans repasser à l'historique). */
+  function flushHeld() {
+    clearTimeout(flushTimer);
+    flushTimer = null;
+    if (!held.length || sheetOpen()) return;
+    const { show: list, rest } = pickHeld(held, Date.now());
+    held = [];
+    for (const h of list) show({ ...h.o, logged: true });
+    if (rest > 0) showMore(rest);
+  }
+
+  if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
+    new MutationObserver(() => {
+      if (sheetOpen()) {
+        // Une feuille s'ouvre : les messages déjà affichés (annonces du matin…) se retirent et attendent aussi.
+        clearTimeout(flushTimer);
+        flushTimer = null;
+        for (const n of liveToasts()) {
+          if (!n._o || !holdsOnSheet(n._o, n.dataset.prio, n._o.kind || 'info')) continue;
+          held = held.filter((h) => !(n._o.key && h.o.key === n._o.key));
+          held.push({ o: { ...n._o, logged: true }, at: n._at || Date.now() });
+          dismiss(n);
+        }
+        if (held.length > 8) held = held.slice(-8);
+      } else if (held.length && !flushTimer) flushTimer = setTimeout(flushHeld, 320); // après la fermeture (animation)
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
+
   function show(opts) {
     const o = typeof opts === 'string' ? { text: opts } : opts;
     const kind = o.kind || 'info';
@@ -165,11 +230,20 @@ export function createToasts(stack, bannerNode) {
       }
       return null;
     }
+    // Feuille ouverte : le message passe à l'historique et attend la fermeture (il ne couvre pas la feuille).
+    if (!o.logged && sheetOpen() && holdsOnSheet(o, prio, kind)) {
+      log(o, kind);
+      heldCount += 1;
+      held = held.filter((h) => !(o.key && h.o.key === o.key));
+      held.push({ o, at: Date.now() });
+      if (held.length > 8) held.shift();
+      return null;
+    }
     const key = o.key ? `key|${o.key}` : `${kind}|${o.title || ''}|${o.text}`;
     const prev = recent.get(key);
     const duration = durationOf(o, kind, prio);
     if (prev && prev.node.isConnected && !prev.node.classList.contains('is-leaving')) {
-      if (o.key) log(o, kind, true);
+      if (o.key && !o.logged) log(o, kind, true);
       if (o.key) {
         const t = prev.node.querySelector('.toast-text');
         if (t) t.textContent = typo(o.text);
@@ -187,7 +261,7 @@ export function createToasts(stack, bannerNode) {
       }, duration + 400);
       return prev.node;
     }
-    log(o, kind);
+    if (!o.logged) log(o, kind);
     const go = o.onClick
       ? el(
           'button.btn.btn--small.btn--red.toast-go',
@@ -215,6 +289,8 @@ export function createToasts(stack, bannerNode) {
       go,
     );
     if (o.onClick) node.classList.add('is-action');
+    node._o = o; // (feuille ouverte) le message peut se retirer et attendre la fermeture
+    node._at = Date.now();
     node.dataset.prio = prio; // info : une ligne ; important : deux lignes au plus (style.css)
     if (o.keepTouch) node.classList.add('is-sticky'); // reste touchable même sur une feuille haute (mise à jour)
     if (duration >= 5000) node.dataset.important = '1';
@@ -283,6 +359,7 @@ export function createToasts(stack, bannerNode) {
   function clearAll() {
     for (const n of [...stack.children]) n.remove();
     hideMore();
+    held = [];
     recent.clear();
     clearTimeout(bannerTimer);
     bannerNode.classList.remove('is-visible');
@@ -291,6 +368,10 @@ export function createToasts(stack, bannerNode) {
 
   return {
     show,
+    /** Oublie un message en attente (feuille ouverte) devenu sans objet : forget('vl-vis-hedgehog'). */
+    forget(key) {
+      held = held.filter((h) => h.o.key !== key);
+    },
     /** Retire un message affiché (nœud renvoyé par show) : ex. l'annonce d'une fête quand on entre dans la fête. */
     hide(node) {
       if (node && node.nodeType === 1) dismiss(node);
@@ -320,6 +401,6 @@ export function createToasts(stack, bannerNode) {
       moreHandler = typeof fn === 'function' ? fn : null;
     },
     /** Nombre de messages visibles, et de messages passés dans l'historique faute de place (mesures, tests). */
-    stats: () => ({ visible: liveToasts().length, hidden: more.hidden ? 0 : hidden, quiet: quietCount, mode }),
+    stats: () => ({ visible: liveToasts().length, hidden: more.hidden ? 0 : hidden, quiet: quietCount, mode, held: held.length, heldTotal: heldCount }),
   };
 }

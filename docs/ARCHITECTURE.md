@@ -3925,6 +3925,37 @@ src/ui/{field,gestures,todo,grange,album,cozy}.js, src/ui/career/{lots,journal,w
   install(id), stage(n), finds(), fair(), tree(spotId), place(kind, spotId?), open(tab), placing(kind | null),
   point(kind, id), ui(), stats() }`.
 
+### Intégration et vérification du lot V1 (2026-10-03)
+
+- **Accords** (`src/data/career/valley.js`) : chaque variété porte `g` (genre du nom : `'m'` pour le navet, le blé, le
+  chou, le maïs, le tournesol ; `'f'` sinon), chaque habitant `the` (« Les coccinelles »), `g` et `pl` ;
+  `agreeWith(x, mot)` et `savedText(x)` (« Navet Boule d'or est sauvé ! »). Requêtes : `varietyInfo.g`,
+  `query.plot(i).variety.g`, `speciesInfo.{ the, g, pl, seasonsWhen }` ; `habitat.js` : `seasonsWhen(saisons)` (« du
+  printemps à l'automne »), `comesText(espèce)` (« elles viennent »). Indices, refus (« Déjà installées. »), fiche, scène
+  (« Sauvé ! ») et feuille des graines accordés. Hors Vallée, `src/ui/field.js` accorde aussi « mûr / mûre » avec la
+  culture (« Navet mûr », « Gèlera avant d'être mûr »).
+- **Rien ne se perd** (`heirlooms.js` `returnTrialSeed(state, p)`, appelé avant `clearPlot` par `applyFrost`,
+  `applyRot` (`farm.js`), `removeTree` (`game.js`) et `developLot` (`land.js`), gardé par `state.career?.valley`) : une
+  planche d'essai perdue sans récolte rend sa graine (ou son greffon) ; une variété sauvée, rien. Aucun tirage en plus ;
+  la simulation de carrière bouge un peu (§ 12.7 de `docs/VALLEE.md`), les niveaux pas du tout (parité 400 / 400).
+- **Bug corrigé** : réaménager un terrain dont une parcelle était en jachère fleurie laissait `fallow` sur une parcelle
+  sans terrain (`env: null`), sauvegarde refusée au chargement (« Vallée (jachère) ») ; `developLot` efface maintenant
+  `variety`, `fallow` et `rested` des parcelles retirées.
+- **Messages et feuilles** (`src/ui/toasts.js`, règle générale) : sur téléphone, pendant qu'une feuille est ouverte, les
+  messages (sauf refus et système) passent à l'historique et **attendent** ; ceux déjà affichés quand une feuille s'ouvre
+  se retirent et attendent aussi ; à la fermeture, les deux plus récents (moins de 45 s, ceux qui proposent une action
+  d'abord) s'affichent, la pastille « +N » signale le reste. `holdsOnSheet`, `pickHeld`, `HOLD_MAX_AGE` (purs, testés) ;
+  `toasts.forget(key)` (bête observée entre-temps). Même règle en mode aménagement (`body.in-valley-place`) et sur la
+  fenêtre de fin de saison à cartes (`v-season`, CSS). Écran large : inchangé.
+- **Le prochain indice** : tant que rien n'est semé (juste après la boîte de Joseph), « N graines de … attendent d'être
+  semées » passe avant les recettes ; l'onglet Graines montre d'abord les variétés en main, puis les sauvées, puis celles à
+  retrouver. Refus « Plus de graines de … pour l'instant : chaque récolte à la main d'une planche d'essai en rend 2. »
+- **Texte à 150 % sur 360 px** : puces de la feuille des graines, cartes d'aménagement, lignes des habitants, libellé du
+  plan de culture et boutons d'achat (`.btn--buy`) vont à la ligne ou s'abrègent au lieu de déborder.
+- **Étal de la foire** : un greffon pour le Calville (« 3 greffons »), sachet rangé « dans la boîte en fer » (la
+  grainothèque est un bâtiment du V2) ; fiche d'une parcelle sauvée sans la ligne « + 2 graines gardées » (plus de graine
+  après fixation).
+
 ## Rythme, personnages et messages (2026-10-03)
 
 Retours du joueur (téléphone, surtout en carrière) : « les notifs prennent beaucoup de place, et même en ×1 les jours

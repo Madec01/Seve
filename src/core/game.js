@@ -181,6 +181,7 @@ import {
 } from './cozy.js';
 import { careerCozyHost, careerAchievementExtras, triggerCareerCozy } from './career/cozy.js';
 import { valleyAchievementContext, valleyPlantable } from './career/valley.js';
+import { returnTrialSeed } from './career/heirlooms.js';
 import { treeSeedCost as treeSeedCostOf } from './trees.js';
 
 export const STATE_VERSION = 2;
@@ -1228,6 +1229,7 @@ function wrap(state, { fresh = false } = {}) {
       if (!validPlot(plotIndex)) return fail('Parcelle inexistante.');
       const p = state.plots[plotIndex];
       if (!isTreePlot(p)) return fail('Il n\'y a pas d\'arbre ici.');
+      if (state.career?.valley) returnTrialSeed(state, p); // (Vallée) le greffon d'un Calville pas encore sauvé revient
       clearPlot(p);
       p.lastHarvested = null;
       push('treeRemoved', { plotIndex });

@@ -57,6 +57,19 @@ export function isFixed(state, varietyId) {
   return !!v && !!v.varieties?.[varietyId]?.fixedAt;
 }
 
+/**
+ * Planche d'essai perdue sans récolte (gel, pourriture, arbre arraché, terrain réaménagé) : sa graine (ou son greffon)
+ * revient dans la boîte — « rien ne se perd » (docs/VALLEE.md, règles d'or). À appeler AVANT clearPlot. Variété fixée :
+ * rien (ses graines s'achètent). → true si une graine est revenue.
+ */
+export function returnTrialSeed(state, plot) {
+  const v = valleyOf(state);
+  const x = varietyOf(plot);
+  if (!v || !v.started || !x || !plot.cropId || v.varieties?.[x.id]?.fixedAt) return false;
+  v.seeds[x.id] = (v.seeds[x.id] || 0) + 1;
+  return true;
+}
+
 /** Planche d'essai : parcelle semée d'une variété pas encore fixée. */
 export function isTrial(state, plot) {
   const v = varietyOf(plot);

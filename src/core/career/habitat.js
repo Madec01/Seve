@@ -4,12 +4,13 @@
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import {
   MAX_STAGE, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS, RECIPE_NATURE, RECIPE_TEXTS, SPECIES, SPECIES_BY_ID, STAGES,
-  BOON_TEXTS, VARIETIES, VARIETIES_BY_ID,
+  BOON_TEXTS, VARIETIES, VARIETIES_BY_ID, agreeWith,
 } from '../../data/career/valley.js';
 import { inGreenhouse, isMature } from '../farm.js';
 import { isTreeAdult } from '../trees.js';
 import { isFixed, seasonAbs, seasonAbsOfDay, speciesInstalled, traitOf } from './heirlooms.js';
 
+const lowerFirst = (t) => t.charAt(0).toLowerCase() + t.slice(1);
 const BIG_SHELTERS = ['cowshed', 'stable', 'sheepfold', 'goatShed'];
 const SEASON_NAMES = { spring: 'printemps', summer: 'été', autumn: 'automne', winter: 'hiver' };
 
@@ -194,6 +195,24 @@ export function seasonsText(seasons) {
   return `${SEASON_NAMES[seasons[0]]} → ${SEASON_NAMES[seasons[seasons.length - 1]]}`;
 }
 
+const SEASON_WHEN = { spring: 'au printemps', summer: 'en été', autumn: 'en automne', winter: 'en hiver' };
+const SEASON_FROM = { spring: 'du printemps', summer: 'de l\'été', autumn: 'de l\'automne', winter: 'de l\'hiver' };
+const SEASON_TO = { spring: 'au printemps', summer: 'à l\'été', autumn: 'à l\'automne', winter: 'à l\'hiver' };
+/** Quand vient l'espèce, à placer après un verbe : « toute l'année », « en été », « au printemps et en été », « du printemps à l'automne ». */
+export function seasonsWhen(seasons) {
+  if (seasons.length === 4) return 'toute l\'année';
+  if (seasons.length === 1) return SEASON_WHEN[seasons[0]];
+  if (seasons.length === 2) return `${SEASON_WHEN[seasons[0]]} et ${SEASON_WHEN[seasons[1]]}`;
+  return `${SEASON_FROM[seasons[0]]} ${SEASON_TO[seasons[seasons.length - 1]]}`;
+}
+
+/** Pronom sujet et verbe accordés : « il vient », « elles viennent ». */
+export function comesText(s, future = false) {
+  const pron = s.pl ? (s.g === 'f' ? 'elles' : 'ils') : (s.g === 'f' ? 'elle' : 'il');
+  const verb = future ? (s.pl ? 'viendront' : 'viendra') : (s.pl ? 'viennent' : 'vient');
+  return `${pron} ${verb}`;
+}
+
 /** Recette d'une espèce : { items: [{ kind, n, have, ok, text }], ok, inSeason }. */
 export function recipeStatus(state, id, counts = habitatCounts(state)) {
   const s = SPECIES_BY_ID[id];
@@ -289,6 +308,19 @@ function plotSowable(state, i, crop) {
  * planche d'essai mûre ; (5) l'espèce la plus proche de venir (ce qui manque) ; (6) des graines qui attendent d'être
  * semées ; (7) l'étape suivante. → null | { kind, text, icon, target }
  */
+/** Indice « graines à semer » : la première variété dont une graine peut être semée maintenant (null sinon). */
+function sowableSeedsHint(state) {
+  const v = state.career.valley;
+  for (const x of VARIETIES) {
+    const n = v.seeds[x.id] || 0;
+    if (n <= 0) continue;
+    const crop = getCrop(x.cropId);
+    const k = state.plots.findIndex((p, i) => plotSowable(state, i, crop));
+    if (k >= 0) return { kind: 'seeds', text: `${n} ${n > 1 ? 'graines' : 'graine'} de ${x.name} ${n > 1 ? 'attendent' : 'attend'} d'être ${n > 1 ? 'semées' : 'semée'}.`, icon: x.icon, target: { type: 'plot', id: k } };
+  }
+  return null;
+}
+
 export function nextHint(state) {
   const v = state.career?.valley;
   if (!v || !v.started) return null;
@@ -297,7 +329,7 @@ export function nextHint(state) {
   if (wild) {
     for (const s of SPECIES) {
       const e = v.species[s.id];
-      if (e?.state === 'visible') return { kind: 'observe', text: `${s.name} vous attend ${whereText(state, e.spotId)}.`, icon: s.icon, target: { type: 'species', id: s.id } };
+      if (e?.state === 'visible') return { kind: 'observe', text: `${s.the || s.name} vous attend${s.pl ? 'ent' : ''} ${whereText(state, e.spotId)}.`, icon: s.icon, target: { type: 'species', id: s.id } };
     }
   }
   const unread = STAGES.find((st) => st.n <= v.stage && !v.chapters.read.includes(st.n));
@@ -308,9 +340,14 @@ export function nextHint(state) {
     const k = state.plots.findIndex((p) => p && p.env && p.variety && p.cropId && isMature(p) && !isFixed(state, p.variety));
     if (k >= 0) {
       const x = VARIETIES_BY_ID[state.plots[k].variety];
-      return { kind: 'trial', text: `${x.name} est mûre : récoltez-la à la main (+ 2 graines).`, icon: x.icon, target: { type: 'plot', id: k } };
+      return { kind: 'trial', text: `${x.name} est ${agreeWith(x, 'mûr')} : récoltez-${x.g === 'f' ? 'la' : 'le'} à la main (+ 2 graines).`, icon: x.icon, target: { type: 'plot', id: k } };
     }
   }
+  // Rien de semé (juste après la boîte de Joseph, ou toutes les planches récoltées) : semer passe avant les recettes —
+  // le premier geste de la Vallée est de semer ses graines (relecture « joueur tranquille », intégration V1).
+  const nothingSown = !state.plots.some((p) => p && p.variety && p.cropId);
+  const seedsHint = seeds ? sowableSeedsHint(state) : null;
+  if (seedsHint && nothingSown) return seedsHint;
   if (wild) {
     const counts = habitatCounts(state);
     let best = null;
@@ -331,7 +368,7 @@ export function nextHint(state) {
     if (best) {
       const { s, r, missing } = best;
       if (!missing.length) {
-        return { kind: 'recipe', text: `Tout est prêt pour ${s.name.toLowerCase()} : il vient en ${seasonsText(s.seasons)}.`, icon: s.icon, target: null };
+        return { kind: 'recipe', text: `Tout est prêt pour ${lowerFirst(s.the || s.name)} : ${comesText(s)} ${seasonsWhen(s.seasons)}.`, icon: s.icon, target: null };
       }
       const m = missing[0];
       const kind = RECIPE_NATURE[m.kind] || null;
@@ -342,15 +379,7 @@ export function nextHint(state) {
       return { kind: 'recipe', text, icon: s.icon, target };
     }
   }
-  if (seeds) {
-    for (const x of VARIETIES) {
-      const n = v.seeds[x.id] || 0;
-      if (n <= 0) continue;
-      const crop = getCrop(x.cropId);
-      const k = state.plots.findIndex((p, i) => plotSowable(state, i, crop));
-      if (k >= 0) return { kind: 'seeds', text: `${n} graine${n > 1 ? 's' : ''} de ${x.name} attend${n > 1 ? 'ent' : ''} d'être semée${n > 1 ? 's' : ''}.`, icon: x.icon, target: { type: 'plot', id: k } };
-    }
-  }
+  if (seedsHint) return seedsHint;
   const next = STAGES.find((st) => st.n === v.stage + 1);
   if (next) {
     const left = next.signs - signsOfLife(state);

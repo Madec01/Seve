@@ -719,6 +719,13 @@ garde 4 saisons de charges avant d'aménager.
 | Argent en caisse (tranquille) | an 14 ≤ 85 % de sans (cible d'ensemble, § 12.6) | an 10 : 95 % ; an 14 : **97 %** — le V1 seul ne crée pas le puits (V2, V3) |
 | Lanternes (tranquille, carrière) | § 17.2.1 ; total médian ≈ 11 | total médian **12 / 20** ; beauté 17 / 33 / 33 / 17 % ; variété 13 / 53 / 25 / 9 % |
 
+**Relance après l'intégration (2026-10-03)** — une planche d'essai perdue sans récolte (gel, pourriture, arbre arraché)
+rend maintenant sa graine (« rien ne se perd ») : `--compare-valley --runs 60` donne tranquille **+ 3,2 %** de revenu
+(306 439 ; 8 variétés et 7 habitants à l'an 5, 12 variétés an 9), dépenses 18 063, Domaine an 8 → 7 ; débutant + 2,2 %
+(4 + 4 à l'an 8 dans 57 % / 58 %) ; appliqué + 0,1 % ; ferme laissée seule **− 0,9 %** ; `automator` + 0,3 % de patrimoine ;
+part des semis : écart le plus grand 1,1 point. Toutes les cibles restent tenues (sauf « nouveautés », 65 %, comme
+avant). Parité des niveaux 400 / 400.
+
 **Nouveautés : pourquoi 65 % et pas 80 %.** Toutes les saisons d'automne ont leur nouveauté dès l'arrivée du geai (son
 bocal), les ans 2 à 5 en ont ≥ 75 % ; le creux est aux ans 6 et 7 (rang 5, plus rien de la liste à poser, les dernières
 recettes attendent des haies) et aux printemps et hivers des ans 8 à 10 (tout ce qui vient au printemps est déjà là).

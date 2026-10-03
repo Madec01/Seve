@@ -160,7 +160,7 @@ test('services des habitants installés (et seulement eux)', () => {
   assert.ok(g.query.career.valley().services.length >= 11);
 });
 
-test('le prochain indice (un seul) : bête à voir, chapitre, bocal, planche mûre, recette, graines, étape', () => {
+test('le prochain indice (un seul) : bête à voir, chapitre, bocal, planche mûre, (rien de semé : graines), recette, graines, étape', () => {
   const g = startedCareer();
   const Q = () => g.query.career.valley().hint;
   assert.equal(Q().kind, 'chapter');
@@ -173,6 +173,9 @@ test('le prochain indice (un seul) : bête à voir, chapitre, bocal, planche mû
   g.state.plots[i].growth = 99;
   assert.deepEqual([Q().kind, Q().target], ['trial', { type: 'plot', id: i }]);
   g.actions.harvest(i);
+  // Rien de semé : semer passe avant les recettes ; une planche en terre, la recette revient.
+  assert.equal(Q().kind, 'seeds');
+  g.actions.career.sowHeirloom(Q().target.id, 'bouleDOr');
   assert.equal(Q().kind, 'recipe');
   assert.deepEqual(Q().target, { type: 'nature', id: 'woodpile' });
   g.actions.career.triggerValley('visible', 'robin');

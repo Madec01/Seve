@@ -1,8 +1,8 @@
 {
-  "id": "b0b08f0d5683",
+  "id": "6ddfbe3caf4e",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.b1280c850c.js",
-  "css": "dist/game.d65aa9334d.css",
+  "js": "dist/game.ddfc8aa79d.js",
+  "css": "dist/game.cf80c27a4b.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -155,8 +155,8 @@
     "css/fonts.css": "f6a60d8eb500f8f4",
     "css/guidance.css": "40cbbd0be7f99e99",
     "css/lot2.css": "abbc12b1669158cb",
-    "css/style.css": "4fa1ebbb6844b2c6",
-    "css/valley.css": "d367767972fac954",
+    "css/style.css": "61bba55439eff2c0",
+    "css/valley.css": "0fa45a71db527202",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
@@ -173,10 +173,10 @@
     "src/core/career/effects.js": "3bb4c18721bed04a",
     "src/core/career/events.js": "278a705a2818ffce",
     "src/core/career/extensions.js": "d73bafac4910428b",
-    "src/core/career/habitat.js": "b85abdae24bdcf5c",
+    "src/core/career/habitat.js": "cddba345022bb013",
     "src/core/career/handwork.js": "ca63b1dc9ffbe89e",
-    "src/core/career/heirlooms.js": "f4efcdf67ca115c6",
-    "src/core/career/land.js": "7ce3a3907980b45e",
+    "src/core/career/heirlooms.js": "02ec671e301a56c7",
+    "src/core/career/land.js": "3301b18417a5cd11",
     "src/core/career/level.js": "369b1b4a616754a3",
     "src/core/career/machines.js": "f3cb2b22272f1105",
     "src/core/career/market.js": "047b74bf02858d3e",
@@ -189,7 +189,7 @@
     "src/core/career/storage.js": "4ca4c2f7c600037f",
     "src/core/career/surprises.js": "ad2ae7b9583caa2b",
     "src/core/career/themes.js": "2966a641f85841d9",
-    "src/core/career/valley.js": "6c8b2dfd26c7e75e",
+    "src/core/career/valley.js": "24a4af38fffce73d",
     "src/core/career/variety-host.js": "232b679b70fb8eff",
     "src/core/career/variety.js": "98bcac3b51b18ddd",
     "src/core/career/work.js": "75ce736d96cf874e",
@@ -197,8 +197,8 @@
     "src/core/cozy.js": "4039dc805a203088",
     "src/core/economy.js": "87b9d3de6feae120",
     "src/core/events.js": "467b3069052f8d70",
-    "src/core/farm.js": "01fc9dab0b8a0e59",
-    "src/core/game.js": "c99267a40e5a8bba",
+    "src/core/farm.js": "292988bfa0d2aba1",
+    "src/core/game.js": "704f1bb7668a7290",
     "src/core/lanterns.js": "33f5622724d85b7a",
     "src/core/market.js": "b44b99ed21844017",
     "src/core/neighbour.js": "625c041def630a9b",
@@ -229,7 +229,7 @@
     "src/data/career/ranks.js": "b5930a5d8eef36d3",
     "src/data/career/staff.js": "7685179ad1eb19c1",
     "src/data/career/themes.js": "86744b07e300ccd2",
-    "src/data/career/valley.js": "953dcc4493e45b59",
+    "src/data/career/valley.js": "0697c145884ba64d",
     "src/data/cosmetics.js": "78ed9ef1dbe57fe8",
     "src/data/cozy.js": "0f21c1d21dceb952",
     "src/data/crops.js": "0a9635c093c6dc20",
@@ -257,7 +257,7 @@
     "src/render/layout.js": "391ef10dd8ea0e06",
     "src/render/lot2-actors.js": "f58ca6268e9a71c7",
     "src/render/scene.js": "3b845bc0fbce1ce2",
-    "src/render/valley-actors.js": "c70e9bfd86c4b2fa",
+    "src/render/valley-actors.js": "8cb2ff42ec87a8c4",
     "src/render/variety-actors.js": "116b4db2523e4981",
     "src/storage.js": "192b615d34734341",
     "src/ui/a11y.js": "d5d561bd705da86f",
@@ -273,13 +273,13 @@
     "src/ui/career/shop.js": "ac41c572d748cc12",
     "src/ui/career/staff.js": "d270c50586401e40",
     "src/ui/career/util.js": "971519f5a6b85201",
-    "src/ui/career/valley.js": "a6f917524eeae564",
+    "src/ui/career/valley.js": "1392d20ca91bbf4a",
     "src/ui/career/windows.js": "ee6b9ce23bb9b7e1",
     "src/ui/cozy.js": "3e06797b7e1c42da",
     "src/ui/decor.js": "c295c12c0681e1c0",
     "src/ui/dialogs.js": "ed2c0e1de2b0518e",
     "src/ui/dom.js": "4ce9149d5d52a48f",
-    "src/ui/field.js": "d8aa640f046fe6c7",
+    "src/ui/field.js": "66df8e17241c66fc",
     "src/ui/gestures.js": "59a2c914495e779d",
     "src/ui/grange.js": "9d4219434510c7ce",
     "src/ui/guide-prefs.js": "e79573213ab6a060",
@@ -295,7 +295,7 @@
     "src/ui/sheets.js": "cec7d204aff765c6",
     "src/ui/tabbar.js": "3074678b152f99db",
     "src/ui/text.js": "dcb262860db7a6de",
-    "src/ui/toasts.js": "ae395b89f9d00fba",
+    "src/ui/toasts.js": "61de1dfb3f8450ce",
     "src/ui/todo.js": "ad870a6f082767b7",
     "src/ui/tooltip.js": "b2da8b2d915163ab",
     "src/ui/tutorial.js": "b567fa8157c237dd",
@@ -307,43 +307,43 @@
   },
   "history": [
     {
-      "id": "b0b08f0d5683",
+      "id": "6ddfbe3caf4e",
       "files": [
-        "dist/game.b1280c850c.js",
-        "dist/game.b1280c850c.js.map",
-        "dist/game.d65aa9334d.css"
+        "dist/game.ddfc8aa79d.js",
+        "dist/game.ddfc8aa79d.js.map",
+        "dist/game.cf80c27a4b.css"
       ]
     },
     {
-      "id": "42366dec2a84",
+      "id": "06d8c899c360",
       "files": [
-        "dist/game.cf9075c007.js",
-        "dist/game.cf9075c007.js.map",
-        "dist/game.d65aa9334d.css"
+        "dist/game.4913f47491.js",
+        "dist/game.4913f47491.js.map",
+        "dist/game.cf80c27a4b.css"
       ]
     },
     {
-      "id": "79b5f7f92a57",
+      "id": "aa13ae6e4523",
       "files": [
-        "dist/game.d6eda7d0e3.js",
-        "dist/game.d6eda7d0e3.js.map",
-        "dist/game.ff95339b6c.css"
+        "dist/game.4913f47491.js",
+        "dist/game.4913f47491.js.map",
+        "dist/game.a529f4da0b.css"
       ]
     },
     {
-      "id": "679e1521a0d6",
+      "id": "93802834e5d7",
       "files": [
-        "dist/game.c4e2cdd793.js",
-        "dist/game.c4e2cdd793.js.map",
-        "dist/game.2b597ce1d1.css"
+        "dist/game.5bcd1390c1.js",
+        "dist/game.5bcd1390c1.js.map",
+        "dist/game.03c27fb34a.css"
       ]
     },
     {
-      "id": "135e7b25f528",
+      "id": "213e813429c5",
       "files": [
-        "dist/game.b826e4d32b.js",
-        "dist/game.b826e4d32b.js.map",
-        "dist/game.8727d5a46d.css"
+        "dist/game.b311cfe445.js",
+        "dist/game.b311cfe445.js.map",
+        "dist/game.414ff8b9ab.css"
       ]
     }
   ]

@@ -94,7 +94,7 @@ export function createField(app) {
       }
       if (c.noWater) warnings.push(el('span.warn-chip.is-hardy', icon('water', 'xs'), 'Pousse sans arrosage'));
       if (c.product?.owned) warnings.push(el('span.warn-chip.is-product', productIcon(c.product.productId, 'sprite--xs'), `Atelier : ${fmt(c.product.value)}`));
-      if (c.willFreeze && !isTree) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), 'Gèlera avant d\'être mûre'));
+      if (c.willFreeze && !isTree) warnings.push(el('span.warn-chip.is-frost', icon('winter', 'xs'), `Gèlera avant d'être ${agree(c.name, 1, 'mûr')}`));
       if (c.fatigue) warnings.push(el('span.warn-chip.is-fatigue', icon('info', 'xs'), `Sol fatigué −${Math.round(lvl.modifiers.soilFatigue * 100)} %`));
       if (c.frostHardy && !isTree && cal.seasonId !== 'winter') warnings.push(el('span.warn-chip.is-hardy', icon('winter', 'xs'), 'Résiste au gel'));
       if (lvl.modifiers.priceVolatility && Math.abs(c.marketMultiplier - 1) > 0.01) {
@@ -293,7 +293,7 @@ export function createField(app) {
     if (!p.cropId) return 'Parcelle libre';
     if (p.giant) return `${p.cropName} ${agree(p.cropName, 1, 'géant')} !`;
     if (p.kind === 'tree') return p.tree?.fruitReady ? 'Pommier : pommes mûres' : p.cropName || 'Pommier';
-    return p.mature ? `${p.cropName} mûre` : p.cropName;
+    return p.mature ? `${p.cropName} ${agree(p.cropName, 1, 'mûr')}` : p.cropName;
   }
 
   function openPlotInfo(index, silent = false) {
@@ -398,7 +398,7 @@ export function createField(app) {
       rows.push(el('div.tip-sub', 'Il se récolte à la main, en une fois.'));
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else if (p.mature) {
-      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} mûre !`));
+      if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), `${p.cropName} ${agree(p.cropName, 1, 'mûr')} !`));
       rows.push(el('div', icon('coin', 'xs'), `Valeur : ${plural(p.handValue ?? p.harvestValue, 'pièce')}`));
       valleyRows(rows, p);
       qualityRows(rows, p, sheet);
@@ -409,7 +409,7 @@ export function createField(app) {
       if (verb) rows.push(el('div.tip-sub', `${verb} pour récolter.`));
     } else {
       if (!sheet) rows.push(el('div.tip-title', cropIcon(p.cropId, 'sprite--xs'), p.cropName));
-      rows.push(el('div.tip-progress', el('span.tip-bar', el('span.tip-bar-fill', { style: { width: `${Math.round(p.progress * 100)}%` } })), el('span', `mûre dans ${plural(p.daysLeft, 'jour')}`)));
+      rows.push(el('div.tip-progress', el('span.tip-bar', el('span.tip-bar-fill', { style: { width: `${Math.round(p.progress * 100)}%` } })), el('span', `${agree(p.cropName, 1, 'mûr')} dans ${plural(p.daysLeft, 'jour')}`)));
       rows.push(
         p.watered
           ? el('div.tip-ok', icon('water', 'xs'), 'Arrosée aujourd\'hui')
@@ -421,7 +421,7 @@ export function createField(app) {
       qualityRows(rows, p, sheet);
       claimRow(rows, p);
       if (p.processTarget) rows.push(el('div.tip-sub', productIcon(p.processTarget.productId, 'sprite--xs'), `Transformable : ${p.processTarget.productName.toLowerCase()} ${fmt(p.processTarget.value)}`));
-      if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), 'Gèlera avant d\'être mûre !'));
+      if (p.willFreeze) rows.push(el('div.tip-note.neg', icon('winter', 'xs'), `Gèlera avant d'être ${agree(p.cropName, 1, 'mûr')} !`));
       if (p.crow) rows.push(el('div.tip-note.warn', 'Un corbeau ! Touchez la parcelle pour le chasser.'));
       if (p.fatigue) rows.push(el('div.tip-note.warn', 'Sol fatigué : récolte réduite.'));
       if (!p.watered && verb && p.needsWater !== false) rows.push(el('div.tip-sub', game.state.money < (game.query.finance().waterCost || 0) ? 'Pas assez d\'argent pour arroser.' : `${verb} pour arroser${game.query.finance().waterCost ? ` (${plural(game.query.finance().waterCost, 'pièce')})` : ''}.`));

@@ -34,8 +34,10 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/avant-lot4-collection-2026-10-03` | Avant le lot 4 (album, lanternes, aider sans remplacer, fêtes participatives, hiver vivant), commit `581fa70` (main avec PR n° 9 fusionnée + lot 3) |
 | 2026-10-03 | `backup/lot4-collection-2026-10-03` | Lot 4 collection & enjeux doux terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 (avec le lot 3) |
 | 2026-10-03 | `backup/avant-vallee-vivante-2026-10-03` | Avant « La Vallée vivante » (grand projet de carrière), après les 4 lots |
+| 2026-10-03 | `backup/vallee-v1-2026-10-03` | Vallée vivante V1 « La boîte en fer » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
+| 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -1022,6 +1024,13 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Lot 4 : la prime à la main d'une récolte partie au grenier ou à l'atelier était payée sans pièce qui vole vers le compteur | Corrigé (`juice.js`) |
 | 2026-10-03 | Lot 4, carrière : la fenêtre courte de fin de saison du lot 3 s'ouvre à l'image suivante (différée) : si l'on enchaîne plusieurs jours sans image (outil de débogage), elle s'ouvre plus tard par-dessus une feuille | Sans effet en jeu réel (une image par 16 ms) ; noté |
 | 2026-10-03 | Lot 4 : à 150 % sur 360 px, le titre « L'album de la ferme » touche le ✕ de la fenêtre ; barre du haut de carrière : la case du fermage recouvre en partie l'icône météo quand le texte est long (« couvert · ce soir ! ») | À voir (titres de fenêtres et barre du haut, hors lot 4) |
+| 2026-10-03 | Vallée V1 : accords faux « Navet Boule d'or est sauvée ! », « Navet Boule d'or mûre », « Coccinelles vous attend », « Installé ✓ » pour la chouette, « Elles vous attendent » pour les bourdons, « il vient en toute l'année », « Sauvée !» sur un navet ; hors Vallée « Navet mûre », « Blé mûre » | Corrigé (genre des variétés et des habitants dans les données, `agreeWith`, `savedText`, `seasonsWhen` ; `field.js` ; tests) |
+| 2026-10-03 | Vallée V1 : à 360 px, messages empilés par-dessus les feuilles (boîte de Joseph, fiche « La Vallée », observation) : les messages affichés avant l'ouverture restaient dessus | Corrigé (`toasts.js` : sur téléphone, feuille ouverte → les messages attendent et s'affichent à la fermeture ; mode aménagement aussi ; test) |
+| 2026-10-03 | Vallée V1 : réaménager un terrain avec une parcelle en jachère fleurie → sauvegarde refusée au chargement (« Vallée (jachère) ») | Corrigé (`land.js`, test) |
+| 2026-10-03 | Vallée V1 : une planche d'essai gelée, pourrie ou un greffon arraché faisait perdre la dernière graine d'une variété (variété bloquée jusqu'à un nouveau bocal) | Corrigé (la graine revient, `returnTrialSeed`, test) |
+| 2026-10-03 | Vallée V1 : fiche d'une parcelle sauvée « À la main : + 2 graines gardées » (faux depuis l'écart CORE : plus de graine après fixation) ; étal de la foire « 3 graines » pour un greffon de Calville, sachet « dans la grainothèque » (bâtiment du V2) | Corrigé |
+| 2026-10-03 | Vallée V1 : texte à 150 % sur 360 px — puces de la feuille des graines (« Planche d'essai : récoltez-la à la main ») et cartes « Aménager » plus larges que l'écran ; lignes des habitants et plan de culture qui débordent de 3 px ; « Jachère fleurie » coupée à 100 % ; traits à 13 px dans la boîte de Joseph ; hors Vallée bouton « Installer : Moissonneuse 700 » | Corrigé (`valley.css`, `style.css`) |
+| 2026-10-03 | Vallée V1 : toucher la scène pendant la fenêtre « La boîte en fer » la ferme (comme toute feuille) ; le chapitre reste « à lire » (ligne « À faire », boîte du perron), mais le détail des trois graines ne se revoit pas | Noté (rien ne se perd) |
 
 ### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
 
@@ -1235,3 +1244,48 @@ Contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V1 » ;
   ajustés (album 13 pages, succès de carrière 24 dans la liste, décors de la Vallée).
 - Écarts au contrat : `docs/ARCHITECTURE.md`, « Écarts et précisions (livraison CORE V1) ».
 - Bug passager signalé par un autre paquet (`ALBUM_COMPLETE_PAGES is not defined`) : import ajouté juste après, corrigé.
+
+### 2026-10-03 — Vallée vivante V1 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde : `backup/avant-qa-vallee1-2026-10-03` (commit `a958bb2`). Détail : `docs/ARCHITECTURE.md`, « Intégration et
+vérification du lot V1 ».
+
+- **Accords** : genre de chaque variété (`g`) et de chaque habitant (`the`, `g`, `pl`) dans `src/data/career/valley.js` ;
+  `agreeWith`, `savedText` (« Navet Boule d'or est sauvé ! »), `seasonsWhen` (« du printemps à l'automne ») ; indices,
+  refus, fiche, scène, feuille des graines et lignes des habitants accordés ; « mûr / mûre » des cultures accordé partout
+  (`field.js`, aussi en Niveaux).
+- **Messages et feuilles** (règle générale, `src/ui/toasts.js`) : sur téléphone, une feuille ouverte (et le mode
+  aménagement) fait attendre les messages (sauf refus et système) ; ceux déjà affichés se retirent ; à la fermeture,
+  les deux plus récents s'affichent, la pastille « +N » signale le reste. Pastille et messages masqués aussi sur la
+  fenêtre de fin de saison à cartes (`v-season`).
+- **Rien ne se perd** : une planche d'essai perdue sans récolte (gel, pourriture, greffon arraché, terrain réaménagé)
+  rend sa graine ; réaménager un terrain efface jachère, variété et sol reposé des parcelles retirées (sauvegarde refusée
+  avant).
+- **Relecture « joueur tranquille »** : juste après la boîte, le prochain indice dit de semer ses graines (avant les
+  recettes) ; variétés en main en tête de l'onglet Graines ; refus « Plus de graines … pour l'instant : chaque récolte à
+  la main d'une planche d'essai en rend 2 » ; fiche de parcelle sauvée sans « + 2 graines gardées ».
+- **Étal de la foire** (dernier jour d'hiver, vérifié au doigt) : visible dans la feuille de la foire et dans l'onglet
+  Graines, achat au doigt (« Acheté ✓ » aussitôt, message à la fermeture de la feuille), disparu le lendemain ; greffon
+  du Calville nommé.
+- **Cohérence UI ↔ CORE** vérifiée sur chaque écart : fixation à 7 (`SEED_RULES.fixHand` partout), plus de graine après
+  fixation (scène, fiche, messages), variété semable quel que soit le rang (citrouille au rang 2), `plantableCrops()
+  .heirlooms` / `.fallow` lus sur le tableau d'origine, album complet = 11 pages (+ 2 pages à récompense propre),
+  24 succès (grange : « La Vallée · n / 7 »), bête ancrée sur un emplacement libre (hirondelles, grenouille, libellules
+  sans aménagement : dessinées et touchables), étal sans fêtes du lot 4 (onglet Graines).
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`, `index.html` construit) :
+  carrière neuve créée au menu, jouée du rang 1 au rang 2 (semis, arrosage, récoltes au doigt, terrain acheté, ≈ 30
+  jours) jusqu'à la boîte de Joseph ; boîte du perron touchée → fiche ; Navet Boule d'or semé depuis la feuille des
+  graines, récolté à la main jusqu'à « Navet Boule d'or est sauvé ! » ; maison agrandie, jardinier embauché, plan
+  « Variétés sauvées » : l'équipe sème 12 parcelles de la variété sans garder de graine ; haie, nichoir et tas de bois
+  posés en mode aménagement ; hérisson venu naturellement (recette remplie), toujours là 9 jours et une saison plus
+  tard, touché → « Le hérisson s'installe ! », service listé ; rouge-gorge ; étape 1 et son chapitre ; album, succès ;
+  zoom maximal et minimal (bête touchée) ; mouvement réduit + texte 150 % ; ancienne carrière (commit `9d36f12`, rang 3,
+  2 bocaux) reprise : boîte à l'aube, 2 bocaux à ouvrir, rechargée sans perte ; Niveaux (Détente, Classique) sans
+  aucune trace de la Vallée hors des 2 pages d'album. Aucune erreur console ; cibles ≥ 48 px ; textes ≥ 14 px ; rien ne
+  déborde. Captures : `scratchpad/screens/valley1-qa-*.png`.
+- **Mesures** : `node tools/simulate-career.js --compare-valley --runs 60` : tranquille + 3,2 % (cible + 1 à + 5 %),
+  ferme laissée seule − 0,9 %, débutant + 2,2 %, appliqué + 0,1 % (le retour de la graine perdue bouge un peu les
+  chiffres, `docs/VALLEE.md` § 12.7) ; `node tools/capture-parity.js --check` : 400 / 400.
+- **Idées / à revoir** : un joueur qui touche la scène pendant la boîte de Joseph la ferme (le détail des graines ne se revoit pas : un bouton « Revoir
+  la boîte » dans les récits de Joseph ?) ; la bête qui attend pourrait se signaler par un petit bruit ; « nouveautés »
+  65 % des saisons (cible 80 %, V2).

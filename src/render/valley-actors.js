@@ -34,6 +34,7 @@
 
 import { TILE, drawSprite } from './atlas.js';
 import { canDraw } from './effects.js';
+import { VARIETIES_BY_ID } from '../data/career/valley.js';
 
 const T = TILE;
 const OUTLINE = '#3f2631';
@@ -482,7 +483,7 @@ export function createValleyActors(effects) {
         const r = plotRect(layout, lastHarvestPlot);
         if (r) {
           effects.burst?.(r.x + r.w / 2, r.y + r.h / 2, reduced ? 8 : 20, 'gold', 44, 0.4, 1);
-          effects.floatText?.(r.x + r.w / 2, r.y - 26, 'Sauvée !', '#ffd23a', { icon: false, life: 2.2, delay: 0.6, pop: true });
+          effects.floatText?.(r.x + r.w / 2, r.y - 26, VARIETIES_BY_ID[p.varietyId]?.g === 'm' ? 'Sauvé !' : 'Sauvée !', '#ffd23a', { icon: false, life: 2.2, delay: 0.6, pop: true });
         }
         infoT = -1;
         break;

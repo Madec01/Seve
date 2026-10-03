@@ -32,7 +32,7 @@ import { getCrop } from '../../data/crops.js';
 import { HINTS } from '../hints.js';
 import { v3 } from '../v3.js';
 import { readPrefs } from '../guide-prefs.js';
-import { SEED_RULES, STAGES, VALLEY_HINTS, NATURE_ITEMS_BY_ID, SPECIES_BY_ID, VARIETIES_BY_ID, TRAITS_BY_ID, JOSEPH_BOX, BOON_TEXTS } from '../../data/career/valley.js';
+import { SEED_RULES, STAGES, VALLEY_HINTS, NATURE_ITEMS_BY_ID, SPECIES_BY_ID, VARIETIES_BY_ID, TRAITS_BY_ID, JOSEPH_BOX, BOON_TEXTS, agreeWith, savedText } from '../../data/career/valley.js';
 
 // ── Textes et petits dessins ─────────────────────────────────────────────────────────
 
@@ -63,7 +63,15 @@ const WHO = {
   squirrel: { the: 'L\'écureuil roux', a: 'Un écureuil roux', pl: false, welcome: 'Bienvenue, petit écureuil !' },
   jay: { the: 'Le geai des chênes', a: 'Un geai des chênes', pl: false, welcome: 'Bienvenue, beau geai !' },
 };
-const who = (id, name) => WHO[id] || { the: name || 'Une bête', a: name || 'Une bête', pl: false, welcome: 'Bienvenue !' };
+const who = (id, name) => (WHO[id] ? { ...WHO[id], g: SPECIES_BY_ID[id]?.g || 'm' } : { the: name || 'Une bête', a: name || 'Une bête', pl: false, g: 'f', welcome: 'Bienvenue !' });
+/** Accords d'une variété (genre du nom : « Navet Boule d'or » masculin) : vAgree(x, 'sauvé') → « sauvé » | « sauvée ». */
+const genderOf = (x) => x?.g || VARIETIES_BY_ID[x?.varietyId || x?.id]?.g || 'f';
+const vAgree = (x, word) => agreeWith({ g: genderOf(x) }, word);
+const vPron = (x) => (genderOf(x) === 'm' ? 'le' : 'la');
+/** Pronom sujet et futur accordés d'un habitant : « il viendra », « elles viendront ». */
+const comes = (s) => `${s.pl ? (s.g === 'f' ? 'elles' : 'ils') : (s.g === 'f' ? 'elle' : 'il')} ${s.pl ? 'viendront' : 'viendra'}`;
+/** « la graine », « le greffon ». */
+const theUnit = (unit) => (unit === 'greffon' ? 'le greffon' : 'la graine');
 
 const TRAIT_EMOJI = { early: '⏱', dry: '💧', hardy: '❄', fine: '★', tasty: '♥', bee: '🐝', giant: '◆' };
 const NATURE_EMOJI = { hedge: '🌳', strip: '🌼', nestbox: '🏠', owlbox: '🦉', woodpile: '🪵', insectHotel: '🐞', loneTree: '🌳', reeds: '🌾', fallow: '🌸' };
@@ -345,11 +353,11 @@ export function createValley(app) {
     const status = unknown
       ? el('span.vl-row-sub', x.hint || 'À retrouver.')
       : x.state === 'fixed'
-        ? el('span.vl-row-sub.is-ok', `Sauvée ✓ · dans le plan de culture${x.seeds ? ` · ${plural(x.seeds, x.unit || 'graine')} gardée${x.seeds > 1 ? 's' : ''}` : ''}`)
+        ? el('span.vl-row-sub.is-ok', `${capitalize(vAgree(x, 'sauvé'))} ✓ · dans le plan de culture${x.seeds ? ` · ${plural(x.seeds, x.unit || 'graine')} gardée${x.seeds > 1 ? 's' : ''}` : ''}`)
         : el('span.vl-row-sub', `${plural(x.seeds, x.unit || 'graine')}${x.growing ? ` · ${x.growing} en terre` : ''}`, fixBar(x.hand, x.need, x.unit));
     return el(
       `button.vl-row.vl-variety${unknown ? '.is-unknown' : ''}${x.state === 'fixed' ? '.is-fixed' : ''}`,
-      { type: 'button', id: `vl-var-${x.id}`, 'aria-label': `${x.name}, ${x.trait?.name || ''}, ${unknown ? 'à retrouver' : x.state === 'fixed' ? 'sauvée' : `${x.seeds} ${x.unit || 'graine'}s, ${x.hand} récoltes à la main sur ${x.need}`}`, onclick: () => openVariety(x.id) },
+      { type: 'button', id: `vl-var-${x.id}`, 'aria-label': `${x.name}, ${x.trait?.name || ''}, ${unknown ? 'à retrouver' : x.state === 'fixed' ? vAgree(x, 'sauvé') : `${plural(x.seeds, x.unit || 'graine')}, ${x.hand} récoltes à la main sur ${x.need}`}`, onclick: () => openVariety(x.id) },
       el('span.vl-row-ico', unknown ? cropIcon(x.cropId, 'sprite--md') : vIcon([x.icon, x.ripeIcon], 'sprite--md', '🌱')),
       el('span.vl-row-main', el('span.vl-row-name', x.name), traitChip(x.trait), status),
       el('span.c-row-go', { 'aria-hidden': 'true' }, '›'),
@@ -366,7 +374,9 @@ export function createValley(app) {
     const list = v.varieties || [];
     const fixed = list.filter((x) => x.state === 'fixed').length;
     parts.push(el('p.vl-count', `${fixed} / ${list.length} variétés sauvées`));
-    parts.push(el('div.vl-rows', list.map(varietyRow)));
+    // Les variétés qu'on a en main d'abord (graines à semer), puis les sauvées, puis celles à retrouver.
+    const rank = { seeds: 0, fixed: 1, unknown: 2 };
+    parts.push(el('div.vl-rows', [...list].sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2)).map(varietyRow)));
     parts.push(el('p.sheet-hint', `Récoltez une variété ancienne à la main : + ${SEED_RULES.handSeeds} graines. Après ${SEED_RULES.fixHand} récoltes à la main, elle est sauvée.`));
     return el('div.vl-seeds', parts);
   }
@@ -385,7 +395,7 @@ export function createValley(app) {
       if (x.label) parts.push(el('p.vl-label', `Étiquette d'un vieux bocal : « ${x.label} »`));
     } else {
       if (x.anecdote) parts.push(el('p.cz-say', `« ${x.anecdote} »`));
-      if (x.state === 'fixed') parts.push(el('p.vl-ok', `Sauvée ✓ · graines illimitées${x.seedCost ? ` (${fmt(x.seedCost)} la ${x.unit || 'graine'})` : ''} · l'équipe peut la semer.`));
+      if (x.state === 'fixed') parts.push(el('p.vl-ok', `${capitalize(vAgree(x, 'sauvé'))} ✓ · ${x.tree ? 'greffons illimités' : 'graines illimitées'}${x.seedCost ? ` (${fmt(x.seedCost)} ${theUnit(x.unit)})` : ''} · l'équipe peut ${x.tree ? 'le planter' : `${vPron(x)} semer`}.`));
       else parts.push(el('div.vl-fixline', el('span', `${plural(x.seeds, x.unit || 'graine')} · `), fixBar(x.hand, x.need, x.unit)));
       parts.push(el('p.sheet-hint', x.tree ? 'Planter : touchez une parcelle vide du verger.' : 'Semer : touchez une parcelle vide.'));
       const k = firstSowable(x);
@@ -504,10 +514,10 @@ export function createValley(app) {
         ? el(
             'div.vl-row.is-static',
             el('span.vl-row-ico', vIcon([f.icon, 'seedpack.heirloom'], 'sprite--md', '🌱')),
-            el('span.vl-row-main', el('span.vl-row-name', f.name), traitChip(f.trait), el('span.vl-row-sub', `Un sachet de ${plural(f.seeds, 'graine')}`)),
+            el('span.vl-row-main', el('span.vl-row-name', f.name), traitChip(f.trait), el('span.vl-row-sub', VARIETIES_BY_ID[f.varietyId]?.cropId === 'apple' ? plural(f.seeds, 'greffon') : `Un sachet de ${plural(f.seeds, 'graine')}`)),
             f.bought
               ? el('span.vl-ok', 'Acheté ✓')
-              : el(`button.btn.vl-buy${f.canBuy ? '.btn--red' : '.is-disabled'}`, { type: 'button', id: 'vl-fair-buy', 'aria-disabled': f.canBuy ? 'false' : 'true', 'aria-label': `Acheter le sachet de ${f.name} pour ${f.price} pièces`, onclick: () => buyFair(f) }, icon('coin', 'sm'), fmt(f.price)),
+              : el(`button.btn.vl-buy${f.canBuy ? '.btn--red' : '.is-disabled'}`, { type: 'button', id: 'vl-fair-buy', 'aria-disabled': f.canBuy ? 'false' : 'true', 'aria-label': `Acheter ${VARIETIES_BY_ID[f.varietyId]?.cropId === 'apple' ? 'les greffons' : 'le sachet'} de ${f.name} pour ${f.price} pièces`, onclick: () => buyFair(f) }, icon('coin', 'sm'), fmt(f.price)),
           )
         : el('p.stats-note', f.reason || 'Toutes les variétés du pays sont déjà chez vous.'),
       !f.canBuy && f.reason && f.varietyId && !f.bought ? el('p.stats-note', f.reason) : null,
@@ -530,6 +540,7 @@ export function createValley(app) {
   // ── Onglet Habitants ──────────────────────────────────────────────────────────
   function speciesRow(s) {
     const unknown = s.state === 'unknown';
+    const sp = { g: s.g || who(s.id).g, pl: s.pl ?? who(s.id).pl };
     const recipe = el(
       'ul.vl-recipe',
       { 'aria-label': 'Recette d\'habitat' },
@@ -538,18 +549,18 @@ export function createValley(app) {
     );
     let state;
     let action = null;
-    if (s.state === 'installed') state = el('p.vl-row-sub.is-ok', `Installé${s.id === 'ladybird' || s.id === 'bumblebee' || s.id === 'swallow' || s.id === 'dragonfly' ? 's' : ''} ✓ — ${lower(s.service?.text || '')}`);
+    if (s.state === 'installed') state = el('p.vl-row-sub.is-ok', `${capitalize(agreeWith(sp, 'installé'))} ✓ — ${lower(s.service?.text || '')}`);
     else if (s.state === 'visible') {
-      state = el('p.vl-row-sub.is-wait', `${who(s.id, s.name).pl ? 'Elles vous attendent' : 'Vous attend'} ${s.where || ''}.`);
+      state = el('p.vl-row-sub.is-wait', `${sp.pl ? `${sp.g === 'f' ? 'Elles' : 'Ils'} vous attendent` : 'Vous attend'} ${s.where || ''}.`);
       action = el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-see-${s.id}`, onclick: () => showInScene('wildlife', s.id) }, 'Aller voir');
     } else if (s.state === 'hint') state = el('p.vl-row-sub', `Indice : ${lower(s.hint || '')}`);
-    else if (s.recipeOk) state = el('p.vl-row-sub', s.inSeason ? 'Tout est prêt : il viendra bientôt.' : `Tout est prêt : il viendra ${s.seasonsText ? `(${s.seasonsText})` : 'à sa saison'}.`);
+    else if (s.recipeOk) state = el('p.vl-row-sub', s.inSeason ? `Tout est prêt : ${comes(sp)} bientôt.` : `Tout est prêt : ${comes(sp)} ${s.seasonsWhen || 'à sa saison'}.`);
     else state = null;
     return el(
       `article.vl-row.vl-species.is-${s.state}`,
       { id: `vl-sp-${s.id}` },
       el('span.vl-row-ico', vIcon([s.icon, `wild.${s.id}`], 'sprite--md', WILD_EMOJI[s.id] || '🐾')),
-      el('div.vl-row-main', el('span.vl-row-name', unknown ? `${s.name} · pas encore venu` : s.name), s.state === 'installed' ? null : recipe, state, s.firstMet && s.state !== 'installed' ? el('p.vl-row-sub.is-soft', s.firstMet) : null, s.anecdote ? el('p.cz-say.vl-anec', `« ${s.anecdote} »`) : null),
+      el('div.vl-row-main', el('span.vl-row-name', unknown ? `${s.name} · pas encore ${agreeWith(sp, 'venu')}` : s.name), s.state === 'installed' ? null : recipe, state, s.firstMet && s.state !== 'installed' ? el('p.vl-row-sub.is-soft', s.firstMet) : null, s.anecdote ? el('p.cz-say.vl-anec', `« ${s.anecdote} »`) : null),
       action,
     );
   }
@@ -705,6 +716,7 @@ export function createValley(app) {
   function showObserve(r, rect = null) {
     if (placing) leavePlacing({ silent: true });
     app.toasts.hide?.(visToasts.get(r.speciesId));
+    app.toasts.forget?.(`vl-vis-${r.speciesId}`); // message encore en attente (feuille ouverte) : sans objet
     visToasts.delete(r.speciesId);
     openLive('vl-observe', { title: 'Un nouvel habitant', icon: vIcon([`wild.${r.speciesId}`], 'sprite--md', '🐾'), build: () => observeContent(r), sig: () => '', tall: false });
     // La bête reste visible au-dessus de la fenêtre.
@@ -895,7 +907,6 @@ export function createValley(app) {
       rows.push(el('div.tip-strong.vl-plot-var', vIcon([x.icon], 'sprite--xs', '🌱'), el('span', `Variété ancienne${x.trial ? ' (planche d\'essai)' : ' · sauvée ✓'}`)));
       rows.push(el('div.vl-plot-trait', traitChip(x.trait, { long: true })));
       if (x.trial) rows.push(el('div.tip-ok.vl-plot-hand', el('span', `À la main : + ${x.seedsOnHand} ${x.unit === 'greffon' ? (x.seedsOnHand > 1 ? 'greffons' : 'greffon') : 'graines'} `), fixBar(x.hand, x.need, x.unit)));
-      else rows.push(el('div.tip-sub', `À la main : + ${x.seedsOnHand} ${x.unit === 'greffon' ? 'greffon' : 'graines'} gardées.`));
     }
     if (p.fallow) rows.push(el('div.tip-ok.vl-plot-fallow', vIcon(['icon.nature.fallow'], 'sprite--xs', '🌸'), el('span', p.fallow.text)));
     else if (p.rested && !p.cropId) rows.push(el('div.tip-ok.vl-plot-rested', el('span', `Sol reposé : la prochaine culture pousse + ${(V()?.stage?.n ?? 0) >= 4 ? 20 : 10} %.`)));
@@ -905,7 +916,7 @@ export function createValley(app) {
   function plotTitle(p) {
     if (!enabled() || !p) return null;
     if (!p.cropId && p.fallow) return 'Jachère fleurie';
-    if (p.cropId && p.variety) return p.mature ? `${p.variety.name} mûre` : p.variety.name;
+    if (p.cropId && p.variety) return p.mature ? `${p.variety.name} ${vAgree(p.variety, 'mûr')}` : p.variety.name;
     return null;
   }
   function plotIcon(p) {
@@ -929,7 +940,7 @@ export function createValley(app) {
         el(
           'div.seed-list.vl-seed-list',
           list.map((h) => {
-            const facts = h.seeds > 0 ? `${plural(h.seeds, h.tree ? 'greffon' : 'graine')} · gratuit` : h.fixed ? `Sauvée · ${fmt(h.cost)}` : 'Plus de graines';
+            const facts = h.seeds > 0 ? `${plural(h.seeds, h.tree ? 'greffon' : 'graine')} · gratuit` : h.fixed ? `${capitalize(vAgree(h, 'sauvé'))} · ${fmt(h.cost)}` : `Plus de ${h.tree ? 'greffon' : 'graines'}`;
             return el(
               `button.seed-row.vl-seed-row${h.canSow ? '' : '.is-disabled'}`,
               { type: 'button', id: `seed-heirloom-${h.varietyId}`, dataset: { variety: h.varietyId }, 'aria-disabled': h.canSow ? 'false' : 'true', onclick: () => sowHeirloom(index, h, close) },
@@ -1002,7 +1013,7 @@ export function createValley(app) {
   function planLabel(value) {
     const id = typeof value === 'string' && value.startsWith('heirloom:') ? value.slice(9) : null;
     const x = id ? VARIETIES_BY_ID[id] : null;
-    return x ? [vIcon([x.icon], 'sprite--sm', '🌱'), el('span', x.name)] : null;
+    return x ? [vIcon([x.icon], 'sprite--sm', '🌱'), el('span.vl-plan-name', x.name)] : null;
   }
   function planRows({ seasonId: sid, greenhouse, cur, pick }) {
     const v = V();
@@ -1165,7 +1176,7 @@ export function createValley(app) {
       case 'heirloomFixed':
         tone('chime', { volume: 0.85, delay: 0.5 });
         app.vibrate?.([14, 50, 14]);
-        app.toasts.show({ prio: 'important', kind: 'achievement', key: `vl-fixed-${ev.varietyId}`, sprite: vIcon([VARIETIES_BY_ID[ev.varietyId]?.icon], 'sprite--sm', '🌱'), title: ev.text || `${ev.name} est sauvée !`, text: 'Dans l\'album et le plan de culture.', actionLabel: 'Voir', onClick: () => openVariety(ev.varietyId), duration: 5200 });
+        app.toasts.show({ prio: 'important', kind: 'achievement', key: `vl-fixed-${ev.varietyId}`, sprite: vIcon([VARIETIES_BY_ID[ev.varietyId]?.icon], 'sprite--sm', '🌱'), title: ev.text || (VARIETIES_BY_ID[ev.varietyId] ? savedText(VARIETIES_BY_ID[ev.varietyId]) : `${ev.name} : variété sauvée !`), text: 'Dans l\'album et le plan de culture.', actionLabel: 'Voir', onClick: () => openVariety(ev.varietyId), duration: 5200 });
         hint('valley.fixed', null);
         break;
       case 'heirloomSown':
@@ -1212,7 +1223,7 @@ export function createValley(app) {
         app.toasts.show({ prio: 'important', kind: 'info', key: 'vl-jay', sprite: vIcon(['wild.jay'], 'sprite--sm', '🐦'), text: ev.text || 'Le geai a oublié un bocal au pied du chêne.', actionLabel: 'Ouvrir', onClick: () => openJar(), duration: 5200 });
         break;
       case 'fairHeirloomBought':
-        app.toasts.show({ prio: 'important', kind: 'success', key: 'vl-fair', sprite: vIcon(['seedpack.heirloom'], 'sprite--sm', '🌱'), text: `${ev.name || 'Un sachet'} : ${plural(ev.seeds || 3, 'graine')} dans la grainothèque.`, duration: 3200 });
+        app.toasts.show({ prio: 'important', kind: 'success', key: 'vl-fair', sprite: vIcon(['seedpack.heirloom'], 'sprite--sm', '🌱'), text: `${ev.name || 'Un sachet'} : ${plural(ev.seeds || 3, VARIETIES_BY_ID[ev.varietyId]?.cropId === 'apple' ? 'greffon' : 'graine')} dans la boîte en fer.`, duration: 3200 });
         break;
       case 'valleyStage':
         onStage(ev, g);

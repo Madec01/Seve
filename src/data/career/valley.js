@@ -32,7 +32,9 @@ export const TRAITS = [
 export const TRAITS_BY_ID = Object.fromEntries(TRAITS.map((t) => [t.id, t]));
 
 /** Les douze variétés du pays (une par culture ; (†) : vraies variétés anciennes du domaine public). */
-const variety = (id, cropId, name, trait, label, anecdote, tint) => ({ id, cropId, name, trait, label, anecdote, icon: `heirloom.${id}.icon`, ripe: `heirloom.${id}.4`, tint });
+const variety = (id, cropId, name, trait, label, anecdote, tint) => ({ id, cropId, name, g: VARIETY_GENDER[cropId] || 'f', trait, label, anecdote, icon: `heirloom.${id}.icon`, ripe: `heirloom.${id}.4`, tint });
+/** Genre du nom de chaque variété (premier nom : « Navet Boule d'or » est masculin, « Vitelotte » féminin) : accords. */
+const VARIETY_GENDER = { carrot: 'f', turnip: 'm', wheat: 'm', cabbage: 'm', tomato: 'f', corn: 'm', sunflower: 'm', potato: 'f', strawberry: 'f', zucchini: 'f', pumpkin: 'f', apple: 'f' };
 export const VARIETIES = [
   variety('jauneDuDoubs', 'carrot', 'Carotte jaune du Doubs', 'tasty', '…une du Doubs, 1952', 'Avant la carotte orange, on en cultivait des jaunes, des blanches et des violettes.', '#e8c64a'),
   variety('bouleDOr', 'turnip', 'Navet Boule d\'or', 'early', null, 'Sa chair jaune est plus douce que celle des navets blancs.', '#d9b54a'),
@@ -137,7 +139,22 @@ export const RECIPE_TEXTS = {
 export const RECIPE_NATURE = { hedge: 'hedge', strip: 'strip', nestbox: 'nestbox', woodpile: 'woodpile', insectHotel: 'insectHotel', owlbox: 'owlbox', loneTree: 'loneTree', oakAdult: 'loneTree', treeAdult: 'loneTree', reeds: 'reeds', flowers: 'strip', wildGround: 'fallow' };
 
 const ALL_YEAR = ['spring', 'summer', 'autumn', 'winter'];
-const species = (id, name, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, extra = {}) => ({ id, name, icon: `wild.${id}`, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, ...extra });
+const species = (id, name, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, extra = {}) => ({ id, name, ...SPECIES_FORMS[id], icon: `wild.${id}`, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, ...extra });
+/** Accords des habitants : `the` (avec l'article), `g` (genre 'm' | 'f'), `pl` (nom au pluriel : « Les coccinelles »). */
+const SPECIES_FORMS = {
+  robin: { the: 'Le rouge-gorge', g: 'm', pl: false },
+  hedgehog: { the: 'Le hérisson', g: 'm', pl: false },
+  ladybird: { the: 'Les coccinelles', g: 'f', pl: true },
+  bumblebee: { the: 'Les bourdons', g: 'm', pl: true },
+  butterfly: { the: 'Le paon-du-jour', g: 'm', pl: false },
+  swallow: { the: 'Les hirondelles', g: 'f', pl: true },
+  tawnyOwl: { the: 'La chouette hulotte', g: 'f', pl: false },
+  frog: { the: 'La grenouille rousse', g: 'f', pl: false },
+  dragonfly: { the: 'Les libellules', g: 'f', pl: true },
+  hare: { the: 'Le lièvre', g: 'm', pl: false },
+  squirrel: { the: 'L\'écureuil roux', g: 'm', pl: false },
+  jay: { the: 'Le geai des chênes', g: 'm', pl: false },
+};
 
 /**
  * Les douze habitants (ordre des tirages de l'aube : 1 nombre par espèce, dans cet ordre). service.kind :
@@ -250,7 +267,7 @@ export const VALLEY_HINTS = {
   'valley.jar': 'Un bocal de graines anciennes : ouvrez-le pour découvrir la variété, puis semez ses graines.',
   'valley.trial': 'Une planche d\'essai est mûre : récoltez-la à la main pour garder 2 graines et avancer vers la variété sauvée.',
   'valley.nature': 'Votre premier aménagement nature : les bêtes viennent quand leur recette d\'habitat est remplie.',
-  'valley.species': 'Une bête est venue ! Touchez-la pour qu\'elle s\'installe : son service commence aussitôt.',
+  'valley.species': 'Touchez-la pour qu\'elle s\'installe : son service commence aussitôt. Rien ne presse, elle attend.',
   'valley.fixed': 'Variété sauvée : ses graines sont illimitées, et l\'équipe peut la semer (sans jamais garder de graines).',
   'valley.fallow': 'Jachère fleurie : la parcelle fleurit jusqu\'à la fin de la saison, puis la culture suivante pousse plus vite.',
   'valley.stage': 'Une étape de la vallée ! Joseph a quelque chose à vous dire.',
@@ -261,11 +278,24 @@ export const VALLEY_TEXTS = {
   unknownVariety: 'À retrouver : un bocal au défrichage, chez Basile, à la foire aux graines…',
   boxVariety: 'Dans la boîte de Joseph.',
   graftVariety: 'Un greffon à la foire aux graines (il faut un verger).',
-  saved: '{name} est sauvée !',
+  saved: '{name} est {sauvée} !',
   jayGift: 'Le geai a oublié un bocal au pied du chêne.',
   noJar: 'Aucun bocal à ouvrir.',
   notStarted: 'La Vallée commence au rang 2.',
 };
+
+/**
+ * Accord d'un participe ou d'un adjectif avec une variété ou un habitant (champs `g`, `pl`) :
+ * agreeWith(navet, 'sauvé') → 'sauvé' ; agreeWith(tomate, 'sauvé') → 'sauvée' ; agreeWith(coccinelles, 'installé') → 'installées'.
+ */
+export function agreeWith(x, word) {
+  return `${word}${x?.g === 'f' ? 'e' : ''}${x?.pl ? 's' : ''}`;
+}
+
+/** « Navet Boule d'or est sauvé ! », « Tomate Cœur de bœuf est sauvée ! » */
+export function savedText(x) {
+  return VALLEY_TEXTS.saved.replace('{name}', x.name).replace('{sauvée}', agreeWith(x, 'sauvé'));
+}
 
 /** Signes de vie du V1 (12 habitants + 12 variétés). */
 export const SIGNS_V1 = SPECIES.length + VARIETIES.length;

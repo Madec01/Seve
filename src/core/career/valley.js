@@ -22,7 +22,7 @@ import { careerFactor } from '../../data/cozy.js';
 import {
   ARRIVAL, FAIR_STALL, HEDGE_FINDS, HEDGE_FINDS_BY_ID, HEDGE_FIND_RULES, JOSEPH_BOX, MAX_STAGE, NATURE_ITEMS, NATURE_ITEMS_BY_ID,
   SEED_RULES, SPECIES, SPECIES_BY_ID, STAGES, TRAITS_BY_ID, VALLEY_PARTS, VALLEY_START, VALLEY_TEXTS, VALLEY_VERSION, VARIETIES, VARIETIES_BY_ID,
-  VARIETY_OF_CROP,
+  VARIETY_OF_CROP, agreeWith, savedText,
 } from '../../data/career/valley.js';
 import { hashSeed, stream } from '../rng.js';
 import { absDay } from '../surprises.js';
@@ -32,7 +32,7 @@ import {
   animalBonusOf, fixedSeedCost, growthBonusOf, isFixed, partOn, seasonAbs, touristBonusOf, valleyOf, varietyOf,
 } from './heirlooms.js';
 import {
-  beePlotsGrowing, fixedVarieties, habitatCounts, installedSpecies, loneTreeStage, naturePrice, nextHint, recipeStatus, seasonsText,
+  beePlotsGrowing, fixedVarieties, habitatCounts, installedSpecies, loneTreeStage, naturePrice, nextHint, recipeStatus, seasonsText, seasonsWhen,
   signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, valleyServices, whereText, granaryBuilt,
 } from './habitat.js';
 
@@ -419,7 +419,7 @@ export function valleyHarvest(api, plotIndex, by) {
     e.fixedAt = absDay(state);
     v.year.fixed += 1;
     info.fixed = true;
-    info.events.push(['heirloomFixed', { varietyId: x.id, name: x.name, trait: traitInfo(x.trait), text: VALLEY_TEXTS.saved.replace('{name}', x.name) }]);
+    info.events.push(['heirloomFixed', { varietyId: x.id, name: x.name, trait: traitInfo(x.trait), text: savedText(x) }]);
   }
   return info;
 }
@@ -459,7 +459,7 @@ export function valleySow(api, plotIndex, varietyId, { by = 'player' } = {}) {
   const fromSeeds = have > 0;
   let cost = 0;
   if (!fromSeeds) {
-    if (!fixed) return api.fail(`Plus de graines de ${x.name} : récoltez-en une à la main.`);
+    if (!fixed) return api.fail(`Plus de ${tree ? 'greffon' : 'graines'} de ${x.name} pour l'instant : chaque récolte à la main d'une planche d'essai en rend ${tree ? SEED_RULES.graftPerBasket : SEED_RULES.handSeeds}.`);
     cost = heirloomSeedCost(api, x.id);
     if (state.money < cost) return api.fail(notEnough(cost - state.money));
   }
@@ -580,7 +580,7 @@ function observe(api, speciesId) {
   const v = V(state);
   const s = SPECIES_BY_ID[speciesId];
   const e = s ? v.species[speciesId] : null;
-  if (e?.state === 'installed') return api.fail('Déjà installé.');
+  if (e?.state === 'installed') return api.fail(`Déjà ${agreeWith(s, 'installé')}.`);
   if (!s || !v.parts.wildlife || e?.state !== 'visible') return api.fail('Rien à observer ici.');
   e.state = 'installed';
   e.at = absDay(state);
@@ -688,7 +688,7 @@ function triggerValley(api, kind, arg, arg2) {
         e.fixedAt = abs;
         v.year.fixed += 1;
         const x = VARIETIES_BY_ID[arg];
-        api.push('heirloomFixed', { varietyId: arg, name: x.name, trait: traitInfo(x.trait), text: VALLEY_TEXTS.saved.replace('{name}', x.name) });
+        api.push('heirloomFixed', { varietyId: arg, name: x.name, trait: traitInfo(x.trait), text: savedText(x) });
       }
       return { ok: true };
     }
@@ -761,7 +761,7 @@ function varietyInfo(api, x) {
   let hint = null;
   if (!e) hint = JOSEPH_BOX.varieties.includes(x.id) ? VALLEY_TEXTS.boxVariety : tree ? VALLEY_TEXTS.graftVariety : VALLEY_TEXTS.unknownVariety;
   return {
-    id: x.id, cropId: x.cropId, name: e ? x.name : getCrop(x.cropId).name, icon: x.icon, ripeIcon: x.ripe, tint: x.tint, trait: traitInfo(x.trait),
+    id: x.id, cropId: x.cropId, name: e ? x.name : getCrop(x.cropId).name, g: x.g, icon: x.icon, ripeIcon: x.ripe, tint: x.tint, trait: traitInfo(x.trait),
     state: !e ? 'unknown' : fixed ? 'fixed' : 'seeds', seeds: v.seeds[x.id] || 0, hand: e?.hand || 0, need: SEED_RULES.fixHand,
     label: x.label, anecdote: e ? x.anecdote : null, hint, from: e?.from || null, tree, unit: tree ? 'greffon' : 'graine',
     growing: state.plots.filter((p) => p.variety === x.id && p.cropId).length,
@@ -775,7 +775,7 @@ function speciesInfo(state, s, counts) {
   const r = recipeStatus(state, s.id, counts);
   const st = e ? e.state : 'unknown';
   return {
-    id: s.id, name: s.name, icon: s.icon, seasons: [...s.seasons], seasonsText: seasonsText(s.seasons), state: st, inSeason: r.inSeason,
+    id: s.id, name: s.name, icon: s.icon, seasons: [...s.seasons], seasonsText: seasonsText(s.seasons), seasonsWhen: seasonsWhen(s.seasons), the: s.the, g: s.g, pl: s.pl, state: st, inSeason: r.inSeason,
     recipe: r.items, recipeOk: r.ok, service: serviceInfo(s), spotId: e?.spotId || null, where: e?.spotId ? whereText(state, e.spotId) : null,
     hint: st !== 'unknown' ? s.hint : null, hintIcon: s.hintIcon, anecdote: st === 'installed' ? s.anecdote : null, firstMet: s.firstMet || null,
   };
@@ -877,7 +877,7 @@ export function valleyPlotExtras(api, i) {
     const e = v.varieties[x.id];
     const tree = isTreeCrop(getCrop(x.cropId));
     variety = {
-      id: x.id, name: x.name, icon: x.icon, ripeIcon: x.ripe, tint: x.tint, trait: traitInfo(x.trait), trial: !e?.fixedAt, hand: e?.hand || 0,
+      id: x.id, name: x.name, g: x.g, icon: x.icon, ripeIcon: x.ripe, tint: x.tint, trait: traitInfo(x.trait), trial: !e?.fixedAt, hand: e?.hand || 0,
       need: SEED_RULES.fixHand, seedsOnHand: tree ? SEED_RULES.graftPerBasket : SEED_RULES.handSeeds, unit: tree ? 'greffon' : 'graine',
     };
   }
@@ -905,7 +905,7 @@ export function valleyPlantable(api, i) {
     let reason = null;
     if (!(p && inGreenhouse(p)) && !crop.seasons.includes(sid)) reason = `${crop.name} ne se sème pas ${SEASON_IN[sid]}.`;
     else if (p && p.cropId) reason = 'Cette parcelle n\'est pas libre.';
-    else if (seeds <= 0 && !fixed) reason = `Plus de graines de ${x.name} : récoltez-en une à la main.`;
+    else if (seeds <= 0 && !fixed) reason = `Plus de ${tree ? 'greffon' : 'graines'} de ${x.name} pour l'instant : chaque récolte à la main d'une planche d'essai en rend ${tree ? SEED_RULES.graftPerBasket : SEED_RULES.handSeeds}.`;
     else if (cost > state.money) reason = notEnough(cost - state.money);
     heirlooms.push({ varietyId: x.id, cropId: x.cropId, name: x.name, icon: x.icon, trait: traitInfo(x.trait), seeds, fixed, cost, canSow: !reason, reason, trial: !fixed, tree });
   }
