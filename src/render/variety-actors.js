@@ -53,6 +53,9 @@ function obstacles(layout) {
     for (const k of ['house', 'storage', 'well', 'stand', 'waterTower', 'tractor']) add(home[k]);
     for (const s of home.solar || []) add({ x: s.x, y: s.y, w: 1, h: 1 });
   }
+  // (Vallée V2) La Grainothèque réservée (2 × 2) : le panneau du village ne la recouvre jamais.
+  const lib = layout.valley?.reserved ? layout.valley.library : null;
+  if (lib) add({ x: Math.floor(lib.x / T), y: Math.floor(lib.y / T), w: Math.round(lib.w / T), h: Math.round(lib.h / T) });
   const slots = layout.slots || {};
   const avail = layout.available instanceof Set ? layout.available : new Set();
   if (!layout.career && typeof layout.slotTiles === 'function') {

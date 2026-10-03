@@ -234,7 +234,7 @@ export function createVariety(app) {
   // ── Tableau du village (C1) ───────────────────────────────────────────────────
   function boardSig() {
     const o = q('orders');
-    return JSON.stringify([o, game?.state?.money >= 0, [...doneToday.keys()]]);
+    return JSON.stringify([o, game?.state?.money >= 0, [...doneToday.keys()], app.game?.state?.career?.valley?.troc || null]);
   }
 
   function keepBtn(o) {
@@ -317,7 +317,7 @@ export function createVariety(app) {
     return el(
       `article.v-order${o.kept || o.started ? '.is-kept' : ''}`,
       { id: `v-order-${o.id}`, 'aria-label': `${o.clientName}, ${o.clientTitle || ''}` },
-      el('div.v-order-head', el('span.v-portrait', portraitOf(o.portrait)), el('div.v-who', el('b.v-name', o.clientName), o.clientTitle ? el('small.v-title', o.clientTitle) : null), el('span.v-premium', { 'aria-label': `Prime ${premium} pièces` }, coin(), el('b', `+${fmt(premium)}`))),
+      el('div.v-order-head', el('span.v-portrait', portraitOf(o.portrait), app.heritage?.orderMark?.(o) || null), el('div.v-who', el('b.v-name', o.clientName), o.clientTitle ? el('small.v-title', o.clientTitle) : null), el('span.v-premium', { 'aria-label': `Prime ${premium} pièces` }, coin(), el('b', `+${fmt(premium)}`))),
       o.text ? el('p.v-say', `« ${o.text} »`) : null,
       el('div.v-lines', lines),
       o.note ? el('p.v-note', icon('info', 'sm'), o.note) : null,
@@ -344,9 +344,11 @@ export function createVariety(app) {
 
   function boardContent() {
     const o = q('orders');
-    if (!o) return el('p.sheet-empty', 'Le tableau du village est vide.');
+    // (Vallée V2) Le troc épinglé au tableau : une carte « Troc » en tête (pas une commande : aucune place prise).
+    const troc = isCareer() ? app.heritage?.boardCard?.(app.game) || null : null;
+    if (!o) return troc ? el('div.v-board', troc) : el('p.sheet-empty', 'Le tableau du village est vide.');
     if (o.startsIn > 0) {
-      return el('div.v-board', el('p.v-lead', `Les villageois épingleront leurs premières commandes ${o.startsIn === 1 ? 'demain' : `dans ${plural(o.startsIn, 'jour')}`}.`));
+      return el('div.v-board', troc, el('p.v-lead', `Les villageois épingleront leurs premières commandes ${o.startsIn === 1 ? 'demain' : `dans ${plural(o.startsIn, 'jour')}`}.`));
     }
     const slots = o.slots || [];
     const reroll = el(
@@ -369,6 +371,7 @@ export function createVariety(app) {
     );
     return el(
       'div.v-board',
+      troc,
       el('p.v-lead', 'Récoltez ce qu\'ils demandent : payé tout de suite, et la prime quand c\'est complet.'),
       el('div.v-orders', { role: 'list' }, slots.map((s, i) => el('div', { role: 'listitem' }, s && !s.empty && s.id ? orderCard(s, i) : emptyCard(s, i)))),
       reroll,
@@ -805,6 +808,9 @@ export function createVariety(app) {
         break;
       case 'orderDone': {
         const slot = slotOf.get(ev.orderId);
+        // (Vallée V2) Écho doux : une fois le troc fait, une commande sur trois parle du jardin du voisin.
+        const echo = isCareer() ? app.heritage?.echoThanks?.(ev) || null : null;
+        if (echo) ev = { ...ev, thanks: echo };
         doneToday.set(ev.orderId, { slot: slot ?? -1, day: dayOf(g), clientId: ev.clientId, clientName: ev.clientName, thanks: ev.thanks, premium: ev.premium, portrait: `portrait.client.${ev.clientId}` });
         app.audio.tone?.('chime', { volume: 0.85, delay: 0.1 });
         app.audio.play('coin', { delay: 0.35, volume: 0.7 });

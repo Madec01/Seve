@@ -260,3 +260,262 @@ body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom:
 .vl-row { min-width: 0; }
 .vl-recipe li, .vl-row-name { overflow-wrap: anywhere; }
 .c-plan-value .vl-plan-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   Lot V2 « Le troc et les croisements » : fiche « La Grainothèque » (vignette, niveau, effets cochés, « Agrandir »,
+   segments L'étagère · Croisements · Troc), feuille du troc, popup du croisement, barre du mode paire, carte du tableau,
+   « Revoir la boîte en fer », groupes de l'onglet Graines, lignes des fiches existantes. Téléphone d'abord : cibles
+   ≥ 48 px, textes ≥ 14 px, rien que la couleur (✓, ?, « 2 / 3 », ♥ ont aussi un mot ou une forme).
+   ══════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+.sprite--vl-lib { --sk: 2; image-rendering: pixelated; }
+.vl-traits { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.vl-traits.is-long { display: grid; gap: 4px; width: 100%; }
+.vl-row-sub .vl-meet, .vl-xline .vl-meet { flex: none; }
+.vl-meet-seg.is-on { background: var(--gold-2); }
+.vl-sealed { position: relative; display: inline-grid; place-items: center; }
+.vl-seal, .vl-row-ico.is-cross::after, .seed-icon.is-cross::after, .vl-jar-tile.is-cross .vl-jar-glass::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0 0 25%, #f2c23a 30% 100%);
+  box-shadow: 0 0 0 2px var(--outline);
+}
+.vl-row-ico.is-cross, .seed-icon.is-cross { position: relative; }
+.vl-gold { color: #b8860b; font-weight: 700; }
+
+/* Fiche « La Grainothèque » */
+.vl-lib-head { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
+.vl-lib-pic { display: grid; place-items: center; flex: none; width: 112px; height: 112px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-lib-pic .sprite--vl-lib { --sk: 3; }
+.vl-lib-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-lib-level { font-size: 0.9375rem; color: var(--text-soft); }
+.vl-lib-name { font-size: 1.0625rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.vl-lib-fx { margin: 4px 0 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--text); }
+.vl-lib-fx li { display: flex; align-items: flex-start; gap: 6px; line-height: 1.3; }
+.vl-lib-fx li + li { margin-top: 2px; }
+.vl-lib-fx li.is-ok { color: var(--green-text); font-weight: 600; }
+.vl-lib-fx li.is-ok .vl-check::before { content: '✓'; }
+.vl-lib-build { margin: 0 0 10px; }
+.vl-lib-go { min-height: 52px; gap: 8px; flex-wrap: wrap; }
+.vl-lib-go .buy-cost { display: inline-flex; align-items: center; gap: 4px; }
+.vl-lib-rank { font-size: 0.875rem; }
+.vl-lib-next { margin: 4px 0 0; font-size: 0.875rem; color: var(--text-soft); line-height: 1.3; }
+.vl-library .card-reason { margin: 4px 0 0; font-size: 0.875rem; }
+
+/* L'étagère : 3 étagères, 4 bocaux par rangée (tuile ≥ 72 × 72 sur 412 px, ≥ 64 sur 360 px). */
+.vl-shelf-row { margin: 0 0 12px; }
+.vl-shelf-title { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 4px; font-size: 1rem; color: var(--text); }
+.vl-shelf-title small { font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl-jars-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 6px;
+  padding: 6px 6px 10px;
+  background: linear-gradient(to bottom, transparent calc(100% - 8px), #8a5a32 calc(100% - 8px), #6a4226 100%);
+  box-shadow: inset 0 0 0 var(--u) var(--parch-3);
+}
+.vl-jar-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  aspect-ratio: 1;
+  padding: 0;
+  font: inherit;
+  background: rgba(232, 244, 255, 0.55);
+  border: 0;
+  border-radius: 10px 10px 4px 4px;
+  box-shadow: inset 0 0 0 2px #9ab0c8, inset 0 6px 0 0 #c8d8e8;
+  cursor: pointer;
+}
+.vl-jar-tile:active { transform: translateY(var(--u)); }
+.vl-jar-tile:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl-jar-glass { position: relative; display: grid; place-items: center; }
+.vl-jar-shine { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0.8; pointer-events: none; }
+.vl-jar-tile.is-unknown { background: rgba(200, 200, 200, 0.35); }
+.vl-jar-tile.is-unknown .sprite, .vl-jar-tile.is-unknown .cz-emoji { filter: grayscale(1) brightness(0.6); opacity: 0.6; }
+.vl-jar-tile.is-fixed { box-shadow: inset 0 0 0 2px var(--green-text), inset 0 6px 0 0 #c8d8e8; }
+.vl-jar-tile.is-cross { box-shadow: inset 0 0 0 2px var(--gold-2), inset 0 6px 0 0 #fff3b0; }
+.vl-jar-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+  background: #fffbe8;
+  border-radius: 11px;
+  box-shadow: 0 0 0 2px var(--outline);
+}
+.vl-jar-badge.is-ok { color: #fffbe8; background: var(--green-text); }
+.vl-jar-badge.is-q { color: var(--text-soft); }
+
+/* Croisements */
+.vl-rule { margin: 0 0 8px; font-size: 0.875rem; line-height: 1.35; color: var(--text-soft); }
+.vl-cross { align-items: center; }
+.vl-cross-pics { display: grid; grid-template-columns: 26px 10px 26px 12px 26px; align-items: center; justify-items: center; flex: none; }
+.vl-cross-p { display: grid; place-items: center; width: 26px; height: 26px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-cross-p .sprite { max-width: 24px; max-height: 24px; }
+.vl-cross-p.is-missing .sprite, .vl-cross-p.is-missing .cz-emoji { filter: grayscale(1) brightness(0.6); opacity: 0.55; }
+.vl-cross-p.is-gold { background: #fff3b0; box-shadow: inset 0 0 0 var(--u) var(--gold-2); }
+.vl-cross-p.is-q b { font-size: 1rem; color: var(--text-soft); }
+.vl-cross-op { font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl-cross.is-found { box-shadow: inset 0 0 0 var(--u) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-linked { font-size: 0.875rem; font-style: italic; }
+
+/* Troc : carte, voisins, feuille */
+.vl-troc-card { display: flex; align-items: center; gap: 10px; min-height: 72px; margin: 0 0 8px; padding: 6px 8px; background: #fff3dc; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) #c8945a, 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-troc-pic { position: relative; display: grid; place-items: center; flex: none; width: 52px; height: 52px; }
+.vl-troc-pin { position: absolute; right: -6px; bottom: -4px; }
+.vl-troc-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-troc-name { font-size: 1rem; color: var(--text); }
+.vl-troc-what { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9375rem; color: var(--text); overflow-wrap: anywhere; }
+.vl-troc-card > .btn { margin-left: auto; }
+.vl-neighbours { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 8px; }
+.vl-nb { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 96px; padding: 6px 4px; text-align: center; background: var(--parch); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-nb.is-done { background: #eef6dc; box-shadow: inset 0 0 0 var(--u) var(--green-text); }
+.vl-nb.is-locked { opacity: 0.8; }
+.vl-nb.is-locked .vl-nb-pic .sprite { filter: grayscale(0.7); }
+.vl-nb-pic { position: relative; display: grid; place-items: center; width: 48px; height: 48px; }
+.vl-nb-var { position: absolute; right: -8px; bottom: -4px; }
+.vl-nb-name { font-size: 0.875rem; font-weight: 700; line-height: 1.15; color: var(--text); overflow-wrap: anywhere; }
+.vl-nb-state { font-size: 0.875rem; line-height: 1.2; color: var(--text-soft); }
+.vl-nb-state.is-ok { color: var(--green-text); font-weight: 700; }
+.vl-troc-who { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }
+.vl-troc-who > div { display: flex; flex-direction: column; }
+.vl-troc-who b { font-size: 1.0625rem; color: var(--text); }
+.vl-troc-who small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-troc-h { margin: 10px 0 4px; font-size: 0.9375rem; color: var(--text); }
+.vl-troc-get { min-height: 64px; }
+.vl-gifts { display: grid; gap: 6px; }
+.vl-gift {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--parch);
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) var(--parch-3), 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+.vl-gift:active { transform: translateY(var(--u)); }
+.vl-gift:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl-gift.is-picked { background: #fff8e8; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; background: #fffbe8; box-shadow: inset 0 0 0 2px var(--outline); }
+.vl-gift.is-picked .vl-radio { background: radial-gradient(circle, var(--outline) 0 35%, #fffbe8 40%); }
+.vl-gift-ico { display: grid; place-items: center; flex: none; width: 40px; height: 40px; }
+.vl-gift-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-gift-name { font-size: 0.9375rem; font-weight: 700; overflow-wrap: anywhere; }
+.vl-gift-fav { font-size: 0.875rem; color: var(--text); }
+.vl-free { margin: 8px 0 0; font-size: 0.8125rem; color: var(--text-soft); }
+.vl-swap { min-height: 56px; }
+.vl-troc.is-done { text-align: center; }
+.vl-troc.is-done .vl-troc-who { justify-content: center; text-align: left; }
+.vl-troc-pack { display: grid; place-items: center; margin: 6px 0; animation: vl-pop 600ms var(--ease-out) both; }
+.vl-board-troc { margin: 0 0 8px; }
+.vl-board-troc .vl-troc-card { margin-bottom: 4px; }
+.vl-board-lib { width: 100%; }
+.vl-order-pack { position: absolute; right: -4px; bottom: -4px; }
+.v-portrait { position: relative; }
+
+/* Popup du croisement */
+.vl-crossfound { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.vl-pack { position: relative; display: grid; place-items: center; width: 120px; height: 84px; }
+.vl-pack .sprite--card { animation: vl-pack-open 700ms var(--ease-out) both; }
+.vl-pack-pop { position: absolute; top: -10px; right: 4px; animation: vl-pop 700ms var(--ease-out) 300ms both; }
+@keyframes vl-pack-open { 0% { transform: scale(0.6) rotate(-8deg); } 60% { transform: scale(1.12) rotate(4deg); } 100% { transform: none; } }
+.vl-crossfound-kicker { margin: 0; font-size: 1rem; font-weight: 700; color: #b8860b; }
+.vl-crossfound-name { margin: 0; font-size: 1.125rem; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.vl-crossfound-from { margin: 2px 0; font-size: 0.875rem; color: var(--text-soft); }
+.vl-crossfound .sheet-actions { width: 100%; }
+
+/* Onglet Graines : carte de la Grainothèque, groupes repliés, « Revoir la boîte » */
+.vl-seeds-top { margin: 0 0 8px; }
+.vl-libcard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: #f2ead8;
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) #8a6a4a, 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+.vl-libcard:active { transform: translateY(var(--u)); }
+.vl-libcard-pic { display: grid; place-items: center; flex: none; width: 56px; height: 56px; background: #3a2a2f; }
+.vl-libcard-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-libcard-main b { font-size: 1rem; }
+.vl-libcard-main small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-libcard-go { display: inline-grid; place-items: center; pointer-events: none; }
+.vl-group { margin: 0 0 8px; }
+.vl-group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; margin: 0 0 4px; padding: 0 10px; font-size: 1rem; font-weight: 700; color: var(--text); background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; list-style: none; }
+.vl-group-title::-webkit-details-marker { display: none; }
+details.vl-group > .vl-group-title::after { content: '▸'; margin-left: 6px; }
+details.vl-group[open] > .vl-group-title::after { content: '▾'; }
+.vl-group-title small { margin-left: auto; font-size: 0.875rem; color: var(--text-soft); }
+section.vl-group > .vl-group-title { cursor: default; }
+.vl-box-again { margin: 10px 0 0; min-height: 52px; gap: 8px; }
+.vl-box.is-again .cz-story-line, .vl-box-seed.is-still { animation: none; opacity: 1; }
+button.vl-box-seed { font: inherit; border: 0; cursor: pointer; color: var(--text); }
+.vl-box-seed.is-fixed { box-shadow: inset 0 0 0 var(--u) var(--green-text); background: #eef6dc; }
+.vl-melon { margin: 6px 0 0; font-size: 0.9375rem; }
+
+/* Fiche d'une variété, parcelle, feuille des graines */
+.vl-from { font-style: normal; font-weight: 700; color: var(--text); }
+.vl-vextra { display: grid; gap: 6px; margin: 6px 0; }
+.vl-xline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 8px; font-size: 0.9375rem; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2); }
+.vl-xline .btn { margin-left: auto; }
+.vl-plot-cross { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.vl-pair-sec { display: grid; gap: 6px; margin: 0 0 8px; }
+.vl-pair-row { width: 100%; background: #fff8e8; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) var(--gold-2); }
+.vl-pair-ico { display: inline-flex; align-items: center; gap: 0; }
+.vl-pair-ico .sprite { --sk: 2; }
+.vl-chip-meet { background: #fff3b0; }
+
+/* Barre du mode paire (comme celle du mode aménagement) */
+body.in-valley-pair .vl-placebar:not(.vl-pairbar) { display: none; }
+body:not(.in-valley-pair) .vl-pairbar { display: none; }
+
+/* Fenêtre qui ne se ferme pas d'un toucher dehors : petit tressaillement. */
+.sheet.is-nudge { animation: vl-nudge 260ms ease-out; }
+@keyframes vl-nudge { 25% { transform: translateY(-6px); } 60% { transform: translateY(2px); } }
+
+@media (max-width: 379px) {
+  .vl-lib-pic { width: 88px; height: 88px; }
+  .vl-lib-pic .sprite--vl-lib { --sk: 2; }
+  .vl-jar-tile { min-height: 64px; }
+  .vl-jars-grid { gap: 5px; padding: 5px 5px 9px; }
+  .vl-cross { flex-wrap: wrap; }
+  .vl-cross > .btn { margin-left: auto; }
+  .vl-troc-card { flex-wrap: wrap; }
+}
+
+/* Mouvements réduits : rien ne saute, rien ne tremble. */
+.reduced-motion .vl-pack .sprite--card, .reduced-motion .vl-pack-pop, .reduced-motion .vl-troc-pack, .reduced-motion .sheet.is-nudge { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vl-pack .sprite--card, .vl-pack-pop, .vl-troc-pack, .sheet.is-nudge { animation: none; }
+}
+.vl-troc-card { flex-wrap: wrap; }
+.vl-troc-main { flex: 1 1 140px; }
+.vl-pair-row .seed-facts, .vl-pair-row .seed-facts > span { flex-wrap: wrap; white-space: normal; overflow-wrap: anywhere; }
+.vl-pair-row .seed-main { min-width: 0; }

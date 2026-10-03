@@ -6,7 +6,8 @@
 //   Joseph : portrait, cœurs, prochain cadeau d'amitié, dette et remboursement.
 
 import { el, fmt, gain, loss, plural, signed } from '../dom.js';
-import { icon, cropIcon } from '../icons.js';
+import { icon, cropIcon, spriteAny } from '../icons.js';
+import { NATURE_ITEMS_BY_ID } from '../../data/career/valley.js';
 import { season, difficultyName } from '../text.js';
 import { bar, cBtn, cIcon, CHARGE_LABELS, INCOME_LABELS, SPENT_LABELS, joseph, josephSays, line, rankIcon, animalIcon, lotIcon, buildingIcon, machineIcon, inDays } from './util.js';
 import { marketSection } from './buildings.js';
@@ -137,6 +138,7 @@ function farmTab(ui) {
 
 /** Nom d'un déblocage (sans « niv. 2 (niv. 2) » en double). */
 export function unlockName(u) {
+  if (!u.name && u.kind === 'nature') return NATURE_ITEMS_BY_ID[u.id]?.name || u.id;
   return String(u.name || '').replace(/ niv\. (\d) \(niv\. \1\)/, ' niv. $1');
 }
 
@@ -154,6 +156,11 @@ export function unlockIcon(u, cls = 'sprite--sm') {
       return machineIcon(u.id, cls);
     case 'lots':
       return lotIcon('forSale', cls);
+    // (Vallée) La Grainothèque (rang 3), un aménagement nature (nichoir à chauves-souris au rang 4…).
+    case 'valley':
+      return spriteAny(['icon.library', 'library.1', 'icon.valley'], cls, 'star');
+    case 'nature':
+      return spriteAny([`icon.nature.${u.id}`, `nature.${u.id}`, 'icon.valley'], cls, 'star');
     default:
       return cIcon(u.id === 'hire' ? 'hire' : u.id === 'quests' ? 'quest' : 'level', cls, 'star');
   }

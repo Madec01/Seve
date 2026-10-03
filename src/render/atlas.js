@@ -42,6 +42,7 @@ export const SHEETS = {
   lot3: 'assets/sprites/lot3.png',
   lot4: 'assets/sprites/lot4.png',
   valley1: 'assets/sprites/valley1.png',
+  valley2: 'assets/sprites/valley2.png',
 };
 
 // Cultures disponibles (toutes présentes dans Tiny Farm ; le tournesol n'y a qu'une image mûre,
@@ -574,6 +575,11 @@ export const DECOR_SPRITES = Object.freeze({
   'seed.cabinet': 'decor.seed.cabinet',
   'nestbox.painted': 'decor.nestbox.painted',
   'valley.linden': 'decor.valley.linden',
+  // (Vallée vivante, lot V2) Décors trouvés : pages d'album « Le troc du village », « Les variétés de la ferme »,
+  // « Les habitants (suite) » (planche valley2).
+  'swap.basket': 'decor.swap.basket',
+  'cross.sign': 'decor.cross.sign',
+  'lizard.wall': 'decor.lizard.wall',
 });
 
 /** Sprite d'une décoration (accepte aussi « decor.<id> » ou un nom de sprite « deco.* »), ou null. */
@@ -1938,6 +1944,155 @@ for (const [id, cropId] of Object.entries(HEIRLOOM_CROPS)) {
   }
 }
 // </valley1:auto>
+
+// <valley2:auto>
+// Lot V2 de La Vallée vivante (planche « valley2 », assets/sprites/valley2.png) : « Le troc et les croisements »,
+// style Kenney. Variétés du village et croisées : heirloom.<id>.icon (12 + 11 ; les croisées portent un petit sceau
+// doré en bas à droite), heirloom.<id>.4 (+ .3 quand la variété change le plant ; .0 à .3 et .dead manquants = alias
+// de la culture de base, posés ci-dessous), heirloom.apiEtoile.fruit (à poser par-dessus tree.apple.*), géants
+// heirloom.coeurDeBoeufDesVertus / crossCabbage / crossPumpkin.giant (32 × 32) ; Grainothèque library.site,
+// library.1 … library.5 (32 × 32), library.window ; troc.pin, seedpack.village, seedpack.cross, jar.empty, jar.glass
+// (reflet à poser sur une icône), shelf.wood (autotuile horizontale) ; habitants wild.<wildBee|blackbird|lizard|bat>[.1]
+// (regard vers la GAUCHE), wild.hint.<mud|tail|moon> ; nature.batbox, icon.nature.batbox, icon.trait.scented,
+// icon.library, icon.swap, icon.cross, fx.pollen[.1] (8 × 8 : col/row demi-entiers, w = h = 0.5) ; story.library,
+// story.cross, story.library5 (48 × 32) ; album.page.swaps / crosses / wildlife2 ; decor.swap.basket,
+// decor.cross.sign, decor.lizard.wall ; icon.ach.<id>[.locked].
+// Ajoutés à SPRITES ici même (Object.assign), après sa définition.
+// Généré par assets/sprites/generate-valley2.py — ne pas modifier à la main.
+const valley2 = {
+  'heirloom.carotteViolette.icon': { sheet: 'valley2', col: 15, row: 0 },
+  'heirloom.carotteViolette.3': { sheet: 'valley2', col: 15, row: 1 },
+  'heirloom.carotteViolette.4': { sheet: 'valley2', col: 12, row: 2 },
+  'heirloom.marteauDesVertus.icon': { sheet: 'valley2', col: 13, row: 2 },
+  'heirloom.marteauDesVertus.3': { sheet: 'valley2', col: 14, row: 2 },
+  'heirloom.marteauDesVertus.4': { sheet: 'valley2', col: 15, row: 2 },
+  'heirloom.barbuDuRoussillon.icon': { sheet: 'valley2', col: 12, row: 3 },
+  'heirloom.barbuDuRoussillon.4': { sheet: 'valley2', col: 13, row: 3 },
+  'heirloom.coeurDeBoeufDesVertus.icon': { sheet: 'valley2', col: 14, row: 3 },
+  'heirloom.coeurDeBoeufDesVertus.3': { sheet: 'valley2', col: 15, row: 3 },
+  'heirloom.coeurDeBoeufDesVertus.4': { sheet: 'valley2', col: 0, row: 4 },
+  'heirloom.noireDeCrimee.icon': { sheet: 'valley2', col: 1, row: 4 },
+  'heirloom.noireDeCrimee.3': { sheet: 'valley2', col: 2, row: 4 },
+  'heirloom.noireDeCrimee.4': { sheet: 'valley2', col: 3, row: 4 },
+  'heirloom.blancDesLandes.icon': { sheet: 'valley2', col: 4, row: 4 },
+  'heirloom.blancDesLandes.4': { sheet: 'valley2', col: 5, row: 4 },
+  'heirloom.veloursRouge.icon': { sheet: 'valley2', col: 6, row: 4 },
+  'heirloom.veloursRouge.4': { sheet: 'valley2', col: 7, row: 4 },
+  'heirloom.bleueDArtois.icon': { sheet: 'valley2', col: 8, row: 4 },
+  'heirloom.bleueDArtois.4': { sheet: 'valley2', col: 9, row: 4 },
+  'heirloom.madameMoutot.icon': { sheet: 'valley2', col: 10, row: 4 },
+  'heirloom.madameMoutot.4': { sheet: 'valley2', col: 11, row: 4 },
+  'heirloom.blancheDeVirginie.icon': { sheet: 'valley2', col: 12, row: 4 },
+  'heirloom.blancheDeVirginie.4': { sheet: 'valley2', col: 13, row: 4 },
+  'heirloom.galeuseDEysines.icon': { sheet: 'valley2', col: 14, row: 4 },
+  'heirloom.galeuseDEysines.3': { sheet: 'valley2', col: 15, row: 4 },
+  'heirloom.galeuseDEysines.4': { sheet: 'valley2', col: 0, row: 5 },
+  'heirloom.apiEtoile.icon': { sheet: 'valley2', col: 1, row: 5 },
+  'heirloom.apiEtoile.fruit': { sheet: 'valley2', col: 2, row: 5 },
+  'heirloom.crossCarrot.icon': { sheet: 'valley2', col: 3, row: 5 },
+  'heirloom.crossCarrot.3': { sheet: 'valley2', col: 4, row: 5 },
+  'heirloom.crossCarrot.4': { sheet: 'valley2', col: 5, row: 5 },
+  'heirloom.crossTurnip.icon': { sheet: 'valley2', col: 6, row: 5 },
+  'heirloom.crossTurnip.3': { sheet: 'valley2', col: 7, row: 5 },
+  'heirloom.crossTurnip.4': { sheet: 'valley2', col: 8, row: 5 },
+  'heirloom.crossWheat.icon': { sheet: 'valley2', col: 9, row: 5 },
+  'heirloom.crossWheat.4': { sheet: 'valley2', col: 10, row: 5 },
+  'heirloom.crossCabbage.icon': { sheet: 'valley2', col: 11, row: 5 },
+  'heirloom.crossCabbage.3': { sheet: 'valley2', col: 12, row: 5 },
+  'heirloom.crossCabbage.4': { sheet: 'valley2', col: 13, row: 5 },
+  'heirloom.crossTomato.icon': { sheet: 'valley2', col: 14, row: 5 },
+  'heirloom.crossTomato.3': { sheet: 'valley2', col: 15, row: 5 },
+  'heirloom.crossTomato.4': { sheet: 'valley2', col: 0, row: 6 },
+  'heirloom.crossCorn.icon': { sheet: 'valley2', col: 1, row: 6 },
+  'heirloom.crossCorn.4': { sheet: 'valley2', col: 2, row: 6 },
+  'heirloom.crossSunflower.icon': { sheet: 'valley2', col: 3, row: 6 },
+  'heirloom.crossSunflower.4': { sheet: 'valley2', col: 4, row: 6 },
+  'heirloom.crossPotato.icon': { sheet: 'valley2', col: 5, row: 6 },
+  'heirloom.crossPotato.4': { sheet: 'valley2', col: 6, row: 6 },
+  'heirloom.crossStrawberry.icon': { sheet: 'valley2', col: 7, row: 6 },
+  'heirloom.crossStrawberry.4': { sheet: 'valley2', col: 8, row: 6 },
+  'heirloom.crossZucchini.icon': { sheet: 'valley2', col: 9, row: 6 },
+  'heirloom.crossZucchini.4': { sheet: 'valley2', col: 10, row: 6 },
+  'heirloom.crossPumpkin.icon': { sheet: 'valley2', col: 11, row: 6 },
+  'heirloom.crossPumpkin.3': { sheet: 'valley2', col: 12, row: 6 },
+  'heirloom.crossPumpkin.4': { sheet: 'valley2', col: 13, row: 6 },
+  'heirloom.coeurDeBoeufDesVertus.giant': { sheet: 'valley2', col: 9, row: 0, w: 2, h: 2 },
+  'heirloom.crossCabbage.giant': { sheet: 'valley2', col: 11, row: 0, w: 2, h: 2 },
+  'heirloom.crossPumpkin.giant': { sheet: 'valley2', col: 13, row: 0, w: 2, h: 2 },
+  'library.site': { sheet: 'valley2', col: 0, row: 2, w: 2, h: 2 },
+  'library.1': { sheet: 'valley2', col: 2, row: 2, w: 2, h: 2 },
+  'library.2': { sheet: 'valley2', col: 4, row: 2, w: 2, h: 2 },
+  'library.3': { sheet: 'valley2', col: 6, row: 2, w: 2, h: 2 },
+  'library.4': { sheet: 'valley2', col: 8, row: 2, w: 2, h: 2 },
+  'library.5': { sheet: 'valley2', col: 10, row: 2, w: 2, h: 2 },
+  'library.window': { sheet: 'valley2', col: 14, row: 6 },
+  'troc.pin': { sheet: 'valley2', col: 15, row: 6 },
+  'seedpack.village': { sheet: 'valley2', col: 0, row: 7 },
+  'seedpack.cross': { sheet: 'valley2', col: 1, row: 7 },
+  'jar.empty': { sheet: 'valley2', col: 2, row: 7 },
+  'jar.glass': { sheet: 'valley2', col: 3, row: 7 },
+  'shelf.wood': { sheet: 'valley2', col: 4, row: 7 },
+  'wild.wildBee': { sheet: 'valley2', col: 5, row: 7 },
+  'wild.wildBee.1': { sheet: 'valley2', col: 6, row: 7 },
+  'wild.blackbird': { sheet: 'valley2', col: 7, row: 7 },
+  'wild.blackbird.1': { sheet: 'valley2', col: 8, row: 7 },
+  'wild.lizard': { sheet: 'valley2', col: 9, row: 7 },
+  'wild.lizard.1': { sheet: 'valley2', col: 10, row: 7 },
+  'wild.bat': { sheet: 'valley2', col: 11, row: 7 },
+  'wild.bat.1': { sheet: 'valley2', col: 12, row: 7 },
+  'wild.hint.mud': { sheet: 'valley2', col: 13, row: 7 },
+  'wild.hint.tail': { sheet: 'valley2', col: 14, row: 7 },
+  'wild.hint.moon': { sheet: 'valley2', col: 15, row: 7 },
+  'nature.batbox': { sheet: 'valley2', col: 0, row: 8 },
+  'icon.nature.batbox': { sheet: 'valley2', col: 1, row: 8 },
+  'icon.trait.scented': { sheet: 'valley2', col: 2, row: 8 },
+  'icon.library': { sheet: 'valley2', col: 3, row: 8 },
+  'icon.swap': { sheet: 'valley2', col: 4, row: 8 },
+  'icon.cross': { sheet: 'valley2', col: 5, row: 8 },
+  'album.page.swaps': { sheet: 'valley2', col: 6, row: 8 },
+  'album.page.crosses': { sheet: 'valley2', col: 7, row: 8 },
+  'album.page.wildlife2': { sheet: 'valley2', col: 8, row: 8 },
+  'story.library': { sheet: 'valley2', col: 0, row: 0, w: 3, h: 2 },
+  'story.cross': { sheet: 'valley2', col: 3, row: 0, w: 3, h: 2 },
+  'story.library5': { sheet: 'valley2', col: 6, row: 0, w: 3, h: 2 },
+  'decor.swap.basket': { sheet: 'valley2', col: 9, row: 8 },
+  'decor.cross.sign': { sheet: 'valley2', col: 10, row: 8 },
+  'decor.lizard.wall': { sheet: 'valley2', col: 11, row: 8 },
+  'icon.ach.firstSwap': { sheet: 'valley2', col: 12, row: 8 },
+  'icon.ach.firstSwap.locked': { sheet: 'valley2', col: 13, row: 8 },
+  'icon.ach.villageSeeds': { sheet: 'valley2', col: 14, row: 8 },
+  'icon.ach.villageSeeds.locked': { sheet: 'valley2', col: 15, row: 8 },
+  'icon.ach.firstCross': { sheet: 'valley2', col: 0, row: 9 },
+  'icon.ach.firstCross.locked': { sheet: 'valley2', col: 1, row: 9 },
+  'icon.ach.farmHeritage': { sheet: 'valley2', col: 2, row: 9 },
+  'icon.ach.farmHeritage.locked': { sheet: 'valley2', col: 3, row: 9 },
+  'icon.ach.livingLibrary': { sheet: 'valley2', col: 4, row: 9 },
+  'icon.ach.livingLibrary.locked': { sheet: 'valley2', col: 5, row: 9 },
+  'icon.ach.valleyFriends': { sheet: 'valley2', col: 6, row: 9 },
+  'icon.ach.valleyFriends.locked': { sheet: 'valley2', col: 7, row: 9 },
+  'fx.pollen': { sheet: 'valley2', col: 8, row: 9, w: 0.5, h: 0.5 },
+  'fx.pollen.1': { sheet: 'valley2', col: 8.5, row: 9, w: 0.5, h: 0.5 },
+};
+Object.assign(SPRITES, valley2);
+// Étapes des variétés que la planche ne redessine pas (0 à 2, le plant 3 quand la variété ne le change pas, le fané) :
+// celles de la culture de base. Le pommier (apiEtoile) garde tree.apple.* et y pose heirloom.apiEtoile.fruit.
+const HEIRLOOM_CROPS_V2 = {
+  carotteViolette: 'carrot', marteauDesVertus: 'turnip', barbuDuRoussillon: 'wheat',
+  coeurDeBoeufDesVertus: 'cabbage', noireDeCrimee: 'tomato', blancDesLandes: 'corn',
+  veloursRouge: 'sunflower', bleueDArtois: 'potato', madameMoutot: 'strawberry',
+  blancheDeVirginie: 'zucchini', galeuseDEysines: 'pumpkin', crossCarrot: 'carrot',
+  crossTurnip: 'turnip', crossWheat: 'wheat', crossCabbage: 'cabbage',
+  crossTomato: 'tomato', crossCorn: 'corn', crossSunflower: 'sunflower',
+  crossPotato: 'potato', crossStrawberry: 'strawberry', crossZucchini: 'zucchini',
+  crossPumpkin: 'pumpkin',
+};
+for (const [id, cropId] of Object.entries(HEIRLOOM_CROPS_V2)) {
+  for (const st of ['0', '1', '2', '3', 'dead']) {
+    const name = `heirloom.${id}.${st}`;
+    if (!SPRITES[name] && SPRITES[`crop.${cropId}.${st}`]) SPRITES[name] = SPRITES[`crop.${cropId}.${st}`];
+  }
+}
+// </valley2:auto>
 
 // Alias du pommier en « culture » (crop.apple.*) : étapes sans saison (été).
 Object.assign(SPRITES, {

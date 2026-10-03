@@ -69,6 +69,11 @@ test('emplacements nature : jamais sur une parcelle, un chemin, un bâtiment, un
     for (let ty = r.y / TILE; ty < (r.y + r.h) / TILE; ty++) for (let tx = r.x / TILE; tx < (r.x + r.w) / TILE; tx++) assert.ok(!L.isPath(tx, ty), `${id} : pas sur un chemin (${tx}, ${ty})`);
   };
   for (const [id, r] of Object.entries(L.valley.spots)) {
+    if (id === 'home.bat') {
+      // (V2) Le nichoir à chauves-souris est accroché sous l'avant-toit de la maison : sur le bâtiment, par conception.
+      assert.ok(overlap(r, px(L.home.house)), 'nichoir à chauves-souris sur la maison');
+      continue;
+    }
     if (/\.owl$/.test(id)) {
       // Le nichoir à chouette est accroché sous le pignon du grenier : sur le bâtiment, par conception.
       assert.ok(overlap(r, px(L.home.storage)), 'nichoir à chouette sur le grenier');

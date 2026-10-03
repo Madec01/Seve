@@ -21,8 +21,8 @@ import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
 import { lotFinds } from './surprises.js';
 import { reserveLotNature } from './habitat.js';
-import { isFixed, planVariety, returnTrialSeed } from './heirlooms.js';
-import { VARIETIES_BY_ID } from '../../data/career/valley.js';
+import { fixHandOf, isFixed, planVariety, returnTrialSeed, varietyName } from './heirlooms.js';
+import { ALL_VARIETIES_BY_ID as VARIETIES_BY_ID } from '../../data/career/valley.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
 
@@ -315,7 +315,7 @@ export function setPlan(api, lotId, seasonId, cropId) {
   if (heirloom) {
     const x = VARIETIES_BY_ID[heirloom];
     const crop = getCrop(x.cropId);
-    if (!isFixed(state, heirloom)) return api.fail(`${x.name} : sauvez-la d'abord (6 récoltes à la main).`);
+    if (!isFixed(state, heirloom)) return api.fail(`${varietyName(state, x)} : sauvez-la d'abord (${fixHandOf(state)} récoltes à la main).`);
     if (crop.kind === 'tree') return api.fail('Culture inconnue.');
     if (lot.type !== 'greenhouse' && !crop.seasons.includes(seasonId)) return api.fail(`${crop.name} : ne se sème pas cette saison.`);
   } else if (cropId !== null && cropId !== 'same') {

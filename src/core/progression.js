@@ -25,7 +25,7 @@
 //
 // Étoiles et records : une seule fiche par niveau, quel que soit le mode (on garde le meilleur).
 
-import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, VALLEY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
+import { ACHIEVEMENTS as LEVEL_ACHIEVEMENTS, ALL_ACHIEVEMENTS as ACHIEVEMENTS, CAREER_ACHIEVEMENTS, COZY_ACHIEVEMENTS, HERITAGE_ACHIEVEMENTS, VALLEY_ACHIEVEMENTS, getAchievement } from '../data/achievements.js';
 import { CAREER_ARCHIVE_MAX, CAREER_ECUS } from '../data/career/career.js';
 import { COSMETICS, DECOR_SLOTS_BY_ID, DEFAULT_COSMETICS, DEFAULT_FARM_NAME, FARM_NAME_MAX, getCosmetic } from '../data/cosmetics.js';
 import { getCrop } from '../data/crops.js';
@@ -548,7 +548,12 @@ function evaluate(check, p, f) {
     case 'careerValley': {
       const v = ctx?.career?.valley;
       if (!v) return { done: false, progress: null };
-      const val = { started: v.started ? 1 : 0, fixed: (v.fixed || []).length, installed: (v.installed || []).length, stage: v.stage || 0, hand: v.hand || 0 }[check.key] ?? 0;
+      const val = {
+        started: v.started ? 1 : 0, fixed: (v.fixed || []).length, installed: (v.installed || []).length, stage: v.stage || 0, hand: v.hand || 0,
+        // (Vallée V2) Comptes par groupe ; une sauvegarde d'avant le V2 n'a que fixed / installed (tous du V1).
+        fixedPays: v.fixedPays ?? (v.fixed || []).length, installedV1: v.installedV1 ?? (v.installed || []).length,
+        swaps: (v.swaps || []).length, crosses: (v.crossesFound || []).length, fixedCross: v.fixedCross || 0, library: v.library || 0, installedV2: v.installedV2 || 0,
+      }[check.key] ?? 0;
       return counter(val, check.n);
     }
     // ── (lot 4) Album et fêtes (écus seulement) ──
@@ -629,7 +634,7 @@ export function achievementList(p, ctx) {
  */
 export function careerAchievementList(p, ctx) {
   // (Vallée vivante) Les 7 succès de la Vallée sont dans la catégorie « Carrière », à la suite.
-  return listOf([...CAREER_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS], p, ctx, true);
+  return listOf([...CAREER_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS], p, ctx, true);
 }
 
 /** (lot 4) Liste pour la catégorie « Album et fêtes » de la grange (écus seulement), même forme + category: 'cozy'. */

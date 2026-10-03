@@ -73,7 +73,7 @@ import { handBonusOf, helpersOn, waitInfo, waitedDawns } from './handwork.js';
 import { noteCozyHarvest, noteCozyProduct, takeFromSeedBank } from '../cozy.js';
 import { careerCozyYear } from './cozy.js';
 import { careerValleyYear, lotNature, valleyHarvest, valleyPlotExtras, valleySow } from './valley.js';
-import { dryGrowthOf as heirloomDryGrowth, planVariety, priceFactorOf } from './heirlooms.js';
+import { dryGrowthOf as heirloomDryGrowth, planVariety, priceFactorOf, scentedFactorOf } from './heirlooms.js';
 
 /** Postes du bilan de l'année → statistiques des niveaux (buildSummary). */
 const STAT_OF_INCOME = { crops: 'harvestIncome', products: 'productIncome', stock: 'rawSales', contest: 'contestPrize' };
@@ -381,7 +381,8 @@ export function createCareerRuntime(core) {
     const sold = !!diverted && !!diverted.sell;
     const careWatered = state.variety && !tree ? careOf(state, p).wateredEveryDay : false;
     const caredLot4 = state.cozy ? tree || careOf(state, p).wateredEveryDay : false;
-    const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, yf);
+    // (Vallée V2) Variété parfumée : le rendement de la place d'atelier × 1,15 (rien de nouveau dans les places).
+    const processed = diverted ? null : tryProcessHarvest(state, cropId, rawValue, state.career.valley && p.variety ? yf * scentedFactorOf(state, p) : yf);
     let stored = false;
     // (Vallée vivante) Une variété ancienne ne va jamais au grenier (son trait ne se perd pas dans le stock).
     if (!diverted && !processed && !p.variety && wouldStore(state, cropId)) {

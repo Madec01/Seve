@@ -124,7 +124,8 @@ test('récolte à la main : + 2 graines et + 1 vers la fixation ; sauvée à 7 ;
 test('équipe et machines : leurs récoltes ne gardent jamais de graine ni ne comptent pour la fixation', () => {
   const t = withExtension();
   try {
-    const g = startedCareer();
+    // Règle du V1 (avec le V2, la graine d'une planche d'essai récoltée par l'équipe revient : tests/valley2-cross.test.js).
+    const g = startedCareer({ valley: { heritage: false } });
     const api = t.api();
     const i = emptyPlots(g)[0];
     g.actions.career.sowHeirloom(i, 'bouleDOr');

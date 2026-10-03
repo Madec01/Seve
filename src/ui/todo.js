@@ -417,7 +417,7 @@ export function createTodo(app) {
     if (app.tutorial?.active && app.tutorial.stepId !== 'wait-winter') return false;
     if (app.decor?.active) return false;
     if (app.cozy?.feteMode) return false;
-    if (app.valley?.placing) return false; // (Vallée) mode aménagement : la barre remplace les onglets // (lot 4) mode fête : la barre de la chasse remplace les onglets
+    if (app.valley?.placing || app.heritage?.pairing) return false; // (Vallée) mode aménagement : la barre remplace les onglets // (lot 4) mode fête : la barre de la chasse remplace les onglets
     if (document.body.classList.contains('is-rotated')) return false;
     return true;
   }

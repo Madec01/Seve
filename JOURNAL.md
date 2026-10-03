@@ -1322,3 +1322,57 @@ Conception complète du lot V2 « Le troc et les croisements » et de ses contra
   de chance ; rythme du troc ; signes de vie du V2 pour les étapes 1 à 5 ; liens écartés ; nom des croisées.
 - **Idées** : une variété croisée × croisée (3ᵉ génération) pour les légendes du V4 ; visiteurs devant la Grainothèque
   qui sont les voisins du troc ; écho du jardin des voisins dans d'autres textes (fêtes, paniers de Noël).
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : planche de sprites `valley2.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley2.py` (reprend les outils de `generate-valley1.py`) → `assets/sprites/valley2.png`
+  (16 × 10 tuiles, 112 sprites), bloc `// <valley2:auto>` d'`src/render/atlas.js` (après celui du V1) et
+  `SHEETS.valley2` ; les 151 noms du tableau « Sprites » du contrat V2 (et ceux qu'il réutilise) vérifiés sous Node,
+  aucun heurt (le script refuse un nom déjà pris).
+- 12 variétés du village (icônes, stade mûr `.4`, plant `.3` quand la teinte le change ; carotte violette au cœur
+  orange, navet long blanc, gerbe barbue, chou pointu, tomate noire à épaules vertes, maïs blanc, tournesol rouge,
+  pomme de terre bleue coupée, grosse fraise ronde, courgette blanche ronde, citrouille galeuse, pomme Api étoilé +
+  `heirloom.apiEtoile.fruit`) ; 11 croisées (mélange des deux parents, petit sceau doré rond en bas à droite des
+  icônes) ; étapes 0 à 3 et fané manquantes = alias de la culture de base (fin du bloc) ; 3 géants 32 × 32.
+- Grainothèque : `library.site` (piquets, ficelle, panneau « ? ») et `library.1` … `library.5` (remise → auvent, tresses
+  et banc → maison de pierre à enseigne → jardin d'essai clos et ruche en paille → rosier grimpant, porte ouverte,
+  fenêtres allumées), `library.window` ; punaise du troc, sachets du village et doré, bocal vide, reflet de verre,
+  planche d'étagère ; osmie, merle (rouge-gorge du lot 4 repeint), lézard, pipistrelle en 2 images, 3 indices ; nichoir à
+  chauves-souris et son picto ; icônes Parfumée, Grainothèque, troc, croisement ; pollen (8 × 8) ; vignettes
+  `story.library`, `story.cross`, `story.library5` ; 3 onglets d'album ; 3 décors ; 6 succès (+ `.locked`).
+- `tools/atlas-preview.html` : case « Vallée V2 seulement » (`?valley2=1`). `CREDITS.md` : ligne `valley2.png` (CC0).
+- Écart : `nature.batbox` est posé sur un petit poteau (comme `nature.nestbox`) plutôt que sur un pan de mur, pour se
+  poser n'importe où sur la scène. Le paquet (`node tools/build.js`) reste à refaire au moment du commit.
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : rendu et interface (paquet UI/RENDER)
+
+Contrat : `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V2 » (+ écarts du CORE) ; détail du livré :
+« Vallée V2 — rendu et interface ». Écrans : `docs/VALLEE.md` § 16.9 et § 16.10.
+
+- **Scène** : la Grainothèque (2 × 2 tuiles réservées derrière le grenier ; panneau « ? » au rang 3, 5 dessins, fondu
+  quand elle grandit, visiteurs devant la porte au niveau 5), le sachet kraft épinglé au tableau quand un troc attend,
+  une abeille entre deux parents voisins (point de pollen fixe en mouvement réduit), « + 1 rencontre · 2 / 3 », le sachet
+  doré qui saute au croisement, le nichoir à chauves-souris (maison, verger, ateliers), les 4 habitants du V2 ; mode
+  « paire » (parcelles valides en pointillé épais avec « + », points sur la mini-carte). Variété sans dessin : la culture
+  teintée. Planche `valley2` facultative (replis dessinés).
+- **Interface** (`src/ui/career/heritage.js`, nouveau) : fiche « La Grainothèque » (construire / agrandir, L'étagère aux
+  35 bocaux, Croisements, Troc et ses 12 voisins), feuille du troc (♥ en tête, « ça ne coûte rien »), « Semer la paire »
+  d'un geste depuis la feuille des graines ou par le mode paire, popup du croisement au nom complet de la ferme, 4 récits,
+  « Revoir la boîte en fer » (état actuel des 3 variétés), carte « Troc » du tableau du village (et petit sachet sur la
+  commande du même voisin, écho des mercis une fois sur trois), onglet Graines groupé (En cours · Du pays · Du village ·
+  De la ferme), deux traits et « De la part de … » sur les fiches, lignes « À faire » `vl-troc` / `vl-story`, résumé du
+  matin, bilan annuel, Carnet, déblocages du rang, succès du V2 sous « La Vallée », tampon ♥ de l'album.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : récit « Une idée de
+  Joseph » au toucher du panneau, Grainothèque N1 construite, troc avec Lili au tableau (♥ : 4 graines), paire semée
+  depuis la feuille des graines puis deux par le mode paire, 3 récoltes à la main → 3 rencontres → sachet doré
+  « Carotte de la Ferme de test » puis le récit, nichoir à chauves-souris posé, lézard observé, « Revoir la boîte » (un
+  toucher dehors ne la ferme pas), Grainothèque N3 et N5 (mouvement réduit) ; cibles ≥ 48 px et textes ≥ 12 px mesurés
+  dans la fiche ; aucune erreur console. Captures : `scratchpad/screens/valley2-ui-*.png`.
+- **Bugs corrigés en passant** : le nichoir de la maison se dessinait sous le panneau du village (lot 3) — il se pose
+  maintenant à côté (le décor des fermes à Vallée change un peu) ; le message « touchez un emplacement » du mode
+  aménagement attendait sous la barre et arrivait après coup (retiré : la barre le dit) ; la fenêtre de la boîte de
+  Joseph se fermait d'un toucher sur la scène (option `outsideClose: false` des feuilles).
+- Tests : `tests/valley2-render.test.js` (Grainothèque sans chevauchement pour toutes les tailles de maison et de grenier,
+  nichoirs, dessins, abeille, mode paire, toucher) ; `tests/valley-render.test.js` et `tests/lot2-render.test.js` mis à
+  jour (nichoir sur la maison, 3 décors du V2).
+- Idée : un petit « + » flottant au-dessus de la parcelle voisine qui recevra la variété du pays, en mode paire.

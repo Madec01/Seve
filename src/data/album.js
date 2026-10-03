@@ -14,7 +14,9 @@
 // Les icônes réutilisent les sprites existants (cultures, produits, animaux, météo, surprises, portraits) ; les
 // manquants sont dessinés par le paquet ART (planche lot4).
 
-import { SPECIES, VARIETIES } from './career/valley.js';
+import { SEED_RULES, SPECIES, VARIETIES } from './career/valley.js';
+import { CROSSES, CROP_NAMES, SPECIES_V2, TROC, VILLAGE_VARIETIES_BY_ID } from './career/heritage.js';
+import { CLIENTS } from './variety.js';
 
 export const ALBUM_VERSION = 1;
 
@@ -31,6 +33,8 @@ export const ALBUM_STAMPS = {
   fete: { name: 'Fête jouée', icon: 'album.stamp.fete' },
   visitor: { name: 'Visiteur accueilli', icon: 'album.stamp.visitor' },
   best: { name: 'Le meilleur résultat', icon: 'album.stamp.best' },
+  // (Vallée V2) Troc : la variété donnée était d'une culture préférée du voisin (♥).
+  heart: { name: 'Une préférée offerte ♥', icon: 'album.stamp.heart' },
 };
 
 /** Suffixes des indices selon le mode de la case (affichés quand on joue dans un mode qui ne la donne pas). */
@@ -229,13 +233,27 @@ const STORY_CASES = STORIES.map((s, k) => ({
 
 // (Vallée vivante, lot V1) Graines anciennes (variété fixée) et habitants de la ferme (espèce installée) : carrière.
 const HEIRLOOM_CASES = VARIETIES.map((x) => ({
-  id: x.id, name: x.name, icon: x.icon, mode: 'career', check: { type: 'heirloomFixed', id: x.id }, text: x.anecdote, hint: 'Sauvez cette variété ancienne : 6 récoltes à la main.',
+  id: x.id, name: x.name, icon: x.icon, mode: 'career', check: { type: 'heirloomFixed', id: x.id }, text: x.anecdote, hint: `Sauvez cette variété ancienne : ${SEED_RULES.fixHand} récoltes à la main.`,
 }));
 const WILDLIFE_CASES = SPECIES.map((sp) => ({
   id: sp.id, name: sp.name, icon: sp.icon, mode: 'career', check: { type: 'wildlifeInstalled', id: sp.id }, text: sp.anecdote, hint: 'Remplissez sa recette d\'habitat, puis allez le voir quand il vient.',
 }));
 
-/** Les 13 pages (148 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1). */
+// (Vallée vivante, lot V2) Le troc du village (un troc par voisin, tampon ♥), les variétés de la ferme (croisée sauvée),
+// les habitants (suite) : carrière.
+const CLIENT_NAME = Object.fromEntries(CLIENTS.map((c) => [c.id, c.name]));
+const SWAP_CASES = TROC.order.map((o) => {
+  const x = VILLAGE_VARIETIES_BY_ID[o.varietyId];
+  return { id: o.clientId, name: `${CLIENT_NAME[o.clientId] || o.clientId} · ${x.name}`, icon: x.icon, mode: 'career', check: { type: 'swapDone', id: o.clientId }, text: x.anecdote, hint: 'Un troc de graines, au tableau du village.', stamps: ['heart'] };
+});
+const CROSS_CASES = CROSSES.map((c) => ({
+  id: c.id, name: `${CROP_NAMES[c.cropId]} de la ferme`, icon: c.icon, mode: 'career', check: { type: 'heirloomFixed', id: c.id }, text: c.text, hint: 'Semez côte à côte les deux variétés d\'une même culture, puis sauvez la graine née chez vous.',
+}));
+const WILDLIFE2_CASES = SPECIES_V2.map((sp) => ({
+  id: sp.id, name: sp.name, icon: sp.icon, mode: 'career', check: { type: 'wildlifeInstalled', id: sp.id }, text: sp.anecdote, hint: 'Remplissez sa recette d\'habitat, puis allez le voir quand il vient.',
+}));
+
+/** Les 16 pages (175 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1), puis les 3 du lot V2. */
 export const ALBUM_PAGES = [
   { id: 'garden', name: 'Le potager', icon: 'album.page.garden', cases: GARDEN, reward: { ecus: 30, cosmeticId: 'scarecrow.flower' } },
   { id: 'homemade', name: 'Fait maison et basse-cour', icon: 'album.page.homemade', cases: HOMEMADE, reward: { ecus: 25, cosmeticId: 'jam.shelf' } },
@@ -250,6 +268,9 @@ export const ALBUM_PAGES = [
   { id: 'stories', name: 'Les veillées de Joseph', icon: 'album.page.stories', cases: STORY_CASES, reward: { ecus: 30, cosmeticId: 'rocking.chair' } },
   { id: 'heirlooms', name: 'Graines anciennes', icon: 'album.page.heirlooms', cases: HEIRLOOM_CASES, reward: { ecus: 30, cosmeticId: 'seed.cabinet' } },
   { id: 'wildlife', name: 'Les habitants de la ferme', icon: 'album.page.wildlife', cases: WILDLIFE_CASES, reward: { ecus: 30, cosmeticId: 'nestbox.painted' } },
+  { id: 'swaps', name: 'Le troc du village', icon: 'album.page.swaps', cases: SWAP_CASES, reward: { ecus: 25, cosmeticId: 'swap.basket' } },
+  { id: 'crosses', name: 'Les variétés de la ferme', icon: 'album.page.crosses', cases: CROSS_CASES, reward: { ecus: 40, cosmeticId: 'cross.sign' } },
+  { id: 'wildlife2', name: 'Les habitants (suite)', icon: 'album.page.wildlife2', cases: WILDLIFE2_CASES, reward: { ecus: 20, cosmeticId: 'lizard.wall' } },
 ];
 
 /**

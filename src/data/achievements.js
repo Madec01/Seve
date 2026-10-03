@@ -40,7 +40,8 @@
 //   careerYear {n}                commencer l'année n
 //   careerStock {n}               n unités au grenier en même temps
 //   careerYearNet {n}             n pièces de bénéfice en une année
-//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand
+//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand ; (V2) fixedPays,
+//                                 installedV1, swaps, crosses, fixedCross, library, installedV2
 
 import { CROPS } from './crops.js';
 
@@ -127,11 +128,25 @@ export const COZY_ACHIEVEMENTS = [
 export const VALLEY_ACHIEVEMENTS = [
   career('valleyBox', 'La boîte en fer', 'Recevoir la boîte en fer de Joseph.', 10, { type: 'careerValley', key: 'started', n: 1 }),
   career('firstSaved', 'Graine sauvée', 'Sauver une première variété ancienne.', 10, { type: 'careerValley', key: 'fixed', n: 1 }),
-  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixed', n: 12 }),
+  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixedPays', n: 12 }),
   career('firstNeighbour', 'Premier habitant', 'Installer un premier habitant.', 10, { type: 'careerValley', key: 'installed', n: 1 }),
-  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installed', n: 12 }),
+  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installedV1', n: 12 }),
   career('valleySings', 'La vallée chante', 'Atteindre l\'étape 5 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 5 }),
   career('seedHands', 'Les mains dans les graines', '100 récoltes à la main de variétés anciennes.', 15, { type: 'careerValley', key: 'hand', n: 100 }),
+];
+
+/**
+ * (Vallée vivante, lot V2) 6 succès de carrière (catégorie « Carrière », écus seulement, 145 écus). Condition
+ * careerValley { key, n } : swaps (trocs faits), crosses (croisements trouvés), fixedCross (variétés croisées sauvées),
+ * library (niveau de la Grainothèque), installedV2 (habitants du V2 installés).
+ */
+export const HERITAGE_ACHIEVEMENTS = [
+  career('firstSwap', 'Premier troc', 'Échanger une graine avec un voisin du village.', 10, { type: 'careerValley', key: 'swaps', n: 1 }),
+  career('villageSeeds', 'Les graines du village', 'Faire les 12 trocs du village.', 30, { type: 'careerValley', key: 'swaps', n: 12 }),
+  career('firstCross', 'Un nom pour une graine', 'Trouver un premier croisement.', 15, { type: 'careerValley', key: 'crosses', n: 1 }),
+  career('farmHeritage', 'L\'héritage de la ferme', 'Sauver les 11 variétés croisées.', 40, { type: 'careerValley', key: 'fixedCross', n: 11 }),
+  career('livingLibrary', 'La grainothèque vivante', 'Agrandir la Grainothèque jusqu\'au niveau 5.', 30, { type: 'careerValley', key: 'library', n: 5 }),
+  career('valleyFriends', 'Les habitants (suite)', 'Installer les 4 nouveaux habitants (osmie, merle, lézard, pipistrelle).', 20, { type: 'careerValley', key: 'installedV2', n: 4 }),
 ];
 
 function cozy(id, name, description, ecus, check) {
@@ -143,7 +158,7 @@ function cozy(id, name, description, ecus, check) {
  * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
  * category: 'cozy'.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS];
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

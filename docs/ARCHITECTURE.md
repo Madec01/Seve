@@ -4401,3 +4401,131 @@ une carrière V1 reprise au rang 3 → récit et panneau, Grainothèque construi
 saison au tableau, paire semée, deux rencontres et un croisement, variété du village sauvée, « Revoir la boîte », un
 habitant du V2 observé, nichoir à chauves-souris posé ; mouvements réduits, texte à 150 % ; une partie de niveau
 Classique identique), `JOURNAL.md`, sauvegarde `backup/vallee-v2-…` à la fin.
+
+### Écarts et précisions (livraison CORE V2)
+
+Section tenue par le paquet CORE **pendant** la livraison (UI/RENDER et ART travaillent en parallèle) : tout ce qui
+précise ou s'écarte du contrat ci-dessus. Aucun nom ni forme du contrat n'est retiré ; seulement des champs **ajoutés**,
+sauf mention contraire. Chiffres réglés : `src/data/career/heritage.js` et `docs/VALLEE.md` § 16.12.
+
+**Fichiers**
+- Touchés en plus de la liste : `src/core/career/crew.js` et `src/core/career/land.js` (lisent `ALL_VARIETIES_BY_ID` :
+  plan de culture et semoir avec les variétés du V2 ; refus du plan « sauvez-la d'abord (7 récoltes à la main) » — 5 au
+  niveau 3 — au lieu du « 6 » resté du départ), `src/core/progression.js` (`careerAchievementList` : 17 + 7 + 6 = 30 ;
+  clés `careerValley` du V2).
+- `src/data/career/heritage.js` exporte aussi `LIBRARY_MAX` (5), `VILLAGE_VARIETIES_BY_ID`, `VILLAGE_OF_CROP`,
+  `TROC_BY_CLIENT`, `CROSSES_BY_ID`, `CROSS_OF_CROP`, `SPECIES_V2_BY_ID`, `STORIES_BY_ID`, `CROP_NAMES`,
+  `crossShortName(cross)` (« Tomate · de la ferme ») ; `SEED_LIBRARY.siteName` / `siteLines` (panneau) ;
+  `TROC.favThanks`, `TROC.fairText` (« À la foire, tout le village est là. »). Les variétés du village et les croisées
+  ont `traits: [..]` **et** `trait` (= le premier) ; les 12 du pays reçoivent `traits: [trait]` et `group: 'pays'`.
+- `src/core/career/heirlooms.js` : en plus du contrat, `varietyName(state, x)` (nom affiché : une croisée porte le nom
+  actuel de la ferme), `heritagePartOn`, `libraryLevelOf`, `libraryEffectsOf`, `crossNeedOf`, `crossFactorOf` (osmie).
+  `fixedSeedCost(base, state)` : `state` facultatif (sans lui, la règle du V1).
+- `src/core/career/heritage.js` : en plus du contrat, `heritageSeedsOn`, `nextLibraryLevel`, `savedVarieties`,
+  `trocRemaining`, `trocLock(state, entry)` (« Grainothèque niveau 2 » | « Il faut un verger »), `isFavGift`,
+  `unitOf`, `traitInfos`, `clientInfo`, `partnerPlotOf(state, i)`, `plotFreeFor`, `pairPartnerPlot`, `pairGrowing`,
+  `canSupply`, `pairStatus(state, cropId) → { canPair, reason }`, `farmOf`, `unreadStory`, `handSeedsFor`,
+  `parentsOfCrop`.
+
+**Règles précisées**
+- **Nichoir à chauves-souris** : `NATURE_ITEMS` et `NATURE_SPOTS` portent `heritage: true` sur `batbox` / les
+  emplacements `bat` ; ils n'existent (requêtes, `spotsOf`, `placeNature`, `valley().nature.items`) qu'avec la partie
+  `heritage` (V1 exact sinon). Emplacements `home.bat` (dès le début de la Vallée, verrou « Rang 4 requis »),
+  `<verger>.bat`, `<ateliers>.bat`, toujours **en fin de liste** du terrain. RENDER : un rectangle pour chacun.
+- **Flux `valley2`** : créé seulement avec la partie `heritage` ; 4 nombres par aube (Vallée commencée, `wildlife`).
+- **Troc** : strictement à l'aube du 2ᵉ jour de la saison (pas « au plus tôt le 2ᵉ ») ; le dernier jour d'hiver, la
+  foire passe avant. `trocGifts` exige une variété **sauvée** (fixée). Le troc de la foire saute Léon tant qu'il n'y a
+  pas de verger.
+- **Rencontres** : comptées à la récolte à la main d'un **parent** (variété du pays ou du village d'une culture à
+  croisement), sauvé ou non ; `crossMeeting.meet` est plafonné à `need` pour l'affichage (`add` : 1, ou 2 avec
+  l'osmie). Le croisement est trouvé même si la planche récoltée est déjà sauvée.
+- **Graines par récolte** (niveau 2) et **fixation** (niveau 3) valent aussi pour le V1 ; une variété dont `hand` a déjà
+  atteint le nouveau seuil est sauvée à sa prochaine récolte à la main.
+- **Stand de la fête des récoltes** : `year.heirloomCrops` n'est tenu qu'avec la partie `heritage` (V1 exact sinon).
+- **Indice** (`hint.kind`) : + `'story'` (target `{ type: 'story', id }`), `'troc'` (`{ type: 'troc', id: clientId }`),
+  `'pair'` (`{ type: 'pair', id: cropId }` → mode paire), `'library'` (`{ type: 'library', id: null }`). Ordre du
+  § 16.9.4, avec une précision : la Grainothèque passe **avant** une recette qui attend un aménagement verrouillé (rang)
+  ou un terrain (sinon elle ne se montrerait presque jamais : il manque toujours quelque chose à une recette).
+- **Succès du V1** : « Gardien des semences » compte les **12 variétés du pays** (clé `fixedPays`), « La ferme
+  accueillante » les **12 habitants du V1** (`installedV1`) — sinon les variétés et habitants du V2 les donneraient.
+- **Album** : tampon nouveau `heart` (♥, icône `album.stamp.heart` — repli : le caractère ♥) sur la page `swaps`.
+
+**Formes (champs ajoutés)**
+- `query.career.valley()` (V2 actif) : `crossRule` (texte de la règle) ; `library.siteLines`, `library.next.vignette` ;
+  `troc` (trocInfo) : `since`, `fairText`, `anecdote`, `label` (« De la part de Lili »), `noCost` ; `swaps.list[]` :
+  `waiting` ; `crosses[]` : `hand`, `seeds`, `parents[].known`, `parents[].group` ; `box.melonLine` ; `varieties[]` :
+  `parents` (croisée) ; `species[]` : `welcome` (« Bienvenue, petite osmie ! »). Avec `{ heritage: false }`, les
+  champs du V2 sont absents et `varieties` / `species` gardent leurs 12 entrées (`stage.total` 24).
+- `query.plot(i).variety.cross` : + `partnerPlot`, `cropId`, `partnerKnown`.
+- `plantableCrops(i).heirlooms[].pair` : + `cropId`, `partnerId`.
+- Événements : `seedSwapped.favLine` ; `crossMeeting.add` ; `crossFound.text` ; `pairSown.cropId` ;
+  `heirloomFixed.traits` ; `speciesInstalled.welcome` (V2). `crossFound` est suivi de `storyAvailable` au premier
+  croisement ; `seedLibraryBuilt` de `storyAvailable` aux niveaux 1 et 5.
+- `achievementContext().career.valley` : + `swapsFav`, `fixedPays`, `fixedVillage`, `fixedCross`, `installedV1`,
+  `installedV2`.
+
+## Vallée V2 — rendu et interface (UI/RENDER, 2026-10-03)
+
+Code contre « Vallée vivante — contrats du lot V2 » et ses « Écarts et précisions (livraison CORE V2) ». Carrière
+seulement, gardé par `state.career.valley` (commencée) **et** `parts.heritage` (`v ≥ 2`) ; `{ heritage: false }` : rien de
+nouveau à l'écran. Planche `valley2` facultative (`OPTIONAL_SHEETS`, `SHEETS.valley2`) : repli dessiné dans la scène,
+emoji décoratif caché aux lecteurs d'écran ou icône de la culture dans l'interface. Styles ajoutés à **`css/valley.css`**
+(déjà dans `CSS_FILES`). Tests : `tests/valley2-render.test.js`.
+
+```
+src/render/layout-career.js  careerValleySpots → + library (2 × 2 tuiles, px) et les emplacements '<lotId>.bat' (maison :
+                             sous l'avant-toit, sur le bâtiment ; verger : entre deux rangs d'arbres (7, 6) ; ateliers :
+                             entre les deux bâtiments (7, 1)) ; layout.valley.library
+src/render/valley-actors.js  purs : librarySpriteName(level, site), trocPinRect(board), beePos(a, b, t, reduced),
+                             pairTargets(list, layout) ; acteurs : setPair(cropId | null), pair, pairTargets() ; dessin
+                             de la Grainothèque (fondu au changement de niveau, visiteurs au niveau 5), sachet du tableau,
+                             abeilles des paires, sachet doré, « + 1 rencontre · 2 / 3 », mode paire, nichoir à chauves-souris
+src/render/scene.js          setPairPlacing(cropId | null), pairPlacing, valleyPairTargets() ; hitTestCareer : en mode
+                             paire, seulement { type: 'pairPlot', plotIndex } ; + { type: 'seedLibrary' } ; valleyItemRect
+                             + 'seedLibrary' | 'pairPlot' (index) | 'trocPin' ; points de la mini-carte en mode paire ;
+                             variété sans dessin : la culture teintée par `tint` (stade ≥ 2) ; heirloom.<id>.giant
+src/render/{cozy,variety}-actors.js   la Grainothèque réservée est évitée (repères du lot 4, panneau du village)
+src/render/atlas.js          SHEETS.valley2 ; DECOR_SPRITES : swap.basket, cross.sign, lizard.wall
+src/ui/career/heritage.js    createHeritage(app) → app.heritage (voir l'en-tête du fichier)
+src/ui/career/valley.js      délègue à app.heritage : onEvent, onHit, todoItems, hintAction, plotRows, seedRows ; onglet
+                             Graines (carte de la Grainothèque, troc, groupes, « Revoir la boîte en fer ») ; fiche d'une
+                             variété (deux traits, « De la part de … », croisement) ; récits ; habitants du V2 (accords) ;
+                             exporte vIcon, traitsChips
+src/ui/sheets.js             option outsideClose: false (la feuille tressaille au lieu de se fermer)
+src/ui/variety.js            carte « Troc » en tête du tableau, petit sachet sur la commande du même voisin, écho des mercis
+src/ui/{todo,album,grange}.js, src/ui/career/journal.js   mode paire (pas de ligne « À faire »), tampon ♥ et pages,
+                             succès du V2 rangés sous « La Vallée », déblocages 'valley' / 'nature'
+src/main.js                  app.heritage ; frame, reset, Échap quitte le mode paire ; __debug.valley2
+```
+
+- **Grainothèque** : 2 × 2 tuiles au bout de l'allée, derrière le grenier (candidats dans l'ordre : (10, H), (1, H + 1),
+  (10, H + 1), (4, H + 1), (5, H + 10) — le premier carré libre qui évite le panneau du village) ; le décor tiré dessus est
+  retiré **après** le tirage (le décor des fermes du V1 ne bouge pas) ; le nichoir de la maison ne se pose plus sous le
+  panneau du village (il s'y dessinait par-dessus). Toucher : le panneau ouvre d'abord « Une idée de Joseph » s'il n'est
+  pas lu, sinon la fiche.
+- **Fiche « La Grainothèque »** (`openLibrary(tab)`, feuille haute, pause de lecture) : vignette (× 3, × 2 sur 360 px),
+  « Niveau n · nom », effets cochés (avant construction : les trois lignes du panneau), « Construire · 2 000 » /
+  « Agrandir · 5 000 » (grisé + raison lue), segments **L'étagère** (3 étagères, 4 bocaux de ≥ 72 px par rangée, pastille ✓ /
+  nombre de graines / « ? »), **Croisements** (11 lignes ≥ 72 px : parents + parents → bocal doré ou « ? », barre de
+  rencontres lue « 2 rencontres sur 3 », « Semer la paire » ou la raison), **Troc** (proposition, 12 voisins en grille de 3,
+  ✓ ♥ ou cadenas doux).
+- **Troc** (`openTroc`, feuille basse) : ce qu'on reçoit (traits, « De la part de … »), ce qu'on donne (radios ≥ 56 px, ♥
+  en tête avec le petit mot du voisin), « Ça ne vous coûte rien », « Échanger » actif après un choix ; puis le merci,
+  « Semer » (première parcelle qui convient) / « Plus tard ».
+- **Croisements** : « Semer la paire » d'un geste depuis la feuille des graines (section « Croisements » en tête : la
+  parcelle touchée reçoit la variété du village, la voisine celle du pays) ou par le **mode paire** (barre `#vl-pairbar`
+  à la place des onglets, temps en pause, seules les parcelles valides répondent, défilement / pincement / + − actifs,
+  la vue va vers une parcelle valide) ; popup du croisement en file (sachet doré, nom complet, deux pastilles, « Née de
+  … et … · 3 graines », Semer / Plus tard), puis le récit « Le premier croisement ».
+- **Récits** : fenêtre comme les chapitres, ne se ferme pas d'un toucher dehors ; ajoutés aux « Récits de Joseph » ;
+  ligne « À faire » `vl-story` (sauf si un chapitre attend déjà). « Revoir la boîte en fer » (bas de l'onglet Graines et
+  chapitre 0 déjà lu) : `valley().box` reconstruite (état actuel des trois variétés, haie, melon), ne se ferme pas d'un
+  toucher dehors ; la fenêtre du premier jour non plus.
+- **Messages** : importants — troc proposé (« Voir »), Grainothèque bâtie (« Voir »), récit (« Écouter ») ; infos —
+  rencontre, paire semée ; le croisement passe par son popup. Résumé du matin : « Mme Rose a épinglé un sachet au tableau »,
+  « Hier : 2 rencontres d'abeilles (champ) », « Joseph a une idée… ». Conseils `valley.library`, `valley.troc`,
+  `valley.pair`, `valley.cross`, `valley.scented` (textes `HERITAGE_HINTS`). Plus de message « touchez un emplacement »
+  en mode aménagement / paire (la barre le dit ; gardé sous la barre, il arrivait trop tard).
+- **Débogage** (`?debug=1`) : `__debug.valley2.{ on(), state(), site(), library(n), troc(clientId), swap(clientId),
+  meet(cropId, n), cross(cropId), pair(cropId | null), pairPlots(cropId), links(), box(), story(id), open(tab), trocUI(),
+  point(kind, id), ui(), stats() }` (les mêmes aussi sous `__debug.valley`).
