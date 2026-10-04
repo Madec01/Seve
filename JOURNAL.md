@@ -39,6 +39,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/vallee-v2-2026-10-03` | Vallée V2 « Le troc et les croisements » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-vallee-v3-2026-10-03` | Avant le lot V3 « Le ruisseau » (vue de la vallée, 6 lieux, terres sauvages), commit `c958599` |
 | 2026-10-03 | `backup/vallee-v3-2026-10-03` | Vallée V3 « Le ruisseau » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
+| 2026-10-04 | `backup/avant-vallee-v4-2026-10-04` | Avant le lot V4 « Les cigognes » (variétés légendaires, visiteurs rarissimes, paysage et sons), commit `ae003c1` |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
