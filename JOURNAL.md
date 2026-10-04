@@ -43,6 +43,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-04 | `backup/avant-accompagnement-2026-10-04` | Avant l'accompagnement (Joseph vous montre) et le code du V4, après le déplacement des boutons de zoom |
 | 2026-10-04 | `backup/accompagnement-v4-2026-10-04` | Accompagnement « Joseph vous montre » et Vallée V4 « Les cigognes » terminés, intégrés et vérifiés ; pull request n° 11 |
 | 2026-10-04 | `backup/avant-intro-mg-studios-2026-10-04` | Avant l'intégration de l'intro animée MG studios au démarrage du jeu |
+| 2026-10-04 | `backup/intro-mg-studios-2026-10-04` | Intro MG studios intégrée et vérifiée (dernier commit) ; pull request n° 11 |
 | 2026-10-04 | `backup/avant-qa-coach-v4-2026-10-04` | Avant l'intégration et la QA finale de l'accompagnement et du V4, commit `c449436` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
@@ -2075,3 +2076,46 @@ CORE V4) » (rédigés au début du travail pour ART, AUDIO et UI/RENDER). Non c
   `PLACES_HINTS`, `STORKS_HINTS`) ne servent plus qu'aux tests des données (à retirer avec eux) ; le quota de 3 leçons par
   jour peut faire attendre une leçon propre à un écran (vue, fête) jusqu'au lendemain.
 
+
+### 2026-10-04 — Intro « MG studios » à chaque ouverture du jeu, avec une fin douce
+
+Demande de l'utilisateur (prototype « Le panneau de la ferme » validé) : « il faut que ça finisse bien, sans que ça coupe
+d'un coup, et on met ça en intro du jeu systématiquement à l'ouverture ». Sauvegarde préalable :
+`backup/avant-intro-mg-studios-2026-10-04`.
+
+- **Fin douce** (`src/intro/timeline.js`, pur et testé) : la poule ne quitte plus l'écran (elle s'installe à droite du
+  panneau), tenue de l'image finale où tout le monde est en place, dernier geste (le coq gonfle le poitrail avec un petit
+  battement d'ailes et une plume, un oiseau seul traverse le ciel), accord final (arpège de marimba, clochette, nappe)
+  qui s'éteint de lui-même, puis **fondu enchaîné de 1,0 s** vers l'écran suivant (fondu à 5,8 s, fin à 6,8 s). Le
+  volume de l'intro descend en rampe linéaire pendant tout le fondu ; toucher pour passer = fondu de 0,35 s image et son.
+  Mouvement réduit : image fixe en fondu (0,5 s), cocorico puis accord, fondu de sortie de 0,9 s (3,7 s en tout).
+- **Intro au démarrage** : portillon `src/intro/gate.js` (script classique recopié dans la page avant le chargeur) →
+  écran-titre « Touchez pour commencer » (ruban du jeu + panneau en bois, fond vert de l'écran de chargement, tout l'écran
+  se touche ; Entrée/Espace au clavier). Le toucher crée et débloque l'AudioContext que le jeu reprend
+  (`src/audio/audio.js`), puis lance l'animation (`src/intro/player.js`, `mg-studios.js`, `voice.js`, petit paquet
+  `dist/intro.<empreinte>.js` de 32 Ko téléchargé **en parallèle** du jeu). Volume = effets du joueur ; sans son si le
+  son est coupé ; mouvement réduit selon le réglage du jeu ou du système. Fin de l'intro : jeu prêt → menu directement
+  (fondu enchaîné, la musique du menu entre en fondu de 2 s) ; sinon l'écran de chargement prend le relais (même fond)
+  et le menu suit tout seul. L'écran-titre remplace le bouton « Commencer » (gardé sans intro).
+- **Pas d'intro** avec `?nointro`, le réglage **« Intro au démarrage »** (Options › Téléphone et affichage, activé par
+  défaut), `?debug=1` ou un navigateur piloté par un robot de test (`navigator.webdriver`) ; `?intro=1` la force.
+  Le chargeur efface l'intro s'il affiche son aide (« Réparer le jeu ») ; un lecteur absent ou en erreur = pas d'intro.
+- **Ressources** : planche `assets/sprites/intro.png` (2,7 Ko, `assets/sprites/generate-intro.py` : tuiles extraites des
+  planches du jeu + le coq dessiné pour l'intro, 4 poses dont la nouvelle « poitrail gonflé ») ; cris
+  `assets/audio/intro/{coq,vache,mouton,poule,ailes}.mp3` (Freesound CC0, découpes propres à l'intro ; battement d'ailes
+  de _stubb, nouveau). Précache « core » (l'intro se joue aussi hors ligne). `CREDITS.md` et les crédits du jeu à jour.
+- **Tests** : `tests/intro.test.js` (chronologie, fin douce, rampes de volume, passage au toucher, mouvement réduit,
+  décision du portillon dans un faux navigateur, version publiée et précache).
+- **Vérifié** (Playwright, Pixel 7 et 360 × 740, toucher uniquement, version publiée avec service worker et `dev.html`) :
+  premier lancement (fondu à 5,96 s du toucher, menu dessous), rechargement (intro à nouveau, service worker actif, 5 cris
+  décodés), toucher pour passer (fondu ~0,35-0,45 s), mouvement réduit (système et réglage), son coupé / effets à 0
+  (pas de son), réseau lent (90 Ko/s : écran-titre à 0,8 s, intro complète avec le son, puis écran de chargement et menu
+  à 34 s, sans saut), hors ligne avec le jeu installé, `?nointro` / `?debug=1` / robot (bouton « Commencer » comme
+  avant), réglage coupé puis rétabli, paquet du jeu introuvable (intro effacée, « Réparer le jeu » visible), un seul
+  AudioContext pour l'intro et le jeu, aucune erreur console. Mesure du son (OfflineAudioContext) : volume ×0,89 / 0,51 /
+  0,10 à 0,1 / 0,5 / 0,9 s du fondu final, −102 dB à la fin puis silence ; sans fondu, les sons s'éteignent déjà
+  d'eux-mêmes (−65 dB à 6,8 s) ; passage au toucher : ×0,87 / 0,50 / 0,03 à 0,05 / 0,175 / 0,34 s.
+- **Reste noté** : le mode « application installée » (`display-mode: standalone`) ne s'émule pas dans ce Chromium sans
+  interface ; l'intro n'en dépend pas (vérifiée hors ligne avec le service worker). Sur réseau très lent, le ruban et le
+  panneau de l'écran-titre apparaissent quand leurs images arrivent (le texte est lisible dès le début), comme sur
+  l'écran de chargement.

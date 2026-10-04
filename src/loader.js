@@ -26,6 +26,10 @@
  *     « ?r=<heure> » (retiré de l'adresse au chargement suivant). localStorage (progression,
  *     partie) n'est jamais touché.
  *
+ * L'intro « MG studios » (portillon src/intro/gate.js, recopié juste avant ce script) se joue par-dessus
+ * l'écran de chargement pendant que ce chargeur continue : elle ne change rien à son travail ; s'il doit
+ * afficher son aide, il l'efface (window.__fermeIntro.abort()).
+ *
  * Interface pour le jeu (src/main.js) : window.__bootProgress(0..1) (suite du chargement, après
  * le paquet), window.__bootOk() (écran « Prêt ! »), window.__bootFail(err).
  */
@@ -143,6 +147,8 @@
 
   function showHelp(message) {
     if (ok) return;
+    // L'intro « MG studios » (src/intro/gate.js) s'efface : l'aide et « Réparer le jeu » doivent se voir.
+    try { if (window.__fermeIntro && window.__fermeIntro.active) window.__fermeIntro.abort(); } catch (e) { /* */ }
     whenDom(function () {
       if (ok) return;
       var box = $('#loading .loading-box') || document.body;
@@ -296,8 +302,9 @@
     if (ok) return;
     var t = e.target;
     if (e instanceof ErrorEvent || e.error) { fail(e.error && e.error.message ? e : (e.message || e.error), 'script'); return; }
-    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais.)
-    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry')) fail('script introuvable : ' + (t.src || ''), 'script');
+    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais ; le lecteur de l'intro, data-intro,
+    // est facultatif : sans lui, le jeu démarre sans intro.)
+    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry') && !t.hasAttribute('data-intro')) fail('script introuvable : ' + (t.src || ''), 'script');
   }, true);
   window.addEventListener('unhandledrejection', function (e) {
     if (ok) return;

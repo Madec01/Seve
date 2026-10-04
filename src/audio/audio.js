@@ -172,7 +172,10 @@ export function createAudio(manifest, initialSettings = {}) {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     try {
-      ctx = new AC();
+      // L'intro « MG studios » (src/intro/gate.js) a créé et débloqué le contexte au toucher de l'écran-titre :
+      // le jeu le reprend (un seul contexte, déjà autorisé par le navigateur).
+      const shared = typeof window !== 'undefined' ? window.__fermeIntro?.ctx : null;
+      ctx = shared && shared.state !== 'closed' ? shared : new AC();
     } catch {
       ctx = null;
       return;

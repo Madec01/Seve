@@ -54,6 +54,7 @@ Problèmes signalés sur la V1 : **tout est trop petit**, **l'affichage est coup
 - **Jamais bloqué sur une version cassée** : garde-fou de démarrage dans `index.html` (nouvelle version activée et un seul rechargement si le jeu ne démarre pas ; sinon bouton « Réparer le jeu ») et bouton « Réparer le jeu (vider le cache) » dans les options (progression conservée).
 - Garder l'écran allumé pendant la partie si possible (Wake Lock, réglable).
 - Audio débloqué au premier toucher ; mise en pause propre quand l'appli passe en arrière-plan.
+- *(2026-10-04)* **Intro « MG studios » à chaque ouverture** (docs/ARCHITECTURE.md, « Intro MG studios ») : écran-titre « Touchez pour commencer » (tout l'écran est la cible, fond de l'écran de chargement) dont le toucher débloque le son du jeu, puis l'animation (~6 s, fin douce : tenue de l'image, dernier geste, fondu enchaîné de 1 s, son en fondu, jamais coupé). Le jeu se charge en parallèle : à la fin, menu directement s'il est prêt, sinon l'écran de chargement prend le relais. Toucher pour passer (fondu de 0,35 s). Mouvement réduit : image fixe. Son coupé : animation muette. Réglage « Intro au démarrage » (activé par défaut), `?nointro`.
 
 ## Vérification
 

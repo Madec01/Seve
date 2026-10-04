@@ -18,9 +18,11 @@
 //      minifié, carte des sources dist/game.<empreinte>.js.map) ; la table des empreintes des
 //      ressources y est écrite (globalThis.__FERME_ASSETS__, lue par src/version.js) : images et
 //      sons sont demandés avec « ?v=<empreinte> » ;
-//   3. css/fonts.css + css/style.css + css/guidance.css + css/lot2.css + css/variety.css + css/cozy.css + css/valley.css + css/coach.css → dist/game.<empreinte>.css (url() réécrites en ../assets/…?v=…) ;
+//   2 bis. src/intro/player.js et ses modules → dist/intro.<empreinte>.js (petit paquet de l'intro « MG studios »,
+//      téléchargé en parallèle du jeu par le portillon src/intro/gate.js ; même table des empreintes) ;
+//   3. css/fonts.css + css/style.css + css/guidance.css + css/lot2.css + css/variety.css + css/cozy.css + css/valley.css + css/coach.css + css/intro.css → dist/game.<empreinte>.css (url() réécrites en ../assets/…?v=…) ;
 //   4. src/index.template.html → index.html (paquet) et dev.html (modules de src/, pour déboguer),
-//      avec le chargeur src/loader.js recopié dans la page ;
+//      avec le portillon de l'intro src/intro/gate.js et le chargeur src/loader.js recopiés dans la page ;
 //   5. bloc PRECACHE de sw.js (fichiers de cette version, empreintes, « core » ou « lazy ») ;
 //   6. dist/build.json : version, fichiers, empreintes des sources (pour tests/build.test.js).
 //
@@ -39,9 +41,11 @@ const KEEP_BUILDS = 5;
 // fichiers de travail (scripts de génération, licences, police source).
 const ASSET_EXCLUDED_DIRS = new Set(['assets/screenshots']);
 const ASSET_EXCLUDED_EXT = new Set(['.md', '.py', '.txt', '.pyc', '.map', '.log', '.ttf', '.otf', '.xcf', '.aseprite']);
-const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css', 'css/valley.css', 'css/coach.css'];
+const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css', 'css/valley.css', 'css/coach.css', 'css/intro.css'];
 const TEMPLATE = 'src/index.template.html';
 const LOADER = 'src/loader.js';
+const INTRO_GATE = 'src/intro/gate.js';
+const INTRO_ENTRY = 'src/intro/player.js';
 const ENTRY = 'src/main.js';
 const TARGET = ['chrome90', 'edge90', 'firefox90', 'safari15'];
 
@@ -118,8 +122,11 @@ function renderPage({ dev, config, versions }) {
   const template = read(TEMPLATE).toString('utf8');
   const loader = read(LOADER).toString('utf8').trim();
   if (/<\/script/i.test(loader)) throw new Error(`${LOADER} ne doit pas contenir « </script »`);
+  const gate = read(INTRO_GATE).toString('utf8').trim();
+  if (/<\/script/i.test(gate)) throw new Error(`${INTRO_GATE} ne doit pas contenir « </script »`);
   const boot = [
     `  <script>window.__FERME_BUILD__ = ${JSON.stringify(config)};</script>`,
+    `  <script>\n${gate}\n  </script>`,
     `  <script>\n${loader}\n  </script>`,
   ].join('\n');
   const styles = (dev ? CSS_FILES : config.css).map(cssLink).join('\n');
@@ -194,6 +201,34 @@ export async function build() {
   map.file = `game.${jsHash}.js`;
   const mapFinal = JSON.stringify(map);
 
+  // ── Intro « MG studios » (petit paquet à part : il doit pouvoir se jouer avant que le jeu soit arrivé) ──
+  const intro = await esbuild.build({
+    absWorkingDir: ROOT,
+    entryPoints: [INTRO_ENTRY],
+    bundle: true,
+    format: 'iife',
+    target: TARGET,
+    minify: true,
+    charset: 'utf8',
+    legalComments: 'none',
+    sourcemap: 'external',
+    sourcesContent: false,
+    outfile: 'dist/intro.js',
+    write: false,
+    logLevel: 'silent',
+    banner: { js: '"use strict";' },
+    define: { 'globalThis.__FERME_ASSETS__': JSON.stringify(versions) },
+  });
+  const introOut = intro.outputFiles.find((f) => f.path.endsWith('.js'));
+  const introMapOut = intro.outputFiles.find((f) => f.path.endsWith('.js.map'));
+  const introCode = introOut.text.replace(/\n?\/\/# sourceMappingURL=.*\n?$/, '').trimEnd();
+  const introHash = hash16(introCode).slice(0, 10);
+  const introName = `dist/intro.${introHash}.js`;
+  const introFinal = `${introCode}\n//# sourceMappingURL=intro.${introHash}.js.map\n`;
+  const introMap = JSON.parse(introMapOut.text);
+  introMap.file = `intro.${introHash}.js`;
+  const introMapFinal = JSON.stringify(introMap);
+
   // ── CSS ──
   const cssSource = CSS_FILES.map((f) => `/* ${f} */\n${rewriteCssUrls(read(f).toString('utf8'), posix.dirname(f), versions)}`).join('\n');
   const css = await esbuild.transform(cssSource, { loader: 'css', minify: true, target: TARGET, charset: 'utf8', legalComments: 'none', logLevel: 'silent' });
@@ -208,14 +243,16 @@ export async function build() {
     `manifest:${manifestHash}`,
     `template:${hash16(read(TEMPLATE))}`,
     `loader:${hash16(read(LOADER))}`,
+    `intro:${hash16(introFinal)}`,
+    `gate:${hash16(read(INTRO_GATE))}`,
     `sw:${hash16(read('sw.js').toString('utf8').replace(/\/\/ <precache>[\s\S]*?\/\/ <\/precache>/, ''))}`,
     ...assets.map((a) => `${a.path}:${a.hash}`),
   ].join('\n')).slice(0, 12);
 
   // ── Pages ──
-  const config = { id, js: { src: jsName, sha: hash16(jsFinal), size: Buffer.byteLength(jsFinal) }, css: [cssName] };
+  const config = { id, js: { src: jsName, sha: hash16(jsFinal), size: Buffer.byteLength(jsFinal) }, css: [cssName], intro: { src: introName } };
   const indexHtml = renderPage({ dev: false, config, versions });
-  const devHtml = renderPage({ dev: true, config: { id: 'dev', dev: true, module: ENTRY }, versions });
+  const devHtml = renderPage({ dev: true, config: { id: 'dev', dev: true, module: ENTRY, intro: { module: INTRO_ENTRY } }, versions });
 
   // ── Service worker ──
   const entries = [
@@ -223,7 +260,9 @@ export async function build() {
     ['manifest.webmanifest', manifestHash, read('manifest.webmanifest').length, 'core'],
     [jsName, hash16(jsFinal), Buffer.byteLength(jsFinal), 'core'],
     [cssName, hash16(cssFinal), Buffer.byteLength(cssFinal), 'core'],
-    ...assets.map((a) => [a.path, a.hash, a.size, a.path.startsWith('assets/audio/') ? 'lazy' : 'core']),
+    [introName, hash16(introFinal), Buffer.byteLength(introFinal), 'core'],
+    // sons « lazy » (rangés au premier usage), sauf les cris de l'intro : joués dès l'ouverture, même hors ligne
+    ...assets.map((a) => [a.path, a.hash, a.size, a.path.startsWith('assets/audio/') && !a.path.startsWith('assets/audio/intro/') ? 'lazy' : 'core']),
   ];
   const swSrc = read('sw.js').toString('utf8');
   const blockRe = /\/\/ <precache>[\s\S]*?\/\/ <\/precache>/;
@@ -231,7 +270,7 @@ export async function build() {
   const swFinal = swSrc.replace(blockRe, () => precacheBlock(id, entries));
 
   // ── dist/build.json et ménage des anciennes versions ──
-  const ownFiles = [jsName, `${jsName}.map`, cssName];
+  const ownFiles = [jsName, `${jsName}.map`, cssName, introName, `${introName}.map`];
   let previous = { history: [] };
   try { previous = JSON.parse(read('dist/build.json').toString('utf8')); } catch { /* première construction */ }
   const history = [{ id, files: ownFiles }, ...(previous.history || []).filter((h) => h.id !== id)].slice(0, KEEP_BUILDS);
@@ -242,6 +281,7 @@ export async function build() {
     note: 'Généré par tools/build.js : ne pas modifier à la main.',
     js: jsName,
     css: cssName,
+    intro: introName,
     esbuild: esbuild.version,
     sources: sourceFingerprint(),
     history,
@@ -251,6 +291,8 @@ export async function build() {
     [jsName, jsFinal],
     [`${jsName}.map`, mapFinal],
     [cssName, cssFinal],
+    [introName, introFinal],
+    [`${introName}.map`, introMapFinal],
     ['index.html', indexHtml],
     ['dev.html', devHtml],
     ['sw.js', swFinal],

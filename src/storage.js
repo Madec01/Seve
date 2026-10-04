@@ -42,6 +42,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   guidanceAsked: false, // le réglage a été choisi (fenêtre « Bienvenue ! », question unique, options)
   // ── (Vallée vivante, lot V4) Sons de la vallée : paysage sonore synthétisé (src/audio/nature.js) ──
   natureSound: 'full', // 'full' (Complets) · 'light' (Légers : couches et 4 voix, sans écho) · 'off' (Coupés)
+  // ── Intro « MG studios » à chaque ouverture (src/intro/gate.js lit ce réglage directement dans localStorage) ──
+  intro: true,
 });
 
 /** Valeurs permises du réglage « Sons de la vallée ». */

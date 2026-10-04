@@ -77,6 +77,20 @@
     </div>
   </div>
 
+  <!-- Intro « MG studios », à chaque ouverture du jeu (src/intro/gate.js décide et met « intro-on » sur
+       <html> ; css/intro.css) : écran-titre « Touchez pour commencer » (le toucher débloque le son), puis
+       l'animation, pendant que le jeu se charge dessous ; fondu enchaîné vers le menu ou l'écran de chargement. -->
+  <div id="intro" class="intro" role="button" tabindex="0" aria-label="Touchez pour commencer">
+    <canvas class="intro-canvas" aria-hidden="true"></canvas>
+    <div class="intro-title">
+      <div class="intro-box">
+        <div class="logo-ribbon"><p class="logo-title">Une année à la ferme</p></div>
+        <p class="intro-sign">Touchez pour commencer</p>
+      </div>
+    </div>
+    <p class="intro-skip" aria-hidden="true">Touchez pour passer</p>
+  </div>
+
   <noscript>
     <p class="noscript">Ce jeu a besoin de JavaScript pour fonctionner.</p>
   </noscript>
