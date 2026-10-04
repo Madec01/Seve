@@ -204,13 +204,5 @@ export const STORY = { day: 3, ecus: 1 };
  */
 export const F1 = { handBonus: HAND_BONUS, machineDelay: 3, staffDelay: 4, weedFine: 0.01, weedGold: 0.003, migrateRipeBack: 4 };
 
-// ── Conseils « première fois » (textes affichés par l'interface) ──────────────────────────────
+// (Accompagnement) Les conseils « première fois » sont des leçons de Joseph : src/ui/coach/lessons/lots.js.
 
-export const COZY_HINTS = {
-  'cozy.album': 'Une case de l\'album ! Chaque chose vécue à la ferme a sa page : Menu → L\'album.',
-  'cozy.fete': 'Demain, c\'est jour de fête : un petit jeu au doigt, sans chrono. Ce que vous ne faites pas, le village le fera.',
-  'cozy.winter': 'L\'hiver est là : ramassez les trouvailles en lisière, remplissez la mangeoire, et passez chez Joseph le soir.',
-  'cozy.lanterns': 'Joseph allume des lanternes pour votre année : une au moins par critère, et l\'an prochain on peut toujours faire mieux.',
-  'cozy.helpers': `Vos récoltes vous attendent : l'équipe ne les cueille qu'après ${F1.machineDelay} à ${F1.staffDelay} jours. À la main, elles valent ${Math.round((HAND_BONUS - 1) * 100)} % de plus !`,
-  'cozy.seedFair': 'La foire aux graines : des sachets à −25 % pour le printemps. Vos semis les prendront d\'abord, sans payer.',
-};

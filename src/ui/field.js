@@ -185,8 +185,7 @@ export function createField(app) {
     show('seeds', { index }, { title: 'Que semer ?', icon: icon('seed', 'md'), content: seedContent(index) }, silent);
     const first = app.sheets.body.querySelector('.seed-row:not(.is-disabled)');
     if (first && app.keyboardMode && !silent) first.focus({ preventScroll: true });
-    // Premier pommier proposé : un conseil (une fois pour toutes).
-    if (!silent && app.sheets.body.querySelector('#seed-apple')) app.hints?.maybe('tree', { selector: '#seed-apple' });
+    // (Premier pommier proposé : leçon « tree » de Joseph, déclenchée par l'ouverture de la feuille des graines.)
   }
 
   function choose(crop, all) {

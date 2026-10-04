@@ -45,6 +45,8 @@ export const SHEETS = {
   valley2: 'assets/sprites/valley2.png',
   valley3: 'assets/sprites/valley3.png',
   valley3bg: 'assets/sprites/valley3-bg.png',
+  valley4: 'assets/sprites/valley4.png',
+  coach: 'assets/sprites/coach.png',
 };
 
 // Cultures disponibles (toutes présentes dans Tiny Farm ; le tournesol n'y a qu'une image mûre,
@@ -2269,6 +2271,144 @@ const valley3 = {
 };
 Object.assign(SPRITES, valley3);
 // </valley3:auto>
+
+// <valley4:auto>
+// Lot V4 de La Vallée vivante (planche « valley4 », assets/sprites/valley4.png) : « Les cigognes », style Kenney.
+// Légendes : legend.<motherMelon|millEinkorn|farmMarvel|storkPea>.icon ; legend.<id>.0 / .1 / .2 et legend.cloche
+// (8 × 12 : sous la cloche de verre translucide, terre sur les 2 dernières lignes) ; legend.jar.
+// Cigognes : visitor.whiteStork[.1] (16 × 24, pattes en bas), visitor.whiteStork.fly[.1] (32 × 16), stork.wheel
+// (24 × 12) et stork.nest.<pair|chicks|snow> (24 × 20) au même pied (bas du poteau, x = 12), stork.steeple (16 × 24).
+// Visiteurs : visitor.<crane|redDeer (32 × 32)|oriole|beaver>[.1], visitor.crane.flock[.1] (48 × 16),
+// view.beaverDam (32 × 16), visitor.glowworms, fx.glow[.1] (8 × 8, halo par le code), visitor.hint.<trumpet|antler|
+// gnawed|flute|glow>. Bêtes : regard vers la GAUCHE. Forêt de la carte : forest.mixed.<oak|beech|birch|cherry|
+// cherry.bloom>, forest.old.0 / .1, forest.fern (tuiles pleines raccordées à forest.green.fill). Vue : valley.stage.8
+// (96 × 48), view.village.lights, view.joseph.seated, view.helene.seated, valley.box.gift. Vignettes (48 × 32) :
+// story.<melon|mill|marvel|peas|storks|storkNest>, story.epilogue.1 / .2 / .3, postcard.1 … 8. Livre : book.cover
+// (64 × 80), book.ribbon (8 × 24). Pictogrammes : icon.<legend|visitor|book|postcard|sound.nature>,
+// album.page.<legends|visitors>, decor.<melon.cloche|stork.vane|iron.box>, icon.ach.<id> (grisés par le code).
+// Ajoutés à SPRITES ici même (Object.assign), après sa définition.
+// Généré par assets/sprites/generate-valley4.py — ne pas modifier à la main.
+const valley4 = {
+  'legend.motherMelon.icon': { sheet: 'valley4', col: 9, row: 5 },
+  'legend.millEinkorn.icon': { sheet: 'valley4', col: 4, row: 11 },
+  'legend.farmMarvel.icon': { sheet: 'valley4', col: 5, row: 11 },
+  'legend.storkPea.icon': { sheet: 'valley4', col: 6, row: 11 },
+  'legend.motherMelon.0': { sheet: 'valley4', col: 7, row: 11, w: 0.5, h: 0.75 },
+  'legend.motherMelon.1': { sheet: 'valley4', col: 8, row: 11, w: 0.5, h: 0.75 },
+  'legend.motherMelon.2': { sheet: 'valley4', col: 10, row: 11, w: 0.5, h: 0.75 },
+  'legend.millEinkorn.0': { sheet: 'valley4', col: 11, row: 11, w: 0.5, h: 0.75 },
+  'legend.millEinkorn.1': { sheet: 'valley4', col: 12, row: 11, w: 0.5, h: 0.75 },
+  'legend.millEinkorn.2': { sheet: 'valley4', col: 13, row: 11, w: 0.5, h: 0.75 },
+  'legend.farmMarvel.0': { sheet: 'valley4', col: 14, row: 11, w: 0.5, h: 0.75 },
+  'legend.farmMarvel.1': { sheet: 'valley4', col: 15, row: 11, w: 0.5, h: 0.75 },
+  'legend.farmMarvel.2': { sheet: 'valley4', col: 1, row: 12, w: 0.5, h: 0.75 },
+  'legend.storkPea.0': { sheet: 'valley4', col: 2, row: 12, w: 0.5, h: 0.75 },
+  'legend.storkPea.1': { sheet: 'valley4', col: 4, row: 12, w: 0.5, h: 0.75 },
+  'legend.storkPea.2': { sheet: 'valley4', col: 5, row: 12, w: 0.5, h: 0.75 },
+  'legend.cloche': { sheet: 'valley4', col: 6, row: 12, w: 0.5, h: 0.75 },
+  'legend.jar': { sheet: 'valley4', col: 7, row: 12 },
+  'visitor.whiteStork': { sheet: 'valley4', col: 15, row: 6, w: 1, h: 1.5 },
+  'visitor.whiteStork.1': { sheet: 'valley4', col: 9, row: 10, w: 1, h: 1.5 },
+  'visitor.whiteStork.fly': { sheet: 'valley4', col: 10, row: 10, w: 2, h: 1 },
+  'visitor.whiteStork.fly.1': { sheet: 'valley4', col: 12, row: 10, w: 2, h: 1 },
+  'stork.wheel': { sheet: 'valley4', col: 14, row: 10, w: 1.5, h: 0.75 },
+  'stork.nest.pair': { sheet: 'valley4', col: 12, row: 8, w: 1.5, h: 1.25 },
+  'stork.nest.chicks': { sheet: 'valley4', col: 14, row: 8, w: 1.5, h: 1.25 },
+  'stork.nest.snow': { sheet: 'valley4', col: 0, row: 9, w: 1.5, h: 1.25 },
+  'stork.steeple': { sheet: 'valley4', col: 0, row: 11, w: 1, h: 1.5 },
+  'visitor.crane': { sheet: 'valley4', col: 8, row: 12 },
+  'visitor.crane.1': { sheet: 'valley4', col: 9, row: 12 },
+  'visitor.crane.flock': { sheet: 'valley4', col: 6, row: 9, w: 3, h: 1 },
+  'visitor.crane.flock.1': { sheet: 'valley4', col: 6, row: 10, w: 3, h: 1 },
+  'visitor.redDeer': { sheet: 'valley4', col: 2, row: 9, w: 2, h: 2 },
+  'visitor.redDeer.1': { sheet: 'valley4', col: 4, row: 9, w: 2, h: 2 },
+  'visitor.oriole': { sheet: 'valley4', col: 10, row: 12 },
+  'visitor.oriole.1': { sheet: 'valley4', col: 11, row: 12 },
+  'visitor.beaver': { sheet: 'valley4', col: 12, row: 12 },
+  'visitor.beaver.1': { sheet: 'valley4', col: 13, row: 12 },
+  'view.beaverDam': { sheet: 'valley4', col: 1, row: 11, w: 2, h: 1 },
+  'visitor.glowworms': { sheet: 'valley4', col: 14, row: 12 },
+  'fx.glow': { sheet: 'valley4', col: 15, row: 12, w: 0.5, h: 0.5 },
+  'fx.glow.1': { sheet: 'valley4', col: 0, row: 13, w: 0.5, h: 0.5 },
+  'visitor.hint.trumpet': { sheet: 'valley4', col: 1, row: 13 },
+  'visitor.hint.antler': { sheet: 'valley4', col: 2, row: 13 },
+  'visitor.hint.gnawed': { sheet: 'valley4', col: 3, row: 13 },
+  'visitor.hint.flute': { sheet: 'valley4', col: 4, row: 13 },
+  'visitor.hint.glow': { sheet: 'valley4', col: 5, row: 13 },
+  'forest.mixed.oak': { sheet: 'valley4', col: 6, row: 13 },
+  'forest.mixed.beech': { sheet: 'valley4', col: 7, row: 13 },
+  'forest.mixed.birch': { sheet: 'valley4', col: 8, row: 13 },
+  'forest.mixed.cherry': { sheet: 'valley4', col: 9, row: 13 },
+  'forest.mixed.cherry.bloom': { sheet: 'valley4', col: 10, row: 13 },
+  'forest.old.0': { sheet: 'valley4', col: 11, row: 13 },
+  'forest.old.1': { sheet: 'valley4', col: 12, row: 13 },
+  'forest.fern': { sheet: 'valley4', col: 13, row: 13 },
+  'view.village.lights': { sheet: 'valley4', col: 14, row: 13 },
+  'view.joseph.seated': { sheet: 'valley4', col: 15, row: 13 },
+  'view.helene.seated': { sheet: 'valley4', col: 0, row: 14 },
+  'valley.box.gift': { sheet: 'valley4', col: 1, row: 14 },
+  'story.melon': { sheet: 'valley4', col: 10, row: 0, w: 3, h: 2 },
+  'story.mill': { sheet: 'valley4', col: 13, row: 0, w: 3, h: 2 },
+  'story.marvel': { sheet: 'valley4', col: 10, row: 2, w: 3, h: 2 },
+  'story.peas': { sheet: 'valley4', col: 13, row: 2, w: 3, h: 2 },
+  'story.storks': { sheet: 'valley4', col: 4, row: 3, w: 3, h: 2 },
+  'story.storkNest': { sheet: 'valley4', col: 7, row: 3, w: 3, h: 2 },
+  'story.epilogue.1': { sheet: 'valley4', col: 10, row: 4, w: 3, h: 2 },
+  'story.epilogue.2': { sheet: 'valley4', col: 13, row: 4, w: 3, h: 2 },
+  'story.epilogue.3': { sheet: 'valley4', col: 0, row: 5, w: 3, h: 2 },
+  'valley.stage.8': { sheet: 'valley4', col: 4, row: 0, w: 6, h: 3 },
+  'postcard.1': { sheet: 'valley4', col: 3, row: 5, w: 3, h: 2 },
+  'postcard.2': { sheet: 'valley4', col: 6, row: 5, w: 3, h: 2 },
+  'postcard.3': { sheet: 'valley4', col: 9, row: 6, w: 3, h: 2 },
+  'postcard.4': { sheet: 'valley4', col: 12, row: 6, w: 3, h: 2 },
+  'postcard.5': { sheet: 'valley4', col: 0, row: 7, w: 3, h: 2 },
+  'postcard.6': { sheet: 'valley4', col: 3, row: 7, w: 3, h: 2 },
+  'postcard.7': { sheet: 'valley4', col: 6, row: 7, w: 3, h: 2 },
+  'postcard.8': { sheet: 'valley4', col: 9, row: 8, w: 3, h: 2 },
+  'book.cover': { sheet: 'valley4', col: 0, row: 0, w: 4, h: 5 },
+  'book.ribbon': { sheet: 'valley4', col: 3, row: 11, w: 0.5, h: 1.5 },
+  'icon.legend': { sheet: 'valley4', col: 2, row: 14 },
+  'icon.visitor': { sheet: 'valley4', col: 3, row: 14 },
+  'icon.book': { sheet: 'valley4', col: 4, row: 14 },
+  'icon.postcard': { sheet: 'valley4', col: 5, row: 14 },
+  'icon.sound.nature': { sheet: 'valley4', col: 6, row: 14 },
+  'album.page.legends': { sheet: 'valley4', col: 7, row: 14 },
+  'album.page.visitors': { sheet: 'valley4', col: 8, row: 14 },
+  'decor.melon.cloche': { sheet: 'valley4', col: 9, row: 14 },
+  'decor.stork.vane': { sheet: 'valley4', col: 10, row: 14 },
+  'decor.iron.box': { sheet: 'valley4', col: 11, row: 14 },
+  'icon.ach.firstLegend': { sheet: 'valley4', col: 12, row: 14 },
+  'icon.ach.legendHarvest': { sheet: 'valley4', col: 13, row: 14 },
+  'icon.ach.fourLegends': { sheet: 'valley4', col: 14, row: 14 },
+  'icon.ach.storksBack': { sheet: 'valley4', col: 15, row: 14 },
+  'icon.ach.storkNest': { sheet: 'valley4', col: 0, row: 15 },
+  'icon.ach.rareVisitor': { sheet: 'valley4', col: 1, row: 15 },
+  'icon.ach.allVisitors': { sheet: 'valley4', col: 2, row: 15 },
+  'icon.ach.valleyBook': { sheet: 'valley4', col: 3, row: 15 },
+  'icon.ach.furtherAway': { sheet: 'valley4', col: 4, row: 15 },
+};
+Object.assign(SPRITES, valley4);
+// </valley4:auto>
+
+// <coach:auto>
+// Accompagnement (planche « coach », assets/sprites/coach.png) : le doigt de Joseph.
+// coach.hand / .1 (16 × 16 : index tendu vers le haut-gauche, bout en (2, 1) ; .1 appuyé avec une onde, bout en (3, 3)),
+// coach.hand.press (16 × 16 : appuyé, cercle pointillé centré en (3, 3), remplissage dessiné par le code),
+// coach.hand.pinch / .1 (24 × 16 : pouce et index rapprochés, milieu (12, 2) / écartés, bouts (3, 2) et (20, 2)),
+// coach.arrow (8 × 8, pointe à DROITE en (7, 3), à tourner), portrait.joseph.point (32 × 32 : montre du doigt en bas).
+// Ajoutés à SPRITES ici même (Object.assign), après sa définition.
+// Généré par assets/sprites/generate-coach.py — ne pas modifier à la main.
+const coach = {
+  'coach.hand': { sheet: 'coach', col: 2, row: 1 },
+  'coach.hand.1': { sheet: 'coach', col: 3, row: 1 },
+  'coach.hand.press': { sheet: 'coach', col: 4, row: 1 },
+  'coach.hand.pinch': { sheet: 'coach', col: 2, row: 0, w: 1.5, h: 1 },
+  'coach.hand.pinch.1': { sheet: 'coach', col: 4, row: 0, w: 1.5, h: 1 },
+  'coach.arrow': { sheet: 'coach', col: 5, row: 1, w: 0.5, h: 0.5 },
+  'portrait.joseph.point': { sheet: 'coach', col: 0, row: 0, w: 2, h: 2 },
+};
+Object.assign(SPRITES, coach);
+// </coach:auto>
 
 // Alias du pommier en « culture » (crop.apple.*) : étapes sans saison (été).
 Object.assign(SPRITES, {

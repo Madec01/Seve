@@ -20,6 +20,8 @@ import { swipeToClose } from './sheets.js';
 import { cropCount, season, seasonArrives } from './text.js';
 import { TEXT_SCALES } from '../storage.js';
 import { applyA11y, autoPauseDawnSupported, pauseOnSheetActive, slowSpeedSupported } from './a11y.js';
+import { guidancePicker } from './coach/carnet.js';
+import { SIGNALS } from './coach/signals.js';
 
 export function createDialogs(layer, app) {
   const stack = []; // { node, opts }
@@ -53,6 +55,7 @@ export function createDialogs(layer, app) {
       if (target && app.keyboardMode) target.focus({ preventScroll: true });
     });
     app.onDialogChange?.();
+    app.coach?.signal?.(SIGNALS.dialogOpen, { id: opts.id || null });
     return {
       node,
       close: (reason) => close(node, reason),
@@ -82,6 +85,8 @@ export function createDialogs(layer, app) {
     if (entry.opts.pauses) app.popPause(entry.opts.id || 'dialog');
     entry.opts.onClose?.(reason);
     app.onDialogChange?.();
+    app.coach?.signal?.(SIGNALS.dialogClose, { id: entry.opts.id || null });
+    if (entry.opts.id === 'resume') app.coach?.signal?.(SIGNALS.resumeClose);
   }
 
   function closeTop() {
@@ -99,7 +104,7 @@ export function createDialogs(layer, app) {
   const top = () => stack[stack.length - 1]?.opts.id || null;
 
   // Le reste de la page est inerte tant qu'une fenêtre est ouverte (ni clic, ni focus clavier).
-  const BACKGROUND = ['#hud', '#tabbar', '#sheet-layer', '#stage', '#tutorial', '#banner', '#decorbar'];
+  const BACKGROUND = ['#hud', '#tabbar', '#sheet-layer', '#stage', '#banner', '#decorbar'];
   function setBackgroundInert(on) {
     for (const sel of BACKGROUND) {
       const n = document.querySelector(sel);
@@ -336,7 +341,7 @@ export function createDialogs(layer, app) {
   function a11yWelcome() {
     let handle = null;
     const done = () => {
-      app.updateSettings({ a11yOffered: true });
+      app.updateSettings({ a11yOffered: true, guidanceAsked: true });
       handle?.close();
     };
     const node = frame({
@@ -345,7 +350,13 @@ export function createDialogs(layer, app) {
       cls: 'dialog--welcome',
       body: [
         el('p.welcome-text', 'Réglez le jeu pour jouer confortablement. Vous pourrez tout changer plus tard dans Options, rubrique Accessibilité.'),
-        el('div.options', textSizePicker(), ...a11yToggles({ welcome: true })),
+        el(
+          'div.options',
+          textSizePicker(),
+          // (Accompagnement, § 10.1) Joseph vous accompagne : Complet (défaut) · Discret · Aucun.
+          el('div.opt-block.welcome-coach', el('span.opt-label', el('b', 'Joseph vous accompagne')), guidancePicker(app, { idPrefix: 'welcome-coach', rows: true })),
+          ...a11yToggles({ welcome: true }),
+        ),
       ],
       actions: [btn('Plus tard', () => done(), '', { id: 'welcome-later' }), btn('C\'est parti', () => done(), 'btn--red', { id: 'welcome-ok', 'data-autofocus': '' })],
     });
@@ -353,7 +364,7 @@ export function createDialogs(layer, app) {
       id: 'a11y-welcome',
       onClose: (reason) => {
         // Fermée par le jeu (menu reconstruit) : elle sera reproposée ; fermée par le joueur : jamais.
-        if (reason !== 'silent' && reason !== 'replace' && !app.settings.a11yOffered) app.updateSettings({ a11yOffered: true });
+        if (reason !== 'silent' && reason !== 'replace' && !app.settings.a11yOffered) app.updateSettings({ a11yOffered: true, guidanceAsked: true });
       },
     });
     return handle;
@@ -574,6 +585,10 @@ export function createDialogs(layer, app) {
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
       el('h3.opt-section', { id: 'opt-msg' }, 'Messages'),
       app.messages?.modePicker?.() || null,
+      // (Accompagnement, § 4.7) Complet · Discret · Aucun, et le carnet de Joseph.
+      el('h3.opt-section', { id: 'opt-coach' }, 'Accompagnement'),
+      el('div.opt-block', el('span.opt-label', el('b', 'Joseph vous accompagne')), guidancePicker(app, { idPrefix: 'opt-coach', rows: true })),
+      btn([icon('info', 'sm'), 'Ouvrir le carnet de Joseph'], () => app.openCarnet?.(), 'btn--wide', { id: 'opt-carnet' }),
       el('h3.opt-section', { id: 'opt-a11y' }, 'Accessibilité'),
       textSizePicker(),
       ...a11yToggles(),

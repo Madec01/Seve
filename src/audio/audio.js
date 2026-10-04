@@ -13,12 +13,24 @@
 //                                      pentatonique qui monte, src/audio/synth.js), sur le bus des effets
 //   audio.tone(name, opts)             (lot 2) son synthétisé : 'belle' | 'gold' | 'fanfare' | 'thud' |
 //                                      'splash' | 'pop' | 'chime' | 'magic' | 'wish' | 'reveal' | 'chirp' (lot 4 : oiseau)
+//                                      | 'clatter' (V4 : cigognes) | 'legend' (V4 : réveil d'une légende)
+//   audio.setNature(scape | null)      (V4) paysage sonore de la vallée (natureScape, src/audio/soundscape.js), joué
+//                                      en synthèse sur le bus « Ambiance » (src/audio/nature.js) ; null = silence
+//   audio.setNatureListener({ y, h })  (V4) vue de la vallée : centre de l'écran (px du monde), au défilement
+//   audio.setNatureDetail(mode)        (V4) réglage « Sons de la vallée » : 'full' | 'light' | 'off'
+//   audio.setMusicScale(k)             (V4) facteur à part sur la musique (vue de la vallée : 0,6), sans toucher au duck
+//   audio.playNature(id, opts)         (V4, débogage) joue un son de la vallée tout de suite (__debug.valley4.sound)
+//   audio.natureVoices / natureStats() (V4, mesures) voix de nature en cours, état du moteur
+//
+// La couche « birds » n'est PAS multipliée ici par scape.birdsFactor : c'est main.js qui passe
+// `birds: levels.birds × scape.birdsFactor` à setAmbience (une seule multiplication).
 //
 // Avant le déverrouillage, les demandes de musique et d'ambiance sont mémorisées et appliquées
 // dès que le contexte existe ; les effets sonores sont ignorés.
 
 import { assetUrl } from '../version.js';
 import { createSynth } from './synth.js';
+import { createNature } from './nature.js';
 
 const FADE = 2; // secondes
 const DEFAULT_THROTTLE = 45; // ms entre deux lectures du même son
@@ -40,8 +52,9 @@ export function createAudio(manifest, initialSettings = {}) {
   let ctx = null;
   let master = null;
   const bus = { music: null, sfx: null, ambience: null };
-  let settings = { musicVolume: 0.6, sfxVolume: 0.8, ambienceVolume: 0.6, muted: false, ...initialSettings };
+  let settings = { musicVolume: 0.6, sfxVolume: 0.8, ambienceVolume: 0.6, muted: false, natureSound: 'full', ...initialSettings };
   let duck = 1; // atténuation de la musique (menus de pause)
+  let musicScale = 1; // (V4) facteur à part : la musique baisse dans la vue de la vallée
 
   const raw = new Map(); // url → Promise<ArrayBuffer>
   const buffers = new Map(); // clé (1er chemin) → AudioBuffer
@@ -126,13 +139,21 @@ export function createAudio(manifest, initialSettings = {}) {
       else node.gain.setTargetAtTime(v, t, 0.08);
     };
     set(master, settings.muted ? 0 : 1);
-    set(bus.music, settings.musicVolume * settings.musicVolume * duck); // courbe douce (perception)
+    set(bus.music, settings.musicVolume * settings.musicVolume * duck * musicScale); // courbe douce (perception)
     set(bus.sfx, settings.sfxVolume * settings.sfxVolume);
     set(bus.ambience, settings.ambienceVolume * settings.ambienceVolume);
   }
 
   function setVolumes(next) {
     settings = { ...settings, ...next };
+    applyVolumes();
+    applyNature(); // volume « Ambiance » à 0, son coupé, ou retour : le moteur s'arrête ou repart
+  }
+
+  function setMusicScale(k) {
+    const v = Number.isFinite(k) ? Math.max(0, Math.min(1, k)) : 1;
+    if (v === musicScale) return;
+    musicScale = v;
     applyVolumes();
   }
 
@@ -174,6 +195,7 @@ export function createAudio(manifest, initialSettings = {}) {
       playMusic(k, { fade: 1 });
     }
     updateAmbience();
+    applyNature();
   }
 
   const isUnlocked = () => !!ctx;
@@ -364,6 +386,63 @@ export function createAudio(manifest, initialSettings = {}) {
     updateAmbience();
   }
 
+  // ── Paysage sonore de la vallée (V4) ─────────────────────────────────────────────
+  // Moteur créé paresseusement, seulement s'il peut s'entendre : contexte prêt, son non coupé, « Ambiance » > 0 et
+  // « Sons de la vallée » différent de « Coupés » ; sinon arrêté (fondu court) et libéré. La demande faite avant le
+  // déverrouillage est mémorisée (comme la musique). Arrière-plan : le contexte suspendu suffit, et la minuterie du
+  // moteur s'arrête d'elle-même (document.hidden).
+  let nature = null;
+  let natureScapeWanted = null;
+  let natureListener = null;
+  const natureMode = () => (settings.natureSound === 'light' || settings.natureSound === 'off' ? settings.natureSound : 'full');
+  const natureAudible = () => !!ctx && !settings.muted && settings.ambienceVolume > 0 && natureMode() !== 'off';
+
+  function ensureNature() {
+    if (!natureAudible()) return null;
+    if (!nature) {
+      nature = createNature(ctx, bus.ambience, { detail: natureMode() });
+      if (natureListener) nature.setListener(natureListener);
+    }
+    return nature;
+  }
+  function stopNature() {
+    if (nature) nature.stop();
+    nature = null;
+  }
+  function applyNature() {
+    const scape = natureScapeWanted;
+    if (!natureAudible() || !scape || !scape.on) {
+      // Sans paysage, un moteur créé pour le débogage se tait doucement (ses couches tombent), puis il est libéré.
+      if (nature && natureAudible() && !scape) nature.set(null);
+      else stopNature();
+      return;
+    }
+    const n = ensureNature();
+    n.setDetail(natureMode());
+    n.set(scape);
+  }
+
+  /** Paysage sonore à jouer (natureScape) ; null = la vallée se tait. */
+  function setNature(scape) {
+    natureScapeWanted = scape && scape.on ? scape : null;
+    applyNature();
+  }
+  function setNatureListener(l) {
+    natureListener = l ? { y: l.y, h: l.h } : null;
+    if (nature && natureListener) nature.setListener(natureListener);
+  }
+  function setNatureDetail(mode) {
+    settings = { ...settings, natureSound: mode === 'light' || mode === 'off' ? mode : 'full' };
+    applyNature();
+  }
+  /** (Débogage) Joue un son de la vallée (chant ou couche) tout de suite, hors paysage. */
+  function playNature(id, opts = {}) {
+    if (!ctx || ctx.state !== 'running') return false;
+    const n = ensureNature();
+    if (!n) return false;
+    return n.play(id, opts);
+  }
+
   // ── Animaux (cris ponctuels) ─────────────────────────────────────────────────────
   let world = { active: false, owned: {}, season: 'spring', weather: 'sunny' };
   let animalTimer = null;
@@ -422,6 +501,19 @@ export function createAudio(manifest, initialSettings = {}) {
     setWorld,
     setVolumes,
     setDuck,
+    setNature,
+    setNatureListener,
+    setNatureDetail,
+    setMusicScale,
+    playNature,
+    /** (V4, mesures) voix de nature en cours (chants) ; 0 si le moteur ne tourne pas. */
+    get natureVoices() {
+      return nature ? nature.voices : 0;
+    },
+    /** (V4, débogage) état du moteur de nature, ou null. */
+    natureStats() {
+      return nature ? { ...nature.stats(), layerCount: nature.layers } : null;
+    },
     get musicKey() {
       return music.key ?? music.wanted;
     },

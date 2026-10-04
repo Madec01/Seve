@@ -59,14 +59,14 @@ test('données : 6 lieux (19 étapes, 160 000), 10 habitants de la vallée, pois
   // Étapes 6 et 7 ; 99 signes de vie.
   assert.deepEqual(STAGES_V3.map((s) => [s.n, s.signs]), [[6, 56], [7, 76]]);
   assert.deepEqual(STAGE_SIGNS_V3, [0, 2, 6, 11, 22, 38, 56, 76]);
-  assert.equal(STAGES_ALL.length, 8);
+  assert.equal(STAGES_ALL.length, 9, '(V4) + l\'étape 8');
   assert.equal(MAX_STAGE, 5);
-  assert.equal(MAX_STAGE_ALL, 7);
+  assert.equal(MAX_STAGE_ALL, 8, '(V4) étape 8');
   assert.equal(SIGNS_ALL, 51, 'le V2 seul ne change pas');
   assert.equal(SIGNS_ALL_V3, 99);
   assert.equal(stageSigns(6, true, true), 56);
   assert.equal(stageSigns(6, true, false), 38, 'sans le V3 : étape 5 au plus');
-  assert.equal(maxStageOf({ heritage: true, places: true }), 7);
+  assert.equal(maxStageOf({ heritage: true, places: true, storks: false }), 7);
   assert.equal(maxStageOf({ heritage: true, places: false }), 5);
   assert.deepEqual(STORIES_V3.map((s) => s.id), ['hill', 'helene', 'brook3', 'combe3', 'poppies3', 'millpond3', 'bocage3', 'oldOrchard3']);
   assert.ok(STORIES_V3.every((s) => s.lines.length === 3));
@@ -76,8 +76,8 @@ test('données : 6 lieux (19 étapes, 160 000), 10 habitants de la vallée, pois
   assert.equal(ALL_VARIETIES.at(-1).id, 'reinetteGrise');
   assert.deepEqual(ALL_SPECIES.slice(0, 12).map((s) => s.id), SPECIES.map((s) => s.id));
   assert.deepEqual(ALL_SPECIES.slice(16).map((s) => s.id), VALLEY_SPECIES.map((s) => s.id));
-  assert.equal(VALLEY_VERSION, 3);
-  assert.deepEqual(VALLEY_PARTS, ['seeds', 'wildlife', 'heritage', 'places']);
+  assert.equal(VALLEY_VERSION, 4);
+  assert.deepEqual(VALLEY_PARTS, ['seeds', 'wildlife', 'heritage', 'places', 'storks'], '(V4) + storks');
 });
 
 test('activation : partie places (absente = vraie) ; { places: false } = le V1 + V2 (aucun flux valley3, aucun champ du V3 dans les requêtes) ; { heritage: false } coupe aussi le V3', () => {
@@ -105,7 +105,7 @@ test('activation : partie places (absente = vraie) ; { places: false } = le V1 +
   assert.equal(A(off).openValleyView().reason, 'Vue de la vallée désactivée.');
   assert.equal(A(off).triggerValley('view').ok, false);
   const v1 = startedCareer({ valley: { heritage: false } }, 3);
-  assert.deepEqual(v1.state.career.valley.parts, { seeds: true, wildlife: true, heritage: false, places: false });
+  assert.deepEqual(v1.state.career.valley.parts, { seeds: true, wildlife: true, heritage: false, places: false, storks: false });
   assert.equal(v1.state.rng.valley3, undefined);
 });
 
@@ -153,8 +153,9 @@ test('étapes 6 et 7 : paliers 56 et 76 ET conditions de lieux (Ru des Saules �
   assert.equal(A(g).readChapter(7).chapter.title, 'La vallée vivante');
   const q = Q(g).valley();
   assert.equal(q.stage.n, 7);
-  assert.equal(q.stage.next, null);
-  assert.equal(q.chapters.length, 8);
+  // (V4) Après l'étape 7 vient l'étape 8 « Les cigognes » (sans palier de signes).
+  assert.deepEqual([q.stage.next.n, q.stage.next.signs], [8, null]);
+  assert.equal(q.chapters.length, 9);
   assert.ok(q.stage.signs >= 76);
   // Sauvegarde valide et rechargée.
   const saved = g.serialize();
@@ -229,5 +230,5 @@ test('progression : 2 pages d\'album (carnet d\'Hélène 10, lieux 6), 8 succès
   const found = P.checkAlbum(p, ctx);
   assert.ok(found.cases.includes('places.poppies'));
   assert.ok(found.cases.includes('valleyWild.kingfisher'));
-  assert.equal(P.careerAchievementList(p, ctx).length, 38);
+  assert.equal(P.careerAchievementList(p, ctx).length, 47);
 });

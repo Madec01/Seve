@@ -4,7 +4,8 @@
 // sans remplacer » en carrière (F1 : prime à la main, « vous attend », réserve de graines).
 //
 // createCozy(app) → app.cozy = {
-//   onEvent(ev, game)      main.js (onGameEvent) : messages, sons, récompenses (écus, lanternes, histoires), conseils
+//   onEvent(ev, game)      main.js (onGameEvent) : messages, sons, récompenses (écus, lanternes, histoires)
+//                          (les conseils « première fois » sont des leçons de Joseph : src/ui/coach/lessons/lots.js)
 //   frame()                à chaque image : feuille ouverte « vivante », barre du mode fête
 //   reset(game|null)       nouvelle partie / retour au menu (quitte le mode fête, porte-lanternes du niveau)
 //   openFete(), enterFeteMode(), leaveFeteMode(), openWinter(), openStory(), openLanterns(), openSeedFair()
@@ -31,30 +32,14 @@
 import { el, fmt, plural } from './dom.js';
 import { icon, spriteAny, hasSprite, sprite, cropIcon, productIcon } from './icons.js';
 import { cropName, season } from './text.js';
-import { HINTS } from './hints.js';
+import { SIGNALS } from './coach/signals.js';
 import { v3 } from './v3.js';
 
-// ── Textes par défaut (remplacés par COZY_HINTS du cœur s'ils existent) ───────────
-const DEFAULT_HINTS = {
-  'cozy.album': { title: 'L\'album de la ferme', text: 'Une case de l\'album ! Chaque chose vécue à la ferme a sa page : Menu → L\'album.' },
-  'cozy.fete': { title: 'Jour de fête', text: 'Demain, c\'est jour de fête : un petit jeu au doigt, sans chrono. Ce que vous ne faites pas, le village le fera.' },
-  'cozy.winter': { title: 'L\'hiver vivant', text: 'Ramassez les trouvailles en lisière, remplissez la mangeoire, et passez chez Joseph le soir.' },
-  'cozy.lanterns': { title: 'Les lanternes', text: 'Joseph allume des lanternes pour votre année : une au moins par critère. L\'an prochain, on peut toujours faire mieux.' },
-  'cozy.helpers': { title: 'Vos récoltes vous attendent', text: 'L\'équipe ne les cueille qu\'après 3 à 4 jours. À la main, elles valent 25 % de plus !' },
-  'cozy.seedFair': { title: 'La foire aux graines', text: 'Des sachets à −25 % pour le printemps : vos semis les prendront d\'abord, sans payer.' },
-};
-const HINT_TITLES = Object.fromEntries(Object.entries(DEFAULT_HINTS).map(([k, v]) => [k, v.title]));
-for (const [id, h] of Object.entries(DEFAULT_HINTS)) if (!HINTS[id]) HINTS[id] = { ...h, where: 'game', who: 'joseph' };
-
-/** Données du lot (noms des oiseaux, trouvailles, histoires, conseils), chargées sans casser le jeu si elles manquent. */
+/** Données du lot (noms des oiseaux, trouvailles, histoires), chargées sans casser le jeu si elles manquent. */
 const DATA = { cozy: null, album: null };
 async function loadData() {
   try {
     DATA.cozy = await import('../data/cozy.js');
-    for (const [id, t] of Object.entries(DATA.cozy.COZY_HINTS || {})) {
-      const text = typeof t === 'string' ? t : t?.text;
-      if (text) HINTS[id] = { ...(HINTS[id] || {}), title: HINT_TITLES[id] || HINTS[id]?.title || 'Conseil', text, where: 'game', who: 'joseph' };
-    }
   } catch {
     /* données du lot 4 absentes : textes par défaut */
   }
@@ -134,7 +119,6 @@ export function createCozy(app) {
   let feteToast = null; // annonce de la fête du jour (retirée quand on y entre)
   const sel = { feteId: null, soup: [], stand: [], baskets: [[], [], []], basket: 0 };
   const hand = { n: 0, bonus: 0, day: '' };
-  let lastRipeHint = '';
   let badgeAt = 0;
 
   // ── Accès protégés ──────────────────────────────────────────────────────────────
@@ -189,7 +173,6 @@ export function createCozy(app) {
     return v;
   }
   const morning = (text) => text && app.todo?.morningNote?.(text);
-  const hint = (id, target = null) => app.hints?.maybe?.(id, target);
   const tone = (name, opts) => app.audio.tone?.(name, opts);
   const reduced = () => !!app.reducedMotion?.();
 
@@ -342,7 +325,6 @@ export function createCozy(app) {
     if (!enabled()) return false;
     app.toasts.hide?.(feteToast);
     const f = q('fete');
-    if (f?.engine === 'foire') hint('cozy.seedFair', null);
     return openLive('cz-fete', { title: f?.name || 'Les fêtes', icon: feteIcon(f, 'sprite--md'), build: feteContent, sig: feteSig });
   }
 
@@ -426,11 +408,12 @@ export function createCozy(app) {
     feteMode = true;
     app.sheets.close('silent');
     app.input?.cancel?.();
-    app.hints?.clear?.();
     app.toasts.hide?.(feteToast);
     app.pushPause('fete');
     document.body.classList.add('in-fete');
     app.scene?.setFeteMode?.(true);
+    // (Accompagnement) Mode fête : seules les leçons de la fête (fete.chasse) peuvent s'afficher.
+    app.coach?.signal?.(SIGNALS.feteMode, { on: true });
     paintBar();
     app.audio.play('open', { volume: 0.6 });
     app.onDecorChange?.(true); // la ligne « À faire » et les marges de la scène se recalculent
@@ -445,6 +428,7 @@ export function createCozy(app) {
     feteMode = false;
     document.body.classList.remove('in-fete');
     app.scene?.setFeteMode?.(false);
+    app.coach?.signal?.(SIGNALS.feteMode, { on: false });
     app.popPause('fete');
     app.todo?.ring?.([]);
     if (!silent) app.audio.play('close', { volume: 0.6 });
@@ -906,7 +890,6 @@ export function createCozy(app) {
 
   function openWinter() {
     if (!enabled() || !q('winter')) return false;
-    hint('cozy.winter', null);
     return openLive('cz-winter', { title: 'L\'hiver à la ferme', icon: czIcon(['icon.winter'], 'sprite--md', '❄'), build: winterContent, sig: () => JSON.stringify(q('winter')) });
   }
 
@@ -1062,7 +1045,8 @@ export function createCozy(app) {
       body: () => lanternBody(L.ev, L.rec, { bankrupt }),
       onShow: () => {
         tone('chime', { volume: 0.6 });
-        hint('cozy.lanterns', null);
+        // (Accompagnement) La page des lanternes est une page d'une fenêtre : la leçon est demandée ici.
+        app.coach?.request?.('cozy.lanterns', { target: { ui: '#cz-lanterns', label: 'les lanternes de l\'année' } });
       },
     };
   }
@@ -1382,15 +1366,12 @@ export function createCozy(app) {
       case 'feteSoon':
         morning(ev.text || `Demain, ${lower(ev.name || 'une fête')} !`);
         app.toasts.banner?.({ kind: 'season', icon: SEASON_OF(g), title: ev.name || 'Demain, jour de fête', text: ev.text || 'Un petit jeu au doigt, sans chrono.', duration: 4600 });
-        hint('cozy.fete', null);
         break;
       case 'feteStarted': {
         const f = ev.fete || q('fete', g);
         resetSel(f);
         morning(`Aujourd'hui : ${lower(f?.name || 'jour de fête')} !`);
         feteToast = app.toasts.show({ prio: 'info', kind: 'info', key: 'cz-fete', sprite: feteIcon(f, 'sprite--sm'), title: f?.name || 'Jour de fête', text: ev.text || f?.text || 'Venez participer !', actionLabel: 'Voir', onClick: () => openFete(), duration: 6000 });
-        if (f?.engine === 'foire') hint('cozy.seedFair', null);
-        else hint('cozy.fete', null);
         break;
       }
       case 'feteFound':
@@ -1441,23 +1422,11 @@ export function createCozy(app) {
       case 'planted':
         if (ev.fromBank && (!ev.by || ev.by === 'player')) app.toasts.show({ kind: 'info', key: 'cz-bank', sprite: czIcon(['icon.seedbank'], 'sprite--sm', '🥫'), text: `Semis pris dans la réserve (reste ${fmt(ev.bankLeft ?? 0)}).`, duration: 2200, log: false });
         break;
-      case 'seasonStart':
-        if (ev.seasonId === 'winter') hint('cozy.winter', null);
-        break;
       case 'dawn':
         if (career && hand.n > 0) morning(`À la main : ${plural(hand.n, 'récolte')} (+${fmt(hand.bonus)} de prime).`);
         hand.n = 0;
         hand.bonus = 0;
         hand.day = dayKey(g);
-        if (career && g.state.cozy?.parts?.helpers) {
-          const k = dayKey(g);
-          if (lastRipeHint !== k) {
-            lastRipeHint = k;
-            // Seulement quand une aide travaille vraiment sur ce terrain (un débutant sans équipe n'a rien à attendre).
-            const waiting = (safe(() => g.query.plots(), []) || []).some((p) => p.action === 'harvest' && p.wait && (Number.isFinite(p.wait.machineIn) || Number.isFinite(p.wait.staffIn)));
-            if (waiting) hint('cozy.helpers', null);
-          }
-        }
         break;
       default:
         break;
@@ -1491,7 +1460,6 @@ export function createCozy(app) {
     hand.bonus = 0;
     hand.day = '';
     storyShown = null;
-    lastRipeHint = '';
     if (!g || lanternsEv?.game !== g) lanternsEv = null;
     requestAnimationFrame(() => applyRack(g));
   }

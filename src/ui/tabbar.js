@@ -51,6 +51,7 @@ export function createTabbar(root, app) {
           onclick: () => {
             app.vibrate?.(8);
             app.openTab(t.id, { fromUser: true });
+            app.coach?.signal?.('tab', { id: t.id });
           },
         },
         el('span.tabbar-ico', ico, badge, lock),

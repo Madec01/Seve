@@ -36,6 +36,10 @@
 //                                                        revenu, argent en caisse, dépenses du V3, années des étapes de lieux, des
 //                                                        étapes 6 et 7, des habitants de la vallée et des terres (docs/VALLEE.md
 //                                                        § 17.12 ; robots : PLACES_STYLES, me.placesRnd) ; --valley …,places
+//   node tools/simulate-career.js --compare-valley4 --jobs 4   (Vallée V4) V1 + V2 + V3 → + V4 (même graine), 24 ans par
+//                                                        défaut, contrôle d'empreinte (argent de chaque jour identique),
+//                                                        calendrier des légendes, cigognes, visiteurs, épilogue (docs/VALLEE.md
+//                                                        § 18.12 ; robots : STORKS_STYLES, me.storksRnd) ; --valley …,storks
 //   node tools/simulate-career.js --compare-valley       (Vallée vivante) sans → avec : revenu, rangs, Domaine, dépenses,
 //                                                        nouveautés par saison, collection, gestes, handsOff, automator
 //                                                        (docs/VALLEE.md § 12.7 ; robots : VALLEY_STYLES, me.valleyRnd)
@@ -85,6 +89,7 @@ import { COZY_STYLES, HUMAN_PROFILES, parseCozy, parseVariety, sowRare, varietyC
 import { ALL_VARIETIES_BY_ID, NATURE_ITEMS_BY_ID, SPECIES_BY_ID } from '../src/data/career/valley.js';
 import { SEED_LIBRARY } from '../src/data/career/heritage.js';
 import { PLACES, VALLEY_SPECIES_BY_ID, WILD_RULES } from '../src/data/career/places.js';
+import { LEGENDS, VISITORS } from '../src/data/career/storks.js';
 
 const args = process.argv.slice(2);
 function arg(name, fallback) {
@@ -103,7 +108,8 @@ export function parseValley(value) {
   if (['on', 'true', '1', 'oui'].includes(v)) return true;
   const parts = v.split(',');
   // (V2) « seeds,wildlife » : le V1 seul ; « seeds,wildlife,heritage » : le V1 + V2 ; (V3) « …,places » : tout.
-  return { seeds: parts.includes('seeds'), wildlife: parts.includes('wildlife'), heritage: parts.includes('heritage'), places: parts.includes('places') };
+  // (V4) « …,storks » : le V4 (sinon le V3 exactement).
+  return { seeds: parts.includes('seeds'), wildlife: parts.includes('wildlife'), heritage: parts.includes('heritage'), places: parts.includes('places'), storks: parts.includes('storks') };
 }
 export const STRATEGIES = ['casual', 'novice', 'optimal', 'idle', 'automator', 'handsOff'];
 /**
@@ -1424,11 +1430,83 @@ function placesMorning(game, me, P, noGestures) {
   return taps;
 }
 
+// ── (Vallée V4) Les cigognes : légendes, visiteurs rares, épilogue, cartes ─────────────────
+// docs/VALLEE.md § 18.12.3. Par l'API publique et un tirage propre (me.storksRnd) : les décisions du V1 au V3 tirent les
+// mêmes nombres et appellent les mêmes actions dans le même ordre avec ou sans le V4 (le V4 passe après eux dans la
+// journée). Gestes : voir un visiteur 1 (+ 1 pour ouvrir la vue s'il y est), semer 1, récolter 1 ; récits, épilogue, carte : 0.
+// Réglé (§ 18.12) : le tranquille ne regarde ses cloches qu'une saison sur quatre (« quand on veut » ; chaque saison, il
+// ressemait 4 légendes et ajoutait 1,1 geste par jour) et envoie un sachet une saison sur deux (les cartes s'étalent).
+// automator et les fermes laissées seules : rien (aucun geste) — l'automate ne touche jamais rien.
+export const STORKS_STYLES = {
+  casual: { see: 0.7, harvest: 0.7, sowLook: 0.15, sowEvery: 'season', epilogue: 1, postcard: 0.5, budget: 4 },
+  novice: { see: 0.21, harvest: 0.21, sowLook: 0.045, sowEvery: 'season', epilogue: 0.3, postcard: 0.15, budget: 2 },
+  optimal: { see: 1, harvest: 1, sowLook: 1, sowEvery: 'day', epilogue: 1, postcard: 1, budget: 6 },
+};
+STORKS_STYLES.idle = STORKS_STYLES.casual;
+STORKS_STYLES.handsOff = STORKS_STYLES.casual;
+
+function storksRng(me) {
+  if (!me.storksRnd) me.storksRnd = humanRng((me.seedBase ?? 1) ^ 0x165667b1);
+  return me.storksRnd;
+}
+
+/** Gestes et décisions du V4 (après ceux du V1, du V2 et du V3). → gestes. */
+function storksMorning(game, me, P, noGestures) {
+  const SS = STORKS_STYLES[me.strategy];
+  const v = game.state.career.valley;
+  if (!SS || noGestures || !v?.started || v.parts.storks === false || v.parts.places === false || v.parts.heritage === false) return 0;
+  const rnd = storksRng(me);
+  const A = game.actions.career;
+  let taps = 0;
+  const tap = (n) => {
+    if (taps + n > SS.budget + 1e-9) return false;
+    taps += n;
+    return true;
+  };
+  const cal = game.query.calendar();
+  // Un visiteur qui attend (le clocher, la prairie… ou une haie de la ferme) : on va le voir.
+  for (const x of VISITORS) {
+    if (v.visitors?.[x.id]?.state !== 'visible') continue;
+    if (rnd() >= SS.see) continue;
+    const cost = x.where === 'view' ? 2 : 1;
+    if (!tap(cost)) continue;
+    if (x.where === 'view') A.openValleyView();
+    if (A.observeVisitor(x.id).ok) me.storksStats.seen++;
+  }
+  // Légendes : récolter une légende mûre ; un regard par saison (appliqué : chaque jour) pour semer les cloches libres.
+  for (const x of LEGENDS) {
+    if (!v.cloches?.[x.id]?.ripe) continue;
+    if (rnd() < SS.harvest && tap(1) && A.harvestLegend(x.id).ok) me.storksStats.harvests++;
+  }
+  const key = SS.sowEvery === 'day' ? `${game.state.time.year}/${cal.day}` : `${game.state.time.year}/${cal.seasonId}`;
+  if (me.storksSowKey !== key) {
+    me.storksSowKey = key;
+    me.storksSowLook = rnd() < SS.sowLook;
+  }
+  if (me.storksSowLook) {
+    for (const x of LEGENDS) {
+      if (!v.legends?.[x.id] || v.cloches?.[x.id] || (v.library?.level || 0) < 1) continue;
+      if (tap(1) && A.sowLegend(x.id).ok) me.storksStats.sown++;
+    }
+  }
+  // L'épilogue (lu, 0 geste) ; une carte : un sachet par saison quand aucun n'est en route (0 geste, décision).
+  if (v.epilogue?.availableAt && !v.epilogue.readAt && (SS.epilogue >= 1 || rnd() < SS.epilogue)) A.readEpilogue();
+  if (v.epilogue?.readAt) {
+    const pkey = `${game.state.time.year}/${cal.seasonId}`;
+    if (me.storksPostKey !== pkey) {
+      me.storksPostKey = pkey;
+      if (!v.postcards?.sent && (SS.postcard >= 1 || rnd() < SS.postcard)) A.sendPostcardSeeds();
+    }
+    for (const g of v.postcards?.got || []) if (!g.read) A.readPostcard(g.id);
+  }
+  return taps;
+}
+
 // ── Une journée ───────────────────────────────────────────────────────────────────────────
 function playDay(game, me) {
   const P = me.profile;
   const year = game.state.time.year;
-  const t = { left: 0, spent: 0, valley: 0 };
+  const t = { left: 0, spent: 0, valley: 0, v4: 0 };
   const spend = (n) => {
     if (t.left < n - 1e-9) return false;
     t.left -= n;
@@ -1466,6 +1544,12 @@ function playDay(game, me) {
   if (game.state.career.valley) t.valley += valleyMorning(game, me, P, noGestures);
   // (Vallée V3) La vue de la vallée, les chantiers, les terres sauvages (tirage propre, budget de gestes à part).
   if (game.state.career.valley) t.valley += placesMorning(game, me, P, noGestures);
+  // (Vallée V4) Légendes, visiteurs rares, épilogue, cartes (tirage propre, budget de gestes à part).
+  if (game.state.career.valley) {
+    const v4 = storksMorning(game, me, P, noGestures);
+    t.valley += v4;
+    t.v4 = v4;
+  }
   const ctx = noGestures ? null : fieldWork(game, me, spend);
   if (!noGestures) collectShelters(game, me, spend);
   // (Vallée vivante) Graines anciennes semées à la main avant « semer partout ».
@@ -1487,7 +1571,7 @@ export async function loadStaffHelper() {
   return staffHelperModule;
 }
 
-export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true, cozy = true, valley = true, keepGame = false } = {}) {
+export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, onDay = null, helper = null, surprises = true, variety = true, cozy = true, valley = true, keepGame = false, trackMoney = false } = {}) {
   const profile = CAREER_PROFILES[strategy];
   if (!profile) throw new Error(`Stratégie inconnue : ${strategy}`);
   const outStrategy = strategy;
@@ -1504,6 +1588,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     springPlan: PLANS[profile.plan]?.spring ? [PLANS[profile.plan].spring] : [],
     valleyStats: { placed: 0 },
     placesStats: { works: 0, wilds: 0, trees: 0 },
+    storksStats: { seen: 0, harvests: 0, sown: 0 },
   };
   game.actions.career.setStorageMode('low');
   const out = { seed, strategy: outStrategy, years: [], bankrupt: false, loans: 0, hardships: 0, rescues: 0, quests: 0, contests: 0, domaineYear: null, overdraftStreakMax: 0 };
@@ -1543,6 +1628,19 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
   for (const type of ['valleyStarted', 'jarOpened', 'heirloomFixed', 'speciesHint', 'speciesInstalled', 'valleyStage', 'jayGift', 'fairHeirloomBought', 'seedLibraryBuilt', 'trocOffered', 'seedSwapped', 'crossFound']) game.on(type, novelty);
   // (V3) + vue ouverte, chantier, étape de lieu, première pêche au ruisseau de l'année, champignons, terres sauvages.
   for (const type of ['valleyViewOpened', 'worksStarted', 'placeRecovered', 'mushroomsGrew', 'wildLandGiven', 'wildLandGrown']) game.on(type, novelty);
+  // (V4) + légende réveillée, première récolte d'une légende, visiteur venu et vu, cigognes, cigogneaux, carte, épilogue,
+  // étape 8 ; à part : les saisons avec une nouveauté du V4.
+  out.valley.v4Seasons = {};
+  const novelty4 = () => {
+    const key = `${game.state.time.year}/${game.state.time.seasonIndex}`;
+    out.valley.v4Seasons[key] = (out.valley.v4Seasons[key] || 0) + 1;
+    novelty();
+  };
+  for (const type of ['legendAwoken', 'visitorVisible', 'visitorSeen', 'storksArrived', 'storkChicks', 'postcardArrived', 'epilogueAvailable']) game.on(type, novelty4);
+  game.on('legendHarvested', (e) => e.first && novelty4());
+  game.on('valleyStage', (e) => e.n === 8 && novelty4());
+  // (V4) Empreinte économique : l'argent de chaque jour (comparaison avec et sans le V4).
+  if (trackMoney) out.moneyDays = [];
   game.on('riverFished', () => {
     if (me.riverYear !== game.state.time.year) {
       me.riverYear = game.state.time.year;
@@ -1654,9 +1752,11 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
     if (assumeObjectives) {
       for (const r of RANKS) for (const o of r.objectives) if (ASSUMED_TYPES.includes(o.type)) game.state.career.objectives[o.id] = true;
     }
+    y.v4Taps += t.v4 || 0;
     const before = game.state.time.year;
     if (onDay) onDay(game, me);
     game.update(DAY_SECONDS / game.state.speed);
+    if (trackMoney) out.moneyDays.push(game.state.money);
     y.minMoney = Math.min(y.minMoney, game.state.money);
     if (game.state.time.year !== before || game.state.status !== 'playing') {
       const rep = current || game.query.career.yearReport();
@@ -1711,7 +1811,7 @@ export function playCareer({ seed = 1, strategy = 'casual', years = 10, difficul
 }
 
 function newYearAcc(game) {
-  return { minMoney: game.state.money, taps: 0, valleyTaps: 0, days: 0, harvestsBy: {}, sownBy: {}, collectedBy: {}, animalLost: 0, quests: 0, contest: 0, events: 0, recoveries: [], hardshipSince: null };
+  return { minMoney: game.state.money, taps: 0, valleyTaps: 0, v4Taps: 0, days: 0, harvestsBy: {}, sownBy: {}, collectedBy: {}, animalLost: 0, quests: 0, contest: 0, events: 0, recoveries: [], hardshipSince: null };
 }
 
 /** (Vallée vivante) État de la Vallée en fin d'année (null sans la Vallée). */
@@ -1745,6 +1845,26 @@ function valleyYearOf(game, y) {
     // (V3) étapes des lieux (somme et par lieu), habitants de la vallée, terres sauvages (confiées, reprises), pêches,
     // dépenses du V3 (chantiers, terres, jeunes plants).
     ...v3YearOf(game, v),
+    // (V4) légendes, visiteurs, cigognes, épilogue, cartes, gestes du V4 par jour.
+    ...v4YearOf(game, v, y),
+  };
+}
+
+/** (Vallée V4) Ce qui est venu à la fin de l'année ({} sans le V4). */
+function v4YearOf(game, v, y) {
+  if (v.parts.storks === false || v.parts.places === false || v.parts.heritage === false || !v.stork) return {};
+  return {
+    v4: true,
+    legends: Object.fromEntries(LEGENDS.map((x) => [x.id, !!v.legends?.[x.id]])),
+    legendsHarvested: LEGENDS.filter((x) => v.legends?.[x.id]?.firstAt).length,
+    visitors: Object.fromEntries(VISITORS.map((x) => [x.id, v.visitors?.[x.id]?.state === 'seen'])),
+    visitorsSeen: VISITORS.filter((x) => v.visitors?.[x.id]?.state === 'seen').length,
+    steeple: !!v.stork.steepleAt,
+    nest: !!v.stork.farmSince,
+    epilogue: !!v.epilogue?.availableAt,
+    epilogueRead: !!v.epilogue?.readAt,
+    postcards: (v.postcards?.got || []).length,
+    v4TapsPerDay: y.v4Taps / Math.max(1, y.days),
   };
 }
 
@@ -1787,11 +1907,11 @@ function median(xs) {
 
 const pct = (n, d) => (d ? Math.round((100 * n) / d) : 0);
 
-export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true, variety = true, cozy = true, valley = true } = {}) {
+export function simulateCareer({ strategies = STRATEGIES, runs = 20, years = 10, difficulty = 'detente', seasonLength = 7, assumeObjectives = false, firstSeed = 1, helper = null, surprises = true, variety = true, cozy = true, valley = true, trackMoney = false } = {}) {
   const table = {};
   for (const strategy of strategies) {
     const careers = [];
-    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises, variety, cozy, valley }));
+    for (let k = 0; k < runs; k++) careers.push(playCareer({ seed: firstSeed + k, strategy, years, difficulty, seasonLength, assumeObjectives, helper, surprises, variety, cozy, valley, trackMoney }));
     table[strategy] = careerTable(careers, { runs, years, seasonLength });
   }
   return table;
@@ -1895,6 +2015,9 @@ function careerTable(careers, { runs, years, seasonLength }) {
               v3SpentMean: Math.round(at.reduce((s2, x) => s2 + (x.valley.v3Spent || 0), 0) / at.length),
               v3SpentMedian: Math.round(median(at.map((x) => x.valley.v3Spent || 0))),
               moneyMedian: Math.round(median(at.map((x) => x.money))),
+              // (V4) gestes du V4 par jour (médiane), visiteurs vus, légendes récoltées.
+              v4Taps: Math.round(median(at.map((x) => x.valley.v4TapsPerDay || 0)) * 100) / 100,
+              visitorsSeen: median(at.map((x) => x.valley.visitorsSeen || 0)),
             }
           : null,
       });
@@ -1931,6 +2054,8 @@ function careerTable(careers, { runs, years, seasonLength }) {
       rank3By5: pct(careers.filter((c) => (c.years.find((x) => x.year === 5)?.rank || 0) >= 3).length, careers.length),
       contestIncome: Math.round(careers.reduce((s2, c) => s2 + c.years.reduce((a, y) => a + (y.contest || 0), 0), 0) / careers.length),
       valley: valleySummary(careers, years),
+      // (V4) Empreinte économique : l'argent de chaque jour de chaque carrière (seulement avec trackMoney).
+      ...(careers[0]?.moneyDays ? { moneyPrints: careers.map((c) => c.moneyDays) } : {}),
       sown: careers.reduce((acc, c) => {
         for (const [id, n] of Object.entries(c.valley?.sownCrops || {})) acc[id] = (acc[id] || 0) + n;
         return acc;
@@ -2002,6 +2127,53 @@ function valleySummary(careers, years) {
           noveltyAtLeast80of1018: pct(careers.map((c) => shareOf(c, 10, years)).filter((x) => x >= 0.8).length, careers.length),
         }
       : null,
+    v4: careers[0].years.some((y) => y.valley?.v4) ? v4Summary(careers, years, firstYear) : null,
+  };
+}
+
+/** (Vallée V4) Année (médiane) de chaque légende, des cigognes, de l'épilogue, de chaque visiteur ; parts ; nouveautés. */
+function v4Summary(careers, years, firstYear) {
+  const share = (test) => pct(careers.filter((c) => c.years.some((y) => y.valley?.v4 && test(y.valley, y.year))).length, careers.length);
+  const atYear = (yv, test) => pct(careers.filter((c) => {
+    const y = c.years.find((r) => r.year === yv);
+    return y?.valley?.v4 && test(y.valley);
+  }).length, careers.length);
+  // Saisons des ans 19 à N avec au moins une nouveauté (du V4 seul ; de toute la Vallée).
+  const seasons = (c, src, from = 19) => {
+    let n = 0;
+    let total = 0;
+    for (let yv = from; yv <= Math.min(years, c.years.length); yv++) {
+      for (let si = 0; si < 4; si++) {
+        total++;
+        if ((src(c)[`${yv}/${si}`] || 0) > 0) n++;
+      }
+    }
+    return total ? n / total : null;
+  };
+  const late4 = careers.map((c) => seasons(c, (x) => x.valley.v4Seasons || {})).filter((x) => x !== null);
+  const lateAll = careers.map((c) => seasons(c, (x) => x.valley.noveltySeasons || {})).filter((x) => x !== null);
+  return {
+    legendYears: Object.fromEntries(LEGENDS.map((x) => [x.id, median(careers.map((c) => firstYear(c, (v) => v.legends?.[x.id])))])),
+    legendShares: Object.fromEntries(LEGENDS.map((x) => [x.id, share((v) => v.legends?.[x.id])])),
+    visitorYears: Object.fromEntries(VISITORS.map((x) => [x.id, median(careers.map((c) => firstYear(c, (v) => v.visitors?.[x.id])))])),
+    steeple: median(careers.map((c) => firstYear(c, (v) => v.steeple))),
+    stage8: median(careers.map((c) => firstYear(c, (v) => v.stage >= 8))),
+    stage8At20: atYear(20, (v) => v.stage >= 8),
+    nest: median(careers.map((c) => firstYear(c, (v) => v.nest))),
+    epilogue: median(careers.map((c) => firstYear(c, (v) => v.epilogue))),
+    epilogueAt20: atYear(20, (v) => v.epilogue),
+    epilogueAt22: atYear(22, (v) => v.epilogue),
+    epilogueShare: share((v) => v.epilogue),
+    visitors18: median(careers.map((c) => c.years.find((y) => y.year === 18)?.valley?.visitorsSeen ?? 0)),
+    visitors20: median(careers.map((c) => c.years.find((y) => y.year === 20)?.valley?.visitorsSeen ?? 0)),
+    visitors22: median(careers.map((c) => c.years.find((y) => y.year === 22)?.valley?.visitorsSeen ?? 0)),
+    all6: median(careers.map((c) => firstYear(c, (v) => (v.visitorsSeen || 0) >= 6))),
+    legends4Harvested: median(careers.map((c) => firstYear(c, (v) => (v.legendsHarvested || 0) >= 4))),
+    postcards: median(careers.map((c) => c.years.at(-1)?.valley?.postcards ?? 0)),
+    lateV4: late4.length ? Math.round(100 * median(late4)) : null,
+    lateV4At60: late4.length ? pct(late4.filter((x) => x > 0).length, late4.length) : null,
+    lateAll: lateAll.length ? Math.round(100 * median(lateAll)) : null,
+    lateSeasonsV4: late4.length ? pct(careers.reduce((a, c) => a + (seasons(c, (x) => x.valley.v4Seasons || {}) ?? 0) * Math.max(0, Math.min(years, c.years.length) - 18) * 4, 0), careers.reduce((a, c) => a + Math.max(0, Math.min(years, c.years.length) - 18) * 4, 0)) : null,
   };
 }
 
@@ -2318,6 +2490,66 @@ export function printCompareValley3(none, off, on, years, title) {
   }
 }
 
+/**
+ * (Vallée V4) Empreinte économique : l'argent de chaque jour de chaque carrière, V3 → V4 (mêmes graines). → { days, diff,
+ * maxRel } : jours comparés, jours différents, écart relatif le plus grand (en %).
+ */
+export function moneyFingerprint(off, on) {
+  let days = 0;
+  let diff = 0;
+  let maxRel = 0;
+  const a = off.moneyPrints || [];
+  const b = on.moneyPrints || [];
+  for (let k = 0; k < Math.min(a.length, b.length); k++) {
+    const n = Math.max(a[k].length, b[k].length);
+    for (let d = 0; d < n; d++) {
+      days++;
+      const x = a[k][d];
+      const y = b[k][d];
+      if (x === y) continue;
+      diff++;
+      if (Number.isFinite(x) && Number.isFinite(y)) maxRel = Math.max(maxRel, (100 * Math.abs(y - x)) / Math.max(1, Math.abs(x)));
+      else maxRel = Infinity;
+    }
+  }
+  return { days, diff, maxRel };
+}
+
+export function printCompareValley4(off, on, years, title) {
+  console.log(`\n${title}`);
+  const sumIncome = (t, from = 1, to = years) => t.rows.filter((r) => r.year >= from && r.year <= to).reduce((s2, r) => s2 + r.income, 0);
+  const sign = (d) => `${d >= 0 ? '+' : ''}${d.toFixed(1)} %`;
+  const delta = (a, b) => (a ? sign((100 * (b - a)) / Math.abs(a)) : '—');
+  const yr = (x) => (Number.isFinite(x) ? `an ${x}` : 'jamais');
+  const row = (t, yv) => t.rows.find((r) => r.year === yv);
+  const late = (t, k, from = 13, to = years) => {
+    const rows = t.rows.filter((r) => r.year >= from && r.year <= to && r.valley);
+    return rows.length ? rows.reduce((s2, r) => s2 + (r.valley[k] || 0), 0) / rows.length : 0;
+  };
+  let allSame = true;
+  for (const strategy of Object.keys(on)) {
+    const a = off[strategy];
+    const b = on[strategy];
+    const fp = moneyFingerprint(a, b);
+    if (fp.diff) allSame = false;
+    const y18 = Math.min(18, years);
+    console.log(`  ${strategy.padEnd(12)} revenu ${y18} ans ${Math.round(sumIncome(a, 1, y18))} → ${Math.round(sumIncome(b, 1, y18))} (${delta(sumIncome(a, 1, y18), sumIncome(b, 1, y18))}) · ${years} ans ${delta(sumIncome(a), sumIncome(b))} · empreinte : ${fp.days} jours, ${fp.diff} différents (écart max ${fp.maxRel.toFixed(2)} %)`);
+    const money = [14, 18, 24].filter((yv) => yv <= years).map((yv) => `an ${yv} ${row(a, yv)?.moneyMean ?? '—'} → ${row(b, yv)?.moneyMean ?? '—'}`).join(' ; ');
+    const ranks = a.rows.every((r, k) => r.rankMedian === b.rows[k]?.rankMedian) ? 'identiques' : 'DIFFÉRENTS';
+    console.log(`               argent en caisse (moy.) ${money} · rangs ${ranks} · Domaine ${a.domaineYear}→${b.domaineYear} · faillites ${a.bankrupt}→${b.bankrupt} %`);
+    console.log(`               gestes/j (ans 13-${years}) ${(late(b, 'taps') - late(a, 'taps')).toFixed(2)} de plus (V4 seul : ${late(b, 'v4Taps').toFixed(2)})`);
+    const vs = b.valley?.v4;
+    if (!vs) continue;
+    const ly = Object.entries(vs.legendYears).map(([id, x]) => `${id} ${yr(x)} (${vs.legendShares[id]} %)`).join(' · ');
+    console.log(`               légendes : ${ly} · les 4 récoltées ${yr(vs.legends4Harvested)}`);
+    console.log(`               cigognes au clocher ${yr(vs.steeple)} · étape 8 ${yr(vs.stage8)} (an 20 : ${vs.stage8At20} %) · nid ${yr(vs.nest)} · épilogue ${yr(vs.epilogue)} (an 20 : ${vs.epilogueAt20} %, an 22 : ${vs.epilogueAt22} %)`);
+    const vy = Object.entries(vs.visitorYears).map(([id, x]) => `${id} ${yr(x)}`).join(' · ');
+    console.log(`               visiteurs : ${vy} · vus (méd.) an 18 ${vs.visitors18} / an 20 ${vs.visitors20} / an 22 ${vs.visitors22} · 6 / 6 ${yr(vs.all6)} · cartes (fin) ${vs.postcards}`);
+    if (vs.lateV4 !== null) console.log(`               nouveautés ans 19-${years} : saisons avec une nouveauté du V4 ${vs.lateSeasonsV4} % (méd. par carrière ${vs.lateV4} %) · toute la Vallée ${vs.lateAll} %`);
+  }
+  console.log(`  Empreinte économique : ${allSame ? 'argent IDENTIQUE chaque jour (0,0 %)' : 'DIFFÉRENCES (voir ci-dessus)'}`);
+}
+
 /** Part de chaque culture dans les semis (points de %) : sans → avec ; écart le plus grand. */
 export function sowShareShift(offCareersSown, onCareersSown) {
   const share = (sown) => {
@@ -2369,6 +2601,21 @@ async function run() {
     valley: arg('valley', null) === null ? true : parseValley(arg('valley')),
     firstSeed: Number(arg('first-seed', 1)),
   };
+  if (arg('compare-valley4', false)) {
+    // (Vallée V4) V1 + V2 + V3 → + V4 (même graine), 24 ans par défaut ; argent de chaque jour comparé (empreinte).
+    const jobs = Number(arg('jobs', 1));
+    const o4 = { ...opts, years: Number(arg('years', 24)), strategies: arg('strategy', null) ? strategies : STRATEGIES_V3, trackMoney: true };
+    const sim = (o) => (jobs > 1 ? simulateCareerParallel({ ...o, jobs }) : Promise.resolve(simulateCareer(o)));
+    const off = await sim({ ...o4, valley: { seeds: true, wildlife: true, heritage: true, places: true, storks: false } });
+    const on = await sim({ ...o4, valley: true });
+    if (arg('json', false)) {
+      const strip = (t) => Object.fromEntries(Object.entries(t).map(([k, x]) => [k, { ...x, moneyPrints: undefined }]));
+      console.log(JSON.stringify({ off: strip(off), on: strip(on), fingerprint: Object.fromEntries(Object.keys(on).map((k) => [k, moneyFingerprint(off[k], on[k])])) }, null, 2));
+      return;
+    }
+    printCompareValley4(off, on, o4.years, `Vallée vivante (lot V4) — carrière ${o4.difficulty}, saisons de ${o4.seasonLength} jours : V1 + V2 + V3 → + V4 · ${o4.runs} carrières × ${o4.years} ans`);
+    return;
+  }
   if (arg('compare-valley3', false)) {
     // (Vallée V3) Sans la Vallée → V1 + V2 → V1 + V2 + V3 (même graine). 18 ans par défaut ; --jobs N : fils de travail.
     const jobs = Number(arg('jobs', 1));
@@ -2376,7 +2623,8 @@ async function run() {
     const sim = (o) => (jobs > 1 ? simulateCareerParallel({ ...o, jobs }) : Promise.resolve(simulateCareer(o)));
     const none = arg('no-none', false) ? null : await sim({ ...o3, valley: false });
     const off = await sim({ ...o3, valley: { seeds: true, wildlife: true, heritage: true, places: false } });
-    const on = await sim({ ...o3, valley: true });
+    // (V4) Le V3 exactement (sans les cigognes : décoratif, l'empreinte économique est la même).
+    const on = await sim({ ...o3, valley: { seeds: true, wildlife: true, heritage: true, places: true, storks: false } });
     if (arg('json', false)) {
       console.log(JSON.stringify({ none, off, on }, null, 2));
       return;

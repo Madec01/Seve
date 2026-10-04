@@ -129,7 +129,12 @@ function farmTab(ui) {
     el(
       'div.sheet-actions',
       app.messages ? cBtn(app, [icon('info', 'sm'), 'Messages'], () => app.messages.open(), { id: 'c-j-messages' }) : null,
-      app.openGuide ? cBtn(app, [icon('info', 'sm'), 'Guide de la ferme'], () => app.openGuide(), { id: 'c-j-guide' }) : null,
+      // (Accompagnement) Le guide de la ferme est fusionné dans le carnet de Joseph (Leçons · Mots de la ferme · Rappels).
+      app.coach?.openCarnet
+        ? cBtn(app, [icon('info', 'sm'), 'Le carnet de Joseph'], () => app.coach.openCarnet(), { id: 'c-j-guide' })
+        : app.openGuide
+          ? cBtn(app, [icon('info', 'sm'), 'Guide de la ferme'], () => app.openGuide(), { id: 'c-j-guide' })
+          : null,
     ),
   );
   void game;
@@ -335,6 +340,24 @@ function josephTab(ui) {
       j.nextGift ? el('p.stats-note', `À ${j.nextGift.hearts} ♥ : ${j.nextGift.text}`) : el('p.stats-note', '+1 ♥ par quête réussie, +1 ♥ quand un prêt est remboursé en entier.'),
     ),
   ];
+  // (Accompagnement) « Ses leçons » : tout ce que Joseph a montré, à relire ou à rejouer (carnet de Joseph).
+  if (app.coach?.openCarnet) {
+    const unread = (() => {
+      try {
+        return (app.coach.unread?.() || []).length;
+      } catch {
+        return 0;
+      }
+    })();
+    parts.push(
+      el(
+        'section.c-sec',
+        el('h3.stats-title', icon('info', 'sm'), 'Ses leçons'),
+        el('p.stats-note', 'Tout ce que Joseph vous a montré est noté dans son carnet, à relire quand vous voulez.'),
+        cBtn(app, ['Ouvrir le carnet de Joseph', unread ? el('span.pause-count', ` (${unread} à lire)`) : null], () => app.coach.openCarnet({ tab: 'lessons' }), { id: 'c-j-carnet', cls: 'btn--wide' }),
+      ),
+    );
+  }
   if (quest) parts.push(el('section.c-sec', el('h3.stats-title', 'Sa demande'), questCard(ui, quest)));
   else {
     const ask = askJosephBlock(ui);

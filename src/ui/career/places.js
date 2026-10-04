@@ -26,20 +26,13 @@
 
 import { el, fmt, plural } from '../dom.js';
 import { icon } from '../icons.js';
-import { HINTS } from '../hints.js';
+import { SIGNALS } from '../coach/signals.js';
 import { vIcon } from './valley.js';
 import * as PD from '../../data/career/places.js';
 
 // ── Textes ──────────────────────────────────────────────────────────────────────────
 
-const HINT_TITLES = {
-  'valley.view': 'La vue de la vallée',
-  'valley.works': 'Le chantier',
-  'valley.valleyAnimal': 'Une bête de la vallée',
-  'valley.river': 'La pêche au ruisseau',
-  'valley.wild': 'Les terres sauvages',
-};
-for (const [id, text] of Object.entries(PD.PLACES_HINTS || {})) if (!HINTS[id]) HINTS[id] = { title: HINT_TITLES[id] || 'La vallée', text, where: 'game', who: 'joseph' };
+// Les anciens conseils « première fois » (PLACES_HINTS) sont des leçons de Joseph : src/ui/coach/lessons/valley.js.
 
 const PLACE_EMOJI = { brook: '🌊', combe: '🌲', poppies: '🌺', millpond: '🪷', bocage: '🌳', oldOrchard: '🍎' };
 const WILD_EMOJI = { kingfisher: '🐦', crayfish: '🦞', otter: '🦦', heron: '🐦', blackWoodpecker: '🐦', roeDeer: '🦌', salamander: '🦎', skylark: '🐦', hoopoe: '🐦', littleOwl: '🦉' };
@@ -129,7 +122,7 @@ export function createPlaces(app) {
     return res;
   }
   const morning = (text) => text && app.todo?.morningNote?.(text);
-  const hint = (id, target = null, opts) => app.hints?.maybe?.(id, target, opts);
+  const signal = (name, data) => app.coach?.signal?.(name, data);
   const tone = (name, opts) => app.audio.tone?.(name, opts);
   const reduced = () => !!app.reducedMotion?.();
   const viewActive = () => !!app.valleyView?.active;
@@ -378,11 +371,7 @@ export function createPlaces(app) {
     tone('reveal', { volume: 0.65, delay: 0.15 });
     app.vibrate?.([12, 40, 12]);
     app.valleyView?.focusPlace?.(id);
-    setTimeout(() => hint('valley.works', viewTarget({ type: 'place', id })), 700);
   }
-
-  /** Cible d'un conseil dans la vue de la vallée (rectangle de la page). */
-  const viewTarget = (hit) => ({ rect: () => app.valleyView?.targetPageRect?.(hit) || null });
 
   // ── Liste des lieux ──────────────────────────────────────────────────────────────
   function placeRow(p, { inView = true } = {}) {
@@ -527,7 +516,6 @@ export function createPlaces(app) {
     app.vibrate?.([10, 30, 10]);
     openLive('vl-river', { title: 'La pêche au ruisseau', icon: vIcon(['icon.river', 'view.pontoon'], 'sprite--md', '🎣'), build: riverContent, sig: () => '' });
     app.valleyView?.keepVisible?.({ type: 'river' });
-    setTimeout(() => hint('valley.river', null), 500);
     return true;
   }
   function pickMushroom(id) {
@@ -631,7 +619,6 @@ export function createPlaces(app) {
     app.audio.play('plant', { volume: 0.85 });
     tone('reveal', { volume: 0.5, delay: 0.2 });
     app.vibrate?.([12, 40, 12]);
-    setTimeout(() => hint('valley.wild', null), 600);
     requestAnimationFrame(() => {
       if (!wilding) return;
       paintWildBar();
@@ -671,6 +658,8 @@ export function createPlaces(app) {
     if (app.heritage?.pairing) app.heritage.leavePair({ silent: true });
     buildWildBar();
     wilding = true;
+    // Signal avant la fermeture de la feuille : la leçon de Joseph passe au mode de visée (pas de retour en arrière).
+    signal(SIGNALS.wildPlacing, { on: true });
     app.sheets.close('silent');
     app.input?.cancel?.();
     app.hints?.clear?.();
@@ -712,6 +701,7 @@ export function createPlaces(app) {
     if (!app.valley?.placing && !app.heritage?.pairing) document.body.classList.remove('in-valley-place');
     app.scene?.setWildPlacing?.(false);
     app.scene?.restoreZoom?.({ animate: !reduced() });
+    signal(SIGNALS.wildPlacing, { on: false });
     app.popPause('valley-wild');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.onDecorChange?.(false);
@@ -850,7 +840,6 @@ export function createPlaces(app) {
         const node = app.toasts.show({ prio: 'important', kind: 'info', key: `vl3-vis-${ev.id}`, sprite: speciesIcon(ev.id, 'sprite--sm'), text: `${aWho(ev.id, ev.name)} ${waits(ev.id)} ${where} !`, actionLabel: 'Voir', onClick: () => goView({ speciesId: ev.id }), duration: 5600 });
         if (node) visToasts.set(ev.id, node);
         tone('chirp', { volume: 0.6, delay: 0.4 });
-        if (viewActive()) setTimeout(() => hint('valley.valleyAnimal', viewTarget({ type: 'viewAnimal', id: ev.id })), 800);
         break;
       }
       case 'speciesInstalled':
@@ -882,7 +871,7 @@ export function createPlaces(app) {
       let tries = 0;
       const tryOpen = () => {
         if (viewActive() || !placesOpen()) return;
-        if (!app.sheets.isOpen() && !app.dialogs.isOpen() && !app.hints?.active) goView({ first: true });
+        if (!app.sheets.isOpen() && !app.dialogs.isOpen() && !(app.coach ? app.coach.blocking : app.hints?.active)) goView({ first: true });
         else if (++tries < 20) setTimeout(tryOpen, 300);
       };
       setTimeout(tryOpen, 250);

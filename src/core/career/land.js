@@ -50,6 +50,28 @@ export function initialPlots() {
   return plots;
 }
 
+/**
+ * (Accompagnement, docs/ACCOMPAGNEMENT.md § 5.1) Option de création `starter` : 6 carottes mûres et arrosées sur les
+ * premières parcelles ouvertes du champ de départ (rangée du haut, puis le début de la suivante : le champ a 4
+ * colonnes). Déterministe (aucun tirage) ; carrière seulement ; désactivée par défaut (createCareer).
+ */
+export const STARTER_CROP = 'carrot';
+export const STARTER_PLOTS = 6;
+export function applyStarter(state, noteSown = null) {
+  const crop = getCrop(STARTER_CROP);
+  const out = [];
+  state.plots.forEach((p, i) => {
+    if (out.length >= STARTER_PLOTS || p.lot !== 'start' || !p.unlocked || p.cropId) return;
+    Object.assign(p, { cropId: crop.id, growth: crop.growDays, watered: true, fatigued: false, insured: false });
+    if (typeof noteSown === 'function') {
+      noteSown(state, i);
+      if (p.care) p.care.wetEnd = true; // soignées : arrosées chaque jour jusqu'à maturité
+    }
+    out.push(i);
+  });
+  return out;
+}
+
 export function getLot(state, lotId) {
   return state.career.lots.find((l) => l.id === lotId) || null;
 }

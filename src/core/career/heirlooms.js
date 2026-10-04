@@ -450,3 +450,14 @@ export function hedgeCoinsFactorOf(state) {
 export function winterFindsPlusOf(state) {
   return placeBoonActive(state, 'winterFindsPlus');
 }
+
+// ── (V4) Les cigognes ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Le V4 est-il actif (partie `storks`, absente = vraie ; il n'existe pas sans `places` ni `heritage`) ? Lecture unique,
+ * ré-exportée par src/core/career/storks.js (ici pour que heritage.js et habitat.js la lisent sans import circulaire).
+ */
+export function storksOn(state) {
+  const v = valleyOf(state);
+  return !!v && v.parts?.heritage !== false && v.parts?.places !== false && v.parts?.storks !== false;
+}

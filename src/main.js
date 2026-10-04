@@ -10,7 +10,7 @@
 //
 // Contenu v3 : progression permanente (src/ui/progress.js → src/core/progression.js), grange aux
 // souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), conseils « première fois »
-// (src/ui/hints.js), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
+// (src/ui/hints.js → pont vers l'accompagnement src/ui/coach/), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
 // démarrage (src/ui/v3.js) et tout est vérifié avant usage : sans eux, le jeu reste le jeu v2.
 //
 // Mode Carrière (docs/CARRIERE.md, src/ui/career/*) : « Ma ferme » au menu principal, création
@@ -49,13 +49,15 @@ import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
 import { createField } from './ui/field.js';
 import { createDialogs } from './ui/dialogs.js';
-import { createTutorial } from './ui/tutorial.js';
 import { season, seasonArrives, cropName, cropCount, incomePhrase, difficultyName } from './ui/text.js';
 import { loadV3, v3 } from './ui/v3.js';
 import { createProgress } from './ui/progress.js';
 import { createGrange } from './ui/grange.js';
 import { createDecor } from './ui/decor.js';
 import { createHints } from './ui/hints.js';
+import { createCoach } from './ui/coach/engine.js';
+import { LESSONS as COACH_LESSONS, REMINDERS as COACH_REMINDERS } from './ui/coach/lessons/index.js';
+import { SIGNALS } from './ui/coach/signals.js';
 import { isProcessing } from './ui/buildings.js';
 import { productIcon } from './ui/icons.js';
 import { productName } from './ui/panel.js';
@@ -113,6 +115,7 @@ const pauseReasons = new Set();
 let resumeSpeed = 1;
 let lastPlaySpeed = settings.speed || 1;
 let hover = { hit: null, x: 0, y: 0 };
+let pendingFirstSteps = false; // nouvelle carrière avec « Premiers pas avec Joseph » (lu par startRun → coach.bind)
 
 // ── Interface ─────────────────────────────────────────────────────────────────────
 app.tooltip = createTooltip($('#tooltip'));
@@ -123,13 +126,25 @@ app.tabbar = createTabbar($('#tabbar'), app);
 app.panel = createPanel(app);
 app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
-app.tutorial = createTutorial($('#tutorial'), app);
 app.input = createSceneInput(canvas, app);
 app.zoomUI = createZoomControls(app); // zoom de la scène (boutons + / −, préférence) ; pincement : gestures.js
 app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
-app.hints = createHints(app);
+app.hints = createHints(app); // pont : app.hints.maybe(id, target) → app.coach.request(id, { target })
+// Accompagnement « Joseph vous montre » (docs/ACCOMPAGNEMENT.md, src/ui/coach/) : leçons, cours (tutoriel du niveau 1,
+// début de carrière), rappels, carnet de Joseph. Remplace l'ancien tutoriel (src/ui/tutorial.js) et les conseils.
+app.coach = createCoach(app);
+app.coach.register(COACH_LESSONS, COACH_REMINDERS);
+// Ancien nom (modules pas encore migrés : app.tutorial?.active) : une bulle de Joseph couvre l'écran.
+app.tutorial = {
+  get active() {
+    return !!app.coach?.blocking;
+  },
+  get stepId() {
+    return app.coach?.current?.stepId || null;
+  },
+};
 app.careerUI = createCareerUI(app);
 app.careerMenuButtons = (btn) => careerMenuButtons(app, btn);
 app.newFarm = () => openNewFarm(app, {});
@@ -141,7 +156,8 @@ app.toasts.setMoreHandler(() => app.messages.open());
 app.toasts.setMode(settings.messages, { active: () => !!app.game && !app.inMenu });
 app.todo = createTodo(app);
 app.toasts.setDigest((e) => app.todo.digest?.(e)); // infos non affichées : regroupées dans le résumé du matin
-app.openGuide = (opts = {}) => openGuide(app, opts);
+app.openGuide = (opts = {}) => openGuide(app, opts); // alias : le carnet de Joseph, onglet « Mots de la ferme »
+app.openCarnet = (opts = {}) => app.coach.openCarnet(opts);
 // Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
 // surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
 app.juice = createJuice(app);
@@ -183,6 +199,7 @@ app.updateSettings = (patch) => {
   app.saveSettings();
   if ('keepAwake' in patch) updateWakeLock();
   if ('messages' in patch) app.toasts.setMode(settings.messages);
+  if ('textScale' in patch) app.coach?.relayout();
 };
 
 app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
@@ -318,6 +335,7 @@ app.openGrangeFromEnd = (tab = 'bonus') => {
 
 /** Menu principal affiché : conseils de la grange et du décor (une fois pour toutes). */
 app.onMainMenu = () => {
+  app.coach?.signal(SIGNALS.menu, { screen: 'main-menu' });
   const P = app.progression;
   if (!P.available()) return;
   if (P.canSpendStars()) app.hints.maybe('grange', { selector: '#menu-grange' });
@@ -369,6 +387,7 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
     // Un choix explicite du joueur lève la pause du tutoriel (pas celle d'une fenêtre ouverte).
     if (app.dialogs.isOpen()) return;
     pauseReasons.delete('tutorial');
+    pauseReasons.delete('coach'); // (accompagnement) le joueur relance le temps : l'étape reste affichée
     pauseReasons.delete('hidden');
     // Pause de lecture d'une fiche (src/ui/sheets.js) : relancer le temps (clavier, bouton) la lève jusqu'à la fermeture.
     if (speed > 0) app.sheets.releasePause?.();
@@ -383,7 +402,7 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
         app.saveSettings();
       }
     }
-    app.tutorial.onSpeed(speed);
+    app.coach.onSpeed(speed);
     scheduleRefresh();
   }
 };
@@ -396,13 +415,13 @@ app.openPauseMenu = () => {
   addPauseGuidance(handle?.node);
 };
 
-/** Menu Pause : « Messages » et « Guide de la ferme », juste après « Reprendre » (lot 1 « confort »). */
+/** Menu Pause : « Messages » et « Le carnet de Joseph » (ex-« Guide de la ferme »), juste après « Reprendre ». */
 function addPauseGuidance(node) {
   const list = node?.querySelector('.menu-buttons');
   if (!list || list.querySelector('#pause-guide')) return;
   const unread = app.messages.unread;
   const messages = app.dialogs.btn([el('span', 'Messages'), unread ? el('span.pause-count', ` (${unread} nouveaux)`) : null], () => app.messages.open(), 'btn--big', { id: 'pause-messages' });
-  const guide = app.dialogs.btn('Guide de la ferme', () => app.openGuide(), 'btn--big', { id: 'pause-guide' });
+  const guide = app.dialogs.btn('Le carnet de Joseph', () => app.openCarnet(), 'btn--big', { id: 'pause-guide' });
   const after = list.querySelector('#pause-resume');
   if (after) after.after(messages, guide);
   else list.prepend(messages, guide);
@@ -654,6 +673,7 @@ function plantAllNow(g, cropId, firstIndex) {
     n += 1;
   }
   if (n > 1) app.toasts.show({ kind: 'success', sprite: cropIcon(cropId, 'sprite--sm'), text: `${n} parcelles semées (${cropName(cropId).toLowerCase()}).` });
+  if (n > 1) app.coach?.signal(SIGNALS.sowAll, { n });
   return n;
 }
 
@@ -766,7 +786,7 @@ function updateInsets() {
   // CSS : haut des onglets seulement (feuilles, messages, ligne « À faire » se posent dessus).
   document.documentElement.style.setProperty('--inset-bottom', `${insets.bottom - todoH}px`);
   if (typeof app.scene?.setInsets === 'function') app.scene.setInsets({ ...insets });
-  app.tutorial.relayout();
+  app.coach.relayout();
 }
 
 function resizeScene() {
@@ -790,7 +810,7 @@ function resizeScene() {
   }
   app.scene.resize(w, h, dpr);
   updateInsets();
-  app.tutorial.relayout();
+  app.coach.relayout();
 }
 
 /** Carrière : la scène passe en disposition « colonne de terrains » (lot RENDER : scene.setCareer). */
@@ -1022,8 +1042,8 @@ function onGameEvent(ev, game) {
     }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
-    app.tutorial.onEvent(ev);
     app.todo.onEvent(ev, game);
+    app.coach.notify(ev); // accompagnement : réussite des étapes, déclencheurs des leçons, rappels
     reactAudio(ev, game);
     if (!career || SHARED_MESSAGES.has(ev.type)) reactMessages(ev, game);
     if (career) {
@@ -1315,7 +1335,7 @@ function reactMessages(ev, game) {
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
       if (loan) t.show({ prio: 'info', digest: 'mensualité du prêt|mensualités du prêt', kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
       if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
-      maybeLowMoneyHint(game);
+      // (Accompagnement) L'ancien conseil « fermage en danger » est le rappel `money.low` (src/ui/coach/lessons/basics.js).
       break;
     }
     default:
@@ -1323,32 +1343,6 @@ function reactMessages(ev, game) {
   }
 }
 
-/**
- * Conseil doux quand l'argent risque de manquer au fermage (une fois par saison, à l'aube, 3 jours
- * avant au plus) : quoi faire concrètement, sans alarme ni pause.
- */
-let lowMoneyHint = null; // saison du dernier conseil
-function maybeLowMoneyHint(game) {
-  if (game.state.status !== 'playing' || app.tutorial.active) return;
-  const p = app.hud.projection();
-  if (p.state === 'ok' || p.daysLeft > 3 || p.daysLeft < 1) return;
-  const key = `${game.state.time.seasonIndex}`;
-  if (lowMoneyHint === key) return;
-  if (p.state === 'warn' && p.projected - p.amount > 15) return; // les récoltes prévues suffiront largement
-  lowMoneyHint = key;
-  const plots = game.query.plots();
-  const mature = plots.filter((x) => x.action === 'harvest').length;
-  const empty = plots.filter((x) => x.action === 'plant').length;
-  const c = game.query.calendar();
-  const fast = game.query.plantableCrops().filter((x) => x.kind !== 'tree' && !x.willFreeze && x.canAfford && x.daysToMature <= p.daysLeft).sort((a, b) => a.daysToMature - b.daysToMature || a.seedCost - b.seedCost)[0];
-  let text;
-  if (mature) text = `${plural(mature, 'culture est mûre', 'cultures sont mûres')} : récoltez-les, l'argent arrive tout de suite.`;
-  else if (empty && fast) text = `Des parcelles sont vides : semez des ${cropCount(fast.id, 2).replace(/^2 /, '')}, ${fast.daysToMature <= 2 ? 'ça pousse vite' : `récolte dans ${plural(fast.daysToMature, 'jour')}`}.`;
-  else text = 'Arrosez vos cultures pour qu\'elles soient mûres avant le soir du fermage.';
-  if (p.state === 'loan') text += ' Et pas de panique : Joseph peut vous avancer le reste.';
-  t0().show({ prio: 'important', kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
-}
-const t0 = () => app.toasts;
 
 function frostHardy(cropId) {
   return !!getCrop(cropId)?.frostHardy;
@@ -1560,14 +1554,12 @@ function startRun(game, { resumed = false, created = false } = {}) {
   if (unwire) unwire();
   app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
-  app.tutorial.stop();
-  app.hints.clear();
+  app.coach.unbind();
   pauseReasons.clear();
   pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
   grouped.toWorkshop.clear();
   grouped.sold = [];
   grouped.loan = null;
-  lowMoneyHint = null;
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
@@ -1614,6 +1606,9 @@ function startRun(game, { resumed = false, created = false } = {}) {
     app.careerUI.bind(game, { resumed, created, quiet: resumed });
     // Reprise depuis le menu : « Où en étais-je ? » (fenêtre courte, la partie attend).
     if (resumed) app.todo.showResume(game);
+    // Accompagnement : cours de début de carrière (case « Premiers pas avec Joseph »), reprise d'un cours, leçons.
+    app.coach.bind(game, { mode: 'career', resumed, created, firstSteps: created && !!pendingFirstSteps });
+    pendingFirstSteps = false;
     save();
     scheduleRefresh();
     updateWakeLock();
@@ -1635,10 +1630,10 @@ function startRun(game, { resumed = false, created = false } = {}) {
     app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${modeName} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
   }
 
-  const tuto = storage.loadTutorial();
-  if (lvl.tutorial && !tuto.done) app.tutorial.start(game, resumed ? tuto.step ?? 0 : 0);
+  // Accompagnement : cours du niveau 1 (levels.firstYear, reprise à l'étape retenue), leçons des niveaux.
+  app.coach.bind(game, { mode: 'levels', resumed, created });
 
-  // Conseils « première fois » (une fois pour toutes, après le tutoriel s'il y en a un).
+  // Conseils « première fois » (pont : leçons du catalogue, ou anciens conseils tant que leur leçon n'existe pas).
   const offered = new Set(lvl.availableInvestments || []);
   const invs = game.query.investments();
   if (invs.some(isProcessing)) app.hints.maybe('processing', { selector: '#tab-shop' });
@@ -1722,8 +1717,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   if (!ended) save();
   app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
-  app.hints.clear();
-  app.tutorial.stop();
+  app.coach.unbind();
   if (unwire) unwire();
   unwire = null;
   pauseReasons.clear();
@@ -1808,12 +1802,15 @@ function archiveSavedCareer(endedBy = 'restart') {
  */
 app.startCareer = (opts, { archiveExisting = false } = {}) => {
   if (archiveExisting) archiveSavedCareer('restart');
+  // (Accompagnement) « Premiers pas avec Joseph » : la ferme commence avec 6 carottes mûres (option `starter` du cœur).
+  const { firstSteps = false, ...farm } = opts || {};
+  opts = farm;
   // La partie de niveau en cours (s'il y en a une) reste sauvegardée de son côté.
   if (app.game && !app.inMenu && app.game.mode !== 'career') save();
   let game;
   try {
     const decor = app.progression.available() ? { ...(app.progression.cosmetics().decor || {}) } : {};
-    game = createCareer({ seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, ...opts, cosmetics: { decor } });
+    game = createCareer({ seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, ...opts, starter: !!firstSteps, cosmetics: { decor } });
   } catch (err) {
     console.error(err);
     audio.play('error');
@@ -1821,6 +1818,7 @@ app.startCareer = (opts, { archiveExisting = false } = {}) => {
     return;
   }
   app.progression.careerStart?.();
+  pendingFirstSteps = !!firstSteps;
   startRun(game, { created: true });
 };
 
@@ -1958,8 +1956,7 @@ function frame(t) {
   app.careerUI.frame(); // mini-carte de la carrière (dessinée par la scène, cachée hors carrière)
   app.zoomUI.frame(); // zoom de la scène : préférence de la partie, boutons + / −
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
-  app.tutorial.frame();
-  app.hints.frame();
+  app.coach.frame(t); // accompagnement : bulle, doigt, pastilles, déclencheurs d'état, rappels
   app.todo.tick();
   app.hud.frame(dt);
   app.juice.frame(dt);
@@ -2104,6 +2101,7 @@ async function boot() {
   await loadV3();
   app.progression.reload();
   const legacyAchievements = app.progression.checkBoot();
+  app.coach.deduce(); // (accompagnement) ce que le joueur sait déjà (§ 10.3) : rudiments jamais rejoués
   applyViewport();
   attract = createAttractGame();
   resizeScene();

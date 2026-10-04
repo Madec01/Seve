@@ -21,6 +21,7 @@
 import { clear, el } from './dom.js';
 import { icon } from './icons.js';
 import { pauseOnSheetActive } from './a11y.js';
+import { SIGNALS } from './coach/signals.js';
 
 /**
  * Glisser vers le bas pour fermer. `grab` : zones qui démarrent toujours le glissement (poignée,
@@ -222,6 +223,8 @@ export function createSheets(layer, app) {
     app.tooltip?.hide();
     if (!replacing) released = false;
     syncPause();
+    app.coach?.signal?.(SIGNALS.sheetOpen, { id: opts.id });
+    app.coach?.signal?.(SIGNALS.sheetShown, { id: opts.id, by: opts.by || null });
     return { body, close };
   }
 
@@ -241,6 +244,7 @@ export function createSheets(layer, app) {
     syncPause();
     opts.onClose?.(reason);
     publishHeight();
+    app.coach?.signal?.(SIGNALS.sheetClose, { id: opts.id || null, reason });
   }
 
   /** Le joueur relance le temps feuille ouverte : la pause de lecture est levée. true si elle l'était. */

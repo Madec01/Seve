@@ -82,7 +82,7 @@ test('données : 12 variétés du village, 11 croisées (traits distincts des de
   assert.equal(CROSS_RULES.need, 3, 'décision de l\'utilisateur : 3 rencontres');
   assert.equal(NATURE_ITEMS_BY_ID.batbox.rank, 4);
   assert.deepEqual(NATURE_ITEMS_BY_ID.batbox.price, { base: 100, step: 50 });
-  assert.equal(VALLEY_VERSION, 3);
+  assert.equal(VALLEY_VERSION, 4);
   for (const k of ['valley.library', 'valley.troc', 'valley.pair', 'valley.cross', 'valley.scented']) assert.ok(HERITAGE_HINTS[k], k);
 });
 
@@ -109,10 +109,10 @@ test('nom des croisées : « de la Ferme des Tilleuls », « du Moulin », « de
 
 test('activation : partie heritage (absente = vraie) ; { heritage: false } = le V1 (aucun champ du V2 dans les requêtes, aucun flux valley2)', () => {
   const g = createCareer({ seed: 3 });
-  assert.deepEqual(g.state.career.valley.parts, { seeds: true, wildlife: true, heritage: true, places: true });
+  assert.deepEqual(g.state.career.valley.parts, { seeds: true, wildlife: true, heritage: true, places: true, storks: true });
   assert.ok(Number.isInteger(g.state.rng.valley2));
   const off = createCareer({ seed: 3, valley: { heritage: false } });
-  assert.deepEqual(off.state.career.valley.parts, { seeds: true, wildlife: true, heritage: false, places: false });
+  assert.deepEqual(off.state.career.valley.parts, { seeds: true, wildlife: true, heritage: false, places: false, storks: false });
   assert.equal(off.state.rng.valley2, undefined);
   const v1 = startedCareer({ valley: { heritage: false } }, 3);
   const q = Q(v1).valley();
@@ -429,9 +429,9 @@ test('progression : 3 pages d\'album (trocs ♥, croisées, habitants), 6 succè
   assert.equal(cv.swapsFav.includes('lili'), g.state.career.valley.swaps.lili.fav);
   if (g.state.career.valley.swaps.lili.fav) assert.ok(found.stamps.some((s) => s.caseId === 'swaps.lili' && s.stamp === 'heart'));
   const list = P.careerAchievementList(p, ctx);
-  assert.equal(list.length, 38);
-  assert.equal(P.albumOverview(p).pages, 18);
-  assert.equal(P.albumOverview(p).total, 191);
+  assert.equal(list.length, 47);
+  assert.equal(P.albumOverview(p).pages, 20);
+  assert.equal(P.albumOverview(p).total, 201);
 });
 
 test('signes de vie du V2 comptés pour les étapes (étapes 1 à 3 : paliers inchangés 2 / 6 / 11)', () => {
@@ -459,8 +459,8 @@ test('niveaux : aucune donnée du V2 (partie de niveau sans state.career)', asyn
 
 test('simulation : --valley seeds,wildlife = le V1 seul ; un tranquille avec le V2 troque, bâtit la Grainothèque et sème des paires', async () => {
   const { parseValley, playCareer, HERITAGE_STYLES } = await import('../tools/simulate-career.js');
-  assert.deepEqual(parseValley('seeds,wildlife'), { seeds: true, wildlife: true, heritage: false, places: false });
-  assert.deepEqual(parseValley('seeds,wildlife,heritage'), { seeds: true, wildlife: true, heritage: true, places: false });
+  assert.deepEqual(parseValley('seeds,wildlife'), { seeds: true, wildlife: true, heritage: false, places: false, storks: false });
+  assert.deepEqual(parseValley('seeds,wildlife,heritage'), { seeds: true, wildlife: true, heritage: true, places: false, storks: false });
   for (const k of ['casual', 'novice', 'optimal', 'idle', 'automator', 'handsOff']) assert.ok(HERITAGE_STYLES[k], k);
   const c = playCareer({ seed: 2, strategy: 'casual', years: 5, keepGame: true });
   const v = c.game.state.career.valley;

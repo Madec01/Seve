@@ -67,6 +67,7 @@ function emptyFacts() {
     surprises: S(), finds: S(), forage: false, wish: false, clients: S(), merchantMet: false, themes: S(), themeFetes: S(), themeVisitors: S(),
     fetes: S(), feteBest: S(), comice: false, contest: false, cartFull: false, goldMedal: false, winterFinds: S(), traces: S(), birds: S(),
     fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(), swapsDone: S(), swapsFav: S(), placesRestored: S(),
+    legendsHarvested: S(), visitorsSeen: S(),
   };
 }
 
@@ -125,6 +126,9 @@ function addContext(f, ctx) {
     addAll(f.swapsFav, ctx.career?.valley?.swapsFav);
     // (Vallée V3) Lieux de la vallée à leur dernière étape.
     addAll(f.placesRestored, ctx.career?.valley?.restored);
+    // (Vallée V4) Légendes récoltées une première fois, visiteurs rares vus.
+    addAll(f.legendsHarvested, ctx.career?.valley?.legendsHarvested);
+    addAll(f.visitorsSeen, ctx.career?.valley?.visitorsSeen);
   } else if (!ctx.cozy) {
     // Classique (rien de plus n'est exposé) : un poulailler à l'aube donne des œufs, une vache ou une chèvre du lait,
     // des moutons de la laine après la tonte du dernier jour de printemps.
@@ -268,6 +272,10 @@ export function caseDone(c, f) {
       return f.swapsDone.has(ch.id);
     case 'placeRestored':
       return f.placesRestored.has(ch.id);
+    case 'legendHarvested':
+      return f.legendsHarvested.has(ch.id);
+    case 'visitorSeen':
+      return f.visitorsSeen.has(ch.id);
     default:
       return false;
   }

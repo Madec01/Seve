@@ -57,6 +57,10 @@ export const COSMETICS = [
   // (Vallée vivante, lot V3) Page « Le carnet d'Hélène », étape 7 de la vallée.
   { id: 'heron.vane', name: 'La girouette au héron', category: 'small', price: 0, found: true },
   { id: 'valley.bench', name: 'Le banc du belvédère', category: 'small', price: 0, found: true },
+  // (Vallée vivante, lot V4) Pages « Les légendes », « Les visiteurs rares », épilogue de Joseph.
+  { id: 'melon.cloche', name: 'La cloche à melon', category: 'small', price: 0, found: true },
+  { id: 'stork.vane', name: 'La girouette à la cigogne', category: 'small', price: 0, found: true },
+  { id: 'iron.box', name: 'La boîte en fer', category: 'small', price: 0, found: true },
   // Grand décor (2 × 2 tuiles)
   { id: 'pond', name: 'Petite mare', category: 'large', price: 50 },
   { id: 'herbarium', name: 'Le grand herbier', category: 'large', price: 0, found: true },

@@ -17,6 +17,7 @@
 import { SEED_RULES, SPECIES, VARIETIES } from './career/valley.js';
 import { CROSSES, CROP_NAMES, SPECIES_V2, TROC, VILLAGE_VARIETIES_BY_ID } from './career/heritage.js';
 import { PLACES, VALLEY_SPECIES } from './career/places.js';
+import { LEGENDS, VISITORS } from './career/storks.js';
 import { CLIENTS } from './variety.js';
 
 export const ALBUM_VERSION = 1;
@@ -263,7 +264,18 @@ const PLACE_CASES = PLACES.map((pl) => ({
   id: pl.id, name: pl.name, icon: pl.icon, mode: 'career', check: { type: 'placeRestored', id: pl.id }, text: pl.steps[pl.steps.length - 1].line, hint: 'Restaurez ce lieu de la vallée jusqu\'à sa dernière étape.',
 }));
 
-/** Les 18 pages (191 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1), les 3 du lot V2, les 2 du lot V3. */
+// (Vallée vivante, lot V4) Les légendes (récoltée une première fois à la main), les visiteurs rares (vu) : carrière.
+const LEGEND_CASES = LEGENDS.map((x) => ({
+  id: x.id, name: x.nameFarm ? `${x.name} de la ferme` : x.name, icon: x.icon, mode: 'career', check: { type: 'legendHarvested', id: x.id }, text: x.anecdote, hint: 'Semez-la sous sa cloche, devant la Grainothèque, puis récoltez-la à la main.',
+}));
+const VISITOR_CASES = VISITORS.map((x) => ({
+  id: x.id, name: x.name, icon: x.icon, mode: 'career', check: { type: 'visitorSeen', id: x.id }, text: x.anecdote, hint: 'Un visiteur rare fait halte quand la vallée est assez vivante pour lui : allez le voir.',
+}));
+
+/**
+ * Les 20 pages (201 cases) : les 11 du lot 4, puis les 2 de la Vallée (lot V1), les 3 du lot V2, les 2 du lot V3, les 2 du
+ * lot V4.
+ */
 export const ALBUM_PAGES = [
   { id: 'garden', name: 'Le potager', icon: 'album.page.garden', cases: GARDEN, reward: { ecus: 30, cosmeticId: 'scarecrow.flower' } },
   { id: 'homemade', name: 'Fait maison et basse-cour', icon: 'album.page.homemade', cases: HOMEMADE, reward: { ecus: 25, cosmeticId: 'jam.shelf' } },
@@ -283,6 +295,8 @@ export const ALBUM_PAGES = [
   { id: 'wildlife2', name: 'Les habitants (suite)', icon: 'album.page.wildlife2', cases: WILDLIFE2_CASES, reward: { ecus: 20, cosmeticId: 'lizard.wall' } },
   { id: 'valleyWild', name: 'Le carnet d\'Hélène', icon: 'album.page.valleyWild', cases: VALLEY_WILD_CASES, reward: { ecus: 30, cosmeticId: 'heron.vane' } },
   { id: 'places', name: 'Les lieux de la vallée', icon: 'album.page.places', cases: PLACE_CASES, reward: { ecus: 40, cosmeticId: 'mill.wheel' } },
+  { id: 'legends', name: 'Les légendes', icon: 'album.page.legends', cases: LEGEND_CASES, reward: { ecus: 30, cosmeticId: 'melon.cloche' } },
+  { id: 'visitors', name: 'Les visiteurs rares', icon: 'album.page.visitors', cases: VISITOR_CASES, reward: { ecus: 40, cosmeticId: 'stork.vane' } },
 ];
 
 /**

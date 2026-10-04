@@ -1769,3 +1769,194 @@ Conception complète du lot V4 « Les cigognes » (dernier lot de la Vallée, d�
 - **Idées** : un « carnet sonore » dans le livre (réécouter chaque chant découvert) ; Hélène qui commente les terres
   sauvages ; confiture de cerises et jus de poire (idée du V3, toujours ouverte) ; la case d'album des habitants de la
   vallée cochée tout de suite (idée du V3).
+
+### 2026-10-04 — Vallée V4 : paysage sonore (paquet AUDIO)
+
+Sons de la vallée **entièrement synthétisés** (Web Audio) : aucun fichier, aucune licence. Non commité (intégration par le
+chef de projet). Fichiers : `src/audio/soundscape.js` (nouveau, pur), `src/audio/nature.js` (nouveau, moteur),
+`src/audio/synth.js` et `src/audio/audio.js` (ajouts), `tests/soundscape.test.js` (21 tests), `tools/nature-preview.html`
+(page d'écoute et laboratoire hors ligne) et `tools/measure-nature.js` (mesures Playwright, Pixel 7 émulé).
+
+- **`soundscape.js`** : `NATURE_SOURCES` (5 couches : ruisseau, moulin, feuilles, grillons, grenouilles ; 17 chants : 11
+  habitants, le coucou, 5 visiteurs ; recette, saisons, phases, lieux), `BIRDS_BY_STAGE` (× 0,25 → × 1), `phaseOf`,
+  `farmBirdsFactor`, `spatial`, `natureScape(facts, ctx)` (conditions et lieux du § 18.8, météo, plafond 12 / 16 phrases par
+  minute au prorata, « Légers » 4 voix sans écho, « Coupés » et hors Vallée : rien de neuf, `birdsFactor` 1), `demoFacts()`.
+- **`nature.js`** : `createNature(ctx, destination, { detail })` → `set`, `setListener`, `setDetail`, `play(id)` (débogage),
+  `stop`, `voices`, `layers`, `stats()`, `advance(t)` (rendu hors ligne). Programmateur à 250 ms, couches en fondu
+  (`setTargetAtTime`), couches tombées à 0 arrêtées après 4 s, un seul tampon de bruit rose bouclé sans couture, un
+  oscillateur automatisé par phrase (pas un nœud par note), écho 0,18 s seulement en « Complets » dans la vue, **limiteur
+  doux** (WaveShaper, linéaire jusqu'à 0,3, borné à 0,48) au lieu d'un compresseur (celui de Web Audio ajoute un gain de
+  rattrapage ≈ × 2), minuterie arrêtée quand l'application passe en arrière-plan.
+- **`synth.js`** : tons `clatter` (claquement de bec des cigognes, 1,5 s) et `legend` (souffle qui monte, marimba grave,
+  clochettes do-mi-sol-la-do).
+- **`audio.js`** : `setNature(scape | null)` (mémorisé avant le déverrouillage), `setNatureListener`, `setNatureDetail`,
+  `setMusicScale(k)` (facteur à part, × 0,6 dans la vue), `playNature(id, opts)` (pour `__debug.valley4.sound(id)`),
+  `natureVoices`, `natureStats()` (pour `voices()` / `stats()`) ; moteur arrêté si son coupé, « Ambiance » à 0 ou « Coupés »,
+  relancé au retour ; réglage initial `settings.natureSound`.
+- **Mesures** (`node tools/measure-nature.js`, Chromium, Pixel 7 émulé, Xeon 2,8 GHz) : charge de rendu 0,7 à 2,6 % d'un
+  cœur (pire cas, chants × 30 : 2,9 %) ; pic ≤ 0,44 (limite 0,5), aucun échantillon écrêté ; RMS : vue complète 0,05 à 0,06,
+  ferme 0,02 à 0,03 (le fichier `birds` : 0,055 × 0,8) ; transitions (phase, lieu, défilement brusque, Légers ↔ Complets,
+  pluie, arrêt) : saut d'échantillon ≤ celui du régime établi (aucun craquement), silence total après `stop()` ; temps réel :
+  12 voix au plus (Complets), 4 (Légers), plus aucune phrase nouvelle en arrière-plan. Le ralentissement CPU de Chrome
+  (`--throttle 4`) n'agit pas sur le fil audio : sur un téléphone 2 à 3 fois plus lent, compter ≈ 5 à 8 % d'un cœur.
+- **Précisions au contrat** (pour UI/RENDER) : (1) `audio.js` ne multiplie **pas** la couche `birds` : `main.js` passe
+  `birds: levels.birds × scape.birdsFactor` (une seule multiplication) ; (2) les chants de la ferme (rouge-gorge, merle,
+  hulotte, geai) s'entendent aussi dans la vue, depuis la ferme (« on entend toute la vallée ») ; (3) `natureScape` rend en
+  plus `on`, `where`, `detail`, `phase`, `brook` (`'open' | 'frozen' | 'far'`) et accepte `ctx.afterRain` (grenouilles × 1,5)
+  et `ctx.spots` (places des visiteurs dans la vue : `steeple`, `crane`, `oriole`, `redDeer`, `beaver`) ; (4) phases fortes
+  réglées à l'oreille : les chouettes et le cerf se taisent en pleine journée, l'été les grenouilles ne chantent que le soir.
+- **Échecs d'autres paquets constatés** (non touchés) : tests des lots V1 à V3 (empreintes, activation, données) et de
+  `build` pendant que CORE V4 et l'accompagnement travaillent.
+- **Idées** : rythme des chants à relever un peu si la vue paraît trop calme (les fréquences de base du § 18.8 donnent
+  ≈ 0,4 à 0,6 voix en moyenne, les couches remplissent) ; un « carnet sonore » dans le livre pourra réutiliser
+  `playNature(id)`.
+
+### 2026-10-04 — Accompagnement « Joseph vous montre » : leçons des lots (paquet LEÇONS lots)
+
+Catalogue de leçons et de rappels hors Vallée (`docs/ACCOMPAGNEMENT.md` §§ 7.2 à 7.6, § 8.4), au format figé du contrat
+(`docs/ARCHITECTURE.md`, « Accompagnement — contrats »). Catalogues PURS (aucun DOM), textes FALC (≤ 90 caractères par
+étape, ≤ 12 mots par phrase, jamais culpabilisants), cibles réelles vérifiées dans le code.
+
+- **`src/ui/coach/lessons/levels.js`** (22 leçons) : contrainte de chaque niveau (sécheresse, pluie, petit lopin, hiver
+  sans fin, marché fou, crédit, année bio, montagne), prêt de Joseph, ateliers (`processing`, `processingBought`),
+  `tree`, `pollination`, `goat`, `contest`, arrosage automatique, mouton ; menu principal (`grange`, `decor`,
+  `menu.career`, `menu.achievements`). Déjà su : niveau déjà gagné ou commencé (progression).
+- **`src/ui/coach/lessons/career.js`** (≈ 40 leçons, 6 rappels) : rangs 1 → 6 (œufs, but du rang, charges, forêt à
+  vendre, carte, aménager, plan, abri, étal, ruches, visiteurs, corbeaux, trouvailles, prêt, coup dur, fin d'année,
+  embauche, affectation, congé, grenier, machines, verger, ateliers, serre, quêtes, amitié, comice, cheval ou tracteur,
+  cochons/lapins/chevaux, chambre d'hôte, mare, tracteur, humeur, embellissements, Domaine) ; **`career.rank2` à
+  `career.rank6`** : 3 nouveautés pointées une à une dans « Acheter » (la section est dépliée par l'étape) ;
+  `RANK_HIGHLIGHTS` exporté. Rappels `shelter`, `waiting`, `leave`, `stock`, `quest`, `offer`.
+- **`src/ui/coach/lessons/lots.js`** (28 leçons, 8 rappels) : qualité, géant, surprises du matin, cueillette, temps
+  spéciaux, heure dorée, vœu ; tableau, cadeau, défis, charrette, Basile, graines rares, année à thème, visiteur de
+  l'année ; album, page complète, « vos récoltes vous attendent », fête (annonce, chasse, soupe, stand, paniers, fête de
+  l'année), foire aux graines, trouvailles d'hiver, mangeoire, veillée, lanternes. Rappels `cart`, `cards`,
+  `challenges`, `merchant`, `fete`, `winter`, `veillee`, `album`. Rien sans `state.surprises` / `variety` / `cozy`
+  (Classique intact).
+- Anciens identifiants repris tels quels (« déjà vu » reste vu) ; règles « déjà su » (`acquired`) par l'état de la
+  partie, la sauvegarde de carrière (`careerSave`), l'album et les compteurs de la progression. Grand écran à la souris :
+  « Cliquez » au lieu de « Touchez ».
+- **Points d'accroche** : `career/windows.js` (fenêtre du rang : 3 nouveautés mises en avant, le reste replié ; signal
+  `rankClosed` à la fermeture ; `intro()` retirée), `career/index.js` (tous les `app.hints.maybe` retirés ; l'accueil d'une nouvelle
+  ferme est le cours `career.firstSteps`, lancé par le moteur dans `coach.bind`), `career/journal.js` (Carnet ›
+  Joseph : « Ses leçons » ; bouton « Le carnet de Joseph »), `cozy.js` (signal `feteMode`, leçon des lanternes demandée
+  à l'affichage de leur page, tables `DEFAULT_HINTS` retirées), `variety.js` (tables et appels retirés, y compris le
+  conseil du troc : la leçon Vallée se déclenche à l'ouverture du tableau), `album.js`, `field.js` (conseil du pommier retiré ;
+  le signal `sowAll` est émis par `app.plantAll`, paquet MOTEUR).
+- **Reste** : les exports `VARIETY_HINTS` (`src/data/variety.js`) et `COZY_HINTS` (`src/data/cozy.js`) ne sont plus lus
+  par l'interface ; leur retrait (paquet du contrat) est laissé à l'intégration (consigne : ne pas toucher `src/data`).
+
+### 2026-10-04 — Sprites du lot V4 et du doigt de Joseph (paquet ART)
+
+Deux planches générées, CC0, création originale (palette et style Kenney). Non commité (intégration par le chef de projet ;
+`node tools/build.js` à relancer : deux planches nouvelles dans `SHEETS`).
+
+- **`assets/sprites/generate-valley4.py` → `valley4.png`** (bloc `// <valley4:auto>` d'`atlas.js`, après valley3 ;
+  `SHEETS.valley4`) : les **97 noms exacts** du tableau des contrats V4 (légendes et pousses sous cloche de verre
+  translucide 8 × 12, bocal ; cigognes debout / en vol, roue, 3 nids, clocher ; grue et vol en V, cerf 32 × 32, loriot,
+  castor et barrage, vers luisants, lueurs 8 × 8 ; 5 indices ; forêt mêlée et vieillie raccordée à `forest.green.fill` ;
+  `valley.stage.8` ; lumières du village, Joseph et Hélène assis, boîte au ruban ; 6 récits, 3 pages d'épilogue,
+  8 cartes postales ; couverture 64 × 80 et signet ; pictogrammes, onglets, 3 décors, 9 succès). Tailles non multiples de
+  16 : rangées dans des cases entières, entrées d'atlas à taille exacte (`w`/`h` fractionnaires). Roue et nids au **même
+  pied** (bas du poteau, x = 12). Succès sans `.locked` (grisés par le code, comme dit le contrat).
+  `--contact DOSSIER` : planches ×6, forêt de la carte dans ses 4 états, nid sur les 5 maisons, cloches devant les
+  5 Grainothèques (et sur la neige).
+- **`assets/sprites/generate-coach.py` → `coach.png`** (bloc `// <coach:auto>`, `SHEETS.coach`) : `coach.hand`, `.1`,
+  `.press`, `.pinch`, `.pinch.1`, `coach.arrow`, `portrait.joseph.point` (portrait de `career.png` + main qui montre en
+  bas). Gant blanc, contour sombre et ombre portée douce : lisible sur l'herbe, la neige, le parchemin, le bois et le
+  sombre. Points chauds notés dans l'en-tête du bloc (bout de l'index de `coach.hand` en (2, 1), etc.).
+- `tools/atlas-preview.html` : filtres `?valley4=1` et `?coach=1`, démos animées (doigt sur 4 fonds ; cloches, nids,
+  cigognes). `CREDITS.md` : lignes `valley4.png`, `coach.png` et « Sons de la vallée : synthétisés ». Vérifié par script
+  (tous les noms du contrat présents, tailles, aucun heurt) et à l'écran (Playwright, aucune erreur de console).
+- **Idées** : une version automnale (roux et or) des tuiles `forest.mixed.*` ; un `coach.hand` en miroir dessiné (gaucher)
+  si le retournement par le code ne suffit pas.
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7, toucher seulement, `dev.html?debug=1&nosw`) : `levels.drought`
+  (niveau 2, 2 bulles), `career.rank2` (fenêtre du rang → « Acheter » → section dépliée, 3 cartes entourées une à une),
+  `surprise.giant` (anneau sur le géant, finie par la vraie récolte), `variety.board` (tableau touché → feuille, punaise),
+  `fete.chasse` (en mode fête : doigt sur un œuf, puis « Indice ») ; les 14 rappels des lots évalués sur une vraie partie
+  (texte et cible justes dans l'état voulu), et une vraie pastille « Le poulailler est plein… » qui pointe la ligne
+  « À faire ». Aucune erreur console. Captures `coach-lots-*.png` (dossier de travail).
+- **Remarques pour MOTEUR** : le lien « Passer » s'affiche « null » sur les étapes à bouton (bulle) ; les rappels
+  `leave`, `stock`, `album` donnent leur entrée « À faire » par une fonction `todo(ctx)` (non branchée sur
+  `todo.addProvider` par `reminders.js` : la pastille marche grâce à `go`) ; signal `sheetShown` pas encore émis (la leçon
+  `surprise.quality` a « Compris » en secours).
+
+### 2026-10-04 — Accompagnement : leçons et rappels de la Vallée (paquet LEÇONS Vallée)
+
+- **`src/ui/coach/lessons/valley.js`** (pur) : **42 leçons** de Joseph pour la Vallée V1 → V4 et **8 rappels**, au format
+  figé des contrats. V1 : `valley.box`, `valley.sheet`, `valley.jar` (boîte → « Un bocal à ouvrir » → « Ouvrir le
+  bocal »), `valley.trial` (planche d'essai mûre, à la main), `valley.fixed`, `valley.traits`, `valley.fallow`,
+  `valley.nature` (boîte → « Aménager » → bouton) puis **`valley.naturePlace`** (mode aménagement : « Touchez une place qui
+  brille »), `valley.recipe`, `valley.speciesHint`, `valley.species`, `valley.hedge`, `valley.stage` (étapes 1 → 8, une
+  fois), `valley.reserve`, `valley.fair`. V2 : `valley.librarySign`, `valley.library`, `valley.libraryLevel`,
+  **`valley.trocPin`** (sur la ferme : le sachet du tableau) puis **`valley.troc`** (à l'ouverture de la feuille du tableau
+  `v-board` quand un troc est épinglé — l'ancien conseil de `variety.js` est retiré par LEÇONS lots ; priorité 75 : le troc
+  passe avant le conseil du tableau, une bulle par ouverture), `valley.pair` (Grainothèque → « Croisements » → « Semer la
+  paire ») puis **`valley.pairPlace`** (mode paire) et `valley.meet` (les rencontres), `valley.cross`, `valley.scented`,
+  `valley.revisitBox`. V3 : `valley.viewOpen` (le poteau, après la première visite), `valley.view` → `valley.place`
+  (fiche d'un lieu : ✓ / ✗, chantier), `valley.works`, `valley.valleyAnimal`, `valley.helene`, `valley.river`,
+  `valley.mushrooms`, `valley.grafts`, `valley.wild` (le poteau d'une forêt) puis **`valley.wildMode`** (mode terres
+  sauvages, feuille « Confier à la nature »). V4 (contrat, codé en parallèle ; cibles prudentes : Grainothèque, vue,
+  onglet Menu) : `valley.legend`, `valley.visitor`, `valley.book`, `valley.sounds`.
+- Identifiants des anciens conseils (`VALLEY_HINTS`, `HERITAGE_HINTS`, `PLACES_HINTS`, `STORKS_HINTS`) repris : déjà vu =
+  vu. Règles de déduction (`acquired`) pour les anciennes carrières sur l'état de la Vallée (bocal ouvert, graines
+  récoltées à la main, aménagement acheté, troc fait, vue visitée deux fois, lieu commencé, terre confiée…).
+- **Rappels** (sans culpabiliser, « rien ne presse ») : `jar`, `species` (ferme et vallée), `troc`, `chapter` (chapitres
+  et récits), `trial`, **`works`** (chantier prêt : la pastille ouvre la vue sur le lieu), **`legend`** (légende mûre sous
+  sa cloche), **`visitor`** (visiteur rare). Leur `since` est traduit dans l'unité de `ctx.day.abs` du moteur (l'écart
+  seul compte).
+- **Interface** (`src/ui/career/{valley,heritage,places,valley-view}.js`) : tables `HINT_TITLES` / `HINT_TEXTS`,
+  enregistrement dans `HINTS` et tous les `hint(...)` / `app.hints.maybe('valley.*')` retirés (déclencheurs dans les
+  leçons) ; signaux `valleySheet { tab, sheet }` (onglets de « La Vallée » et de la Grainothèque), `placing { kind }` /
+  `placing { kind: 'pair', cropId }` / `placing { kind: null }`, `wildPlacing { on }` (émis **avant** la fermeture de la
+  feuille : la leçon passe au mode de visée au lieu de revenir en arrière), `viewOpen` / `viewClose` ;
+  `app.coach.blocking` à la place de `app.hints.active || app.tutorial.active` pour les fenêtres en file. Les exports
+  `*_HINTS` de `src/data/career/*` restent (consigne : ne pas toucher `src/data` ; plus lus par l'interface).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7, toucher seulement, `index.html?dev=1&debug=1&nosw`) : `valley.box`
+  → `valley.sheet` (V1), `valley.nature` → `valley.naturePlace` jusqu'à la vraie pose d'une haie (mode de visée),
+  `valley.trocPin` → `valley.troc` jusqu'au vrai troc, et `valley.troc` seul à la 1ʳᵉ ouverture du tableau puis
+  `variety.board` à la suivante (V2), `valley.view` → `valley.place` puis `valley.viewOpen` (V3) ; les 6 rappels
+  testables (`jar`, `species`, `troc`, `chapter`, `trial`, `works`) : une vraie pastille chacun, et son toucher mène au
+  bon endroit (bocal, scène, troc, chapitre, planches, vue sur le lieu). `legend` / `visitor` : V4 pas encore livré.
+  Aucune erreur console. Captures `coach-valley-*.png` (dossier de travail).
+- **Remarques pour MOTEUR** : `ctx.ui.placing` n'est qu'un booléen (un `ui.placingKind` — genre d'aménagement, `'pair'`,
+  `'wild'` — éviterait de deviner le genre choisi : repli sur le moins cher qui a une place libre) ; `ctx.day.abs` vaut
+  `année × 1000 + jour` (pas le jour absolu du cœur : à un changement d'année l'attente des rappels saute) ; `canShow`
+  lit le `where` de la leçon pour chaque étape (d'où les leçons de visée séparées) ; le lien « Passer » s'affiche
+  « null » sur les étapes à bouton.
+
+### 2026-10-04 — Accompagnement « Joseph vous montre » : moteur de leçons et tutoriels (paquet MOTEUR + TUTORIELS)
+
+- **Moteur** (`src/ui/coach/`) : `engine.js` (file, contexte, étapes, pause `coach`, réglage, cours, rejeu, pont des
+  anciens conseils), `scheduler.js` (PUR : priorités, respiration 20 s, 3 leçons par jour, bon moment, Complet / Discret /
+  Aucun, quotas des rappels), `acquired.js` (PUR : ce qui est déjà su, § 10.3), `bubble.js` (bulle de Joseph pleine
+  largeur jamais sur sa cible, pastille, doigt animé — planche `coach.png` d'ART, repli CSS —, anneau, liseré),
+  `targets.js` (interface, parcelles, chemin d'un glissé, objets de la scène par `scene.targetRect(hit)`, suivent le zoom
+  et le défilement), `store.js` (hors partie : `hintsSeen`, « à lire », rappels coupés, reprise des cours),
+  `reminders.js` (pastille ≤ 1 par jour / ≤ 4 par saison, silence après 3 ignorées, ligne du matin), `carnet.js`
+  (« Le carnet de Joseph » : Leçons · Mots de la ferme · Rappels, fusion du Guide de la ferme), `signals.js`, `css/coach.css`.
+- **Cours** : `levels.firstYear` (niveau 1, 13 bulles, ≈ 95 mots au lieu de 206, gestes enfin appris : glisser, appui
+  long, ligne « À faire » ; reprise à l'étape retenue, anciens index convertis) et `career.firstSteps` (nouvelle ferme avec
+  **6 carottes mûres** : première bulle à 1,2 s, glisser, payé, semer, arroser, le temps, les œufs, acheter une poule,
+  le carnet). Leçons `basics.*` et rappels `harvest`, `water`, `sow`, `money.low` (ex-conseil « fermage en danger »), `order`.
+- **Cœur** : `createCareer({ starter: true })` (carrière seulement, sans tirage, désactivé par défaut ; test
+  `tests/career-starter.test.js`) ; parité Classique 400 / 400.
+- **Réglage** : `settings.guidance` (Complet / Discret / Aucun) dans les Options (« Accompagnement » + « Ouvrir le
+  carnet »), la fenêtre « Bienvenue ! » et le carnet ; anciens joueurs : une seule question de Joseph, **Discret
+  présélectionné**, rudiments marqués sus sans être rejoués. Case « Premiers pas avec Joseph » dans « Nouvelle ferme ».
+- **Retraits** : `src/ui/tutorial.js`, `maybeLowMoneyHint`, conseils du guide, `VARIETY_HINTS`, `COZY_HINTS` ;
+  `hints.js` devient un pont vers `coach.request` ; `zoom.js`, `minimap.js`, `todo.js` testent `app.coach.blocking`.
+- **Tests** : `tests/coach.test.js` (ordonnanceur, réglages, rappels, déduction, reprise), `tests/coach-lessons.test.js`
+  (catalogue : unicité, FALC, événements connus, anciens conseils couverts — vert avec les paquets LEÇONS).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `dev.html` et `index.html`
+  `?debug=1&nosw`) : nouvelle carrière jusqu'à la poule (bulle jamais sur sa cible à chaque étape, temps arrêté pendant
+  les lectures), niveau 1 avec le cours puis l'année jusqu'à la victoire (rechargement au milieu : reprise à l'étape
+  « time »), « Je connais », 360 × 740 + texte 150 % + mouvement réduit, ancien joueur (question unique, rudiments non
+  rejoués), Discret (cours proposé, pastille sans pause), Aucun (tout dans le carnet), carnet (relire, « Me montrer »,
+  rappel coupé), pincement pendant une leçon (l'anneau suit), rappels (pastille et ligne « À faire » pointée ; Discret :
+  ligne du matin), `aria-live`. Cibles ≥ 48 px, textes ≥ 14 px, aucune erreur console. Captures `screens/coach-*.png`.
+- **Bugs corrigés en route** : doigt invisible (visibilité CSS), lien « null » à côté du bouton, glissé lent qui sautait
+  une étape (attente de la fin du geste), section « Animaux » repliée (dépliée par l'étape), feuille restée ouverte sur
+  la dernière bulle.
+- **Idées** : lecture à voix haute (`coach.onSay`) ; anneau du poulailler plus serré (la zone de l'abri entier est grande).
+

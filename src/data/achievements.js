@@ -174,7 +174,24 @@ export const PLACES_ACHIEVEMENTS = [
   career('riverAngler', 'Pêcheur du ruisseau', '20 pêches au ruisseau.', 10, { type: 'careerValley', key: 'riverFish', n: 20 }),
 ];
 
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS, ...PLACES_ACHIEVEMENTS];
+/**
+ * (Vallée vivante, lot V4) Les 9 succès des cigognes (catégorie « Carrière », écus seulement ; rangés sous « La Vallée »).
+ * careerValley { key, n } : legendsAwake, legendHarvests, legendsHarvestedN, stage, storkNest (0 / 1),
+ * visitorsSeenNoStork, visitorsSeenN, epilogue (0 / 1), postcards.
+ */
+export const STORKS_ACHIEVEMENTS = [
+  career('firstLegend', 'La graine qui dormait', 'Réveiller une première légende.', 10, { type: 'careerValley', key: 'legendsAwake', n: 1 }),
+  career('legendHarvest', 'Récolte de légende', 'Récolter une légende à la main.', 10, { type: 'careerValley', key: 'legendHarvests', n: 1 }),
+  career('fourLegends', 'Les quatre légendes', 'Récolter les 4 légendes.', 40, { type: 'careerValley', key: 'legendsHarvestedN', n: 4 }),
+  career('storksBack', 'Les cigognes', 'Atteindre l\'étape 8 de la vallée.', 40, { type: 'careerValley', key: 'stage', n: 8 }),
+  career('storkNest', 'Une maison heureuse', 'Les cigognes nichent sur la maison.', 20, { type: 'careerValley', key: 'storkNest', n: 1 }),
+  career('rareVisitor', 'Un visiteur rare', 'Voir un premier visiteur rare (hors cigognes).', 10, { type: 'careerValley', key: 'visitorsSeenNoStork', n: 1 }),
+  career('allVisitors', 'Le ciel de la vallée', 'Voir les 6 visiteurs rares.', 40, { type: 'careerValley', key: 'visitorsSeenN', n: 6 }),
+  career('valleyBook', 'Le livre de la vallée', 'Lire l\'épilogue de Joseph.', 30, { type: 'careerValley', key: 'epilogue', n: 1 }),
+  career('furtherAway', 'Semer plus loin', 'Recevoir une première carte d\'une vallée voisine.', 10, { type: 'careerValley', key: 'postcards', n: 1 }),
+];
+
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS, ...PLACES_ACHIEVEMENTS, ...STORKS_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

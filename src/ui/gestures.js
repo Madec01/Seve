@@ -100,6 +100,7 @@ export function createSceneInput(canvas, app) {
     const game = app.game;
     const p = game?.query.plot(index);
     if (!p || game.state.status !== 'playing') return null;
+    app.coach?.signal?.('plotTap', { index, action: p.action || null }); // (accompagnement)
     // Carrière : une parcelle marquée d'un corbeau → on le chasse d'abord (docs/CARRIERE.md § 10.9).
     if (app.careerUI?.onPlotTap?.(index)) return 'crow';
     switch (p.action) {
@@ -138,6 +139,7 @@ export function createSceneInput(canvas, app) {
 
   function openInfo(hit) {
     app.vibrate(20);
+    app.coach?.signal?.('longPress', { hit }); // (accompagnement) appui long : la fiche
     app.audio.play('page', { volume: 0.7 });
     if (hit.type === 'plot') app.field.openPlotInfo(hit.index);
     else if (hit.type === 'investment') app.field.openInvestmentInfo(hit.id);
@@ -494,5 +496,12 @@ export function createSceneInput(canvas, app) {
     scene()?.setHover(null);
   }
 
-  return { cancel, hitAt };
+  return {
+    cancel,
+    hitAt,
+    /** (Accompagnement) un doigt est posé sur la scène (glissé en cours) : le moteur attend la fin du geste. */
+    get active() {
+      return !!g || !!pinch;
+    },
+  };
 }

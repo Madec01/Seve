@@ -5,9 +5,10 @@
 
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import {
-  ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, MAX_STAGE, MAX_STAGE_ALL, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS,
+  ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, MAX_STAGE, MAX_STAGE_ALL, MAX_STAGE_V3, LONE_TREE, NATURE_ITEMS_BY_ID, NATURE_SPOTS,
   RECIPE_NATURE, RECIPE_TEXTS, STAGES, STAGES_ALL, BOON_TEXTS, agreeWith, stageSigns,
 } from '../../data/career/valley.js';
+import { LEGENDS, POSTCARDS_BY_ID, STORKS_TEXTS, VISITORS } from '../../data/career/storks.js';
 import { SEED_LIBRARY } from '../../data/career/heritage.js';
 import { BOON_TEXTS_V3, PLACES, PLACES_BY_ID } from '../../data/career/places.js';
 import { inGreenhouse, isMature } from '../farm.js';
@@ -21,6 +22,7 @@ import { canStartWorks, nextStepOf, placeNeeds, placeReady, placesSigns, stage6O
 import {
   crossLinks, heritageOn, heritageSeedsOn, pairPlots, pairStatus, partnerPlotOf, swapInfo, unreadStory, unitOf,
 } from './heritage.js';
+import { fill, legendName, ofValley, sowLegendReason, stage8Ok, storkNeedText, storksOn } from './storks.js';
 
 const SPECIES = ALL_SPECIES;
 const SPECIES_BY_ID = ALL_SPECIES_BY_ID;
@@ -311,35 +313,39 @@ export function signsOfLife(state) {
 
 /**
  * Étape atteinte pour un nombre de signes de vie (paliers du V1, du V2 avec `heritage`, du V3 avec `places` : les étapes 6
- * et 7 demandent aussi `extra.ok6` / `extra.ok7`, les conditions de lieux). Les paliers du V1 sont les plus bas :
- * `stageFor(signs)` borne toute étape 0..5 légitimement atteinte (vérification des sauvegardes).
+ * et 7 demandent aussi `extra.ok6` / `extra.ok7`, les conditions de lieux ; (V4) l'étape 8 n'a pas de palier : elle demande
+ * `extra.ok8`, les cigognes vues). Les paliers du V1 sont les plus bas : `stageFor(signs)` borne toute étape 0..5
+ * légitimement atteinte (vérification des sauvegardes).
  */
 export function stageFor(signs, heritage = false, places = false, extra = {}) {
   const v3 = heritage && places;
   let n = 0;
   for (const st of v3 ? STAGES_ALL : STAGES) {
-    if (signs < stageSigns(st.n, heritage, v3)) break;
+    if (st.n === 8) {
+      if (!extra.ok8) break;
+    } else if (signs < stageSigns(st.n, heritage, v3)) break;
     if (st.n === 6 && !extra.ok6) break;
     if (st.n === 7 && !extra.ok7) break;
     n = st.n;
   }
-  return Math.min(n, v3 ? MAX_STAGE_ALL : MAX_STAGE);
+  return Math.min(n, v3 ? (extra.ok8 ? MAX_STAGE_ALL : MAX_STAGE_V3) : MAX_STAGE);
 }
 
-/** Étape visée par l'état (paliers du V2 si la partie `heritage` est ouverte ; du V3 avec `places`). */
+/** Étape visée par l'état (paliers du V2 si la partie `heritage` est ouverte ; du V3 avec `places` ; (V4) étape 8 avec `storks`). */
 export function stageTarget(state) {
   const p = placesOn(state);
-  return stageFor(signsOfLife(state), heritagePartOn(state), p, p ? { ok6: stage6Ok(state), ok7: stage7Ok(state) } : {});
+  return stageFor(signsOfLife(state), heritagePartOn(state), p, p ? { ok6: stage6Ok(state), ok7: stage7Ok(state), ok8: stage8Ok(state) } : {});
 }
 
-/** Palier (signes de vie) de l'étape n pour cette carrière. */
+/** Palier (signes de vie) de l'étape n pour cette carrière ((V4) étape 8 : null). */
 export function stageSignsOf(state, n) {
   return stageSigns(n, heritagePartOn(state), placesOn(state));
 }
 
-/** Les étapes de la carrière (0 à 5 ; 0 à 7 avec le V3). */
+/** Les étapes de la carrière (0 à 5 ; 0 à 7 avec le V3 ; 0 à 8 avec le V4). */
 export function stagesOf(state) {
-  return placesOn(state) ? STAGES_ALL : STAGES;
+  if (!placesOn(state)) return STAGES;
+  return storksOn(state) ? STAGES_ALL : STAGES_ALL.slice(0, MAX_STAGE_V3 + 1);
 }
 
 /** Services en cours (habitants installés, étapes ; (V3) avantages des lieux) : [{ id, text }]. */
@@ -488,17 +494,31 @@ export function nextHint(state) {
       if (s.group === 'valley') return { kind: 'valleyAnimal', text: `${s.the} vous attend${s.pl ? 'ent' : ''} ${whereText(state, s.placeId)}.`, icon: s.icon, target: { type: 'viewAnimal', id: s.id } };
       return { kind: 'observe', text: `${s.the || s.name} vous attend${s.pl ? 'ent' : ''} ${whereText(state, e.spotId)}.`, icon: s.icon, target: { type: 'species', id: s.id } };
     }
+    // (V4) Un visiteur rare fait halte (les cigognes sur le clocher, les grues dans la prairie, les vers luisants à la haie).
+    const visitor = storksOn(state) ? visitorHint(state) : null;
+    if (visitor) return visitor;
   }
   const unread = stagesOf(state).find((st) => st.n <= v.stage && !v.chapters.read.includes(st.n));
   if (unread) return { kind: 'chapter', text: 'Joseph a quelque chose à vous dire.', icon: 'portrait.joseph', target: null };
   if (heritageOn(state)) {
     const story = unreadStory(state);
     if (story) return { kind: 'story', text: 'Joseph a quelque chose à vous dire.', icon: 'portrait.joseph', target: { type: 'story', id: story.id } };
+    // (V4) L'épilogue de Joseph, puis une carte d'une vallée voisine à lire.
+    if (storksOn(state)) {
+      if (v.epilogue?.availableAt && !v.epilogue.readAt) return { kind: 'epilogue', text: STORKS_TEXTS.epilogueWaits, icon: 'portrait.joseph', target: { type: 'epilogue', id: null } };
+      const card = (v.postcards?.got || []).find((g) => !g.read);
+      if (card) return { kind: 'postcard', text: fill(STORKS_TEXTS.postcardHint, { of: ofValley(POSTCARDS_BY_ID[card.id].valley) }), icon: 'icon.postcard', target: { type: 'postcard', id: card.id } };
+    }
     const troc = seeds ? swapInfo(state) : null;
     if (troc) return { kind: 'troc', text: `${troc.clientName} propose un troc : ${troc.varietyName}.`, icon: 'troc.pin', target: { type: 'troc', id: troc.clientId } };
   }
   const pending = (state.career.heirlooms || []).length - v.jars.opened;
   if (seeds && pending > 0) return { kind: 'jar', text: pending > 1 ? `${pending} bocaux de graines anciennes à ouvrir.` : 'Un bocal de graines anciennes à ouvrir.', icon: 'item.heirloom', target: null };
+  // (V4) Une légende mûre sous sa cloche ; une légende réveillée à semer (une seule fois : avant son premier semis).
+  if (storksOn(state)) {
+    const legend = legendHint(state);
+    if (legend) return legend;
+  }
   if (seeds) {
     const k = state.plots.findIndex((p) => p && p.env && p.variety && p.cropId && isMature(p) && !isFixed(state, p.variety));
     if (k >= 0) {
@@ -562,10 +582,45 @@ export function nextHint(state) {
   const wildHint = wildLandHint(state);
   if (wildHint) return wildHint;
   if (seedsHint) return seedsHint;
+  // (V4) Ce qui manque aux cigognes (étape 8 : aucun palier de signes).
   const next = stagesOf(state).find((st) => st.n === v.stage + 1);
+  if (next && next.n === 8) {
+    const text = storkNeedText(state);
+    return text ? { kind: 'storkNeed', text, icon: 'visitor.whiteStork', target: { type: 'storks', id: null } } : null;
+  }
   if (next) {
     const left = Math.max(1, stageSignsOf(state, next.n) - signsOfLife(state));
     return { kind: 'stage', text: `Encore ${left} signe${left > 1 ? 's' : ''} de vie pour « ${next.name} ».`, icon: 'icon.signs', target: null };
+  }
+  return null;
+}
+
+/** (V4) Un visiteur rare qui attend qu'on vienne le voir (ordre de VISITORS) : indice 'visitor'. */
+function visitorHint(state) {
+  const v = state.career.valley;
+  for (const x of VISITORS) {
+    if (v.visitors?.[x.id]?.state !== 'visible') continue;
+    const text = x.id === 'whiteStork' ? STORKS_TEXTS.storkWaiting : `${x.halt}.`;
+    return { kind: 'visitor', text, icon: x.icon, target: { type: 'visitor', id: x.id, where: x.where } };
+  }
+  return null;
+}
+
+/** (V4) Indice d'une légende : mûre sous sa cloche ('legendRipe'), puis réveillée jamais semée ('legendSow'). */
+function legendHint(state) {
+  const v = state.career.valley;
+  for (const x of LEGENDS) {
+    if (v.cloches?.[x.id]?.ripe) {
+      const the = x.nameFarm ? legendName(state, x.id) : x.the;
+      return { kind: 'legendRipe', text: `${the} ${x.pl ? 'sont' : 'est'} ${agreeWith(x, 'mûr')} sous sa cloche.`, icon: x.icon, target: { type: 'seedLibrary', id: 'legends', legendId: x.id } };
+    }
+  }
+  for (const x of LEGENDS) {
+    const e = v.legends?.[x.id];
+    if (!e || e.harvests > 0 || v.cloches?.[x.id] || sowLegendReason(state, x.id)) continue;
+    const the = x.nameFarm ? legendName(state, x.id) : x.the;
+    const text = `${the} ${x.pl ? 'sont' : 'est'} ${agreeWith(x, 'réveillé')} : ${x.pl ? 'semez-les' : x.g === 'f' ? 'semez-la' : 'semez-le'} sous sa cloche, devant la Grainothèque.`;
+    return { kind: 'legendSow', text, icon: x.icon, target: { type: 'seedLibrary', id: 'legends', legendId: x.id } };
   }
   return null;
 }

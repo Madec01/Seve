@@ -14,6 +14,10 @@ const A = (g) => g.actions.career;
 const V3_FIELDS = ['view', 'places', 'wilds', 'wildBought', 'river', 'mushrooms'];
 const V3_YEAR = ['works', 'recovered', 'valleyInstalled', 'wilds', 'river', 'riverIncome', 'mushrooms'];
 const V3_STATS = ['works', 'recovered', 'river', 'riverIncome', 'mushrooms', 'wilds', 'visits'];
+// (V4) Champs du V4 (inertes sans la partie storks), retirés avant les empreintes comme ceux du V3.
+const V4_FIELDS = ['legends', 'cloches', 'marvel', 'visitors', 'stork', 'epilogue', 'postcards', 'stageAt', 'rainedAt'];
+const V4_YEAR = ['legends', 'legendHarvests', 'visitorsSeen', 'chicks', 'postcards'];
+const V4_STATS = ['legendHarvests', 'visitorsSeen', 'storkYears', 'postcards', 'credits', 'bookOpened'];
 
 /** Sauvegarde « du V2 » : sans les champs du V3, `v: 2`, sans flux valley3. */
 function asV2(saved) {
@@ -38,7 +42,7 @@ test('carrière du V2 reprise : champs du V3 ajoutés sans rien retirer, v = 3, 
   const h = loadCareer(old);
   const v = h.state.career.valley;
   assert.equal(v.v, VALLEY_VERSION);
-  assert.deepEqual(v.parts, { seeds: true, wildlife: true, heritage: true, places: true });
+  assert.deepEqual(v.parts, { seeds: true, wildlife: true, heritage: true, places: true, storks: true });
   assert.deepEqual([v.view, v.places, v.wilds, v.wildBought, v.river, v.mushrooms], [{ open: false, openedAt: null, visits: 0 }, {}, {}, 0, { fishedDay: 0 }, []]);
   assert.ok(Number.isInteger(h.state.rng.valley3));
   for (const k of Object.keys(old.rng)) assert.equal(h.state.rng[k], old.rng[k], k);
@@ -95,10 +99,10 @@ test('{ places: false } : le V1 + V2 exactement — empreinte de l\'état d\'une
   const c = playCareer({ seed: 1, strategy: 'casual', years: 18, valley: { places: false }, keepGame: true });
   const s = JSON.parse(JSON.stringify(c.game.state));
   const v = s.career.valley;
-  for (const k of V3_FIELDS) delete v[k];
+  for (const k of [...V3_FIELDS, ...V4_FIELDS]) delete v[k];
   delete v.v;
   delete v.parts;
-  for (const k of ['works', 'recovered', 'valleyInstalled', 'wilds', 'river', 'riverIncome', 'mushrooms', 'visits']) {
+  for (const k of ['works', 'recovered', 'valleyInstalled', 'wilds', 'river', 'riverIncome', 'mushrooms', 'visits', ...V4_YEAR, ...V4_STATS]) {
     delete v.year[k];
     delete v.stats[k];
   }

@@ -148,6 +148,7 @@ export function createZoomControls(app) {
 
   function changed() {
     save();
+    app.coach?.signal?.('zoom', { ratio: app.scene?.zoomInfo?.().ratio ?? null });
   }
 
   /** Préférence de la partie (ou zoom par défaut au menu) appliquée une fois par partie et par mode. */
@@ -169,7 +170,8 @@ export function createZoomControls(app) {
     // Grand écran : la feuille est rangée à droite, la ferme reste visible (les boutons se décalent, CSS).
     const wide = document.body.classList.contains('layout-wide');
     if ((app.sheets?.isOpen() && !wide) || app.dialogs?.isOpen()) return false;
-    if (app.hints?.active || app.tutorial?.active) return false;
+    // (Accompagnement) Une bulle de Joseph couvre l'écran : les boutons se cachent, sauf pendant la leçon du zoom.
+    if (app.coach?.blocking && app.coach.current?.lessonId !== 'basics.zoom') return false;
     if (app.valleyView?.active) return false; // (Vallée V3) l'écran « La vallée »
     return !document.body.classList.contains('is-loading');
   }

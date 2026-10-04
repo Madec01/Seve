@@ -237,6 +237,7 @@ export function createMessages(app) {
     app.sheets.open({ id: 'messages', kind: 'panel', tall: true, title: 'Messages', icon: bellIcon('bell-ico--md'), content: content() });
     app.audio.play('page', { volume: 0.5 });
     markRead();
+    app.coach?.signal?.('messagesOpen');
   }
 
   return {

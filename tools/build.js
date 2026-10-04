@@ -18,7 +18,7 @@
 //      minifié, carte des sources dist/game.<empreinte>.js.map) ; la table des empreintes des
 //      ressources y est écrite (globalThis.__FERME_ASSETS__, lue par src/version.js) : images et
 //      sons sont demandés avec « ?v=<empreinte> » ;
-//   3. css/fonts.css + css/style.css + css/guidance.css + css/lot2.css + css/variety.css + css/cozy.css → dist/game.<empreinte>.css (url() réécrites en ../assets/…?v=…) ;
+//   3. css/fonts.css + css/style.css + css/guidance.css + css/lot2.css + css/variety.css + css/cozy.css + css/valley.css + css/coach.css → dist/game.<empreinte>.css (url() réécrites en ../assets/…?v=…) ;
 //   4. src/index.template.html → index.html (paquet) et dev.html (modules de src/, pour déboguer),
 //      avec le chargeur src/loader.js recopié dans la page ;
 //   5. bloc PRECACHE de sw.js (fichiers de cette version, empreintes, « core » ou « lazy ») ;
@@ -39,7 +39,7 @@ const KEEP_BUILDS = 5;
 // fichiers de travail (scripts de génération, licences, police source).
 const ASSET_EXCLUDED_DIRS = new Set(['assets/screenshots']);
 const ASSET_EXCLUDED_EXT = new Set(['.md', '.py', '.txt', '.pyc', '.map', '.log', '.ttf', '.otf', '.xcf', '.aseprite']);
-const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css', 'css/valley.css'];
+const CSS_FILES = ['css/fonts.css', 'css/style.css', 'css/guidance.css', 'css/lot2.css', 'css/variety.css', 'css/cozy.css', 'css/valley.css', 'css/coach.css'];
 const TEMPLATE = 'src/index.template.html';
 const LOADER = 'src/loader.js';
 const ENTRY = 'src/main.js';

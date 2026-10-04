@@ -1,6 +1,7 @@
 // Mode Carrière — menu principal « Ma ferme » (§ 1.1, § 10.1) et création d'une ferme (§ 16) :
 // nom de la ferme (18 caractères), fermier ou fermière (aperçu), tenue (parmi celles débloquées),
-// difficulté (Détente / Classique), durée des saisons (7, 10 ou 14 jours).
+// difficulté (Détente / Classique), durée des saisons (7, 10 ou 14 jours) ; (accompagnement) « Premiers pas avec
+// Joseph » : la ferme commence avec 6 carottes mûres et Joseph montre les gestes (docs/ACCOMPAGNEMENT.md § 5.1).
 //
 // careerMenuButtons(app, btn) → nœuds du menu ; openNewFarm(app, { replacing }) → fenêtre de création.
 
@@ -70,7 +71,10 @@ export function openNewFarm(app, { replacing = null } = {}) {
     outfit: P.available() ? P.cosmetics().outfit || 'outfit.classic' : 'outfit.classic',
     difficulty: 'detente',
     seasonLength: 7,
+    // Décochée d'office si les rudiments sont déjà sus (§ 10.3) ou si une ferme a déjà existé ; toujours modifiable.
+    firstSteps: !(app.coach?.experienced?.() || (P.available() && ((P.get().career?.archive || []).length > 0 || (P.get().career?.started || 0) > 0))),
   };
+  const knewGestures = !state.firstSteps;
   if (!outfits.some((o) => o.id === state.outfit)) state.outfit = outfits[0]?.id || 'outfit.classic';
 
   // ── Nom ──
@@ -228,14 +232,40 @@ export function openNewFarm(app, { replacing = null } = {}) {
       if (!ok) return;
     }
     app.dialogs.closeTop();
-    app.startCareer({ farmName: r.value, farmerGender: state.gender, outfit: state.outfit, difficulty: state.difficulty, seasonLength: state.seasonLength }, { archiveExisting: !!replacing?.meta });
+    app.startCareer({ farmName: r.value, farmerGender: state.gender, outfit: state.outfit, difficulty: state.difficulty, seasonLength: state.seasonLength, firstSteps: state.firstSteps }, { archiveExisting: !!replacing?.meta });
   }
+
+  // ── Premiers pas avec Joseph (accompagnement) ──
+  const stepsState = el('span.opt-state', { 'aria-hidden': 'true' });
+  const stepsBtn = el(
+    'button.opt-toggle.nf-firststeps',
+    {
+      type: 'button',
+      role: 'switch',
+      id: 'nf-firststeps',
+      onclick: () => {
+        app.audio.play('toggle');
+        state.firstSteps = !state.firstSteps;
+        syncSteps();
+      },
+    },
+    el('span.checkbox'),
+    el('span.opt-label', el('b', 'Premiers pas avec Joseph'), el('small', knewGestures ? 'Vous connaissez déjà les gestes. Joseph peut quand même vous montrer.' : '6 carottes mûres vous attendent : Joseph vous montre les gestes.')),
+    stepsState,
+  );
+  const syncSteps = () => {
+    stepsBtn.classList.toggle('is-on', state.firstSteps);
+    stepsBtn.setAttribute('aria-checked', state.firstSteps ? 'true' : 'false');
+    stepsState.textContent = state.firstSteps ? 'Oui' : 'Non';
+  };
+  syncSteps();
 
   const section = (title, ...kids) => el('section.nf-sec', el('h3.opt-section', title), kids);
   const body = el(
     'div.nf-form',
     el('p.nf-intro', 'Votre ferme à vous : elle dure d\'année en année et s\'agrandit terrain par terrain.'),
     section('Nom de la ferme', el('div.name-form', el('div.name-row', input), el('div.name-meta', error, count))),
+    stepsBtn,
     section('Je suis', genderBox),
     section('Tenue', outfitBox),
     section('Difficulté', el('div.diff-box.nf-diff', diffBox, diffDesc)),

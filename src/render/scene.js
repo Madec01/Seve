@@ -881,7 +881,8 @@ export function createScene(canvas, images, level, opts = {}) {
 
   /**
    * (v3) Fait défiler le moins possible pour voir le rectangle `r` (px du monde) au-dessus de la
-   * feuille ouverte. opts : { margin (px CSS, 24), animate (true) }. Renvoie le défilement visé (px CSS).
+   * feuille ouverte. opts : { margin (px CSS, 24), animate (true), bottom (px CSS couverts en plus, 0) }. Renvoie le
+   * défilement visé (px CSS).
    */
   function focusRect(r, opts = {}) {
     if (!r) return scrollDev / dpr;
@@ -894,7 +895,8 @@ export function createScene(canvas, images, level, opts = {}) {
     const top = baseY - cur + top0 * zoom;
     const bottom = baseY - cur + (d.y + d.h) * zoom;
     const visTop = band.y + m;
-    const visBottom = band.y + band.h - overlayDev - m;
+    // (Accompagnement) opts.bottom : hauteur couverte en plus en bas (px CSS : bulle de Joseph posée au-dessus des onglets).
+    const visBottom = band.y + band.h - overlayDev - Math.max(0, (opts.bottom || 0) * dpr) - m;
     let target = cur;
     if (bottom > visBottom) target = cur + (bottom - visBottom);
     if (top - (target - cur) < visTop) target = cur - (visTop - top);
@@ -4529,6 +4531,46 @@ export function createScene(canvas, images, level, opts = {}) {
     },
     ensureTouchZoom,
     restoreZoom,
+    /**
+     * (Accompagnement, docs/ARCHITECTURE.md « Accompagnement — contrats ») Rectangle (px du monde) d'une cible de la
+     * forme de hitTest, ou null : parcelle, bâtiment, abri, terrain, personnage, objets des lots 3 et 4, de la Vallée.
+     * Façade sur layout.plotRect / investmentRect / hitRect, actors.rectOf, variety.spots, cozyItemRect, valleyItemRect,
+     * placesItemRect. Ne change rien à la scène.
+     */
+    targetRect(hit) {
+      if (!hit || typeof hit !== 'object') return null;
+      const tryRect = (fn) => {
+        try {
+          const r = fn();
+          return r && r.w > 0 && r.h > 0 ? { x: r.x, y: r.y, w: r.w, h: r.h } : null;
+        } catch {
+          return null;
+        }
+      };
+      const owned = lastGame?.state?.investments || {};
+      if (hit.type === 'plot') return tryRect(() => layout.plotRect(hit.index));
+      if (hit.type === 'investment') return tryRect(() => layout.investmentRect(hit.id, owned[hit.id] || 0));
+      const id = hit.id ?? hit.index ?? hit.cellId ?? hit.spotId ?? hit.plotIndex;
+      let sp = null;
+      try {
+        sp = variety.spots();
+      } catch {
+        sp = null;
+      }
+      const VARIETY = { villageBoard: 'board', cart: 'cart', merchant: 'merchant' };
+      if (VARIETY[hit.type] && sp?.[VARIETY[hit.type]]) return tryRect(() => sp[VARIETY[hit.type]]);
+      if (hit.type === 'themeVisitor' && sp?.visitor) return { x: sp.visitor.x, y: sp.visitor.y - 15, w: 16, h: 17 };
+      if (hit.type === 'crow' && Number.isInteger(hit.plotIndex)) {
+        const r = careerMode ? tryRect(() => actors.rectOf(hit)) : null;
+        return r || tryRect(() => layout.plotRect(hit.plotIndex));
+      }
+      return (
+        (careerMode ? tryRect(() => layout.hitRect(hit)) || tryRect(() => actors.rectOf(hit)) : null) ||
+        tryRect(() => cozy.itemRect(hit.type, id)) ||
+        tryRect(() => valley.itemRect(hit.type, id)) ||
+        tryRect(() => places.itemRect(hit.type, id))
+      );
+    },
     get valleyPlacing() {
       return valley.placing;
     },

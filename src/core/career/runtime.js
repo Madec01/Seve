@@ -400,7 +400,7 @@ export function createCareerRuntime(core) {
     const handBonus = Math.max(0, handPart);
     const amount = ((diverted && !sold) || processed || stored ? handBonus : value) + qualityBonus;
     // (Vallée vivante) Graines gardées à la main, fixation (avant clearPlot) ; lastVariety pour le plan « même culture ».
-    const vh = p.variety && state.career.valley ? valleyHarvest(api, plotIndex, by) : null;
+    const vh = p.variety && state.career.valley ? valleyHarvest(api, plotIndex, by, { quality: q?.quality }) : null;
     if (!vh && !tree && state.career.valley && p.lastVariety !== undefined) delete p.lastVariety;
     if (tree) {
       p.fruit = 0;

@@ -16,9 +16,10 @@ import {
   VILLAGE_VARIETIES_BY_ID, ofFarm,
 } from '../../data/career/heritage.js';
 import {
-  crossNeedOf, fixHandOf, handSeedsOf, heritagePartOn, isFixed, libraryEffectsOf, libraryLevelOf, placesOn, valleyOf, varietyName,
+  crossNeedOf, fixHandOf, handSeedsOf, heritagePartOn, isFixed, libraryEffectsOf, libraryLevelOf, placesOn, storksOn, valleyOf, varietyName,
 } from './heirlooms.js';
 import { STORIES_V3 } from '../../data/career/places.js';
+import { EPILOGUE, STORIES_V4 } from '../../data/career/storks.js';
 import { inGreenhouse } from '../farm.js';
 
 const CLIENTS_BY_ID = Object.fromEntries(CLIENTS.map((c) => [c.id, c]));
@@ -419,24 +420,42 @@ export function boxInfo(state) {
   };
 }
 
-/** Récits de la carrière : ceux de la Grainothèque (V2), puis (V3, partie `places`) ceux de la vallée. */
+/**
+ * Récits de la carrière : ceux de la Grainothèque (V2), puis (V3, partie `places`) ceux de la vallée, puis (V4, partie
+ * `storks`) ceux des cigognes et l'épilogue de Joseph (relisibles).
+ */
 export function storiesOf(state) {
-  return placesOn(state) ? [...STORIES, ...STORIES_V3] : STORIES;
+  if (!placesOn(state)) return STORIES;
+  return storksOn(state) ? [...STORIES, ...STORIES_V3, ...STORIES_V4, EPILOGUE_STORY] : [...STORIES, ...STORIES_V3];
 }
 
-/** Récits de Joseph : [{ id, title, vignette, lines, available, read }] (V2, puis V3). */
+/** (V4) L'épilogue comme récit relisible : ses 3 pages (lignes à la suite) ; `{ofFarm}` remplacé par storiesInfo. */
+const EPILOGUE_STORY = { id: EPILOGUE.id, title: EPILOGUE.title, vignette: EPILOGUE.vignette, lines: EPILOGUE.pages.flatMap((p) => p.lines), pages: EPILOGUE.pages, epilogue: true };
+
+/** « {ofFarm} » d'un récit du V4 remplacé par « de la Ferme des Tilleuls ». */
+function storyLines(state, s) {
+  return s.lines.map((l) => l.replace('{ofFarm}', farmOf(state)));
+}
+
+/** Récits de Joseph : [{ id, title, vignette, lines, available, read }] (V2, puis V3, puis V4 et l'épilogue). */
 export function storiesInfo(state) {
   const v = valleyOf(state);
   const av = v?.stories?.available || [];
   const rd = v?.stories?.read || [];
-  return storiesOf(state).map((s) => ({ id: s.id, title: s.title, vignette: s.vignette, lines: [...s.lines], available: av.includes(s.id), read: rd.includes(s.id), ...(STORIES.includes(s) ? {} : { v3: true }) }));
+  return storiesOf(state).map((s) => {
+    const base = { id: s.id, title: s.title, vignette: s.vignette, lines: storyLines(state, s), available: av.includes(s.id), read: rd.includes(s.id) };
+    if (STORIES.includes(s)) return base;
+    if (STORIES_V3.includes(s)) return { ...base, v3: true };
+    if (s.epilogue) return { ...base, v4: true, epilogue: true, pages: s.pages.map((p) => ({ vignette: p.vignette, lines: p.lines.map((l) => l.replace('{ofFarm}', farmOf(state))) })) };
+    return { ...base, v4: true };
+  });
 }
 
-/** Récit disponible pas encore lu (le premier) ou null. */
+/** Récit disponible pas encore lu (le premier) ou null. (V4) L'épilogue a son propre indice : il n'est pas compté ici. */
 export function unreadStory(state) {
   const v = valleyOf(state);
   if (!v?.stories) return null;
-  return storiesOf(state).find((s) => v.stories.available.includes(s.id) && !v.stories.read.includes(s.id)) || null;
+  return storiesOf(state).find((s) => !s.epilogue && v.stories.available.includes(s.id) && !v.stories.read.includes(s.id)) || null;
 }
 
 /** Graines rendues par une récolte à la main (lu par l'indice et les fiches). */

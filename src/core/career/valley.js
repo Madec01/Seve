@@ -29,13 +29,20 @@
 // Reinette grise, cerisier et poirier, terres sauvages (après le 16ᵉ terrain), étapes 6 et 7, 8 récits. Lectures pures :
 // src/core/career/places.js ; données : src/data/career/places.js ; contrat : docs/ARCHITECTURE.md, « Vallée vivante —
 // contrats du lot V3 ». Avec { places: false } : le V1 + V2 exactement (aucun tirage valley3, aucune règle du V3).
+//
+// (V4, « Les cigognes », partie `storks`) 4 légendes sous cloche (jamais vendues), 6 visiteurs rares (flux NOUVEAU
+// state.rng.valley4 : 5 nombres par aube une fois la vue ouverte, rien d'autre ; les cigognes sont déterministes), l'étape
+// 8, le nid sur la maison, 5 récits et l'épilogue de Joseph, le livre de la vallée, les cartes des vallées voisines, les
+// faits sonores. DÉCORATIF : aucune action du V4 ne gagne ni ne dépense une pièce. Lectures pures : src/core/career/storks.js ;
+// données : src/data/career/storks.js ; contrat : docs/ARCHITECTURE.md, « Vallée vivante — contrats du lot V4 ». Avec
+// { storks: false } : le V1 + V2 + V3 exactement (aucun tirage valley4, aucune règle du V4).
 
 import { SEASONS } from '../../data/balance.js';
 import { getCrop, isTreeCrop } from '../../data/crops.js';
 import { careerFactor } from '../../data/cozy.js';
 import {
   ALL_SPECIES, ALL_SPECIES_BY_ID, ALL_VARIETIES, ALL_VARIETIES_BY_ID, ARRIVAL, FAIR_STALL, HEDGE_FINDS, HEDGE_FINDS_BY_ID, HEDGE_FIND_RULES,
-  JOSEPH_BOX, MAX_STAGE, MAX_STAGE_ALL, NATURE_ITEMS, NATURE_ITEMS_BY_ID, SEED_RULES, SIGNS_ALL, SIGNS_ALL_V3, SIGNS_V1, SPECIES, SPECIES_BY_ID, STAGES, STAGES_ALL, TRAITS_BY_ID,
+  JOSEPH_BOX, MAX_STAGE, MAX_STAGE_ALL, MAX_STAGE_V3, NATURE_ITEMS, NATURE_ITEMS_BY_ID, SEED_RULES, SIGNS_ALL, SIGNS_ALL_V3, SIGNS_V1, SPECIES, SPECIES_BY_ID, STAGES, STAGES_ALL, TRAITS_BY_ID,
   VALLEY_PARTS, VALLEY_START, VALLEY_TEXTS, VALLEY_VERSION, VARIETIES, VARIETIES_BY_ID, VARIETY_OF_CROP, agreeWith, savedText,
 } from '../../data/career/valley.js';
 import {
@@ -60,6 +67,16 @@ import {
   wildEligible, wildOpen, wildPrice, wildStageAt, wildTotal,
 } from './places.js';
 import { themeFishFactor } from './themes.js';
+import { weatherWaters } from '../weather.js';
+import {
+  DRAWN_VISITORS, EPILOGUE, LEGENDS, LEGENDS_BY_ID, LEGEND_RULES, POSTCARDS, POSTCARDS_BY_ID, STAGE_V4, STORIES_V4, STORIES_V4_BY_ID, STORK_RULES, STORKS_TEXTS,
+  VISITORS, VISITORS_BY_ID, VISITOR_RULES,
+} from '../../data/career/storks.js';
+import {
+  benchLine, bookOf, chicksText, chronicle, clocheInfo, creditsInfo, epilogueInfo, epiloguePages, fill as fillText, glowSpot, isStorkDay, legendName, legendWakeOk, legendsInfo,
+  nextPostcard, postcardsInfo, reconstructStageAt, sceneryOf, seenVisitors, soundFacts, sowLegendReason, springDayText, stage8Ok, storkDay, storkInfo, storkNeedText,
+  storkNeedsOk, storksOn, valleyComplete, viewExtras, visitorRecipe, visitorSpot, visitorsInfo,
+} from './storks.js';
 import {
   beePlotsGrowing, fixedVarieties, habitatCounts, installedSpecies, loneTreeStage, naturePrice, nextHint, recipeStatus, seasonsText, seasonsWhen,
   signsOfLife, speciesSpot, spotDef, spotLabel, spotsOf, stageFor, stageSignsOf, stagesOf, stageTarget, valleyServices, whereText, granaryBuilt,
@@ -70,8 +87,8 @@ import {
   trocRemaining, unitOf,
 } from './heritage.js';
 
-/** (V3) Tous les récits par identifiant (V2 et V3). */
-const STORY_BY_ID = { ...STORIES_BY_ID, ...STORIES_V3_BY_ID };
+/** (V3) Tous les récits par identifiant (V2, V3 ; (V4) récits des cigognes). */
+const STORY_BY_ID = { ...STORIES_BY_ID, ...STORIES_V3_BY_ID, ...STORIES_V4_BY_ID };
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const SEASON_IN = { spring: 'au printemps', summer: 'en été', autumn: 'en automne', winter: 'en hiver' };
@@ -86,6 +103,8 @@ function emptyYear() {
     hand: 0, seedsSaved: 0, fixed: 0, installed: 0, placed: 0, finds: 0, jars: 0, spent: 0, swaps: 0, meets: 0, crosses: 0, heirloomCrops: [],
     // (V3) chantiers lancés, étapes de lieux atteintes, habitants de la vallée, terres confiées, pêches au ruisseau, champignons.
     works: 0, recovered: 0, valleyInstalled: 0, wilds: 0, river: 0, riverIncome: 0, mushrooms: 0,
+    // (V4) légendes réveillées et récoltées, visiteurs vus, cigogneaux, cartes reçues.
+    legends: 0, legendHarvests: 0, visitorsSeen: 0, chicks: 0, postcards: 0,
   };
 }
 
@@ -93,6 +112,16 @@ function emptyStats() {
   return {
     hand: 0, seedsSaved: 0, observed: 0, placed: 0, jars: 0, fallows: 0, finds: {}, swaps: 0, meets: 0, crosses: 0, pairs: 0,
     works: 0, recovered: 0, river: 0, riverIncome: 0, mushrooms: 0, wilds: 0, visits: 0,
+    legendHarvests: 0, visitorsSeen: 0, storkYears: 0, postcards: 0, credits: 0, bookOpened: 0,
+  };
+}
+
+/** (V4) Champs du V4 (légendes, cloches, Merveille, visiteurs, cigognes, épilogue, cartes, jours des étapes). */
+function emptyStorks() {
+  return {
+    legends: {}, cloches: {}, marvel: { gens: 0, lastYear: 0 }, visitors: {},
+    stork: { steepleAt: null, seenAt: null, wheelAt: null, farmSince: null, years: {} },
+    epilogue: { availableAt: null, readAt: null, creditsAt: null }, postcards: { sent: null, got: [] }, stageAt: {}, rainedAt: null,
   };
 }
 
@@ -111,6 +140,8 @@ export function normalizeValleyParts(opt) {
   const o = opt && typeof opt === 'object' ? opt : {};
   const parts = Object.fromEntries(VALLEY_PARTS.map((k) => [k, o[k] !== false]));
   if (!parts.heritage) parts.places = false;
+  // (V4) `storks` n'existe pas sans `places`.
+  if (!parts.places) parts.storks = false;
   return parts;
 }
 
@@ -120,6 +151,7 @@ export function newValleyState(parts = normalizeValleyParts(true)) {
     nature: {}, reserve: {}, bought: {}, species: {}, finds: [], jayYear: 0, fair: null, year: emptyYear(), stats: emptyStats(), nextId: 1,
     ...emptyHeritage(),
     ...emptyPlaces(),
+    ...emptyStorks(),
   };
 }
 
@@ -142,6 +174,8 @@ function ensureRng(state) {
   // (V3) Flux des habitants de la vallée, des champignons et de la pêche au ruisseau : seulement avec la partie `places`.
   const parts = state.career?.valley?.parts;
   if (parts && parts.heritage !== false && parts.places !== false && !Number.isInteger(state.rng.valley3)) state.rng.valley3 = hashSeed(state.seed, 'valley3');
+  // (V4) Flux des visiteurs rares : seulement avec la partie `storks`.
+  if (parts && parts.heritage !== false && parts.places !== false && parts.storks !== false && !Number.isInteger(state.rng.valley4)) state.rng.valley4 = hashSeed(state.seed, 'valley4');
 }
 
 /** Complète une Vallée d'une version précédente (champs ajoutés plus tard ; rien n'est retiré). */
@@ -162,6 +196,14 @@ function completeValley(v) {
   if (!Number.isInteger(v.wildBought)) v.wildBought = Object.keys(v.wilds).length;
   if (!v.river || typeof v.river !== 'object') v.river = { fishedDay: 0 };
   if (!Array.isArray(v.mushrooms)) v.mushrooms = [];
+  // (V4) Légendes, visiteurs, cigognes, épilogue, cartes, jours des étapes (stageAt reconstruit par migrate).
+  for (const k of ['legends', 'cloches', 'visitors', 'stageAt']) if (!v[k] || typeof v[k] !== 'object' || Array.isArray(v[k])) v[k] = {};
+  if (!v.marvel || typeof v.marvel !== 'object') v.marvel = { gens: 0, lastYear: 0 };
+  if (!v.stork || typeof v.stork !== 'object') v.stork = { steepleAt: null, seenAt: null, wheelAt: null, farmSince: null, years: {} };
+  if (!v.stork.years || typeof v.stork.years !== 'object') v.stork.years = {};
+  if (!v.epilogue || typeof v.epilogue !== 'object') v.epilogue = { availableAt: null, readAt: null, creditsAt: null };
+  if (!v.postcards || typeof v.postcards !== 'object' || !Array.isArray(v.postcards.got)) v.postcards = { sent: null, got: [] };
+  if (v.rainedAt === undefined) v.rainedAt = null;
   v.v = VALLEY_VERSION;
 }
 
@@ -180,7 +222,7 @@ export function checkValley(state) {
   }
   if (v === null || v === undefined) return null;
   if (!obj(v) || !int(v.v, 1, VALLEY_VERSION)) return 'Vallée (version)';
-  if (!obj(v.parts) || !VALLEY_PARTS.every((k) => typeof v.parts[k] === 'boolean' || (k === 'heritage' && v.parts[k] === undefined && v.v === 1) || (k === 'places' && v.parts[k] === undefined && v.v <= 2))) return 'Vallée (parties)';
+  if (!obj(v.parts) || !VALLEY_PARTS.every((k) => typeof v.parts[k] === 'boolean' || (k === 'heritage' && v.parts[k] === undefined && v.v === 1) || (k === 'places' && v.parts[k] === undefined && v.v <= 2) || (k === 'storks' && v.parts[k] === undefined && v.v <= 3))) return 'Vallée (parties)';
   if (v.started !== null && !(obj(v.started) && int(v.started.year, 1) && int(v.started.day, 1) && int(v.started.abs, 1))) return 'Vallée (début)';
   // Paliers du V1 (les plus bas) : une étape atteinte avant le recalage du V2 reste valide (elle ne recule jamais).
   // (V3) Étapes 6 et 7 : seulement avec la partie `places`, signes de vie et conditions de lieux remplis.
@@ -212,7 +254,58 @@ export function checkValley(state) {
   if (!int(v.jayYear)) return 'Vallée (geai)';
   if (v.fair !== null && !(obj(v.fair) && int(v.fair.year, 1) && (v.fair.varietyId === null || VARIETIES_BY_ID[v.fair.varietyId]) && int(v.fair.price) && typeof v.fair.bought === 'boolean')) return 'Vallée (foire)';
   if (!obj(v.year) || !obj(v.stats) || !int(v.nextId, 1)) return 'Vallée (compteurs)';
-  return checkHeritage(state, v, obj, int) || checkPlaces(state, v, obj, int);
+  return checkHeritage(state, v, obj, int) || checkPlaces(state, v, obj, int) || checkStorks(state, v, obj, int);
+}
+
+/** (V4) Vérification des champs du V4 (une sauvegarde V1, V2 ou V3, sans eux, reste valide). */
+function checkStorks(state, v, obj, int) {
+  const day = (x) => x === null || x === undefined || Number.isInteger(x);
+  if (v.stage === STAGE_V4.n && !(storksOn(state) && v.stork?.seenAt)) return 'Vallée (étape 8 sans cigognes vues)';
+  if (v.legends !== undefined) {
+    if (!obj(v.legends)) return 'Vallée (légendes)';
+    for (const [id, e] of Object.entries(v.legends)) if (!LEGENDS_BY_ID[id] || !obj(e) || !Number.isInteger(e.awokeAt) || !int(e.harvests) || !day(e.firstAt)) return `Vallée (légende ${id})`;
+  }
+  if (v.cloches !== undefined) {
+    if (!obj(v.cloches)) return 'Vallée (cloches)';
+    for (const [id, c] of Object.entries(v.cloches)) {
+      if (c === null) continue;
+      if (!LEGENDS_BY_ID[id] || !v.legends?.[id] || !obj(c) || !Number.isInteger(c.sownAt) || !Number.isInteger(c.readyAt) || c.sownAt > c.readyAt || typeof c.ripe !== 'boolean') return `Vallée (cloche ${id})`;
+    }
+  }
+  if (v.marvel !== undefined && !(obj(v.marvel) && int(v.marvel.gens, 0, LEGEND_RULES.marvel.gens) && int(v.marvel.lastYear))) return 'Vallée (Merveille)';
+  if (v.visitors !== undefined) {
+    if (!obj(v.visitors)) return 'Vallée (visiteurs)';
+    for (const [id, e] of Object.entries(v.visitors)) {
+      if (!VISITORS_BY_ID[id] || !obj(e) || !['hint', 'visible', 'seen'].includes(e.state) || !Number.isInteger(e.since) || (e.state === 'seen' && !Number.isInteger(e.at))) return `Vallée (visiteur ${id})`;
+    }
+  }
+  if (v.stork !== undefined) {
+    const k = v.stork;
+    if (!obj(k) || !['steepleAt', 'seenAt', 'wheelAt', 'farmSince'].every((f) => day(k[f])) || !obj(k.years)) return 'Vallée (cigognes)';
+    if (k.seenAt != null && (k.steepleAt == null || k.seenAt < k.steepleAt)) return 'Vallée (cigognes vues)';
+    if (k.farmSince != null && k.wheelAt == null) return 'Vallée (nid sans roue)';
+    for (const [y, e] of Object.entries(k.years)) {
+      if (!/^\d+$/.test(y) || !obj(e) || !Number.isInteger(e.arrived) || !int(e.chicks, 0, STORK_RULES.chicksMax) || !day(e.left)) return `Vallée (cigognes de l'an ${y})`;
+    }
+  }
+  if (v.epilogue !== undefined) {
+    const e = v.epilogue;
+    if (!obj(e) || !day(e.availableAt) || !day(e.readAt) || !day(e.creditsAt) || (e.readAt != null && e.availableAt == null)) return 'Vallée (épilogue)';
+  }
+  if (v.postcards !== undefined) {
+    const p = v.postcards;
+    if (!obj(p) || !Array.isArray(p.got)) return 'Vallée (cartes)';
+    const ids = p.got.map((g) => g?.id);
+    if (!p.got.every((g) => obj(g) && POSTCARDS_BY_ID[g.id] && Number.isInteger(g.at) && typeof g.read === 'boolean') || new Set(ids).size !== ids.length) return 'Vallée (cartes reçues)';
+    if (!ids.every((id, k) => id === POSTCARDS[k].id)) return 'Vallée (ordre des cartes)';
+    if (p.sent !== null && p.sent !== undefined && !(obj(p.sent) && POSTCARDS_BY_ID[p.sent.id] && !ids.includes(p.sent.id) && Number.isInteger(p.sent.at) && Number.isInteger(p.sent.arrives))) return 'Vallée (carte en route)';
+  }
+  if (v.stageAt !== undefined) {
+    if (!obj(v.stageAt)) return 'Vallée (jours des étapes)';
+    for (const [n, e] of Object.entries(v.stageAt)) if (!/^\d$/.test(n) || Number(n) > MAX_STAGE_ALL || !obj(e) || !Number.isInteger(e.abs)) return 'Vallée (jour d\'une étape)';
+  }
+  if (v.rainedAt !== undefined && !day(v.rainedAt)) return 'Vallée (pluie)';
+  return null;
 }
 
 /** (V3) Vérification des champs du V3 (une sauvegarde V1 ou V2, sans eux, reste valide). */
@@ -278,7 +371,7 @@ function checkHeritage(state, v, obj, int) {
   }
   if (v.stories !== undefined) {
     if (!obj(v.stories) || !Array.isArray(v.stories.available) || !Array.isArray(v.stories.read)) return 'Vallée (récits)';
-    if (!v.stories.available.every((id) => STORY_BY_ID[id]) || !v.stories.read.every((id) => v.stories.available.includes(id))) return 'Vallée (récits)';
+    if (!v.stories.available.every((id) => STORY_BY_ID[id] || id === EPILOGUE.id) || !v.stories.read.every((id) => v.stories.available.includes(id))) return 'Vallée (récits)';
   }
   if (v.year?.heirloomCrops !== undefined && !(Array.isArray(v.year.heirloomCrops) && v.year.heirloomCrops.every((id) => getCrop(id)))) return 'Vallée (cultures de l\'année)';
   return null;
@@ -351,6 +444,8 @@ function startValley(api) {
   if (!v.nature[JOSEPH_BOX.freeHedge] && spotDef(state, JOSEPH_BOX.freeHedge)) hedge = JOSEPH_BOX.freeHedge;
   else hedge = spotsOf(state, 'hedge').find((x) => !x.placed)?.spotId || null;
   if (hedge) v.nature[hedge] = { kind: 'hedge', at: abs };
+  // (V4) Le livre de la vallée commence ici (jour de l'étape 0).
+  if (storksOn(state)) v.stageAt[0] = { abs };
   api.push('valleyStarted', { box, hedge, chapter: { title: JOSEPH_BOX.title, lines: [...JOSEPH_BOX.lines] }, hedgeLine: JOSEPH_BOX.hedgeLine });
 }
 
@@ -477,6 +572,8 @@ function dawnEvents(api) {
     ensureRng(state);
     startValley(api);
   }
+  // (V4) Récits devenus disponibles ce matin (une légende ou un récit par aube, toutes parties confondues).
+  const storiesBefore = v.stories?.available?.length || 0;
   // Saison nouvelle : jachères échues, cueillette effacée au 1er jour d'hiver, bocal du geai au 1er jour d'automne.
   endFallows(api);
   if (state.time.dayOfSeason === 1) {
@@ -495,7 +592,9 @@ function dawnEvents(api) {
     if (v.parts.wildlife) hinted = speciesDawn(api, SPECIES_V2, 'valley2', hintedV1);
   }
   // (V3) Ouverture de la vue, reprises des lieux, terres sauvages, champignons, habitants de la vallée (flux valley3).
-  if (placesOn(state)) placesDawn(api, hinted);
+  if (placesOn(state)) hinted = placesDawn(api, hinted);
+  // (V4) Cigognes, légendes, cloches, cartes, visiteurs rares (flux valley4), après tout le reste.
+  if (storksOn(state)) storksDawn(api, hinted, storiesBefore);
 }
 
 // ── (V3) Aube : la vallée ───────────────────────────────────────────────────────────────────
@@ -556,7 +655,7 @@ function placesDawn(api, hintedBefore) {
     api.push('valleyViewOpened', { first: true });
     pushStoryV3(api, 'hill');
   }
-  if (!v.view.open) return;
+  if (!v.view.open) return hintedBefore;
   // 2. Reprises (ordre des lieux) : la condition n'est plus lue, la reprise va à son terme.
   for (const p of PLACES) {
     const e = v.places[p.id];
@@ -571,7 +670,170 @@ function placesDawn(api, hintedBefore) {
   if (state.time.seasonIndex === 3 && state.time.dayOfSeason === 1 && v.mushrooms.length) v.mushrooms = [];
   if (mushroomSeason(state)) mushroomDawn(api);
   // 5. Habitants de la vallée (10 nombres valley3) ; une seule venue annoncée par aube toutes espèces confondues.
-  if (v.parts.wildlife) speciesDawn(api, VALLEY_SPECIES, 'valley3', hintedBefore);
+  return v.parts.wildlife ? speciesDawn(api, VALLEY_SPECIES, 'valley3', hintedBefore) : hintedBefore;
+}
+
+// ── (V4) Aube : cigognes, légendes, cloches, cartes, visiteurs rares ───────────────────────
+
+/** Marque de l'aube en cours (récits disponibles avant le V4) : lue par la fin de l'aube (épilogue). Pas dans l'état. */
+const dawnMarks = new WeakMap();
+
+/** Récit du V4 disponible (une fois) : pousse storyAvailable. */
+function pushStoryV4(api, id) {
+  const v = V(api.state);
+  if (!STORIES_V4_BY_ID[id] || v.stories.available.includes(id)) return null;
+  v.stories.available.push(id);
+  api.push('storyAvailable', { id, title: STORIES_V4_BY_ID[id].title, v4: true });
+  return id;
+}
+
+/** Une entrée d'année des cigognes sur la maison (créée à leur arrivée). */
+function storkYearOf(v, year) {
+  return v.stork.years[year] || null;
+}
+
+/** Les cigognes arrivent sur la roue de la maison (jour des cigognes, étape 8 passée). */
+function storksToFarm(api) {
+  const { state } = api;
+  const v = V(state);
+  const abs = absDay(state);
+  const year = state.time.year;
+  if (storkYearOf(v, year)) return false;
+  v.stork.years[year] = { arrived: abs, chicks: 0, left: null };
+  const first = !v.stork.farmSince;
+  if (first) v.stork.farmSince = abs;
+  v.stats.storkYears = (v.stats.storkYears || 0) + 1;
+  api.push('storksArrived', { where: 'farm', first, day: storkDay(state), text: STORKS_TEXTS.storksHome });
+  return true;
+}
+
+/** Les cigognes se posent sur le clocher (première fois : elles attendent qu'on vienne les voir). */
+function storksToSteeple(api) {
+  const { state } = api;
+  const v = V(state);
+  const abs = absDay(state);
+  const x = VISITORS_BY_ID.whiteStork;
+  v.stork.steepleAt = abs;
+  v.visitors.whiteStork = { state: 'visible', since: abs, spotId: 'steeple' };
+  api.push('storksArrived', { where: 'steeple', first: true, day: storkDay(state), text: STORKS_TEXTS.storksSteeple });
+  api.push('visitorVisible', { id: x.id, name: x.name, spotId: 'steeple', where: x.where, whereText: x.whereText, text: x.welcome });
+}
+
+/** Les cigogneaux (1ᵉʳ jour de l'été, nid habité) : 1 à 4, hachage pur de la graine et de l'année. */
+function storkChicks(api) {
+  const { state } = api;
+  const v = V(state);
+  const cur = storkYearOf(v, state.time.year);
+  if (!cur || cur.left !== null || cur.chicks > 0) return;
+  const span = STORK_RULES.chicksMax - STORK_RULES.chicksMin + 1;
+  cur.chicks = STORK_RULES.chicksMin + (hashSeed(state.seed, `storkChicks${state.time.year}`) % span);
+  v.year.chicks = (v.year.chicks || 0) + cur.chicks;
+  api.push('storkChicks', { n: cur.chicks, text: chicksText(cur.chicks) });
+}
+
+/** Le départ des cigognes (dernier jour de l'été). */
+function storksLeave(api) {
+  const { state } = api;
+  const v = V(state);
+  const cur = storkYearOf(v, state.time.year);
+  if (!cur || cur.left !== null) return;
+  cur.left = absDay(state);
+  const day = storkDay(state);
+  api.push('storksLeft', { returnDay: day, text: fillText(STORKS_TEXTS.storksLeft, { day: springDayText(day) }) });
+}
+
+/** Réveille une légende (récit compris). */
+function wakeLegend(api, id) {
+  const { state } = api;
+  const v = V(state);
+  const x = LEGENDS_BY_ID[id];
+  if (!x || v.legends[id]) return false;
+  v.legends[id] = { awokeAt: absDay(state), harvests: 0, firstAt: null };
+  v.year.legends = (v.year.legends || 0) + 1;
+  api.push('legendAwoken', { id, name: legendName(state, id), sub: x.sub, story: x.story, cropId: x.cropId, anecdote: x.anecdote, needLibrary: libraryLevelOf(state) < LEGEND_RULES.needLibrary });
+  pushStoryV4(api, x.story);
+  return true;
+}
+
+/**
+ * Venue des visiteurs tirés (5 nombres valley4 par aube, vue ouverte, partie wildlife) : même automate qu'au V1 (indice →
+ * visible → on le touche) ; une seule venue annoncée par aube toutes espèces confondues.
+ */
+function visitorsDawn(api, hintedBefore) {
+  const { state } = api;
+  const v = V(state);
+  ensureRng(state);
+  const rng = stream(state.rng, 'valley4');
+  const draws = DRAWN_VISITORS.map(() => rng.float());
+  const abs = absDay(state);
+  let hinted = hintedBefore;
+  DRAWN_VISITORS.forEach((x, k) => {
+    const e = v.visitors[x.id];
+    if (e?.state === 'visible' || e?.state === 'seen') return;
+    if (e?.state === 'hint') {
+      if (draws[k] < VISITOR_RULES.visibleChance || abs - e.since >= VISITOR_RULES.maxWait - 1) {
+        e.state = 'visible';
+        e.spotId = visitorSpot(state, x.id);
+        api.push('visitorVisible', { id: x.id, name: x.name, spotId: e.spotId, where: x.where, whereText: x.whereText, text: x.welcome });
+      }
+      return;
+    }
+    if (hinted) return;
+    const r = visitorRecipe(state, x.id);
+    if (!r.ok || !r.inSeason || draws[k] >= VISITOR_RULES.hintChance) return;
+    hinted = true;
+    const spotId = visitorSpot(state, x.id);
+    v.visitors[x.id] = { state: 'hint', since: abs, spotId };
+    api.push('visitorHint', { id: x.id, spotId, text: x.hint, icon: x.hintIcon, where: x.where });
+  });
+  return hinted;
+}
+
+/** (V4) L'aube du V4 (après le V1, le V2 et le V3 ; ordre du contrat). */
+function storksDawn(api, hintedBefore, storiesBefore) {
+  const { state } = api;
+  const v = V(state);
+  const abs = absDay(state);
+  dawnMarks.set(state, { abs, stories: storiesBefore });
+  // 1. Cigognes (jour des cigognes ; 1ᵉʳ et dernier jour de l'été). Ni visiteurs ni cigognes sans la partie wildlife.
+  if (v.parts.wildlife) {
+    if (isStorkDay(state)) {
+      if (v.stage >= STAGE_V4.n && v.stork.wheelAt) storksToFarm(api);
+      else if (!v.stork.steepleAt && storkNeedsOk(state)) storksToSteeple(api);
+    }
+    if (state.time.seasonIndex === 1 && state.time.dayOfSeason === 1) storkChicks(api);
+    if (state.time.seasonIndex === 1 && state.time.dayOfSeason === state.career.seasonLength) storksLeave(api);
+  }
+  // 2. Un récit ou une légende au plus par aube, et seulement si aucun autre récit n'est venu ce matin : d'abord « Un nid
+  // sur la maison » (dès la première arrivée sur la maison), puis la première légende qui peut se réveiller.
+  const quiet = () => v.stories.available.length === storiesBefore;
+  if (v.stork.farmSince && !v.stories.available.includes('storkNest') && quiet()) pushStoryV4(api, 'storkNest');
+  if (quiet()) {
+    const x = LEGENDS.find((l) => !v.legends[l.id] && legendWakeOk(state, l.id));
+    if (x) wakeLegend(api, x.id);
+  }
+  // 3. Cloches mûres.
+  for (const x of LEGENDS) {
+    const c = v.cloches[x.id];
+    if (c && !c.ripe && abs >= c.readyAt) {
+      c.ripe = true;
+      api.push('legendRipe', { id: x.id, name: legendName(state, x.id) });
+    }
+  }
+  // 4. Cartes des vallées voisines.
+  const sent = v.postcards.sent;
+  if (sent && abs >= sent.arrives) {
+    v.postcards.got.push({ id: sent.id, at: abs, read: false });
+    v.postcards.sent = null;
+    v.year.postcards = (v.year.postcards || 0) + 1;
+    v.stats.postcards = (v.stats.postcards || 0) + 1;
+    const c = POSTCARDS_BY_ID[sent.id];
+    api.push('postcardArrived', { id: c.id, valley: c.valley, signer: c.signer, first: v.postcards.got.length === 1 });
+  }
+  // 5. Visiteurs tirés (flux valley4 : 5 nombres), vue ouverte.
+  if (v.view?.open && v.parts.wildlife) visitorsDawn(api, hintedBefore);
+  // Arc-en-ciel de demain : il a plu aujourd'hui.
+  if (weatherWaters(state.weather?.today)) v.rainedAt = abs;
 }
 
 function mushroomDawn(api) {
@@ -657,17 +919,39 @@ function trocDawn(api) {
   api.push('trocOffered', trocPayload(state, entry, from));
 }
 
-/** Fin de l'aube : étape de la vallée (jamais en baisse ; (V3) jusqu'à 7). */
+/** Fin de l'aube : étape de la vallée (jamais en baisse ; (V3) jusqu'à 7 ; (V4) 8, la roue, l'épilogue). */
 function updateStage(api) {
   const { state } = api;
   const v = V(state);
   if (!v?.started) return;
   const target = stageTarget(state);
+  const v4 = storksOn(state);
+  const abs = absDay(state);
   while (v.stage < target) {
     v.stage += 1;
     const st = STAGES_ALL[v.stage];
-    api.push('valleyStage', { n: st.n, name: st.name, reward: clone(st.reward), chapter: { title: st.chapter.title, lines: [...st.chapter.lines] } });
+    api.push('valleyStage', { n: st.n, name: st.name, reward: clone(st.reward), chapter: { title: st.chapter.title, lines: [...st.chapter.lines], ...(st.chapter.vignette ? { vignette: st.chapter.vignette } : {}) } });
+    if (v4) v.stageAt[st.n] = { abs };
+    // (V4) Étape 8 : Joseph pose la roue à cigognes sur la cheminée (cadeau, aucun coût).
+    if (v4 && st.n === STAGE_V4.n && !v.stork.wheelAt) {
+      v.stork.wheelAt = abs;
+      api.push('storkWheelPlaced', { text: STORKS_TEXTS.wheel });
+    }
   }
+  if (v4) epilogueDawn(api);
+}
+
+/** (V4) Vallée complète : Joseph attend sur la colline (jamais le même matin qu'une légende ou un récit). */
+function epilogueDawn(api) {
+  const { state } = api;
+  const v = V(state);
+  if (v.epilogue.availableAt || !valleyComplete(state)) return;
+  const abs = absDay(state);
+  const mark = dawnMarks.get(state);
+  if (mark && mark.abs === abs && v.stories.available.length > mark.stories) return;
+  v.epilogue.availableAt = abs;
+  if (!v.stories.available.includes(EPILOGUE.id)) v.stories.available.push(EPILOGUE.id);
+  api.push('epilogueAvailable', { text: STORKS_TEXTS.epilogueWaits });
 }
 
 function beeIncome(api, { seasonId }) {
@@ -701,6 +985,8 @@ export function careerValleyYear(state) {
         places: PLACES.map((p) => ({ id: p.id, step: placeStepOf(state, p.id) })),
       }
     : {};
+  // (V4) Bloc « La vallée cette année » : avant / après, légendes, visiteurs vus, cigogneaux, cartes.
+  const v4 = storksOn(state) && v.started ? storksYear(state, from) : {};
   return {
     started: !!v.started,
     stage: v.stage,
@@ -712,6 +998,24 @@ export function careerValleyYear(state) {
     natureTotal: Object.keys(v.nature).length,
     ...v2,
     ...v3,
+    ...v4,
+  };
+}
+
+/** (V4) Étape atteinte à un jour absolu, d'après les jours gardés des étapes. */
+function stageAtDay(v, abs) {
+  let n = 0;
+  for (const [k, e] of Object.entries(v.stageAt || {})) if (e && e.abs <= abs && Number(k) > n) n = Number(k);
+  return Math.min(n, v.stage);
+}
+
+function storksYear(state, from) {
+  const v = V(state);
+  const L = state.career.seasonLength;
+  const startYear = v.started.year;
+  return {
+    legends: v.year.legends || 0, legendHarvests: v.year.legendHarvests || 0, visitorsSeen: v.year.visitorsSeen || 0, chicks: v.year.chicks || 0, postcards: v.year.postcards || 0,
+    startYear, stageStart: stageAtDay(v, (startYear - 1) * 4 * L + 1), stageYearStart: stageAtDay(v, from - 1), stageNow: v.stage,
   };
 }
 
@@ -730,7 +1034,7 @@ function yearEnd(api, { report }) {
  * (jamais de graine). Toujours : lastVariety (cultures).
  * → null | { variety, seeds, hand, need, fixed, events: [[type, payload]] } (événements à pousser après `harvested`).
  */
-export function valleyHarvest(api, plotIndex, by) {
+export function valleyHarvest(api, plotIndex, by, { quality = null } = {}) {
   const { state } = api;
   const v = valleyOf(state);
   const p = state.plots[plotIndex];
@@ -777,7 +1081,22 @@ export function valleyHarvest(api, plotIndex, by) {
   }
   // (V2) Rencontre de croisement : l'autre parent pousse sur une voisine (même terrain, un côté commun).
   if (v.parts.heritage !== false) crossMeeting(api, plotIndex, x, info.events);
+  // (V4) La Merveille : une génération par été (récolte à la main, belle ou dorée, de la Tomate croisée sauvée).
+  if (storksOn(state)) marvelGeneration(state, x, quality, info.events);
   return info;
+}
+
+/** (V4) + 1 génération de la Merveille (une par été, 3 au plus) ; aucune pièce, rien d'autre ne change à la récolte. */
+function marvelGeneration(state, x, quality, events) {
+  const v = V(state);
+  const R = LEGEND_RULES.marvel;
+  if (x.id !== R.crossId || !isFixed(state, R.crossId) || seasonIdOf(state) !== R.season) return;
+  if (state.surprises && !R.qualities.includes(quality)) return;
+  const m = v.marvel;
+  if (m.gens >= R.gens || m.lastYear >= state.time.year) return;
+  m.gens += 1;
+  m.lastYear = state.time.year;
+  events.push(['marvelGeneration', { n: m.gens, need: R.gens }]);
 }
 
 /** Données de heirloomFixed (V1 + traits du V2). */
@@ -1004,6 +1323,8 @@ function observe(api, speciesId) {
   if (refused) return refused;
   const { state } = api;
   const v = V(state);
+  // (V4) Un visiteur rare : la fenêtre d'observation passe par observeVisitor.
+  if (VISITORS_BY_ID[speciesId] && !ALL_SPECIES_BY_ID[speciesId]) return observeVisitor(api, speciesId);
   const s0 = ALL_SPECIES_BY_ID[speciesId];
   const s = s0 && speciesInPart(state, s0) ? s0 : null;
   const e = s ? v.species[speciesId] : null;
@@ -1214,10 +1535,151 @@ function readStory(api, id) {
   const refused = needStarted(api);
   if (refused) return refused;
   const v = V(api.state);
+  // (V4) L'épilogue se lit par readEpilogue (3 pages).
+  if (id === EPILOGUE.id && storksOn(api.state)) return readEpilogue(api);
   const s = STORY_BY_ID[id];
-  if (!s || !v.stories?.available.includes(id) || (STORIES_V3_BY_ID[id] && !placesOn(api.state))) return api.fail('Récit inconnu.');
+  if (!s || !v.stories?.available.includes(id) || (STORIES_V3_BY_ID[id] && !placesOn(api.state)) || (STORIES_V4_BY_ID[id] && !storksOn(api.state))) return api.fail('Récit inconnu.');
   if (!v.stories.read.includes(id)) v.stories.read.push(id);
-  return { ok: true, story: { id: s.id, title: s.title, lines: [...s.lines], vignette: s.vignette } };
+  const lines = s.lines.map((l) => l.replace('{ofFarm}', farmOf(api.state)));
+  return { ok: true, story: { id: s.id, title: s.title, lines, vignette: s.vignette } };
+}
+
+// ── (V4) Actions : légendes, visiteurs, épilogue, cartes, livre ─────────────────────────────
+
+function needStorks(api) {
+  const refused = needStarted(api);
+  if (refused) return refused;
+  if (!storksOn(api.state)) return api.fail(STORKS_TEXTS.disabled);
+  return null;
+}
+
+/** Sème une légende sous sa cloche (gratuit, toute saison, sans arrosage). */
+function sowLegend(api, legendId) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const reason = sowLegendReason(state, legendId);
+  if (reason) return api.fail(reason);
+  const v = V(state);
+  const x = LEGENDS_BY_ID[legendId];
+  const abs = absDay(state);
+  const readyAt = abs + x.growDays;
+  v.cloches[legendId] = { sownAt: abs, readyAt, ripe: false };
+  api.push('legendSown', { id: legendId, readyAt, name: legendName(state, legendId) });
+  return { ok: true, legendId, sownAt: abs, readyAt, days: x.growDays };
+}
+
+/** Récolte à la main une légende mûre : aucune pièce, rien au grenier ; la cloche redevient libre. */
+function harvestLegend(api, legendId) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const x = LEGENDS_BY_ID[legendId];
+  if (!x) return api.fail(STORKS_TEXTS.unknownLegend);
+  const v = V(state);
+  const c = v.cloches[legendId];
+  if (!c) return api.fail(STORKS_TEXTS.emptyCloche);
+  const abs = absDay(state);
+  if (!c.ripe && abs < c.readyAt) {
+    const n = c.readyAt - abs;
+    return api.fail(fillText(STORKS_TEXTS.notRipe, { days: `${n} jour${n > 1 ? 's' : ''}` }));
+  }
+  const e = v.legends[legendId];
+  const first = !e.firstAt;
+  if (first) e.firstAt = abs;
+  e.harvests += 1;
+  v.cloches[legendId] = null;
+  v.stats.legendHarvests = (v.stats.legendHarvests || 0) + 1;
+  v.year.legendHarvests = (v.year.legendHarvests || 0) + 1;
+  const name = legendName(state, legendId);
+  const line = first ? x.firstHarvest : fillText(STORKS_TEXTS.harvested, { name, e: agreeWith(x, '') });
+  api.push('legendHarvested', { id: legendId, first, line, harvests: e.harvests, name });
+  return { ok: true, legendId, first, line, harvests: e.harvests };
+}
+
+/** Toucher un visiteur rare qui fait halte (il attendait) : fenêtre d'observation ; cigognes : l'étape 8 à l'aube suivante. */
+function observeVisitor(api, visitorId) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const v = V(state);
+  const x = VISITORS_BY_ID[visitorId];
+  const e = x ? v.visitors[visitorId] : null;
+  if (e?.state === 'seen') return api.fail(STORKS_TEXTS.alreadySeen);
+  if (!x || e?.state !== 'visible' || !v.parts.wildlife) return api.fail(STORKS_TEXTS.nothingToSee);
+  const abs = absDay(state);
+  e.state = 'seen';
+  e.at = abs;
+  if (visitorId === 'whiteStork') v.stork.seenAt = abs;
+  v.stats.visitorsSeen = (v.stats.visitorsSeen || 0) + 1;
+  v.year.visitorsSeen = (v.year.visitorsSeen || 0) + 1;
+  const n = seenVisitors(state).length;
+  api.push('visitorSeen', { id: visitorId, name: x.name, first: true, where: x.where, title: x.title, anecdote: x.anecdote, n, total: VISITORS.length });
+  return { ok: true, visitorId, name: x.name, title: x.title, anecdote: x.anecdote, first: true, where: x.where, n, total: VISITORS.length };
+}
+
+/** L'épilogue de Joseph (3 pages) ; la première lecture garde le jour (décor iron.box : recordValleyEpilogue). */
+function readEpilogue(api) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const v = V(state);
+  if (!v.epilogue.availableAt) return api.fail(STORKS_TEXTS.epilogueNotYet);
+  const first = !v.epilogue.readAt;
+  if (first) v.epilogue.readAt = absDay(state);
+  if (!v.stories.available.includes(EPILOGUE.id)) v.stories.available.push(EPILOGUE.id);
+  if (!v.stories.read.includes(EPILOGUE.id)) v.stories.read.push(EPILOGUE.id);
+  api.push('epilogueRead', { first });
+  return { ok: true, pages: epiloguePages(state), first, title: EPILOGUE.title, credits: creditsInfo(state), after: { ...EPILOGUE.after } };
+}
+
+/** Le générique a été regardé (livre, statistiques) ; aucun effet. */
+function seeCredits(api) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const v = V(state);
+  if (!v.epilogue.readAt) return api.fail(STORKS_TEXTS.creditsNotYet);
+  if (!v.epilogue.creditsAt) v.epilogue.creditsAt = absDay(state);
+  v.stats.credits = (v.stats.credits || 0) + 1;
+  return { ok: true, credits: creditsInfo(state) };
+}
+
+/** Envoie un sachet de la boîte en fer à la vallée voisine suivante (gratuit) ; sa carte arrive la saison suivante. */
+function sendPostcardSeeds(api) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const { state } = api;
+  const info = postcardsInfo(state);
+  if (!info.canSend) return api.fail(info.reason);
+  const v = V(state);
+  const c = nextPostcard(state);
+  const abs = absDay(state);
+  const arrives = (seasonAbs(state) + 1) * state.career.seasonLength + 1;
+  v.postcards.sent = { id: c.id, at: abs, arrives };
+  api.push('postcardSent', { id: c.id, valley: c.valley, arrives });
+  return { ok: true, id: c.id, valley: c.valley, arrives, daysLeft: arrives - abs };
+}
+
+/** Lit une carte reçue. */
+function readPostcard(api, id) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const v = V(api.state);
+  const g = v.postcards.got.find((x) => x.id === id);
+  if (!g) return api.fail(STORKS_TEXTS.postcardUnknown);
+  g.read = true;
+  const c = POSTCARDS_BY_ID[id];
+  return { ok: true, card: { id, n: c.n, valley: c.valley, signer: c.signer, text: c.text, vignette: c.vignette, at: g.at } };
+}
+
+/** Ouvre le livre de la vallée (statistique : conseils, simulation) ; aucun effet. */
+function openValleyBook(api) {
+  const refused = needStorks(api);
+  if (refused) return refused;
+  const v = V(api.state);
+  v.stats.bookOpened = (v.stats.bookOpened || 0) + 1;
+  return { ok: true };
 }
 
 
@@ -1459,7 +1921,7 @@ function triggerValley(api, kind, arg, arg2) {
     }
     case 'stage': {
       const p3 = placesOn(state);
-      const n = Math.max(0, Math.min(p3 ? MAX_STAGE_ALL : MAX_STAGE, Number(arg) || 0));
+      const n = Math.max(0, Math.min(p3 ? (storksOn(state) ? MAX_STAGE_ALL : MAX_STAGE_V3) : MAX_STAGE, Number(arg) || 0));
       // (V3) Étapes 6 et 7 : la vue ouverte et les conditions de lieux posées d'abord (Ru des Saules ≥ 2 ; six lieux ≥ 2).
       if (p3 && n >= 6) {
         openViewNow(api);
@@ -1468,8 +1930,9 @@ function triggerValley(api, kind, arg, arg2) {
           if (placeStepOf(state, pl.id) < want) triggerValley(api, 'place', pl.id, want);
         }
       }
-      // Signes de vie jusqu'au palier (variétés fixées d'abord, puis habitants), puis l'étape (comme à l'aube).
-      const need = stageSignsOf(state, n);
+      // Signes de vie jusqu'au palier (variétés fixées d'abord, puis habitants), puis l'étape (comme à l'aube). (V4)
+      // L'étape 8 n'a pas de palier : celui de l'étape 7.
+      const need = stageSignsOf(state, Math.min(n, MAX_STAGE_V3)) || 0;
       const h = heritagePartOn(state);
       for (const x of h ? ALL_VARIETIES : VARIETIES) {
         if (signsOfLife(state) >= need) break;
@@ -1488,8 +1951,113 @@ function triggerValley(api, kind, arg, arg2) {
           triggerValley(api, 'place', pl.id, placeStepOf(state, pl.id) + 1);
         }
       }
+      // (V4) Étape 8 : les cigognes posées sur le clocher et vues (comme si on les avait touchées).
+      if (n >= STAGE_V4.n && storksOn(state)) {
+        updateStage(api);
+        if (!v.stork.steepleAt) storksToSteeple(api);
+        if (v.visitors.whiteStork?.state !== 'seen') observeVisitor(api, 'whiteStork');
+      }
       updateStage(api);
       return { ok: true, stage: v.stage };
+    }
+    // (V4) Légendes, Merveille, visiteurs, cigognes, vallée complète, épilogue, cartes (débogage et tests).
+    case 'legend': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      if (!LEGENDS_BY_ID[arg]) return api.fail(STORKS_TEXTS.unknownLegend);
+      if (arg === 'farmMarvel') v.marvel.gens = Math.max(v.marvel.gens, LEGEND_RULES.marvel.gens);
+      if (!wakeLegend(api, arg)) return api.fail('Déjà réveillée.');
+      return { ok: true };
+    }
+    case 'legendRipe': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      const x = LEGENDS_BY_ID[arg];
+      if (!x) return api.fail(STORKS_TEXTS.unknownLegend);
+      if (!v.legends[arg]) wakeLegend(api, arg);
+      const c = v.cloches[arg] || (v.cloches[arg] = { sownAt: abs - x.growDays, readyAt: abs, ripe: false });
+      c.readyAt = Math.min(c.readyAt, abs);
+      c.sownAt = Math.min(c.sownAt, c.readyAt);
+      if (!c.ripe) {
+        c.ripe = true;
+        api.push('legendRipe', { id: arg, name: legendName(state, arg) });
+      }
+      return { ok: true };
+    }
+    case 'marvel': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      const n = Math.max(0, Math.min(LEGEND_RULES.marvel.gens, Number.isInteger(arg) ? arg : v.marvel.gens + 1));
+      v.marvel.gens = n;
+      api.push('marvelGeneration', { n, need: LEGEND_RULES.marvel.gens });
+      return { ok: true, gens: n };
+    }
+    case 'visitor': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      const x = VISITORS_BY_ID[arg];
+      if (!x) return api.fail('Visiteur inconnu.');
+      if (v.visitors[arg]?.state === 'seen') return api.fail(STORKS_TEXTS.alreadySeen);
+      if (arg === 'whiteStork') {
+        if (!v.stork.steepleAt) storksToSteeple(api);
+      } else if (v.visitors[arg]?.state !== 'visible') {
+        const spotId = visitorSpot(state, arg);
+        v.visitors[arg] = { state: 'visible', since: abs, spotId };
+        api.push('visitorVisible', { id: x.id, name: x.name, spotId, where: x.where, whereText: x.whereText, text: x.welcome });
+      }
+      if (arg2 === 'seen') return observeVisitor(api, arg);
+      return { ok: true, spotId: v.visitors[arg].spotId };
+    }
+    case 'storks': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      if (arg === 'steeple') {
+        if (v.stork.steepleAt) return api.fail('Déjà sur le clocher.');
+        storksToSteeple(api);
+        return { ok: true };
+      }
+      if (arg === 'farm') {
+        if (!v.stork.steepleAt) storksToSteeple(api);
+        if (v.visitors.whiteStork?.state !== 'seen') observeVisitor(api, 'whiteStork');
+        if (!v.stork.wheelAt) {
+          v.stork.wheelAt = abs;
+          api.push('storkWheelPlaced', { text: STORKS_TEXTS.wheel });
+        }
+        if (!storksToFarm(api)) return api.fail('Déjà arrivées cette année.');
+        pushStoryV4(api, 'storkNest');
+        return { ok: true };
+      }
+      if (arg === 'chicks') {
+        if (!v.stork.years[state.time.year]) return api.fail('Pas de cigognes sur la maison cette année.');
+        storkChicks(api);
+        return { ok: true, chicks: v.stork.years[state.time.year].chicks };
+      }
+      if (arg === 'leave') {
+        if (!v.stork.years[state.time.year]) return api.fail('Pas de cigognes sur la maison cette année.');
+        storksLeave(api);
+        return { ok: true };
+      }
+      return api.fail('Inconnu.');
+    }
+    case 'complete': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      for (const pl of PLACES) triggerValley(api, 'place', pl.id, PLACE_MAX[pl.id]);
+      triggerValley(api, 'stage', STAGE_V4.n);
+      if (!v.stork.farmSince) triggerValley(api, 'storks', 'farm');
+      return { ok: true, stage: v.stage, complete: valleyComplete(state) };
+    }
+    case 'epilogue': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      if (v.epilogue.availableAt) return api.fail('Déjà disponible.');
+      v.epilogue.availableAt = abs;
+      if (!v.stories.available.includes(EPILOGUE.id)) v.stories.available.push(EPILOGUE.id);
+      api.push('epilogueAvailable', { text: STORKS_TEXTS.epilogueWaits });
+      return { ok: true };
+    }
+    case 'postcard': {
+      if (!storksOn(state)) return api.fail(STORKS_TEXTS.disabled);
+      if (!v.postcards.sent) {
+        const c = nextPostcard(state);
+        if (!c) return api.fail(STORKS_TEXTS.postcardsDone);
+        v.postcards.sent = { id: c.id, at: abs, arrives: abs + 1 };
+        api.push('postcardSent', { id: c.id, valley: c.valley, arrives: abs + 1 });
+      } else v.postcards.sent.arrives = Math.min(v.postcards.sent.arrives, abs + 1);
+      return { ok: true, id: v.postcards.sent.id, arrives: v.postcards.sent.arrives };
     }
     // (V3) Vue de la vallée, lieux, terres sauvages, champignons, ruisseau (débogage et tests).
     case 'view':
@@ -1719,6 +2287,7 @@ function valleyQuery(api) {
   if (!v.started) return { started: null, startsAtRank: VALLEY_START.rank };
   const signs = signsOfLife(state);
   const p3 = placesOn(state);
+  const v4 = storksOn(state);
   const stages = stagesOf(state);
   const st = STAGES_ALL[v.stage];
   const next = stages[v.stage + 1] || null;
@@ -1733,8 +2302,8 @@ function valleyQuery(api) {
     parts: { ...v.parts },
     stage: {
       n: v.stage, name: st.name, signs, total: p3 ? SIGNS_ALL_V3 : v2 ? SIGNS_ALL : SIGNS_V1,
-      next: next ? { n: next.n, name: next.name, signs: stageSignsOf(state, next.n), ...(next.n >= 6 ? { needs: stageNeedText(next.n) } : {}) } : null,
-      vignette: `valley.stage.${v.stage}`, reward: clone(st.reward), max: p3 ? MAX_STAGE_ALL : MAX_STAGE,
+      next: next ? { n: next.n, name: next.name, signs: stageSignsOf(state, next.n), ...(next.n >= 6 ? { needs: next.n === STAGE_V4.n ? storkNeedText(state) : stageNeedText(next.n) } : {}) } : null,
+      vignette: `valley.stage.${v.stage}`, reward: clone(st.reward), max: p3 ? (v4 ? MAX_STAGE_ALL : MAX_STAGE_V3) : MAX_STAGE,
     },
     hint: nextHint(state),
     chapters: stages.map((s) => ({ n: s.n, title: s.chapter.title, lines: [...s.chapter.lines], read: v.chapters.read.includes(s.n), available: s.n <= v.stage })),
@@ -1764,7 +2333,24 @@ function valleyQuery(api) {
     crossRule: HERITAGE_TEXTS.crossRule,
   };
   if (!p3) return withV2;
-  return { ...withV2, ...placesQuery(state) };
+  const withV3 = { ...withV2, ...placesQuery(state) };
+  return v4 ? { ...withV3, ...storksQuery(state) } : withV3;
+}
+
+/** (V4) Champs du V4 de query.career.valley() : légendes, visiteurs, cigognes, épilogue, cartes, livre. */
+function storksQuery(state) {
+  const v = V(state);
+  return {
+    storks4: true,
+    legends: legendsInfo(state),
+    marvel: { n: v.marvel.gens, need: LEGEND_RULES.marvel.gens, crossSaved: isFixed(state, LEGEND_RULES.marvel.crossId), thisSummer: v.marvel.lastYear >= state.time.year },
+    visitors: visitorsInfo(state),
+    stork: storkInfo(state),
+    epilogue: (({ available, read, credits }) => ({ available, read, credits }))(epilogueInfo(state)),
+    postcards: postcardsInfo(state),
+    book: { open: true, years: chronicle(state).length },
+    complete: valleyComplete(state),
+  };
 }
 
 /** (V3) Champs du V3 de query.career.valley() : vue, lieux, terres sauvages, ruisseau, champignons. */
@@ -1826,6 +2412,14 @@ function valleyAnimalsQuery(api) {
     if (hashSeed(abs, s.id) % 100 >= 60) continue;
     residents += 1;
     out.push({ id: s.id, spotId: speciesSpot(state, s.id), state: 'resident' });
+  }
+  // (V4) Les vers luisants, sur la ferme (au pied d'une haie) : indice, halte, puis chaque soir d'été en décor.
+  if (storksOn(state)) {
+    const e = v.visitors?.glowworms;
+    const x = VISITORS_BY_ID.glowworms;
+    if (e?.state === 'hint' && e.since === abs) out.push({ id: x.id, spotId: e.spotId, state: 'hint', hintIcon: x.hintIcon, visitor: true });
+    else if (e?.state === 'visible') out.push({ id: x.id, spotId: e.spotId, state: 'visible', visitor: true });
+    else if (e?.state === 'seen' && x.seasons.includes(seasonIdOf(state))) out.push({ id: x.id, spotId: glowSpot(state), state: 'resident', visitor: true });
   }
   return out;
 }
@@ -1935,6 +2529,18 @@ export function valleyAchievementContext(state) {
           works: v.stats.works || 0,
         }
       : {}),
+    // (V4) légendes réveillées et récoltées, visiteurs vus, nid sur la maison, épilogue, cartes.
+    ...(storksOn(state)
+      ? {
+          legendsAwake: LEGENDS.filter((x) => v.legends?.[x.id]).length,
+          legendHarvests: v.stats.legendHarvests || 0,
+          legendsHarvested: LEGENDS.filter((x) => v.legends?.[x.id]?.firstAt).map((x) => x.id),
+          visitorsSeen: seenVisitors(state),
+          storkNest: !!v.stork?.farmSince,
+          epilogueRead: !!v.epilogue?.readAt,
+          postcards: (v.postcards?.got || []).length,
+        }
+      : {}),
   };
 }
 
@@ -1959,8 +2565,11 @@ export const valleyExtension = {
     if (!state.career || !state.rng || typeof state.rng !== 'object') return;
     if (state.career.valley === undefined) enableCareerValley(state, true);
     else if (state.career.valley) {
+      const before = Number.isInteger(state.career.valley.v) ? state.career.valley.v : 1;
       completeValley(state.career.valley);
       ensureRng(state);
+      // (V4) Ancienne carrière : le jour de chaque étape déjà atteinte est reconstruit (« vers l'an 9 »).
+      if (before < 4 && storksOn(state) && state.career.valley.started && !Object.keys(state.career.valley.stageAt).length) state.career.valley.stageAt = reconstructStageAt(state);
     }
   },
   check(state) {
@@ -2014,6 +2623,15 @@ export const valleyExtension = {
     fishRiver: () => fishRiver(api),
     pickMushroom: (id) => pickMushroom(api, id),
     rewild: (cellId, kind) => rewild(api, cellId, kind),
+    // (V4)
+    sowLegend: (legendId) => sowLegend(api, legendId),
+    harvestLegend: (legendId) => harvestLegend(api, legendId),
+    observeVisitor: (visitorId) => observeVisitor(api, visitorId),
+    readEpilogue: () => readEpilogue(api),
+    seeCredits: () => seeCredits(api),
+    sendPostcardSeeds: () => sendPostcardSeeds(api),
+    readPostcard: (id) => readPostcard(api, id),
+    openValleyBook: () => openValleyBook(api),
   }),
   queries: (api) => ({
     valley: () => valleyQuery(api),
@@ -2023,9 +2641,23 @@ export const valleyExtension = {
     valleyCrossLinks: () => (valleyOf(api.state) ? crossLinks(api.state) : []),
     valleyPairPlots: (cropId) => (heritageSeedsOn(api.state) ? pairPlots(api.state, cropId) : []),
     // (V3)
-    valleyView: () => (valleyOf(api.state) ? viewInfo(api.state) : null),
+    valleyView: () => {
+      if (!valleyOf(api.state)) return null;
+      const view = viewInfo(api.state);
+      // (V4) Visiteurs, clocher, barrage, fenêtres du village, banc habité, vallée complète.
+      if (!view || !storksOn(api.state)) return view;
+      const extra = viewExtras(api.state);
+      // `joseph` garde son sens du V3 (un récit ou un chapitre du V3) ; le V4 passe par bench.joseph.
+      return { ...view, ...extra };
+    },
     wildCell: (cellId) => (placesOn(api.state) ? wildCellInfo(api.state, cellId) : null),
     place: (placeId) => (viewOpen(api.state) ? placeInfo(api.state, placeId) : null),
+    // (V4)
+    valleyScenery: () => (storksOn(api.state) ? sceneryOf(api.state) : null),
+    valleyBook: () => (storksOn(api.state) ? bookOf(api.state) : null),
+    valleySounds: () => (storksOn(api.state) ? soundFacts(api.state) : null),
+    valleyEpilogue: () => (storksOn(api.state) ? { ...epilogueInfo(api.state), pages: epiloguePages(api.state), title: EPILOGUE.title, credits: creditsInfo(api.state) } : null),
+    valleyBench: () => (storksOn(api.state) && V(api.state).epilogue.readAt ? { line: benchLine(api.state) } : null),
   }),
 };
 

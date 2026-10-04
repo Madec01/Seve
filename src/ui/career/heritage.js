@@ -30,7 +30,7 @@
 import { el, fmt, plural } from '../dom.js';
 import { icon, cropIcon, hasSprite, sprite, spriteAny } from '../icons.js';
 import { cropName as cropNameOf } from '../text.js';
-import { HINTS } from '../hints.js';
+import { SIGNALS } from '../coach/signals.js';
 import * as VD from '../../data/career/valley.js';
 import * as HD from '../../data/career/heritage.js';
 import { STORIES_V3_BY_ID } from '../../data/career/places.js';
@@ -38,28 +38,7 @@ import { traitChip, fixBar, vIcon } from './valley.js';
 
 // ── Textes ──────────────────────────────────────────────────────────────────────────
 
-const HINT_TITLES = {
-  'valley.library': 'La Grainothèque',
-  'valley.troc': 'Un troc de graines',
-  'valley.pair': 'Semer la paire',
-  'valley.cross': 'Un croisement',
-  'valley.scented': 'Une variété parfumée',
-};
-const HINT_TEXTS = {
-  'valley.library': 'Vos graines ont une maison : touchez-la pour voir vos bocaux, les croisements et le troc.',
-  'valley.troc': 'Un voisin a épinglé un sachet au tableau : échangez une de vos graines sauvées. Ça ne coûte rien.',
-  'valley.pair': 'Récoltez l\'une à la main pendant que l\'autre pousse à côté : les abeilles font une rencontre.',
-  'valley.cross': 'Une graine née chez vous, au nom de votre ferme : sauvez-la comme les autres.',
-  'valley.scented': 'Parfumée : ce qu\'on en fait à l\'atelier vaut 15 % de plus.',
-};
-function registerHints() {
-  const texts = { ...HINT_TEXTS, ...(HD.HERITAGE_HINTS || {}) };
-  for (const [id, raw] of Object.entries(texts)) {
-    const text = typeof raw === 'string' ? raw : raw?.text;
-    if (text && !HINTS[id]) HINTS[id] = { title: HINT_TITLES[id] || raw?.title || 'La Grainothèque', text, where: 'game', who: 'joseph' };
-  }
-}
-registerHints();
+// Les anciens conseils « première fois » (HERITAGE_HINTS) sont des leçons de Joseph : src/ui/coach/lessons/valley.js.
 
 const GROUPS = [
   { id: 'pays', label: 'Du pays', shelf: 'Du pays' },
@@ -126,7 +105,6 @@ export function createHeritage(app) {
   let trocPick = null;
   let trocDone = null; // résultat du dernier échange (merci du voisin)
   const day = { key: '', meets: 0, lots: new Set() };
-  let shownScented = false;
 
   // ── Accès protégés ──────────────────────────────────────────────────────────────
   const enabled = (g = app.game) => !!(g && g.mode === 'career' && g.state?.career?.valley);
@@ -178,12 +156,10 @@ export function createHeritage(app) {
     return res;
   }
   const morning = (text) => text && app.todo?.morningNote?.(text);
-  const hint = (id, target = null) => app.hints?.maybe?.(id, target);
+  const signal = (name, data) => app.coach?.signal?.(name, data);
   const tone = (name, opts) => app.audio.tone?.(name, opts);
   const reduced = () => !!app.reducedMotion?.();
   const cropName = (id) => safe(() => cropNameOf(id), id) || id;
-  const sceneRect = (kind, id) => safe(() => app.scene?.valleyItemRect?.(kind, id), null);
-  const rectTarget = (kind, id) => ({ rect: () => { const r = sceneRect(kind, id); return r ? app.worldPageRect?.(r) : null; } });
 
   // ── Feuilles « vivantes » ──────────────────────────────────────────────────────
   function openLive(id, { title, icon: ico, build, sig, tall = true, pauses, outsideClose }) {
@@ -281,6 +257,7 @@ export function createHeritage(app) {
           app.audio.play('page', { volume: 0.6 });
           tab = t.id;
           repaint();
+          signal(SIGNALS.valleySheet, { tab: t.id, sheet: 'vl-library' });
         } },
         el('span', t.label),
       )),
@@ -549,7 +526,6 @@ export function createHeritage(app) {
     tone('chime', { volume: 0.9 });
     app.vibrate?.([14, 60, 14, 60, 20]);
     openLive('vl-cross', { title: 'La Grainothèque', icon: vIcon(['icon.cross', 'seedpack.cross'], 'sprite--md', '✨'), build: () => crossContent(d), sig: () => '', tall: false });
-    setTimeout(() => hint('valley.cross', null), 400);
   }
   /** Fiche d'un croisement : trouvé → le popup ; sinon l'onglet Croisements de la Grainothèque. */
   function openCross(cropId) {
@@ -596,6 +572,8 @@ export function createHeritage(app) {
     if (app.valley?.placing) app.valley.leavePlacing({ silent: true });
     buildBar();
     pairing = cropId;
+    // Signal avant la fermeture de la feuille : la leçon de Joseph passe au mode de visée (pas de retour en arrière).
+    signal(SIGNALS.placing, { kind: 'pair', cropId });
     app.sheets.close('silent');
     app.input?.cancel?.();
     app.hints?.clear?.();
@@ -638,6 +616,7 @@ export function createHeritage(app) {
     if (!app.valley?.placing) document.body.classList.remove('in-valley-place');
     app.scene?.setPairPlacing?.(null);
     if (!app.valley?.placing && !app.places?.wilding) app.scene?.restoreZoom?.({ animate: !reduced() });
+    signal(SIGNALS.placing, { kind: null });
     app.popPause('valley-pair');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.onDecorChange?.(false);
@@ -682,7 +661,6 @@ export function createHeritage(app) {
     }
     app.vibrate?.(10);
     app.sheets.close();
-    if (id === 'heritage0') setTimeout(() => hint('valley.library', rectTarget('seedLibrary')), 300);
     app.places?.afterStory?.(id); // (V3) « Sur la colline » : la vue de la vallée s'ouvre une première fois
   }
   function openStory(id = firstUnreadStory()) {
@@ -944,13 +922,11 @@ export function createHeritage(app) {
       case 'seedLibraryBuilt':
         tone('reveal', { volume: 0.75, delay: 0.25 });
         app.toasts.show({ prio: 'important', kind: 'achievement', key: 'vl-lib', sprite: vIcon([`library.${Math.min(5, ev.level || 1)}`, 'icon.library'], 'sprite--sm', '🏡'), title: `${ev.name || 'La Grainothèque'} !`, text: (ev.unlocks || []).join(' · ') || 'Vos graines ont une maison.', actionLabel: 'Voir', onClick: () => openLibrary(), duration: 5600 });
-        setTimeout(() => hint('valley.library', rectTarget('seedLibrary')), 900);
         break;
       case 'trocOffered':
         morning(`${ev.clientName || 'Un voisin'} a épinglé un sachet au tableau.`);
         app.toasts.show({ prio: 'important', kind: 'info', key: 'vl-troc', sprite: portrait(`portrait.client.${ev.clientId}`, 'sprite--sm'), title: `${ev.clientName || 'Un voisin'} propose un troc`, text: ev.varietyName ? `${ev.varietyName}, contre une de vos graines.` : 'Un sachet au tableau du village.', actionLabel: 'Voir', onClick: () => openTroc(), duration: 6000 });
         tone('pop', { volume: 0.5, delay: 0.3 });
-        setTimeout(() => hint('valley.troc', rectTarget('trocPin')), 1000);
         break;
       case 'seedSwapped':
         if (app.sheets.current !== 'vl-troc') app.toasts.show({ prio: 'important', kind: 'success', key: 'vl-swapped', sprite: portrait(`portrait.client.${ev.clientId}`, 'sprite--sm'), title: `${ev.clientName} : merci !`, text: ev.thanks || 'Troc fait.', duration: 4200 });
@@ -975,18 +951,7 @@ export function createHeritage(app) {
         break;
       case 'pairSown':
         app.toasts.show({ prio: 'info', kind: 'success', key: 'vl-pairsown', sprite: vIcon(['icon.cross'], 'sprite--sm', '🐝'), text: 'Paire semée : récoltez l\'une à la main pendant que l\'autre pousse.', duration: 3000, log: false });
-        setTimeout(() => hint('valley.pair', ev.plots?.length ? { plot: ev.plots[0] } : null), 500);
         break;
-      case 'heirloomSown': {
-        if (shownScented || !(ev.by === 'player' || !ev.by)) break;
-        const def = vDef(ev.varietyId);
-        const traits = typeof VD.varietyTraits === 'function' ? VD.varietyTraits(def) : def?.traits || [def?.trait];
-        if (traits?.includes('scented')) {
-          shownScented = true;
-          setTimeout(() => hint('valley.scented', null), 600);
-        }
-        break;
-      }
       case 'dawn':
         for (const line of morningLines()) morning(line);
         break;
@@ -1018,7 +983,7 @@ export function createHeritage(app) {
       else if (bar) paintBar();
     }
     if (!g || app.inMenu || !enabled(g)) return;
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !(app.coach ? app.coach.blocking : app.hints?.active || app.tutorial?.active) && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'cross') {
         showCross(w.data);
@@ -1038,7 +1003,6 @@ export function createHeritage(app) {
     day.key = '';
     day.meets = 0;
     day.lots = new Set();
-    shownScented = false;
     void g;
   }
 

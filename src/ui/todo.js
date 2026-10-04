@@ -14,6 +14,9 @@
 //   digest(entry),             message non affiché (réglage « Messages », toasts.setDigest) : compté pour le résumé du
 //                              matin (« Hier aussi : 12 récoltes de l'équipe (+46), 3 produits vendus »)
 //   ring(rects), focusPlots(indexes)
+//   (Accompagnement) addProvider(fn(game) → items[]) : entrées fournies par les rappels de Joseph ;
+//   pointAt(id, ms = 6000) : met l'entrée en tête et la fait briller le temps d'une pastille de rappel ;
+//   currentId : entrée affichée (lecture)
 // }
 //
 // La ligne est posée juste au-dessus des onglets (à portée de pouce), sur toute la largeur : une grande cible
@@ -54,6 +57,8 @@ export function createTodo(app) {
   document.body.append(root, rings);
 
   let current = null; // élément affiché
+  const providers = []; // (accompagnement) fournisseurs d'entrées
+  let pointed = null; // (accompagnement) { id, until } : entrée mise en tête par un rappel
   let lastTick = 0;
   let shown = false;
   let lastKey = '';
@@ -295,6 +300,9 @@ export function createTodo(app) {
         go: () => app.openTab('stats'),
       });
     }
+    // (Accompagnement) Entrées fournies par les rappels de Joseph (todo.addProvider), en dernier : une entrée qui existe
+    // déjà (même identifiant) n'est jamais doublée — le rappel la pointe seulement.
+    for (const fn of providers) for (const it of safe(() => fn(game), []) || []) if (it && it.id && !out.some((x) => x.id === it.id)) add(it);
     return out.sort((a, b) => a.prio - b.prio);
   }
 
@@ -352,6 +360,7 @@ export function createTodo(app) {
   // ── Actions ───────────────────────────────────────────────────────────────────
   function go() {
     if (!current) return;
+    app.coach?.signal?.('todoGo', { id: current.id });
     app.audio.play('click', { volume: 0.6 });
     app.vibrate?.(8);
     try {
@@ -453,8 +462,9 @@ export function createTodo(app) {
     if (!g || app.inMenu || g.state.status !== 'playing') return false;
     if (app.dialogs?.isOpen()) return false;
     if (app.sheets?.isOpen() && !app.isWide()) return false;
-    if (app.hints?.active) return false;
-    if (app.tutorial?.active && app.tutorial.stepId !== 'wait-winter') return false;
+    // (Accompagnement) Une bulle de Joseph couvre l'écran : la ligne se cache (sauf si Joseph la montre) ; pas sous une
+    // pastille de rappel (elle la pointe).
+    if (app.coach?.blocking && !app.coach.targetsTodo) return false;
     if (app.decor?.active) return false;
     if (app.cozy?.feteMode) return false;
     if (app.valley?.placing || app.heritage?.pairing || app.places?.wilding || app.valleyView?.active) return false; // (Vallée) mode aménagement : la barre remplace les onglets // (lot 4) mode fête : la barre de la chasse remplace les onglets
@@ -534,7 +544,12 @@ export function createTodo(app) {
     } catch (err) {
       console.warn('À faire :', err);
     }
+    if (pointed && performance.now() < pointed.until) {
+      const k = list.findIndex((x) => x.id === pointed.id);
+      if (k > 0) list = [list[k], ...list.slice(0, k), ...list.slice(k + 1)];
+    } else pointed = null;
     paint(list, raw);
+    main.classList.toggle('is-pointed', !!pointed && current?.id === pointed.id);
     setShown(true);
     publishHeight();
     deliverMorning();
@@ -600,7 +615,7 @@ export function createTodo(app) {
     // (2026-10-03) Réglage « Messages » : le résumé s'affiche en « Tous » (interrupteur « Résumé du matin ») ; en
     // « Importants » (par défaut) et « Aucun », il attend derrière la cloche — sauf quand le jeu est en pause et attend.
     const mode = app.toasts.mode || 'important';
-    if (((prefs.morning && mode === 'all') || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.tutorial?.active) {
+    if (((prefs.morning && mode === 'all') || p.paused) && (p.paused || now - morning.lastShownAt > 25000) && !app.coach?.blocking) {
       morning.lastShownAt = now;
       app.toasts.show({ prio: p.paused ? 'important' : 'info', kind: 'info', icon: p.paused ? 'pause' : ['sunny', 'cloudy', 'rain', 'storm', 'heatwave', 'snow'].includes(p.weather) ? p.weather : 'sunny', key: 'morning', title, text, duration: p.paused ? 7000 : 5200 });
     } else {
@@ -700,6 +715,7 @@ export function createTodo(app) {
   }
 
   function reset(game) {
+    pointed = null;
     morning.prevMoney = game ? game.state.money : null;
     morning.pending = null;
     morning.notes.length = 0;
@@ -728,6 +744,16 @@ export function createTodo(app) {
     ring,
     focusPlots,
     collectAll,
+    addProvider(fn) {
+      if (typeof fn === 'function' && !providers.includes(fn)) providers.push(fn);
+    },
+    pointAt(id, ms = 6000) {
+      pointed = id ? { id, until: performance.now() + ms } : null;
+      lastTick = 0;
+    },
+    get currentId() {
+      return current?.id || null;
+    },
     get visible() {
       return shown;
     },

@@ -37,6 +37,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   pinchZoom: true, // zoom de la page à deux doigts (barres et fiches ; la scène garde ses gestes)
   messages: 'important', // messages affichés : 'all' · 'important' (infos dans l'historique et le résumé du matin) · 'none'
   a11yOffered: false, // les réglages d'accessibilité ont été proposés au premier lancement
+  // ── Accompagnement « Joseph vous montre » (src/ui/coach/, docs/ACCOMPAGNEMENT.md § 4.7, § 10) ──
+  guidance: 'full', // 'full' (Complet) · 'quiet' (Discret) · 'off' (Aucun)
+  guidanceAsked: false, // le réglage a été choisi (fenêtre « Bienvenue ! », question unique, options)
 });
 
 export const TEXT_SCALES = Object.freeze([1, 1.15, 1.3, 1.5]);
@@ -239,6 +242,7 @@ export function loadSettings() {
   if (!TEXT_SCALES.includes(out.textScale)) out.textScale = DEFAULT_SETTINGS.textScale;
   if (!['auto', 'on', 'off'].includes(out.pauseOnSheet)) out.pauseOnSheet = DEFAULT_SETTINGS.pauseOnSheet;
   if (!['all', 'important', 'none'].includes(out.messages)) out.messages = DEFAULT_SETTINGS.messages;
+  if (!['full', 'quiet', 'off'].includes(out.guidance)) out.guidance = DEFAULT_SETTINGS.guidance;
   return out;
 }
 
@@ -247,10 +251,14 @@ export function saveSettings(settings) {
 }
 
 // ── Tutoriel ─────────────────────────────────────────────────────────────────────────
-/** { done: bool, step: number|null } */
+/**
+ * { done: bool, step: string|number|null } — (accompagnement) `step` est l'identifiant de l'étape du cours
+ * `levels.firstYear` ; un ancien index (nombre) est gardé tel quel et converti par src/ui/coach/store.js.
+ */
 export function loadTutorial() {
   const data = read(KEYS.tutorial);
-  return { done: !!data?.done, step: Number.isInteger(data?.step) ? data.step : null };
+  const s = data?.step;
+  return { done: !!data?.done, step: Number.isInteger(s) || (typeof s === 'string' && s.length > 0 && s.length < 40) ? s : null };
 }
 
 export function saveTutorial(tutorial) {

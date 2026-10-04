@@ -169,7 +169,6 @@ export function createAlbum(app) {
       app.toasts.show({ prio: 'info', digest: 'case d\'album|cases d\'album', kind: 'achievement', key: 'album', sprite: ico(['icon.album'], 'sprite--sm', '📖'), title: fmtFound(first), text: list.length > 1 ? `et ${plural(list.length - 1, 'autre case', 'autres cases')} : Menu → L'album` : 'Menu → L\'album', duration: 3800, onClick: () => open(pageOf(list[0])) });
       for (const id of list.slice(1)) app.messages?.add?.({ kind: 'achievement', title: fmtFound(caseName(id)), text: 'Nouvelle case de l\'album.' });
       app.audio.play('page', { volume: 0.55, delay: 0.2 });
-      app.hints?.maybe?.('cozy.album', null);
     } else {
       const s = stamps[0];
       app.toasts.show({ prio: 'info', digest: 'tampon d\'album|tampons d\'album', kind: 'achievement', key: 'album', sprite: ico([`album.stamp.${s.stamp}`], 'sprite--sm', STAMP_EMOJI[s.stamp] || '★'), title: `Album : tampon ${STAMP_NAMES[s.stamp]?.toLowerCase() || ''}`.trim(), text: caseName(s.caseId), duration: 3200 });

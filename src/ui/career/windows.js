@@ -1,9 +1,12 @@
 // Mode Carrière — fenêtres (§ 10.8) : bilan de l'année, passage de rang, Joseph vous dépanne, une passe
-// difficile (coup dur), vente de secours, faillite (Classique), accueil de Joseph, au revoir d'un employé.
+// difficile (coup dur), vente de secours, faillite (Classique), au revoir d'un employé. (L'accueil de Joseph est devenu
+// le cours « Premiers pas » de l'accompagnement : src/ui/coach/lessons/basics.js.)
 // Seuls le passage de rang, le bilan annuel, le coup dur et la faillite mettent le jeu en pause.
 //
 // createCareerWindows(app, { getGame, openJournal, openTeam }) → {
-//   queue(kind, ev), queueBanner(banner), process(), reset(), intro(game), farewell(staff) }
+//   queue(kind, ev), queueBanner(banner), process(), reset(), farewell(staff) }
+// Fenêtre du rang : les 3 nouveautés mises en avant (RANK_HIGHLIGHTS de src/ui/coach/lessons/career.js, montrées ensuite
+// du doigt par la leçon career.rankN), le reste replié ; à sa fermeture, signal `rankClosed` { rank } pour l'accompagnement.
 // Les fenêtres attendent la fin de la journée (processPending) et s'enchaînent une à une, dans l'ordre :
 // faillite → prêt de Joseph → vente de secours → coup dur → rang → bilan de l'année ; le bandeau de la
 // nouvelle saison vient ensuite.
@@ -13,6 +16,8 @@ import { icon, achievementIcon, ecuIcon, cropIcon } from '../icons.js';
 import { season } from '../text.js';
 import { bar, cIcon, INCOME_LABELS, SPENT_LABELS, josephSays, rankIcon, animalIcon, machineIcon, portrait } from './util.js';
 import { unlockIcon, unlockName } from './journal.js';
+import { RANK_HIGHLIGHTS } from '../coach/lessons/career.js';
+import { SIGNALS } from '../coach/signals.js';
 
 const ORDER = ['bankrupt', 'loan', 'rescue', 'hardship', 'rank', 'year'];
 
@@ -164,14 +169,29 @@ export function createCareerWindows(app, { getGame, openJournal }) {
     const female = g.state.career?.farmerGender === 'fermiere';
     const unlocks = ev.unlocks || [];
     const crest = el('div.c-rank-crest', rankIcon(ev.rank, 'sprite--hero'));
+    // Trois nouveautés à essayer (au lieu de toute la liste d'un coup) ; les autres restent lisibles, repliées.
+    const hl = RANK_HIGHLIGHTS[ev.rank] || [];
+    const isHl = (u) => hl.some((h) => h.id === u.id);
+    const rest = hl.length ? unlocks.filter((u) => !isHl(u)) : unlocks;
+    const highlights = hl.length
+      ? el(
+          'div.c-unlocks.c-unlocks--top',
+          el('small.c-unlocks-title', 'Trois nouveautés à essayer :'),
+          el('div.c-unlock-list', hl.map((h) => el('span.c-unlock.c-highlight', unlockIcon({ kind: h.kind === 'feature' ? 'feature' : h.kind, id: h.id }), el('span', el('b', h.name), ` : ${h.text.charAt(0).toLowerCase()}${h.text.slice(1)}`)))),
+        )
+      : null;
+    const others = rest.length
+      ? hl.length
+        ? el('details.c-unlocks.c-unlocks--more', el('summary.c-unlocks-title', `Et aussi : ${plural(rest.length, 'autre nouveauté', 'autres nouveautés')}`), el('div.c-unlock-list', rest.map((u) => el('span.c-unlock', unlockIcon(u), el('span', unlockName(u))))))
+        : el('div.c-unlocks', el('small.c-unlocks-title', 'Nouveau :'), el('div.c-unlock-list', rest.map((u) => el('span.c-unlock', unlockIcon(u), el('span', unlockName(u))))))
+      : null;
     const body = el(
       'div.end-screen.c-rankup',
       crest,
       el('p.end-lead', 'Votre ferme devient une ', el('b', ev.name), ' !'),
       ev.title ? el('p.c-rank-title', `Vous êtes maintenant ${female ? 'une' : 'un'} « ${ev.title} ».`) : null,
-      unlocks.length
-        ? el('div.c-unlocks', el('small.c-unlocks-title', 'Nouveau :'), el('div.c-unlock-list', unlocks.map((u) => el('span.c-unlock', unlockIcon(u), el('span', unlockName(u))))))
-        : null,
+      highlights,
+      others,
       rewardsNode(rec) || (ev.ecus ? el('p.end-ecus', ecuIcon('sprite--sm'), `+${plural(ev.ecus, 'écu')}`) : null),
     );
     const node = app.dialogs.frame({
@@ -181,7 +201,8 @@ export function createCareerWindows(app, { getGame, openJournal }) {
       body,
       actions: [btn('Formidable !', () => next(), 'btn--red', { id: 'c-rank-ok', 'data-autofocus': '' })],
     });
-    app.dialogs.open(node, { id: 'career-rank', pauses: true, sound: false });
+    // (Accompagnement) Fenêtre fermée : la leçon du rang (3 nouveautés montrées du doigt) peut venir.
+    app.dialogs.open(node, { id: 'career-rank', pauses: true, sound: false, onClose: () => app.coach?.signal?.(SIGNALS.rankClosed, { rank: ev.rank }) });
     app.audio.play('victory', { pitch: 0, delay: 0.1 });
     app.vibrate?.([15, 60, 15, 60, 30]);
     setTimeout(() => burst(crest), 250);
@@ -294,42 +315,6 @@ export function createCareerWindows(app, { getGame, openJournal }) {
     app.audio.play('bankrupt', { pitch: 0, delay: 0.3 });
   }
 
-  // ── Accueil (nouvelle ferme) : trois bulles de Joseph ─────────────────────────
-  function intro(g) {
-    let charges = 20;
-    try {
-      charges = g.query.career.charges().season.amount;
-    } catch {
-      /* valeur par défaut */
-    }
-    const lines = [
-      ['Bienvenue chez vous ! La ferme est petite, mais la forêt tout autour est à vendre, terrain par terrain…', 'happy'],
-      [`Chaque saison, il y a des charges : ${fmt(charges)} pièces pour commencer. Elles grandissent avec la ferme.`, 'content'],
-      ['Je vous ai laissé deux poules. Touchez le poulailler pour ramasser les œufs !', 'proud'],
-    ];
-    let i = 0;
-    const speech = el('div');
-    const nextBtn = btn('Suivant', () => step(), 'btn--red', { id: 'c-intro-next', 'data-autofocus': '' });
-    const paint = () => {
-      const [text, expr] = lines[i];
-      speech.replaceChildren(josephSays(`« ${text} »`, expr, 'Joseph, votre voisin'));
-      nextBtn.textContent = i === lines.length - 1 ? 'C\'est parti !' : 'Suivant';
-      nextBtn.dataset.step = String(i + 1);
-    };
-    const step = () => {
-      i += 1;
-      if (i >= lines.length) {
-        next();
-        app.hints.maybe('career.start', null);
-        return;
-      }
-      paint();
-    };
-    paint();
-    const node = app.dialogs.frame({ title: 'Bienvenue !', ribbon: 'ribbon', cls: 'dialog--loan.dialog--career-intro', body: el('div.loan-screen', speech), actions: [nextBtn] });
-    app.dialogs.open(node, { id: 'career-intro', pauses: true, sound: false });
-  }
-
   /** « Au revoir, Lucie ! Merci pour tout. » */
   function farewell(s) {
     const body = el('div.end-screen', el('div.end-illus', portrait(s.look, 'sprite--hero')), el('p.end-lead', `Au revoir, ${s.name} ! Merci pour tout.`));
@@ -339,7 +324,7 @@ export function createCareerWindows(app, { getGame, openJournal }) {
 
   void openJournal;
   void bar;
-  return { queue, queueBanner, process, reset, intro, farewell, get pending() {
+  return { queue, queueBanner, process, reset, farewell, get pending() {
     return pending.length;
   } };
 }

@@ -11,7 +11,7 @@ import { DEFAULT_SPEED } from '../../data/balance.js';
 import { COSMETICS_BY_ID, DECOR_SLOTS_BY_ID, DEFAULT_FARM_NAME } from '../../data/cosmetics.js';
 import { CAREER_VERSION, DEFAULT_FARMER_GENDER, DEFAULT_SEASON_LENGTH, DIFFICULTY_CAREER, FARMER_GENDERS, SEASON_LENGTHS, START } from '../../data/career/career.js';
 import { createRngState, hashSeed } from '../rng.js';
-import { enableSurprises } from '../surprises.js';
+import { enableSurprises, noteSown } from '../surprises.js';
 import { enableVariety } from '../variety.js';
 import { enableCareerCozy } from './cozy.js';
 import { enableCareerValley } from './valley.js';
@@ -20,7 +20,7 @@ import { drawWeather } from '../weather.js';
 import { tomorrowSeasonIndex } from '../calendar.js';
 import { cleanFarmName } from '../progression.js';
 import { wrapState } from '../game.js';
-import { initialLots, initialPlots } from './land.js';
+import { applyStarter, initialLots, initialPlots } from './land.js';
 import { placeBuilding } from './buildings.js';
 import { initialCareerMarket } from './market.js';
 import { careerLevel } from './level.js';
@@ -52,9 +52,9 @@ export function careerOptions({ difficulty = 'detente', farmName, farmerGender =
  *   cosmetics: { decor, path?, fence? } (décor posé dans la progression : copie de départ de state.career.cosmetics ;
  *   path / fence (lot 4) : allée et clôture choisies, critère « beauté » des lanternes), surprises, variety,
  *   cozy (lot 4 : true | false | { lanterns, fetes, winter, helpers }), valley (Vallée vivante : true | false |
- *   { seeds, wildlife }) }
+ *   { seeds, wildlife }), starter (accompagnement : 6 carottes mûres au départ ; faux par défaut) }
  */
-export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, variety = true, cozy = true, valley = true, ...rest } = {}) {
+export function createCareer({ seed = Date.now(), cosmetics = null, surprises = true, variety = true, cozy = true, valley = true, starter = false, ...rest } = {}) {
   const o = careerOptions(rest);
   const d = DIFFICULTY_CAREER[o.difficulty];
   const rng = createRngState(seed);
@@ -118,6 +118,8 @@ export function createCareer({ seed = Date.now(), cosmetics = null, surprises = 
   placeBuilding(state, 'house', 'home', null, 1, 0);
   placeBuilding(state, 'coop', 'yard', 0, 1, 0);
   for (const ext of careerExtensions()) if (typeof ext.init === 'function') ext.init(state);
+  // (Accompagnement) Premiers pas avec Joseph : 6 carottes mûres au départ (désactivé par défaut : simulations inchangées).
+  if (starter) applyStarter(state, noteSown);
   // Patrimoine de départ (argent) : le « meilleur patrimoine » d'une ferme vendue tout de suite n'est jamais 0.
   state.career.bestPatrimony = patrimony(state);
   const level = careerLevel(state);

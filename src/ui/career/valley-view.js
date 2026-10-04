@@ -18,6 +18,7 @@
 import { el, plural, setText } from '../dom.js';
 import { icon } from '../icons.js';
 import { createValleyView as createRenderer, viewLayout } from '../../render/valley-view.js';
+import { SIGNALS } from '../coach/signals.js';
 
 const TAP_SLOP = 10;
 const VIEW_Q_S = 0.25;
@@ -211,11 +212,8 @@ export function createValleyView(app) {
     } else if (opts.mushrooms) renderer.scrollTo('combe', { animate: false });
     else if (!was) renderer.scrollTo('farm', { animate: false });
     if (opts.placeId) requestAnimationFrame(() => app.places?.openPlace?.(opts.placeId));
-    const first = !!res?.first || !!opts.first;
-    if (first || (view?.places || []).every((p) => !p.step && !p.works)) {
-      setTimeout(() => app.hints?.maybe?.('valley.view', { rect: () => targetPageRect({ type: 'place', id: 'brook' }) }), 500);
-    }
-    if (opts.speciesId) setTimeout(() => app.hints?.maybe?.('valley.valleyAnimal', { rect: () => targetPageRect({ type: 'viewAnimal', id: opts.speciesId }) }), 600);
+    // Joseph montre la vue (leçons valley.view, valley.valleyAnimal… : src/ui/coach/lessons/valley.js).
+    if (!was) app.coach?.signal?.(SIGNALS.viewOpen);
     if (app.keyboardMode) requestAnimationFrame(() => root.querySelector('#vv-list')?.focus());
     return true;
   }
@@ -232,6 +230,7 @@ export function createValleyView(app) {
     document.body.classList.remove('in-valley-view');
     app.popPause('valleyView');
     if (!silent) app.audio.play('close', { volume: 0.6 });
+    app.coach?.signal?.(SIGNALS.viewClose);
     if (historyPushed && !fromHistory) {
       historyPushed = false;
       try {

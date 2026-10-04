@@ -5794,6 +5794,111 @@ bilan avant / après ; « Sons de la vallée » complets / légers / coupés, vo
 arrière-plan ; cibles ≥ 48 px au zoom minimal, textes ≥ 14 px, 150 % ; une partie de niveau Classique identique, sans
 aucun son nouveau), `JOURNAL.md`, sauvegarde `backup/vallee-v4-…` à la fin.
 
+### Écarts et précisions (livraison CORE V4)
+
+Section tenue par le paquet CORE : ce qui précise ou s'écarte du contrat ci-dessus (rédigée **au début** de la livraison
+pour ART, AUDIO et UI/RENDER, complétée à la fin). Aucun nom ni forme du contrat n'est retiré ; seulement des champs
+**ajoutés**, sauf mention contraire. Chiffres : `src/data/career/storks.js` et `docs/VALLEE.md` § 18.12.
+
+**Fichiers**
+- Touchés en plus de la liste : `src/core/career/heirlooms.js` (`storksOn` y vit, ré-exporté par `storks.js`, pour que
+  `heritage.js` et `habitat.js` le lisent sans import circulaire) ; tests du V1 au V3 mis aux nombres du V4 (version 4,
+  partie `storks`, 9 étapes, 20 pages, 201 cases, 47 succès ; empreintes du V2 et du V3 : les champs inertes du V4 retirés
+  avant le hachage, **valeurs inchangées**) ; `tests/lot2-render.test.js` (les 3 décors du V4 rangés avec ceux de la
+  Vallée). `src/core/game.js` ne change pas (le contexte des succès passe par `valleyAchievementContext`).
+- `src/core/career/storks.js` exporte aussi : `springDayText`, `isStorkDay`, `storkNeedText`, `legendAwake`,
+  `sowLegendReason`, `seenVisitors`, `glowSpot`, `visitorSpot`, `epiloguePages`, `creditsInfo`, `nextPostcard`, `nestState`,
+  `datedSigns`, `bookOf` (la requête `valleyBook`), `chicksText`, `ofValley`, `agreeV4`, `fill`. Données en plus :
+  `LEGENDS_BY_ID`, `LEGEND_IDS`, `VISITORS_BY_ID`, `VISITOR_IDS`, `DRAWN_VISITORS`, `STORIES_V4_BY_ID`, `POSTCARDS_BY_ID`,
+  `SCENERY_RULES` (rythmes des passages, du cerf, du loriot, de l'arc-en-ciel, des visiteurs en décor), `EPILOGUE.after`,
+  `EPILOGUE.credits.places` (ordre des cartes du générique). Chaque légende a `label`, `wakeText`, `short` ; chaque
+  visiteur `whereText`, `halt`, `still`, `calendar`.
+- `src/core/progression.js` : `recordValleyEpilogue(progress)` ; `recordValleyStage` va jusqu'à 8 (il lit `STAGES_ALL`).
+
+**État et parties**
+- Comme au V3, les champs du V4 (`legends`, `cloches`, `marvel`, `visitors`, `stork`, `epilogue`, `postcards`, `stageAt`,
+  compteurs) existent **inertes** même avec `{ storks: false }` (rien ne les lit ni ne les écrit, aucun tirage `valley4`,
+  aucun flux créé) ; l'empreinte de `{ storks: false }` les retire avant le hachage, comme celle du V3. `v` vaut 4 dans les
+  deux cas ; `parts.storks` vaut `false` sans le V3 (`places` ou `heritage` à `false`).
+- Champ **ajouté** `rainedAt: null | abs` (dernier jour de pluie vu à l'aube, partie storks seulement) : l'arc-en-ciel « le
+  matin qui suit une pluie » a besoin de la météo de la veille, que l'état du jeu ne garde pas.
+- Données : `src/data/career/valley.js` garde `STAGE_SIGNS_V3` (8 paliers, inchangé) et exporte en plus `MAX_STAGE_V3`
+  (7) ; `stageSigns(8, true, true)` → `null` ; `maxStageOf({ …, storks })` → 5 | 7 | 8 (`storks: false` → 7).
+  `STAGES_ALL` a 9 entrées (la 9ᵉ est `STAGE_V4`, sans `signs`).
+
+**Règles précisées**
+- **Une légende ou un récit par aube, toutes parties confondues** : la légende attend si un récit (V2, V3 ou V4) est devenu
+  disponible plus tôt dans la même aube (`storyAvailable` d'un lieu restauré, `storkNest`…) ; l'épilogue attend aussi
+  l'aube suivante si une légende ou un récit est venu ce matin-là (il ne tombe donc jamais le même jour que `storkNest`).
+- **L'épilogue dans les récits** : `'epilogue'` entre dans `stories.available` / `read` (contrat) mais `unreadStory`
+  l'ignore (l'indice `'epilogue'` et `bench.joseph: 'epilogue'` s'en chargent) ; `readStory('epilogue')` renvoie vers
+  `readEpilogue()`. `storiesInfo` le liste en dernier avec `pages` (3 × `{ vignette, lines }`), `epilogue: true`, `v4: true`.
+- **Vers luisants** : `spotId` = une haie **posée** de la ferme (choisie par `hashSeed(seed, 'glowworms')` parmi les haies
+  posées, dans l'ordre des emplacements) ; leur fenêtre s'ouvre depuis la ferme (`valleyAnimals()`).
+- **`observe(id)`** d'un identifiant de `VISITORS` renvoie le résultat de `observeVisitor(id)`.
+- **Bilan** : `stageStart` = étape au premier jour de l'année où la Vallée a commencé (0 en pratique) ; ajouté
+  `stageYearStart` (étape au 1ᵉʳ jour de l'année du bilan) et `startYear`.
+- **Récit du nid** : `storyAvailable { id: 'storkNest' }` suit la règle « un récit par aube » : il part juste après
+  `storksArrived { where: 'farm', first: true }` (même aube), sauf si un autre récit est venu plus tôt ce matin-là (il
+  attend alors l'aube suivante, avant toute légende).
+- **Cigognes sans la partie `wildlife`** : ni clocher ni nid (étape 7 au plus), aucun tirage `valley4` ; les légendes
+  (melon, engrain, Merveille) viennent quand même.
+- **Arrivée sur la maison** : le jour des cigognes de chaque printemps où l'étape 8 est atteinte **avant** ce jour (vues en
+  hiver : le printemps même ; vues au printemps après le jour, ou en été : le printemps suivant).
+- **Nid** : `valleyScenery().nest.state` vaut `'wheel'` l'automne (nid vide : pas de dessin à part) et avant la première
+  arrivée ; `'snow'` l'hiver seulement après une première nichée.
+- **Légende mûre** : la récolte accepte aussi une cloche dont le jour est passé avant l'aube (`readyAt ≤ jour`), par
+  sûreté ; `legendRipe` part à l'aube du jour `readyAt` (pousse = `growDays` jours après le semis).
+- **Débogage** : `triggerValley('stage', 8)` pose l'étape 7 (paliers et lieux), puis les cigognes sur le clocher, vues ;
+  `'complete'` pose les 6 lieux restaurés, l'étape 8, la roue et la première arrivée sur la maison (récit du nid compris) ;
+  `'legend', 'farmMarvel'` met aussi les générations à 3 ; `'legendRipe'` réveille et sème au besoin ; `'visitor', id`
+  pose la halte (le clocher pour `whiteStork`) ; `'postcard'` envoie le sachet suivant s'il n'y en a pas (arrivée à l'aube
+  suivante, même avant l'épilogue).
+
+**Formes (champs ajoutés)**
+- `valley()` (V4 actif) : `marvel: { n, need, crossSaved, thisSummer }`, `complete` ; `stork` : `dayText` (« 3ᵉ jour du
+  printemps »), `steepleAt`, `seenAt`, `wheelAt`, `farmSince`, `wheel` ; `postcards` : `canSend`, `reason`, `next`,
+  `sent.arrives`, `got[].n / signer / text / vignette / at / year` ; `stage.next` à l'étape 7 : `{ n: 8, signs: null, needs:
+  « Les cigognes reviennent le 3ᵉ jour du printemps. » | « Les cigognes viendront quand l'étang aura ses nénuphars. » }`.
+- `legendInfo` : `fullName`, `g`, `pl`, `the`, `waitsHome` (« Le melon de la boîte attend sa maison : la Grainothèque »),
+  `awokeAt`, `firstAt`, `label`, `growDays`, `story` ; `name` vaut `'?'` tant qu'elle dort (sauf la Merveille, nommée dès le
+  début) ; `cloche` : `sownAt`, `readyAt`, `sprite` (`legend.cloche` | `legend.<id>.0|1|2`), `stage` (0..2).
+- `visitorInfo` : `the`, `g`, `pl`, `seasonsText`, `recipeOk`, `spot`, `spotId`, `hintIcon`, `title`, `halt` (ligne « À
+  faire »), `still` (« Les grues se reposent encore dans la prairie. », visible hors saison), `drawn`.
+- `valleyView()` : `visitors[].hintIcon` (état `hint`), `steeple.waiting` (le couple attend d'être touché), `bench.line`
+  (phrase du banc après l'épilogue). Le champ `joseph` du V3 garde son sens (récit ou chapitre du V3) : Joseph pour le V4
+  se lit dans `bench.joseph`.
+- `valleyAnimals()` : l'entrée des vers luisants porte `visitor: true` (pas une espèce).
+- Requêtes en plus : `valleyEpilogue()` → `{ available, read, credits, …At, pages, title, credits: { title, cards: [{
+  placeId, name, text }], total, end, watched } }` ; `valleyBench()` → `null | { line }`.
+- `valleyBook()` : `sinceText`, `cover.stage`, `beforeAfter.{from,to}.stage / signs`, `beforeAfter.text` (« 0 → 99 signes
+  de vie ») ; `seeds[]`, `beings[]` : `{ id, kind: 'variety' | 'legend' | 'species' | 'visitor', name ('?' : pas encore),
+  icon, state, year }` ; `places[]` : `{ id, name, step, max, stepName, vignette, restored, restoredYear }` ; `calendar[]` :
+  `{ id, when }` ; `stories[]` : `{ kind: 'chapter' | 'story' | 'epilogue', id, title, available, read }` ; une page d'année
+  a **une** ligne d'étape au plus (la plus haute franchie cette année) puis cigognes, épilogue, légendes, visiteurs, lieux,
+  habitants, variétés, cartes (6 lignes au plus) ; la phrase d'Hélène dès l'année de son arrivée (premier habitant de la
+  vallée), sinon `null`.
+- Événements : `legendAwoken` + `sub`, `cropId`, `anecdote`, `needLibrary` ; `legendSown` + `name` ; `legendRipe` +
+  `name` ; `legendHarvested` + `name` ; `visitorHint` + `where` ; `visitorVisible` + `name`, `whereText`, `text` ;
+  `visitorSeen` + `title`, `anecdote`, `n`, `total` ; `storksArrived` + `text` ; `storkChicks` + `text` ; `storksLeft` +
+  `text` ; `storkWheelPlaced` + `text` ; `epilogueAvailable` + `text` ; `postcardArrived` + `signer`, `first` ;
+  `storyAvailable` (V4) + `v4: true` ; `valleyStage` (8) : `chapter.vignette` = `story.storks`.
+- Actions : `observeVisitor` → + `n`, `total` ; `readEpilogue` → + `title`, `credits`, `after` ; `seeCredits` → +
+  `credits` ; `readPostcard` → `card: { id, n, valley, signer, text, vignette, at }`.
+- Succès : clés `careerValley` du contrat ; contexte `achievementContext().career.valley` + `legendsAwake`,
+  `legendHarvests`, `legendsHarvested`, `visitorsSeen`, `storkNest`, `epilogueRead`, `postcards`.
+
+**Simulation** (`tools/simulate-career.js`)
+- `--compare-valley4` (24 ans par défaut, `--jobs N`) : V3 exactement (`{ storks: false }`) → V4, mêmes graines ;
+  `playCareer({ trackMoney })` garde l'argent de chaque jour, `moneyFingerprint(off, on)` compte les jours différents.
+  `--compare-valley3` compare maintenant au V3 **sans** le V4 (`storks: false`, même économie). `parseValley` lit
+  `storks`.
+- Robots `STORKS_STYLES` (tirage propre `me.storksRnd`, après le V1 au V3 dans la journée, budget de gestes à part) :
+  réglés sur la mesure — le tranquille ne regarde ses cloches qu'**une saison sur sept environ** (0,15 par saison : à chaque
+  saison, il ressemait les 4 légendes et ajoutait ≈ 1,1 geste par jour, loin de la cible + 0,05 à + 0,3) et envoie un
+  sachet **une saison sur deux** (les 8 cartes s'étalent sur ≈ 4 ans) ; il va voir un visiteur qui attend 70 % des jours (1
+  geste, + 1 pour ouvrir la vue). `automator` et les fermes laissées seules : rien.
+
 ---
 
 ## Accompagnement — contrats (MOTEUR · LEÇONS · ART, conception 2026-10-04)
@@ -6035,3 +6140,60 @@ livraison ; Vallée V4 — ses conseils deviennent des leçons ; (6) **intégrat
 `backup/avant-accompagnement-<date>`, `node --test tests/`, parité (`tools/capture-parity.js --check`), `node
 tools/simulate.js` et `node tools/simulate-career.js` identiques, `node tools/build.js`, vérification au doigt du § 14 de
 `docs/ACCOMPAGNEMENT.md` (Pixel 7 et 360 × 740, texte 150 %, mouvement réduit), `JOURNAL.md`.
+
+### Écarts et précisions (livraison MOTEUR, 2026-10-04)
+
+- **Démarrage des cours** : c'est `coach.bind(game, { mode, resumed, created, firstSteps })` (appelé par `main.js`
+  `startRun`) qui lance `career.firstSteps` (nouvelle ferme avec la case « Premiers pas avec Joseph ») et qui reprend un
+  cours commencé (niveau 1 : clé `tutorial`, `step` = identifiant d'étape, anciens index convertis par
+  `store.tutorialStepId` ; carrière : `guidance.firstSteps = { key: graine, step, done }`). `startCourse` reste public et
+  idempotent ; `src/ui/career/index.js` n'a rien à appeler. La case « Premiers pas » est dans `src/ui/career/menu.js`
+  (« Nouvelle ferme »), pas dans `dialogs.js` ; `app.startCareer({ …, firstSteps })` passe `starter` au cœur.
+- **Cœur** : `createCareer({ starter: true })` → `applyStarter` (`land.js`) : 6 carottes mûres arrosées sur les
+  parcelles 0 à 5 du champ de départ (rangée du haut **+ 2 de la suivante** : le champ a 4 colonnes). Test :
+  `tests/career-starter.test.js` (et non `career.test.js`, qui n'existe pas). Parité 400 / 400 inchangée.
+- **Deux places** : un cours (`course`) et une leçon simple (`lesson`). Une étape de cours « passive » (`pill: true`, ou
+  `wait: { until(ctx), say }` pas encore vrai) s'affiche en pastille et laisse passer une leçon simple ; une étape active
+  la bloque. Les leçons citées par le cours en cours (`lessons`, `step.lesson`) ne se déclenchent pas pendant lui.
+- **Étapes, champs en plus** : `enter(ctx, kit)` (préparer l'écran : `kit.openSection(clé)` déplie une section repliable
+  de la boutique, `kit.focusInvestment(id)`, `kit.closeSheet()`) ; `sheet` peut être une fonction `(ctx) => id` ;
+  `settle` (ms : la réussite attend la fin du geste — plus de récolte depuis `settle` ms et plus de doigt sur la scène,
+  `app.input.active`) ; `skipNote(ctx)` (message quand l'étape est sautée : « Il pleut… ») ; `laterTo` (étape où mène
+  « Plus tard » dans un cours) ; `idle` (texte du rejeu quand la cible n'existe pas) ; `choice` (question unique, interne).
+  Après « Passer » (et en rejeu, « Suivant »), une étape qui vise le contenu d'une feuille fermée est sautée aussi.
+- **Contexte (`ctx`), champs en plus** : `mem` (mémoire de la leçon en cours, réinscriptible : jamais l'état de partie),
+  `courseActive`, `expert` (rudiments sus, § 10.3), `firstSteps`, `resumed`, `created`, `bill` (= `app.hud.projection()`,
+  pour `money.low`), `ui.speedTouched`, `ui.todoShown`, `ui.todoItem`, `ui.unread`. `ctx.app` n'existe pas (catalogues purs).
+  `ui.placingKind` : genre de visée (aménagement choisi, `'pair'`, `'wild'`), à côté du booléen `ui.placing`. `day.abs` est le
+  **jour absolu continu du cœur** (`absDay` de `src/core/surprises.js` : les années comptent en carrière).
+- **`where` d'une leçon** : il vaut pour **chaque étape** (`canShow` l'applique à l'étape affichée) ; une leçon qui change
+  d'écran s'écrit en deux leçons enchaînées par `next`. Une étape `sheet` n'existe que feuille ouverte.
+- **Cibles en plus** : `{ field: true }` (champ clôturé), `{ center: true }` (centre de la scène, geste `pinch`).
+  `scene.focusRect(r, { bottom })` accepte désormais `bottom` (px couverts par la bulle), comme `focusPlot`.
+- **Signaux en plus** : `start` `{ created, resumed }` et `lessonEnd` `{ id, course }` (émis par le moteur), `plotTap`
+  `{ index, action }` (gestures.js), `sheetShown` `{ id, by }` (sheets.js, avec `sheetOpen`). Émis par MOTEUR : sheets,
+  tabbar, dialogs (open / close, `resumeClose` à la fermeture de « Où en étais-je ? »), todo (`todoGo`), gestures
+  (`longPress`, `plotTap`), `app.plantAll` (`sowAll`), zoom.js (`zoom`), messages.js (`messagesOpen`), main.js (`menu`),
+  `app.setSpeed` → `coach.onSpeed` (`speed`), carnet (`carnetOpen`).
+- **Pont des anciens conseils** : `app.hints.maybe(id, target)` → `coach.request(id, { target })`. Un identifiant sans
+  leçon mais présent dans la table `HINTS` de `hints.js` (et les tables encore recopiées par les modules de la Vallée)
+  devient une leçon d'une étape « Compris » (`legacy`), au lieu d'être ignoré : rien ne se perd pendant la migration.
+  `app.tutorial` est un alias en lecture (`active` = `coach.blocking`) pour les modules pas encore migrés.
+- **Rappels** : `todo: 'id'` pointe une entrée « À faire » existante ; `todo: (ctx) => item` l'ajoute (`todo.addProvider`,
+  un seul fournisseur, passé **après** les entrées existantes : un `item.id` déjà présent n'est pas doublé, il est seulement
+  pointé) ; la pastille pointe l'entrée (`todo.pointAt(id)`), id texte ou `todo(ctx).id`. `safety: true` (fermage) :
+  pastille en Complet et en Discret, message important en Aucun, hors quotas, une fois par saison. La ligne du matin
+  (« Joseph : … ») est ajoutée par `todo.morningNote` en Complet et en Discret. Rappels du catalogue : champs `title` et
+  `example` (affichés dans l'onglet « Rappels » du carnet).
+- **`career.collectAll`** (ancien identifiant) est défini dans `lessons/basics.js` (chapitre « Les premiers pas ») : les
+  autres catalogues ne le redéfinissent pas (un doublon est ignoré, avertissement en développement).
+- **Carnet** : au menu principal (Options › « Ouvrir le carnet de Joseph »), le carnet s'ouvre en fenêtre (`dialog--carnet`)
+  et « Me montrer » y est grisé ; en partie, c'est la feuille `carnet`. `openGuide` = carnet, onglet « Mots de la ferme »
+  (glossaire + règles). `guidancePicker(app, opts)` (carnet.js) sert aussi aux options et à la fenêtre « Bienvenue ! ».
+- **Couche** : `#coach` (créée par le moteur, z-index 45 ; 64 pour une leçon du menu ou d'une fenêtre) ; l'ancien
+  `<div id="tutorial">` est retiré du gabarit. Bulle limitée à 40 % de la hauteur (défilement interne).
+- **Retraits faits** : `src/ui/tutorial.js`, `maybeLowMoneyHint` (→ rappel `money.low`), la section « Les conseils de
+  Joseph » du guide, `VARIETY_HINTS` (`src/data/variety.js`) et `COZY_HINTS` (`src/data/cozy.js`). Restent : la table
+  `HINTS` de `hints.js` (lue par le pont et par `tests/guidance.test.js`) et les appels `app.hints.maybe` de `main.js`
+  (`processing`, `goat`, `pollination`, `contest`, `grange`, `decor`), sans effet double si la leçon a aussi son
+  déclencheur (la file ne garde qu'une entrée par leçon).
