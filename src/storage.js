@@ -42,12 +42,16 @@ export const DEFAULT_SETTINGS = Object.freeze({
   guidanceAsked: false, // le réglage a été choisi (fenêtre « Bienvenue ! », question unique, options)
   // ── (Vallée vivante, lot V4) Sons de la vallée : paysage sonore synthétisé (src/audio/nature.js) ──
   natureSound: 'full', // 'full' (Complets) · 'light' (Légers : couches et 4 voix, sans écho) · 'off' (Coupés)
+  // ── Sons de l'interface (boutons, fiches, onglets : src/audio/ui-sounds.js) ; les sons du jeu n'en dépendent pas ──
+  uiSound: 'soft', // 'normal' (Normaux : sons Kenney d'origine) · 'soft' (Doux, par défaut) · 'off' (Coupés)
   // ── Intro « MG studios » à chaque ouverture (src/intro/gate.js lit ce réglage directement dans localStorage) ──
   intro: true,
 });
 
 /** Valeurs permises du réglage « Sons de la vallée ». */
 export const NATURE_SOUNDS = Object.freeze(['full', 'light', 'off']);
+/** Valeurs permises du réglage « Sons de l'interface ». */
+export const UI_SOUNDS = Object.freeze(['normal', 'soft', 'off']);
 
 export const TEXT_SCALES = Object.freeze([1, 1.15, 1.3, 1.5]);
 export const SPEED_SETTINGS = Object.freeze([0.5, 1, 2, 4]);
@@ -251,6 +255,7 @@ export function loadSettings() {
   if (!['all', 'important', 'none'].includes(out.messages)) out.messages = DEFAULT_SETTINGS.messages;
   if (!['full', 'quiet', 'off'].includes(out.guidance)) out.guidance = DEFAULT_SETTINGS.guidance;
   if (!NATURE_SOUNDS.includes(out.natureSound)) out.natureSound = DEFAULT_SETTINGS.natureSound;
+  if (!UI_SOUNDS.includes(out.uiSound)) out.uiSound = DEFAULT_SETTINGS.uiSound;
   return out;
 }
 

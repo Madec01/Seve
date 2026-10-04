@@ -8,7 +8,13 @@
 //   audio.play('coin')                 effet sonore
 //   audio.setAmbience({ birds, rain, wind, bees })  niveaux cibles 0..1 (fondu)
 //   audio.setWorld({ active, owned, season, weather })  cris d'animaux ponctuels
-//   audio.setVolumes(settings)         { musicVolume, sfxVolume, ambienceVolume, muted }
+//   audio.setVolumes(settings)         { musicVolume, sfxVolume, ambienceVolume, muted, uiSound }
+//   audio.uiStats()                    (mesures) sons d'interface joués / écartés, dernier joué
+//
+// Sons de l'interface (boutons, bascules, fiches, onglets, erreurs : UI_SOUND_NAMES, src/audio/ui-sounds.js),
+// réglage settings.uiSound : 'normal' (fichiers Kenney d'origine) · 'soft' (par défaut : sons doux calculés, plus bas
+// que les sons du jeu, ±3 % de hauteur, passe-bas 3 kHz, survol muet, répétitions rapprochées adoucies, pas de son
+// d'ouverture/fermeture juste après le toucher qui l'a provoquée) · 'off' (aucun). Les sons du jeu ne changent pas.
 //   audio.note(step, opts)             (lot 2) note synthétisée n° step d'une série de récolte (gamme
 //                                      pentatonique qui monte, src/audio/synth.js), sur le bus des effets
 //   audio.tone(name, opts)             (lot 2) son synthétisé : 'belle' | 'gold' | 'fanfare' | 'thud' |
@@ -31,11 +37,25 @@
 import { assetUrl } from '../version.js';
 import { createSynth } from './synth.js';
 import { createNature } from './nature.js';
+import { UI_SOUND_MODES, UI_SOUND_NAMES, renderUiSound } from './ui-sounds.js';
 
 const FADE = 2; // secondes
 const DEFAULT_THROTTLE = 45; // ms entre deux lectures du même son
 const THROTTLE = { coin: 90, hover: 70, harvest: 60, water: 60, plant: 60, buy: 120, rooster: 25000, error: 150, warning: 400 };
 const MAX_VOICES = { coin: 3, harvest: 3, water: 3, plant: 3, hover: 2 };
+// Sons d'interface : jamais deux fois le même à moins de 80 ms (quel que soit le mode).
+const UI_SET = new Set(UI_SOUND_NAMES);
+const UI_MIN_REPEAT = 80; // ms
+// Mode « Doux » : un son d'interface se tait si un autre vient de jouer (le toucher a déjà fait son « toc ») ;
+// l'ouverture/fermeture d'une fiche suit presque toujours un toucher : fenêtre plus large. Erreur, validation et
+// avertissement informent : toujours joués.
+const UI_GAP = { open: 160, close: 160 };
+const UI_GAP_DEFAULT = 90; // ms
+const UI_PRIORITY = new Set(['error', 'confirm', 'warning']);
+// Mode « Doux » : le même son répété (petits touchers à la chaîne) baisse de 15 % à chaque fois, jusqu'à 40 %.
+const UI_STREAK_WINDOW = 1200; // ms
+const UI_PITCH = 0.03; // ±3 %
+const UI_LOWPASS = 3000; // Hz
 
 function pickFormat() {
   try {
@@ -52,7 +72,8 @@ export function createAudio(manifest, initialSettings = {}) {
   let ctx = null;
   let master = null;
   const bus = { music: null, sfx: null, ambience: null };
-  let settings = { musicVolume: 0.6, sfxVolume: 0.8, ambienceVolume: 0.6, muted: false, natureSound: 'full', ...initialSettings };
+  let uiBus = null; // (mode « Doux ») gain → passe-bas 3 kHz → bus des effets
+  let settings = { musicVolume: 0.6, sfxVolume: 0.8, ambienceVolume: 0.6, muted: false, natureSound: 'full', uiSound: 'soft', ...initialSettings };
   let duck = 1; // atténuation de la musique (menus de pause)
   let musicScale = 1; // (V4) facteur à part : la musique baisse dans la vue de la vallée
 
@@ -186,6 +207,25 @@ export function createAudio(manifest, initialSettings = {}) {
       bus[k] = ctx.createGain();
       bus[k].connect(master);
     }
+    // Sons doux de l'interface : calculés une fois (quelques ms), filet de sécurité passe-bas à 3 kHz.
+    uiBus = ctx.createGain();
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = UI_LOWPASS;
+    lp.Q.value = 0.5;
+    uiBus.connect(lp);
+    lp.connect(bus.sfx);
+    for (const name of UI_SOUND_NAMES) {
+      try {
+        const data = renderUiSound(name, ctx.sampleRate);
+        if (!data) continue;
+        const b = ctx.createBuffer(1, data.length, ctx.sampleRate);
+        b.getChannelData(0).set(data);
+        softBuffers.set(name, b);
+      } catch {
+        /* son doux indisponible : l'interface reste muette pour ce son */
+      }
+    }
     applyVolumes(true);
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
     // Décode tous les effets sonores (petits) tout de suite.
@@ -206,6 +246,54 @@ export function createAudio(manifest, initialSettings = {}) {
   // ── Effets sonores ───────────────────────────────────────────────────────────────
   const lastPlayed = new Map();
   const voices = new Map();
+  const softBuffers = new Map(); // nom → AudioBuffer (sons doux de l'interface)
+  const uiMode = () => (UI_SOUND_MODES.includes(settings.uiSound) ? settings.uiSound : 'soft');
+  let lastUiAt = -Infinity;
+  const uiStreak = new Map(); // nom → { n, at }
+  const uiCount = { played: 0, skipped: 0, last: null, lastVolume: 0, mode: 'soft' };
+
+  /** Son d'interface (boutons, fiches, onglets…) selon le réglage « Sons de l'interface ». */
+  function playUi(name, entry, opts) {
+    const mode = uiMode();
+    uiCount.mode = mode;
+    if (mode === 'off') return;
+    if (mode === 'normal') {
+      playBuffer(name, entry, { ...opts, throttle: Math.max(UI_MIN_REPEAT, opts.throttle ?? THROTTLE[name] ?? DEFAULT_THROTTLE) });
+      return;
+    }
+    const buf = softBuffers.get(name);
+    if (!buf) return; // survol : muet en mode « Doux »
+    const now = performance.now();
+    const throttle = Math.max(UI_MIN_REPEAT, opts.throttle ?? THROTTLE[name] ?? 0);
+    const gap = UI_PRIORITY.has(name) ? 0 : UI_GAP[name] ?? UI_GAP_DEFAULT;
+    if (now - (lastPlayed.get(name) || -Infinity) < throttle || now - lastUiAt < gap || (voices.get(name) || 0) >= 2) {
+      uiCount.skipped++;
+      return;
+    }
+    const prev = uiStreak.get(name);
+    const n = prev && now - prev.at < UI_STREAK_WINDOW ? prev.n + 1 : 1;
+    uiStreak.set(name, { n, at: now });
+    const streak = Math.max(0.4, 1 - 0.15 * (n - 1));
+    lastPlayed.set(name, now);
+    lastUiAt = now;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.playbackRate.value = 1 + (Math.random() * 2 - 1) * UI_PITCH;
+    const g = ctx.createGain();
+    const volume = Math.min(1, opts.volume ?? 1) * streak;
+    g.gain.value = volume;
+    src.connect(g);
+    g.connect(uiBus);
+    voices.set(name, (voices.get(name) || 0) + 1);
+    src.onended = () => {
+      voices.set(name, Math.max(0, (voices.get(name) || 1) - 1));
+      g.disconnect();
+    };
+    src.start(ctx.currentTime + (opts.delay || 0));
+    uiCount.played++;
+    uiCount.last = name;
+    uiCount.lastVolume = volume;
+  }
 
   /**
    * @param name  clé de manifest.sfx
@@ -214,6 +302,15 @@ export function createAudio(manifest, initialSettings = {}) {
   function play(name, opts = {}) {
     const entry = manifest.sfx[name];
     if (!entry || !ctx || settings.muted || ctx.state !== 'running') return;
+    if (UI_SET.has(name)) {
+      playUi(name, entry, opts);
+      return;
+    }
+    playBuffer(name, entry, opts);
+  }
+
+  /** Lecture d'un fichier du catalogue (sons du jeu, et sons d'interface en mode « Normaux »). */
+  function playBuffer(name, entry, opts) {
     const now = performance.now();
     const throttle = opts.throttle ?? THROTTLE[name] ?? DEFAULT_THROTTLE;
     if (now - (lastPlayed.get(name) || -Infinity) < throttle) return;
@@ -497,6 +594,10 @@ export function createAudio(manifest, initialSettings = {}) {
     unlock,
     isUnlocked,
     play,
+    /** (Mesures) sons d'interface joués / écartés (anti-répétition), dernier joué et son volume, mode. */
+    uiStats() {
+      return { ...uiCount, mode: uiMode() };
+    },
     note,
     tone,
     playMusic,

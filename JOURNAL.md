@@ -50,6 +50,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee2-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V2 de la Vallée, commit `a0c0e17` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee3-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V3 de la Vallée, commit `5a64fd7` (branche et tag créés en local) |
+| 2026-10-04 | `backup/sons-interface-2026-10-04` | Avant les sons doux de l'interface (retour : « swiiip » aigus des boutons soûlants), commit `532981a` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -2119,3 +2120,35 @@ d'un coup, et on met ça en intro du jeu systématiquement à l'ouverture ». Sa
   interface ; l'intro n'en dépend pas (vérifiée hors ligne avec le service worker). Sur réseau très lent, le ruban et le
   panneau de l'écran-titre apparaissent quand leurs images arrivent (le texte est lisible dès le début), comme sur
   l'écran de chargement.
+
+### 2026-10-04 — Sons de l'interface doux (retour joueur : « swiiip » aigus soûlants)
+
+- **Retour de l'utilisateur** (téléphone) : « Les effets sonores quand on touche les boutons sont assez stridents. C'est
+  soûlant à la longue, les sortes de "swiiip" aigus. »
+- **Diagnostic** (décodage dans Chromium, analyse spectrale hors ligne) : les « swiiip » sont `open` (Kenney
+  `open_002`, ouverture de chaque fiche et fenêtre : centroïde 8,1 kHz, 79 % de l'énergie au-dessus de 4 kHz, souffle qui
+  monte sur 0,3 s) et `close` (`close_002` : 7,6 kHz, 73 % > 4 kHz), presque aussi forts que la récolte ; puis `page`
+  (`bookFlip2`, 36 appels : onglets, fiches d'info, toucher d'une parcelle qui pousse : 4,8 kHz, 54 % > 4 kHz) et `click`
+  (`select_001`, chaque bouton de fenêtre : tic sec à 2,2–2,5 kHz, 77 % > 2 kHz). `confirm` et `warning` sont tonaux mais
+  forts (−13 / −14 dB, au-dessus des sons du jeu) ; `error` est grave ; `hover` ne joue qu'à la souris. Aucun son au
+  défilement. Toucher une parcelle ou un bouton qui ouvre une fiche enchaînait deux sons (« page »/« clic » + « swiiip »).
+- **Correction** : nouveau `src/audio/ui-sounds.js` (logique pure) — sons doux calculés une fois au déverrouillage, sans
+  fichier : « toc » de bois (bouton, 620 Hz), « pop » mat (bascule, 560 → 430 Hz), frottement de papier très doux
+  (onglet / fiche, bande 0,8–1,3 kHz), souffle grave qui s'ouvre / retombe (ouverture / fermeture, passe-bas 0,6–1,3 kHz,
+  les plus discrets), deux notes de marimba (validation, sol 4 → do 5), deux « tocs » qui descendent (erreur), quinte de
+  marimba (avertissement) ; survol muet. Attaques arrondies (≥ 2,5 ms), passe-bas 24 dB/oct à 2,4 kHz puis 3 kHz à la
+  lecture, niveau calé 9 à 26 dB sous les sons du jeu, ±3 % de hauteur. `audio.js` : anti-répétition (même son
+  d'interface jamais à moins de 80 ms, tous modes) ; en mode « Doux », un son d'interface se tait si un autre vient de
+  jouer (90 ms ; 160 ms pour ouverture / fermeture, qui suivent le toucher ; erreur, validation et avertissement toujours
+  joués), et les petits touchers répétés baissent de 15 % à chaque fois (jusqu'à 40 %, fenêtre 1,2 s).
+- **Réglage** Options › Volumes : **« Sons de l'interface : Normaux · Doux · Coupés »** (`settings.uiSound`, défaut
+  « Doux », sous le volume « Sons ») ; « Normaux » rend les sons Kenney d'origine. Les sons du jeu (récolte, pièces,
+  semis, animaux, jingles, sons synthétisés du lot 2 et de la vallée) ne changent pas.
+- **Tests** : `tests/ui-sounds.test.js` (énergie > 4 kHz < 0,5 %, > 3 kHz < 2 %, attaque, début et fin à zéro, pas de
+  saturation, niveau ≤ −28 dB, rendu déterministe), `tests/storage.test.js` (réglage validé).
+- **Vérifié** (Playwright, Pixel 7, `dev.html?debug=1&nosw&nointro`, toucher uniquement) : onglets, fiches Argent /
+  Météo ouvertes et fermées, vitesse, semis, menu, Options (sélecteur 3 × 56 px, réglage enregistré), 5 touchers
+  rapides, récolte, dans les trois modes ; aucune erreur console. Mesure avant / après (crête, centroïde, part > 4 kHz,
+  niveau RMS 50 ms avec les volumes du catalogue et des appels) : voir le tableau du compte rendu ; toutes les crêtes
+  douces ≤ −20,9 dBFS.
+

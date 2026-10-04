@@ -94,6 +94,8 @@ Tous normalisés (crête à −3 dBFS) et convertis en ogg + mp3.
 | `bankrupt` | Music Jingles | `Pizzicato jingles/jingles_PIZZI07.ogg` |
 | `victory` | Music Jingles | `Steel jingles/jingles_STEEL02.ogg` |
 
+Ces sons Kenney d'interface (`click` à `warning`) ne jouent qu'avec le réglage « Sons de l'interface : Normaux ». Par défaut (« Doux »), l'interface joue des sons synthétisés par le jeu (`src/audio/ui-sounds.js` : « toc » de bois, frottement de papier, notes de marimba), créations originales sans ressource extérieure.
+
 Sources : https://kenney.nl/assets/interface-sounds, https://kenney.nl/assets/rpg-audio, https://kenney.nl/assets/impact-sounds, https://kenney.nl/assets/music-jingles
 
 ## Sons d'animaux et ambiances — Freesound (CC0, domaine public)
