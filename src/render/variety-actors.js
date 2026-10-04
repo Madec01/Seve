@@ -53,6 +53,9 @@ function obstacles(layout) {
     for (const k of ['house', 'storage', 'well', 'stand', 'waterTower', 'tractor']) add(home[k]);
     for (const s of home.solar || []) add({ x: s.x, y: s.y, w: 1, h: 1 });
   }
+  // (Vallée V2) La Grainothèque réservée (2 × 2) : le panneau du village ne la recouvre jamais.
+  const lib = layout.valley?.reserved ? layout.valley.library : null;
+  if (lib) add({ x: Math.floor(lib.x / T), y: Math.floor(lib.y / T), w: Math.round(lib.w / T), h: Math.round(lib.h / T) });
   const slots = layout.slots || {};
   const avail = layout.available instanceof Set ? layout.available : new Set();
   if (!layout.career && typeof layout.slotTiles === 'function') {
@@ -648,9 +651,15 @@ export function createVarietyActors(effects) {
   }
 
   // ── Toucher ───────────────────────────────────────────────────────────────────
-  function hitTest(wx, wy, slop = 0) {
+  function hitTest(wx, wy, slop = 0, opts = {}) {
     if (!enabled || !sp) return null;
-    const within = (r, s) => r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
+    // (Vallée V3) Au doigt : chaque cible fait au moins `minWorld` px du monde (48 px CSS au zoom courant).
+    const m = opts.minWorld || 0;
+    const grow = (r) => (r && m > 0 ? { x: r.x + r.w / 2 - Math.max(r.w, m) / 2, y: r.y + r.h / 2 - Math.max(r.h, m) / 2, w: Math.max(r.w, m), h: Math.max(r.h, m) } : r);
+    const within = (r0, s) => {
+      const r = grow(r0);
+      return r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
+    };
     const targets = [];
     // En route vers sa place (« arriving ») aussi : l'animation s'arrête quand le jeu est en pause, et la roulotte
     // ou la charrette doivent rester touchables à leur place.

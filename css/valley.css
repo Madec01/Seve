@@ -48,10 +48,10 @@
 
 .vl-hint { margin: 0 0 10px; padding: 8px 10px; min-height: 72px; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
 .vl-hint-title { display: block; margin: 0 0 4px; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); text-transform: none; }
-.vl-hint-row { display: flex; align-items: center; gap: 10px; }
+.vl-hint-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .vl-hint-ico { display: grid; place-items: center; flex: none; width: 44px; }
-.vl-hint-text { flex: 1 1 auto; margin: 0; font-size: 0.9375rem; line-height: 1.3; color: var(--text); }
-.vl-hint-go { flex: none; min-height: 48px; min-width: 48px; padding: 0 12px; font-size: 0.9375rem; }
+.vl-hint-text { flex: 1 1 8rem; min-width: 0; margin: 0; font-size: 0.9375rem; line-height: 1.3; color: var(--text); }
+.vl-hint-go { flex: none; margin-left: auto; max-width: 100%; min-height: 48px; min-width: 48px; padding: 0 12px; font-size: 0.9375rem; }
 
 .vl-rows { display: grid; gap: 6px; }
 .vl-row {
@@ -188,7 +188,8 @@ body.in-valley-place .vl-placebar {
 body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom: 12px; width: min(30rem, calc(100vw - 24px)); border: var(--u) solid var(--outline); }
 
 /* ─── Fiches existantes ─── */
-.vl-plot { display: grid; gap: 4px; margin: 4px 0; }
+.vl-plot, .tip-rows > .vl-plot { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 4px; margin: 4px 0; } /* .tip-rows > div le mettait en ligne (colonnes écrasées) */
+.vl-plot-cross .vl-meet, .vl-plot-hand .vl-fix { max-width: 100%; }
 .vl-plot-var, .vl-plot-fallow { display: flex; align-items: center; gap: 6px; }
 .vl-plot-hand { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .vl-seeds-sec { margin: 0 0 10px; padding: 0 0 8px; border-bottom: var(--u) dotted var(--parch-3); }
@@ -243,6 +244,10 @@ body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom:
   .vl-box-seed, .vl-jar-pop, body.in-valley-place .vl-placebar { animation: none; }
 }
 .seg.vl-seg { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Texte à 130–150 % sur un petit écran : les trois onglets (« Habitants », « Aménager », « Croisements ») tiennent sans se chevaucher (≥ 14 px). */
+@media (max-width: 430px) {
+  html[data-text-scale='130'] .seg.vl-seg .seg-btn, html[data-text-scale='150'] .seg.vl-seg .seg-btn { padding: 0 1px; font-size: 0.6875rem; overflow-wrap: anywhere; line-height: 1.1; }
+}
 .vl-fallow-row .seed-facts { flex-wrap: wrap; white-space: normal; }
 .vl-fallow-row .seed-facts > span { white-space: normal; display: inline; }
 @media (max-width: 379px), (max-height: 780px) {
@@ -260,3 +265,636 @@ body.layout-wide.in-valley-place .vl-placebar { left: 12px; right: auto; bottom:
 .vl-row { min-width: 0; }
 .vl-recipe li, .vl-row-name { overflow-wrap: anywhere; }
 .c-plan-value .vl-plan-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   Lot V2 « Le troc et les croisements » : fiche « La Grainothèque » (vignette, niveau, effets cochés, « Agrandir »,
+   segments L'étagère · Croisements · Troc), feuille du troc, popup du croisement, barre du mode paire, carte du tableau,
+   « Revoir la boîte en fer », groupes de l'onglet Graines, lignes des fiches existantes. Téléphone d'abord : cibles
+   ≥ 48 px, textes ≥ 14 px, rien que la couleur (✓, ?, « 2 / 3 », ♥ ont aussi un mot ou une forme).
+   ══════════════════════════════════════════════════════════════════════════════════════════════════════════════ */
+.sprite--vl-lib { --sk: 2; image-rendering: pixelated; }
+.vl-traits { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.vl-traits.is-long { display: grid; gap: 4px; width: 100%; }
+.vl-row-sub .vl-meet, .vl-xline .vl-meet { flex: none; }
+.vl-meet-seg.is-on { background: var(--gold-2); }
+.vl-sealed { position: relative; display: inline-grid; place-items: center; }
+.vl-seal, .vl-row-ico.is-cross::after, .seed-icon.is-cross::after, .vl-jar-tile.is-cross .vl-jar-glass::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff3b0 0 25%, #f2c23a 30% 100%);
+  box-shadow: 0 0 0 2px var(--outline);
+}
+.vl-row-ico.is-cross, .seed-icon.is-cross { position: relative; }
+.vl-gold { color: #b8860b; font-weight: 700; }
+
+/* Fiche « La Grainothèque » */
+.vl-lib-head { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; }
+.vl-lib-pic { display: grid; place-items: center; flex: none; width: 112px; height: 112px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-lib-pic .sprite--vl-lib { --sk: 3; }
+.vl-lib-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-lib-level { font-size: 0.9375rem; color: var(--text-soft); }
+.vl-lib-name { font-size: 1.0625rem; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.vl-lib-fx { margin: 4px 0 0; padding: 0; list-style: none; font-size: 0.875rem; color: var(--text); }
+.vl-lib-fx li { display: flex; align-items: flex-start; gap: 6px; line-height: 1.3; }
+.vl-lib-fx li + li { margin-top: 2px; }
+.vl-lib-fx li.is-ok { color: var(--green-text); font-weight: 600; }
+.vl-lib-fx li.is-ok .vl-check::before { content: '✓'; }
+.vl-lib-build { margin: 0 0 10px; }
+.vl-lib-go { min-height: 52px; gap: 8px; flex-wrap: wrap; }
+.vl-lib-go .buy-cost { display: inline-flex; align-items: center; gap: 4px; }
+.vl-lib-rank { font-size: 0.875rem; }
+.vl-lib-next { margin: 4px 0 0; font-size: 0.875rem; color: var(--text-soft); line-height: 1.3; }
+.vl-library .card-reason { margin: 4px 0 0; font-size: 0.875rem; }
+
+/* L'étagère : 3 étagères, 4 bocaux par rangée (tuile ≥ 72 × 72 sur 412 px, ≥ 64 sur 360 px). */
+.vl-shelf-row { margin: 0 0 12px; }
+.vl-shelf-title { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 4px; font-size: 1rem; color: var(--text); }
+.vl-shelf-title small { font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl-jars-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px 6px;
+  padding: 6px 6px 10px;
+  background: linear-gradient(to bottom, transparent calc(100% - 8px), #8a5a32 calc(100% - 8px), #6a4226 100%);
+  box-shadow: inset 0 0 0 var(--u) var(--parch-3);
+}
+.vl-jar-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  aspect-ratio: 1;
+  padding: 0;
+  font: inherit;
+  background: rgba(232, 244, 255, 0.55);
+  border: 0;
+  border-radius: 10px 10px 4px 4px;
+  box-shadow: inset 0 0 0 2px #9ab0c8, inset 0 6px 0 0 #c8d8e8;
+  cursor: pointer;
+}
+.vl-jar-tile:active { transform: translateY(var(--u)); }
+.vl-jar-tile:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl-jar-glass { position: relative; display: grid; place-items: center; }
+.vl-jar-shine { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0.8; pointer-events: none; }
+.vl-jar-tile.is-unknown { background: rgba(200, 200, 200, 0.35); }
+.vl-jar-tile.is-unknown .sprite, .vl-jar-tile.is-unknown .cz-emoji { filter: grayscale(1) brightness(0.6); opacity: 0.6; }
+.vl-jar-tile.is-fixed { box-shadow: inset 0 0 0 2px var(--green-text), inset 0 6px 0 0 #c8d8e8; }
+.vl-jar-tile.is-cross { box-shadow: inset 0 0 0 2px var(--gold-2), inset 0 6px 0 0 #fff3b0; }
+.vl-jar-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text);
+  background: #fffbe8;
+  border-radius: 11px;
+  box-shadow: 0 0 0 2px var(--outline);
+}
+.vl-jar-badge.is-ok { color: #fffbe8; background: var(--green-text); }
+.vl-jar-badge.is-q { color: var(--text-soft); }
+
+/* Croisements */
+.vl-rule { margin: 0 0 8px; font-size: 0.875rem; line-height: 1.35; color: var(--text-soft); }
+.vl-cross { align-items: center; }
+.vl-cross-pics { display: grid; grid-template-columns: 26px 10px 26px 12px 26px; align-items: center; justify-items: center; flex: none; }
+.vl-cross-p { display: grid; place-items: center; width: 26px; height: 26px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-cross-p .sprite { max-width: 24px; max-height: 24px; }
+.vl-cross-p.is-missing .sprite, .vl-cross-p.is-missing .cz-emoji { filter: grayscale(1) brightness(0.6); opacity: 0.55; }
+.vl-cross-p.is-gold { background: #fff3b0; box-shadow: inset 0 0 0 var(--u) var(--gold-2); }
+.vl-cross-p.is-q b { font-size: 1rem; color: var(--text-soft); }
+.vl-cross-op { font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl-cross.is-found { box-shadow: inset 0 0 0 var(--u) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-linked { font-size: 0.875rem; font-style: italic; }
+
+/* Troc : carte, voisins, feuille */
+.vl-troc-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-height: 72px; margin: 0 0 8px; padding: 6px 8px; background: #fff3dc; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) #c8945a, 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-troc-pic { position: relative; display: grid; place-items: center; flex: none; width: 52px; height: 52px; }
+.vl-troc-pin { position: absolute; right: -6px; bottom: -4px; }
+.vl-troc-main { display: flex; flex: 1 1 8rem; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-troc-name { font-size: 1rem; color: var(--text); }
+.vl-troc-what { display: inline-flex; align-items: center; gap: 4px; font-size: 0.9375rem; color: var(--text); overflow-wrap: anywhere; }
+.vl-troc-card > .btn { margin-left: auto; }
+.vl-neighbours { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 8px; }
+.vl-nb { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 96px; padding: 6px 4px; text-align: center; background: var(--parch); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl-nb.is-done { background: #eef6dc; box-shadow: inset 0 0 0 var(--u) var(--green-text); }
+.vl-nb.is-locked { opacity: 0.8; }
+.vl-nb.is-locked .vl-nb-pic .sprite { filter: grayscale(0.7); }
+.vl-nb-pic { position: relative; display: grid; place-items: center; width: 48px; height: 48px; }
+.vl-nb-var { position: absolute; right: -8px; bottom: -4px; }
+.vl-nb-name { font-size: 0.875rem; font-weight: 700; line-height: 1.15; color: var(--text); overflow-wrap: anywhere; }
+.vl-nb-state { font-size: 0.875rem; line-height: 1.2; color: var(--text-soft); }
+.vl-nb-state.is-ok { color: var(--green-text); font-weight: 700; }
+.vl-troc-who { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; }
+.vl-troc-who > div { display: flex; flex-direction: column; }
+.vl-troc-who b { font-size: 1.0625rem; color: var(--text); }
+.vl-troc-who small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-troc-h { margin: 10px 0 4px; font-size: 0.9375rem; color: var(--text); }
+.vl-troc-get { min-height: 64px; }
+.vl-gifts { display: grid; gap: 6px; }
+.vl-gift {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 4px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: var(--parch);
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) var(--parch-3), 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+.vl-gift:active { transform: translateY(var(--u)); }
+.vl-gift:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl-gift.is-picked { background: #fff8e8; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--parch-3); }
+.vl-radio { flex: none; width: 20px; height: 20px; border-radius: 50%; background: #fffbe8; box-shadow: inset 0 0 0 2px var(--outline); }
+.vl-gift.is-picked .vl-radio { background: radial-gradient(circle, var(--outline) 0 35%, #fffbe8 40%); }
+.vl-gift-ico { display: grid; place-items: center; flex: none; width: 40px; height: 40px; }
+.vl-gift-main { display: flex; flex: 1 1 auto; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-gift-name { font-size: 0.9375rem; font-weight: 700; overflow-wrap: anywhere; }
+.vl-gift-fav { font-size: 0.875rem; color: var(--text); }
+.vl-free { margin: 8px 0 0; font-size: 0.875rem; color: var(--text-soft); }
+.vl-swap { min-height: 56px; }
+.vl-troc.is-done { text-align: center; }
+.vl-troc.is-done .vl-troc-who { justify-content: center; text-align: left; }
+.vl-troc-pack { display: grid; place-items: center; margin: 6px 0; animation: vl-pop 600ms var(--ease-out) both; }
+.vl-board-troc { margin: 0 0 8px; }
+.vl-board-troc .vl-troc-card { margin-bottom: 4px; }
+.vl-board-lib { width: 100%; }
+.vl-order-pack { position: absolute; right: -4px; bottom: -4px; }
+.v-portrait { position: relative; }
+
+/* Popup du croisement */
+.vl-crossfound { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.vl-pack { position: relative; display: grid; place-items: center; width: 120px; height: 84px; }
+.vl-pack .sprite--card { animation: vl-pack-open 700ms var(--ease-out) both; }
+.vl-pack-pop { position: absolute; top: -10px; right: 4px; animation: vl-pop 700ms var(--ease-out) 300ms both; }
+@keyframes vl-pack-open { 0% { transform: scale(0.6) rotate(-8deg); } 60% { transform: scale(1.12) rotate(4deg); } 100% { transform: none; } }
+.vl-crossfound-kicker { margin: 0; font-size: 1rem; font-weight: 700; color: #b8860b; }
+.vl-crossfound-name { margin: 0; font-size: 1.125rem; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.vl-crossfound-from { margin: 2px 0; font-size: 0.875rem; color: var(--text-soft); }
+.vl-crossfound .sheet-actions { width: 100%; }
+
+/* Onglet Graines : carte de la Grainothèque, groupes repliés, « Revoir la boîte » */
+.vl-seeds-top { margin: 0 0 8px; }
+.vl-libcard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 72px;
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--text);
+  background: #f2ead8;
+  border: 0;
+  box-shadow: inset 0 0 0 var(--u) #8a6a4a, 0 calc(var(--u) * 2) 0 var(--parch-3);
+  cursor: pointer;
+}
+.vl-libcard:active { transform: translateY(var(--u)); }
+.vl-libcard-pic { display: grid; place-items: center; flex: none; width: 56px; height: 56px; background: #3a2a2f; }
+.vl-libcard-main { display: flex; flex: 1 1 8rem; flex-direction: column; gap: 2px; min-width: 0; }
+.vl-libcard-main b { font-size: 1rem; }
+.vl-libcard-main small { font-size: 0.875rem; color: var(--text-soft); }
+.vl-libcard-go { margin-left: auto; display: inline-grid; place-items: center; pointer-events: none; }
+.vl-group { margin: 0 0 8px; }
+.vl-group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; margin: 0 0 4px; padding: 0 10px; font-size: 1rem; font-weight: 700; color: var(--text); background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; list-style: none; }
+.vl-group-title::-webkit-details-marker { display: none; }
+details.vl-group > .vl-group-title::after { content: '▸'; margin-left: 6px; }
+details.vl-group[open] > .vl-group-title::after { content: '▾'; }
+.vl-group-title small { margin-left: auto; font-size: 0.875rem; color: var(--text-soft); }
+section.vl-group > .vl-group-title { cursor: default; }
+.vl-box-again { margin: 10px 0 0; min-height: 52px; gap: 8px; }
+.vl-box.is-again .cz-story-line, .vl-box-seed.is-still { animation: none; opacity: 1; }
+button.vl-box-seed { font: inherit; border: 0; cursor: pointer; color: var(--text); }
+.vl-box-seed.is-fixed { box-shadow: inset 0 0 0 var(--u) var(--green-text); background: #eef6dc; }
+.vl-melon { margin: 6px 0 0; font-size: 0.9375rem; }
+
+/* Fiche d'une variété, parcelle, feuille des graines */
+.vl-from { font-style: normal; font-weight: 700; color: var(--text); }
+.vl-vextra { display: grid; gap: 6px; margin: 6px 0; }
+.vl-xline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 8px; font-size: 0.9375rem; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2); }
+.vl-xline .btn { margin-left: auto; }
+.vl-plot-cross { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.vl-pair-sec { display: grid; gap: 6px; margin: 0 0 8px; }
+.vl-pair-row { width: 100%; background: #fff8e8; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) var(--gold-2); }
+.vl-pair-ico { display: inline-flex; align-items: center; gap: 0; }
+.vl-pair-ico .sprite { --sk: 2; }
+.vl-chip-meet { background: #fff3b0; }
+
+/* Barre du mode paire (comme celle du mode aménagement) */
+body.in-valley-pair .vl-placebar:not(.vl-pairbar) { display: none; }
+body:not(.in-valley-pair) .vl-pairbar { display: none; }
+
+/* Fenêtre qui ne se ferme pas d'un toucher dehors : petit tressaillement. */
+.sheet.is-nudge { animation: vl-nudge 260ms ease-out; }
+@keyframes vl-nudge { 25% { transform: translateY(-6px); } 60% { transform: translateY(2px); } }
+
+@media (max-width: 379px) {
+  .vl-lib-pic { width: 88px; height: 88px; }
+  .vl-lib-pic .sprite--vl-lib { --sk: 2; }
+  .vl-jar-tile { min-height: 64px; }
+  .vl-jars-grid { gap: 5px; padding: 5px 5px 9px; }
+  .vl-cross { flex-wrap: wrap; }
+  .vl-cross > .btn { margin-left: auto; }
+  .vl-troc-card { flex-wrap: wrap; }
+}
+
+/* Mouvements réduits : rien ne saute, rien ne tremble. */
+.reduced-motion .vl-pack .sprite--card, .reduced-motion .vl-pack-pop, .reduced-motion .vl-troc-pack, .reduced-motion .sheet.is-nudge { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .vl-pack .sprite--card, .vl-pack-pop, .vl-troc-pack, .sheet.is-nudge { animation: none; }
+}
+.vl-troc-card { flex-wrap: wrap; }
+.vl-troc-main { flex: 1 1 140px; }
+.vl-pair-row .seed-facts, .vl-pair-row .seed-facts > span { flex-wrap: wrap; white-space: normal; overflow-wrap: anywhere; }
+.vl-pair-row .seed-main { min-width: 0; }
+
+/* ═══ Vallée V3 « Le ruisseau » : la vue de la vallée, les lieux, les terres sauvages ═══ */
+
+/* Rangée de signes de vie au-delà de 40 : une barre lue. */
+.vl-signs.is-bar { display: block; width: min(16rem, 70vw); height: 12px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl-signs-fill { display: block; height: 100%; background: var(--green-text, #3d8a3c); }
+
+/* Fiche « La Vallée » : quatre segments sur une ligne ; grille 2 × 2 sous 380 px avec un texte ≥ 130 %. */
+.seg.vl-seg.is-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.seg.vl-seg.is-four .seg-btn { padding: 0 2px; font-size: 0.875rem; }
+@media (max-width: 379px) {
+  html[data-text-scale='130'] .seg.vl-seg.is-four, html[data-text-scale='150'] .seg.vl-seg.is-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  html[data-text-scale='130'] .seg.vl-seg.is-four .seg-btn, html[data-text-scale='150'] .seg.vl-seg.is-four .seg-btn { min-height: 48px; font-size: 0.6875rem; }
+}
+
+/* ─── L'écran « La vallée » (au-dessus de la ferme, sous les feuilles, les messages et les conseils) ─── */
+.valley-view { position: fixed; inset: 0; z-index: 22; overflow: hidden; background: #a8daf4; touch-action: none; user-select: none; -webkit-user-select: none; }
+.valley-view[hidden] { display: none; }
+.vv-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; image-rendering: pixelated; }
+.vv-ribbon {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  top: 0;
+  margin: 0;
+  padding: calc(var(--safe-t) + 6px) calc(var(--safe-r) + 12px) 6px calc(var(--safe-l) + 12px);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--parch, #f3e9dc);
+  background: rgba(32, 51, 31, 0.86);
+  border-bottom: var(--u) solid var(--outline);
+  pointer-events: none;
+}
+.vv-bar {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 64px;
+  padding: 6px calc(var(--safe-r) + 6px) calc(var(--safe-b) + 6px) calc(var(--safe-l) + 6px);
+  background: var(--wood-dark);
+  border-top: var(--u) solid var(--outline);
+  box-shadow: inset 0 calc(var(--u) * 2) 0 var(--wood);
+}
+.vv-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 56px;
+  min-height: 52px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+.vv-back { min-width: 112px; }
+.vv-back-arrow { font-size: 1.5rem; line-height: 1; }
+.vv-btn:active { transform: translateY(var(--u)); }
+.vv-btn:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vv-count { flex: 1 1 auto; min-width: 0; font-size: 0.875rem; font-weight: 700; line-height: 1.25; text-align: center; color: var(--parch, #f3e9dc); }
+body.in-valley-view #hud, body.in-valley-view #tabbar, body.in-valley-view #todo, body.in-valley-view .zoom-controls, body.in-valley-view .minimap, body.in-valley-view #banner { visibility: hidden; }
+body.in-valley-view #toasts { bottom: calc(var(--safe-b) + 76px + var(--sheet-h)); }
+body.in-valley-view.has-sheet #toasts { bottom: calc(var(--sheet-h) + 10px); }
+body.layout-wide.in-valley-view .vv-bar { justify-content: center; }
+/* (QA du V3) Texte à 130 % et plus : le compte passe sur sa propre ligne, au-dessus des deux boutons (il s'écrivait sur
+   quatre lignes de 21 px entre eux). */
+html[data-text-scale="130"] .vv-bar,
+html[data-text-scale="150"] .vv-bar { flex-wrap: wrap; row-gap: 4px; }
+html[data-text-scale="130"] .vv-count,
+html[data-text-scale="150"] .vv-count { order: -1; flex: 1 0 100%; }
+html[data-text-scale="130"] .vv-btn,
+html[data-text-scale="150"] .vv-btn { flex: 1 1 0; }
+@media (max-width: 379px) {
+  .vv-back { min-width: 96px; padding: 0 8px; }
+  .vv-btn { font-size: 0.9375rem; }
+}
+
+/* ─── Fiche d'un lieu ─── */
+.vl3-place { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.vl3-place > *, .vl3-works > *, .vl3-next > * { min-width: 0; } /* (QA du V3) 360 px à 150 % : la fiche débordait de 48 px */
+.vl3-place-head { display: flex; align-items: center; gap: 12px; }
+.vl3-place-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl3-place-title { display: grid; gap: 2px; min-width: 0; }
+.vl3-place-step { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text); }
+.vl3-place-stepname { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-dots { display: inline-flex; gap: 3px; }
+.vl3-dot { width: 10px; height: 10px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); border-radius: 50%; }
+.vl3-dot.is-on { background: var(--green-text, #3d8a3c); }
+.vl3-restored { margin: 0; padding: 8px 10px; font-size: 1rem; font-weight: 700; color: #f3fbe8; text-align: center; background: var(--green-text, #3d8a3c); }
+.vl3-works, .vl3-next { display: grid; gap: 6px; padding: 8px 10px; background: #fff8e8; box-shadow: inset 0 0 0 var(--u) var(--gold-2, #c8a050); }
+.vl3-sec-title { display: flex; align-items: center; gap: 6px; font-size: 0.875rem; font-weight: 700; color: var(--text-soft); }
+.vl3-works-name { margin: 0; font-size: 1rem; font-weight: 700; color: var(--text); }
+.vl3-works-row { display: flex; align-items: center; gap: 10px; }
+.vl3-works-left { flex: none; font-size: 0.875rem; color: var(--text); }
+.vl3-bar { position: relative; flex: 1 1 auto; height: 14px; background: var(--parch-3); box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl3-bar-fill { display: block; height: 100%; background: repeating-linear-gradient(90deg, #5aa040 0 8px, #4a9034 8px 10px); }
+.vl3-next-title { margin: 0; font-size: 1rem; color: var(--text); }
+.vl3-next-title small { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
+.vl3-needs { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.vl3-need { display: flex; align-items: center; gap: 8px; min-height: 48px; font-size: 0.9375rem; color: var(--text); }
+.vl3-need .vl-check { flex: none; width: 1.2em; font-weight: 700; color: #b8483a; }
+.vl3-need.is-ok .vl-check { color: var(--green-text, #3d8a3c); }
+.vl3-need-text { flex: 1 1 auto; min-width: 0; }
+.vl3-need-go { flex: none; min-height: 48px; }
+.vl3-seasons { margin: 0; font-size: 0.875rem; color: var(--text-soft); }
+.vl3-start { min-height: 56px; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.vl3-boon-list { display: grid; gap: 3px; margin: 4px 0 0; padding: 0; list-style: none; }
+.vl3-boon-list li { display: flex; gap: 8px; font-size: 0.9375rem; color: var(--text-soft); }
+.vl3-boon-list li.is-ok { color: var(--text); }
+.vl3-boon-list .vl-check { flex: none; width: 1.2em; font-weight: 700; }
+.vl3-sp-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl3-sp { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 2px; min-width: 72px; min-height: 72px; padding: 4px; font: inherit; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+button.vl3-sp { cursor: pointer; box-shadow: inset 0 0 0 calc(var(--u) * 1.5) #c8283a; }
+.vl3-sp-ico { display: grid; place-items: center; width: 48px; height: 48px; }
+.vl3-sp-unknown { font-size: 1.5rem; font-weight: 700; color: var(--text-soft); }
+.vl3-sp-name { max-width: 88px; font-size: 0.875rem; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
+.vl3-sp-st { position: absolute; top: 2px; right: 4px; font-size: 0.875rem; font-weight: 700; }
+.vl3-sp.is-installed .vl3-sp-st { color: var(--green-text, #3d8a3c); }
+.vl3-sp.is-visible .vl3-sp-st { color: #c8283a; }
+.vl3-joseph { margin: 0; font-size: 0.9375rem; }
+.vl3-confirm-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0 0 8px; font-size: 1rem; font-weight: 700; color: var(--text); }
+
+/* ─── Liste des lieux, segment Lieux ─── */
+.vl3-row-state { font-size: 0.875rem; color: var(--text-soft); }
+.vl3-row.is-ready .vl3-row-state { color: var(--text); font-weight: 700; }
+.vl3-row.is-ok .vl3-row-state { color: var(--green-text, #3d8a3c); font-weight: 700; }
+.vl3-row.is-works .vl3-row-state { color: #8a5a32; }
+.vl3-lieux, .vl3-list { display: grid; gap: 10px; }
+.vl3-viewcard { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); background: #e4f2fb; border: 0; box-shadow: inset 0 0 0 var(--u) #3a7ab8, 0 calc(var(--u) * 2) 0 var(--parch-3); cursor: pointer; }
+.vl3-viewcard-pic { display: grid; place-items: center; flex: none; width: 100px; height: 52px; background: #3a2a2f; }
+.vl3-viewcard-main { display: flex; flex: 1 1 auto; flex-direction: column; min-width: 0; }
+.vl3-viewcard-main b { font-size: 1.0625rem; }
+.vl3-viewcard-main span { font-size: 0.9375rem; }
+.vl3-wildcard { display: grid; gap: 6px; padding: 8px 10px; background: #eef6dc; box-shadow: inset 0 0 0 var(--u) var(--green-text, #3d8a3c); }
+.vl3-wildcard .stats-title { display: flex; align-items: center; gap: 6px; margin: 0; }
+.vl3-wildcard.is-soon { background: transparent; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vl3-wild-count { margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-wild-go { min-height: 52px; justify-content: center; gap: 10px; flex-wrap: wrap; }
+.vl3-spgroup { margin: 10px 0 0; }
+.vl3-spgroup-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 56px; padding: 0 10px; font: inherit; font-size: 1rem; font-weight: 700; text-align: left; color: var(--text); background: #e4f2fb; border: 0; box-shadow: inset 0 0 0 var(--u) #3a7ab8; cursor: pointer; }
+.vl3-spgroup-head > span:first-child { flex: 1 1 auto; }
+.vl3-spgroup .vl-rows { margin-top: 6px; }
+
+/* ─── Pêche au ruisseau ─── */
+.vl3-river { display: grid; justify-items: center; gap: 4px; text-align: center; }
+.vl3-river-pic { display: grid; place-items: center; width: 96px; height: 80px; background: #cfe8f6; box-shadow: inset 0 0 0 var(--u) #3a7ab8; }
+.vl3-river-name { margin: 0; font-size: 1.125rem; font-weight: 700; color: var(--text); }
+.vl3-river-amount { margin: 0 0 6px; font-size: 1.25rem; font-weight: 700; color: #8a6a00; }
+
+/* ─── Terres sauvages : fiche, choix de la sorte, barre du mode ─── */
+.vl3-wild { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl3-wild-head { display: flex; align-items: center; gap: 12px; }
+.vl3-wild-pic { display: grid; place-items: center; flex: none; width: 72px; height: 72px; background: #2e5a2a; }
+.vl3-wild-kind { margin: 0; font-size: 1.0625rem; font-weight: 700; color: var(--text); }
+.vl3-wild-stage { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-wild-left { margin: 0; font-size: 0.9375rem; color: var(--text); }
+.vl3-choice { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl3-kinds { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl3-choice > *, .vl3-wild > * { min-width: 0; } /* (QA du V3) 150 % : la feuille « Confier à la nature » débordait */
+.vl3-choice .sheet-actions { flex-wrap: wrap; }
+.vl3-choice .sheet-actions > .btn { flex: 1 1 10rem; }
+.vl3-kind { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 72px; padding: 6px 10px; font: inherit; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.vl3-kind.is-on { background: #eef6dc; box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #3d8a3c); }
+.vl3-kind.is-on .vl3-kind-main b::after { content: ' ✓'; }
+.vl3-kind-pic { display: grid; place-items: center; flex: none; width: 56px; height: 56px; }
+.vl3-kind-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vl3-kind-main b { font-size: 1rem; }
+.vl3-kind-main span { font-size: 0.875rem; color: var(--text-soft); }
+.vl3-forever { margin: 0; font-size: 0.9375rem; font-weight: 700; color: var(--text); }
+body.in-valley-wild .vl-placebar:not(.vl-wildbar) { display: none; }
+body:not(.in-valley-wild) .vl-wildbar { display: none; }
+
+/* ─── Ligne « À faire » regroupée : petite feuille ─── */
+.todo-group { display: grid; gap: 6px; }
+.todo-group-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 4px 10px; font: inherit; font-size: 0.9375rem; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.todo-group-text { flex: 1 1 auto; min-width: 0; }
+.todo-group-row:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+body.in-valley-view .sheet-backdrop { top: 0; }
+
+/* (QA du V3) Dans l'écran « La vallée », rien d'autre à l'écran (§ 17.3) : seuls les messages de la vallée (clés vl3-*)
+   et les refus restent ; ceux de la ferme (poulailler, demandes, pastille « +N messages ») attendent dans l'historique —
+   le temps est en pause. */
+body.in-valley-view #toasts > .toast:not([data-key^="vl3-"]):not([data-key^="vl4-"]):not([data-key^="vv-"]):not(.toast--error),
+body.in-valley-view #toasts > #toast-more { display: none; }
+
+/* ═══ Vallée vivante, lot V4 « Les cigognes » (src/ui/career/storks.js, valley-book.js, valley-view.js) ═══ */
+
+/* ─── Segment « Légendes » de la Grainothèque, groupes repliés, fiche d'une légende ─── */
+.vl4-legends { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl4-legend { min-height: 72px; align-items: center; }
+.vl4-leg-pic { display: grid; place-items: center; flex: none; width: 56px; min-height: 64px; padding: 0; font: inherit; background: #e6f0f4; border: 0; box-shadow: inset 0 0 0 var(--u) #9cc0d0; cursor: pointer; }
+.vl4-leg-pic:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl4-cloche-ico.sprite--md { --sk: 4; }
+.vl4-silhouette { display: grid; place-items: center; width: 40px; height: 48px; font-size: 1.5rem; font-weight: 700; color: var(--text-soft); filter: grayscale(1) brightness(0.7); }
+.vl4-legend.is-asleep .vl-row-name { color: var(--text-soft); }
+.vl4-legend.is-ripe { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--gold, #e8b83a); }
+.vl4-legend .vl-row-main { gap: 3px; }
+.vl4-bar { display: block; width: min(100%, 220px); }
+.vl4-gens { margin: 2px 0; }
+.vl4-hint { font-size: 0.75rem; }
+.vl4-shelf .vl4-jar.is-fixed { box-shadow: inset 0 0 0 calc(var(--u) * 2) #d8a838; }
+.vl4-leggroup-body { display: grid; gap: 8px; }
+.vl4-leg-lib { min-height: 48px; }
+.vl4-legend-sheet { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; justify-items: center; text-align: center; }
+.vl4-legend-sheet > * { max-width: 100%; }
+.vl4-legend-sheet .btn { width: 100%; }
+.vl4-sub { margin: 0; font-size: 0.9375rem; color: var(--text-soft); }
+.vl4-facts, .vl4-state { margin: 0; font-size: 0.9375rem; }
+.vl4-state { font-weight: 700; }
+.vl4-gensline { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; }
+.vl4-wake-name { margin: 0; font-size: 1rem; font-weight: 700; }
+.vl4-wake .sheet-actions, .vl4-epi-after { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl4-wake .sheet-actions > .btn { flex: 1 1 8rem; min-height: 48px; }
+.vl4-epi-after { flex-direction: column; }
+.vl4-epi-after .vl4-watch { min-height: 56px; }
+.vl4-epi-after .vl4-later { min-height: 48px; }
+.vl4-page { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
+.vl4-observe .vl-go, .vl4-first .vl-go { min-height: 56px; }
+.vl4-nest-line { margin: 0; font-size: 1rem; font-weight: 700; }
+.vl4-bench-pics { display: flex; justify-content: center; gap: 8px; }
+.vl4-bench .btn { min-height: 48px; }
+.vl4-bench .btn--big { min-height: 56px; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.reduced-motion) .vl4-jar-pop .sprite { animation: vl4-pop 0.6s steps(6) 1; }
+}
+@keyframes vl4-pop { 0% { transform: scale(0.6); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+/* ─── En-tête de « La Vallée » : bouton « Le livre » ─── */
+.vl-stage-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.vl-stage-row .vl-stage { margin: 0; }
+.vl4-book-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 12px; }
+
+/* ─── Bilan annuel : avant / après (× 1,5 côte à côte, tient sur 360 px) ─── */
+.sprite--vl-ba { --sk: 1.5; }
+.vl4-ba { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 0; }
+.vl4-ba-fig { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; min-width: 0; }
+.vl4-ba-fig figcaption { font-size: 0.75rem; color: var(--text-soft); }
+.vl4-ba-pic { display: grid; place-items: center; padding: 3px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl4-ba-arrow { font-size: 1.25rem; font-weight: 700; color: var(--text-soft); }
+@media (max-width: 379px) { .sprite--vl-ba { --sk: 1.25; } }
+
+/* ─── Options › Son : « Sons de la vallée » ─── */
+.opt-nature { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.opt-nature .seg-btn { min-height: 48px; font-size: 1rem; }
+.opt-nature .seg-btn.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); background: #eef6dc; }
+.opt-nature .seg-btn.is-on span::after { content: ' ✓'; }
+.opt-nature-note { margin: 4px 0 0; font-size: 0.75rem; }
+
+/* ─── Vue de la vallée : banc, générique, contemplation ─── */
+.vv-bench .vv-bench-ico { font-size: 1.25rem; line-height: 1; }
+.vv-bar:has(.vv-bench:not([hidden])) { flex-wrap: wrap; row-gap: 4px; }
+.vv-bar:has(.vv-bench:not([hidden])) .vv-count { order: -1; flex: 1 0 100%; }
+.vv-bar:has(.vv-bench:not([hidden])) .vv-btn { flex: 1 1 0; }
+.vv-credits { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.vv-credits[hidden] { display: none; }
+.vv-card {
+  position: absolute;
+  left: calc(var(--safe-l) + 16px);
+  right: calc(var(--safe-r) + 16px);
+  bottom: calc(var(--safe-b) + 96px);
+  margin: 0 auto;
+  max-width: 26rem;
+  padding: 10px 14px;
+  font-size: 1rem;
+  line-height: 1.35;
+  text-align: center;
+  color: #fff8e6;
+  background: rgba(40, 24, 34, 0.62);
+  box-shadow: inset 0 0 0 var(--u) rgba(255, 232, 180, 0.5);
+}
+.vv-card[hidden] { display: none; }
+.vv-card-title { display: block; font-size: 1rem; }
+.vv-card-text { display: block; font-size: 1rem; }
+.vv-card.is-end { font-size: 1.125rem; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.reduced-motion) .vv-card:not([hidden]) { animation: vv-card-in 1.2s ease-out 1; }
+}
+@keyframes vv-card-in { from { opacity: 0; } to { opacity: 1; } }
+.vv-skip { position: absolute; right: calc(var(--safe-r) + 12px); bottom: calc(var(--safe-b) + 16px); min-width: 96px; min-height: 52px; pointer-events: auto; }
+.vv-still-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 76px); margin: 0; font-size: 0.875rem; text-align: center; color: #fff8e6; text-shadow: 0 1px 0 #000; }
+.vv-still-hint[hidden] { display: none; }
+.valley-view.is-paused .vv-card::after { content: ' ❚❚'; font-size: 0.875rem; }
+body.in-valley-credits .vv-ribbon, body.in-valley-credits .vv-bar,
+body.in-valley-contemplate .vv-ribbon, body.in-valley-contemplate .vv-bar { display: none; }
+body.in-valley-credits #toasts, body.in-valley-contemplate #toasts { bottom: calc(var(--safe-b) + 80px); }
+
+/* ─── Le livre de la vallée (feuille plein écran) ─── */
+.sprite--vlb-big { --sk: 3; max-width: 100%; height: auto; }
+.sprite--vlb-ba { --sk: 1.5; }
+.sprite--vlb-cover { --sk: 2; }
+.sprite--vlb-card { --sk: 2; }
+@media (max-width: 379px) { .sprite--vlb-big { --sk: 2.5; } }
+.vl-book {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #f4ead2;
+  color: var(--text);
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.vl-book[hidden] { display: none; }
+.vlb-head { display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-t) + 6px) calc(var(--safe-r) + 10px) 6px calc(var(--safe-l) + 10px); background: #2f5a34; color: #fff1d2; border-bottom: var(--u) solid var(--outline); }
+.vlb-ribbon { flex: none; }
+.vlb-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1.0625rem; }
+.vlb-toc-btn { min-height: 48px; padding: 0 12px; }
+.vlb-close { flex: none; width: 48px; height: 48px; font: inherit; font-size: 1.25rem; font-weight: 700; color: #fff1d2; background: none; border: 0; cursor: pointer; }
+.vlb-body { overflow-x: hidden; overflow-y: auto; padding: 12px calc(var(--safe-r) + 16px) 16px calc(var(--safe-l) + 16px); outline: none; -webkit-overflow-scrolling: touch; }
+html:not(.reduced-motion) .vlb-body.is-turn .vlb-page { animation: vlb-turn 0.28s ease-out 1; }
+@keyframes vlb-turn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.vlb-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; max-width: 34rem; margin: 0 auto; }
+.vlb-ptitle { margin: 0; font-size: 1.25rem; text-align: center; }
+.vlb-stage { margin: 0; font-size: 1rem; text-align: center; color: var(--text-soft); }
+.vlb-vignette { display: grid; place-items: center; padding: 6px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vlb-cover { position: relative; display: grid; place-items: center; }
+.vlb-cover-title { position: absolute; left: 50%; top: 18%; width: 112px; margin: 0; transform: translateX(-50%); font-size: 0.875rem; font-weight: 700; line-height: 1.15; text-align: center; color: #f2d23a; }
+.vlb-since, .vlb-signs { margin: 0; font-size: 1rem; text-align: center; }
+.vlb-share, .vlb-send, .vlb-credits { min-height: 52px; }
+.vlb-ba { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.vlb-ba-fig { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0; }
+.vlb-ba-fig figcaption { font-size: 0.875rem; }
+.vlb-ba-arrow { font-size: 1.5rem; font-weight: 700; }
+.vlb-big-line { margin: 0; font-size: 1.125rem; font-weight: 700; text-align: center; }
+.vlb-lines { display: grid; gap: 6px; margin: 0; padding: 0 0 0 1.1em; font-size: 0.9375rem; line-height: 1.35; }
+.vlb-cal { list-style: none; padding: 0; }
+.vlb-cal li { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.vlb-quiet { margin: 0; font-size: 0.9375rem; color: var(--text-soft); text-align: center; }
+.vlb-helene { margin: 4px 0 0; font-size: 0.9375rem; font-style: italic; line-height: 1.4; }
+.vlb-helene small { font-style: normal; color: var(--text-soft); }
+.vlb-sub { margin: 4px 0 0; font-size: 1rem; }
+.vlb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.vlb-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 72px; padding: 4px; text-align: center; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-cell.is-unknown { opacity: 0.7; }
+.vlb-cell-name { font-size: 0.8125rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.vlb-cell small { font-size: 0.75rem; color: var(--text-soft); }
+.vlb-q { display: grid; place-items: center; width: 32px; height: 32px; font-weight: 700; color: var(--text-soft); }
+.vlb-places, .vlb-cards { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vlb-place { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 4px 8px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-place-main { display: flex; flex-direction: column; min-width: 0; }
+.vlb-place-main small { font-size: 0.8125rem; color: var(--text-soft); }
+.vlb-stories { display: grid; gap: 6px; }
+.vlb-story { min-height: 48px; text-align: left; }
+.vlb-card { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px; background: #fffaf0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-card.is-new { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--gold, #e8b83a); }
+.vlb-card-main { flex: 1 1 12rem; min-width: 0; }
+.vlb-card-main .cz-say { margin: 4px 0; }
+.vlb-card-main small { font-size: 0.8125rem; color: var(--text-soft); }
+.vlb-toc { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.vlb-toc-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 48px; padding: 0 12px; font: inherit; font-size: 1rem; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.vlb-toc-item.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); }
+.vlb-foot { display: flex; align-items: center; gap: 8px; padding: 8px calc(var(--safe-r) + 12px) calc(var(--safe-b) + 8px) calc(var(--safe-l) + 12px); background: var(--wood-dark); border-top: var(--u) solid var(--outline); }
+.vlb-nav { min-width: 72px; min-height: 56px; font-size: 1.5rem; }
+.vlb-nav:disabled { opacity: 0.45; }
+.vlb-pageno { flex: 1 1 auto; font-size: 0.9375rem; font-weight: 700; text-align: center; color: var(--parch, #fff1d2); }
+body.in-valley-book #toasts { bottom: calc(var(--safe-b) + 84px); }

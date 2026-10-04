@@ -21,8 +21,9 @@ import { providedFirst } from './registry.js';
 import { aboutFields } from '../../data/career/descriptions.js';
 import { lotFinds } from './surprises.js';
 import { reserveLotNature } from './habitat.js';
-import { isFixed, planVariety, returnTrialSeed } from './heirlooms.js';
-import { VARIETIES_BY_ID } from '../../data/career/valley.js';
+import { fixHandOf, isFixed, planVariety, returnTrialSeed, varietyName } from './heirlooms.js';
+import { ALL_VARIETIES_BY_ID as VARIETIES_BY_ID } from '../../data/career/valley.js';
+import { wildCells, wildEligible, wildPrice } from './places.js';
 
 export const DEFAULT_PLAN = Object.freeze({ spring: 'same', summer: 'same', autumn: 'same', winter: 'same' });
 
@@ -47,6 +48,28 @@ export function initialPlots() {
   const plots = [];
   for (let cell = 0; cell < START_FIELD.cols * START_FIELD.rows; cell++) plots.push(newPlot('start', 'field', cell, cell < START_FIELD.open));
   return plots;
+}
+
+/**
+ * (Accompagnement, docs/ACCOMPAGNEMENT.md § 5.1) Option de création `starter` : 6 carottes mûres et arrosées sur les
+ * premières parcelles ouvertes du champ de départ (rangée du haut, puis le début de la suivante : le champ a 4
+ * colonnes). Déterministe (aucun tirage) ; carrière seulement ; désactivée par défaut (createCareer).
+ */
+export const STARTER_CROP = 'carrot';
+export const STARTER_PLOTS = 6;
+export function applyStarter(state, noteSown = null) {
+  const crop = getCrop(STARTER_CROP);
+  const out = [];
+  state.plots.forEach((p, i) => {
+    if (out.length >= STARTER_PLOTS || p.lot !== 'start' || !p.unlocked || p.cropId) return;
+    Object.assign(p, { cropId: crop.id, growth: crop.growDays, watered: true, fatigued: false, insured: false });
+    if (typeof noteSown === 'function') {
+      noteSown(state, i);
+      if (p.care) p.care.wetEnd = true; // soignées : arrosées chaque jour jusqu'à maturité
+    }
+    out.push(i);
+  });
+  return out;
 }
 
 export function getLot(state, lotId) {
@@ -103,10 +126,13 @@ function rankForMoreLots(n) {
 export function frontierCells(state) {
   if (state.career.lotsBought >= MAX_LOTS) return [];
   const occ = occupied(state);
+  // (Vallée V3) Une terre sauvage n'est JAMAIS à vendre.
+  const wild = state.career.valley?.wilds || null;
   const out = [];
   for (let col = LOT_GRID.cols[0]; col <= LOT_GRID.cols[1]; col++) {
     for (let row = LOT_GRID.rows[0]; row <= LOT_GRID.rows[1]; row++) {
       if (!inLotGrid(col, row) || occ.has(key(col, row))) continue;
+      if (wild && wild[lotIdAt(col, row)]) continue;
       if (NEIGHBOURS.some(([dc, dr]) => occ.has(key(col + dc, row + dr)))) out.push({ col, row });
     }
   }
@@ -154,7 +180,11 @@ export function gridInfo(state) {
   const occ = occupied(state);
   const sale = saleLots(state);
   const saleKeys = new Map(sale.map((s) => [key(s.col, s.row), s]));
-  const shown = [{ col: LOT_GRID.home.col, row: LOT_GRID.home.row }, ...state.career.lots.filter((l) => l.index >= FIRST_LOT_INDEX), ...sale];
+  // (Vallée V3) Terres sauvages (« wildland ») et forêts qu'on peut confier (« wildable ») : elles entrent dans l'étendue.
+  const wilds = state.career.valley ? wildCells(state) : {};
+  const wildable = new Set(state.career.valley ? wildEligible(state) : []);
+  const wildExtent = [...Object.values(wilds), ...[...wildable].map((id) => lotCellOf(id))];
+  const shown = [{ col: LOT_GRID.home.col, row: LOT_GRID.home.row }, ...state.career.lots.filter((l) => l.index >= FIRST_LOT_INDEX), ...sale, ...wildExtent];
   const cols = [Math.min(...shown.map((x) => x.col)), Math.max(...shown.map((x) => x.col))];
   const rows = [Math.min(...shown.map((x) => x.row)), Math.max(...shown.map((x) => x.row))];
   const cells = [];
@@ -172,8 +202,18 @@ export function gridInfo(state) {
         continue;
       }
       if (!inLotGrid(col, row)) continue;
+      const id = lotIdAt(col, row);
+      const w = wilds[id];
+      if (w) {
+        cells.push({ col, row, id, name: lotNameAt(col, row), state: 'wildland', type: null, wildKind: w.kind, wildStage: w.stage });
+        continue;
+      }
+      if (wildable.has(id)) {
+        cells.push({ col, row, id, name: lotNameAt(col, row), state: 'wildable', type: null, price: wildPrice(state) });
+        continue;
+      }
       const s = saleKeys.get(k);
-      cells.push({ col, row, id: lotIdAt(col, row), name: lotNameAt(col, row), state: s ? (s.buyable ? 'buyable' : 'locked') : 'forest', type: null });
+      cells.push({ col, row, id, name: lotNameAt(col, row), state: s ? (s.buyable ? 'buyable' : 'locked') : 'forest', type: null });
     }
   }
   return { cols, rows, home: { ...LOT_GRID.home }, bounds: { cols: [...LOT_GRID.cols], rows: [...LOT_GRID.rows] }, block: { cols: LOT_GRID.blockCols, rows: LOT_GRID.blockRows, homeRows: LOT_GRID.homeRows, topForest: LOT_GRID.topForest }, cells };
@@ -315,7 +355,7 @@ export function setPlan(api, lotId, seasonId, cropId) {
   if (heirloom) {
     const x = VARIETIES_BY_ID[heirloom];
     const crop = getCrop(x.cropId);
-    if (!isFixed(state, heirloom)) return api.fail(`${x.name} : sauvez-la d'abord (6 récoltes à la main).`);
+    if (!isFixed(state, heirloom)) return api.fail(`${varietyName(state, x)} : sauvez-la d'abord (${fixHandOf(state)} récoltes à la main).`);
     if (crop.kind === 'tree') return api.fail('Culture inconnue.');
     if (lot.type !== 'greenhouse' && !crop.seasons.includes(seasonId)) return api.fail(`${crop.name} : ne se sème pas cette saison.`);
   } else if (cropId !== null && cropId !== 'same') {

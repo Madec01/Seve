@@ -6,7 +6,9 @@
 //   const synth = createSynth(ctx, destination)   ctx : AudioContext ou OfflineAudioContext
 //   synth.note(step, { when, volume })            step 0, 1, 2… : note de la série (comboMidi)
 //   synth.play(name, { when, volume })            'belle' | 'gold' | 'fanfare' | 'thud' | 'splash' | 'pop'
-//                                                 | 'chime' | 'wish' | 'magic' | 'reveal'
+//                                                 | 'chime' | 'wish' | 'magic' | 'reveal' | 'chirp'
+//                                                 | 'clatter' (V4 : cigognes qui claquent du bec)
+//                                                 | 'legend' (V4 : une légende se réveille)
 //   synth.voices                                  voix en cours (limite : MAX_VOICES)
 //
 // Tout passe par un compresseur doux (aucune saturation, même avec 12 notes qui se chevauchent) ; le volume
@@ -263,6 +265,51 @@ export function createSynth(ctx, destination) {
         o.start(t0);
         track(o, t0 + 0.12);
       }
+    },
+    // (V4) Cigognes : claquement de bec, clics de bois creux (bruit passe-bande 1,5 kHz + résonance 700 Hz) qui
+    // accélèrent de 8 à 14 par seconde puis ralentissent, 1,5 s ; un tampon de bruit, un filtre, une enveloppe.
+    clatter(t, v) {
+      if (voices >= MAX_VOICES) return;
+      const src = ctx.createBufferSource();
+      src.buffer = noise();
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1500;
+      bp.Q.value = 2;
+      const wood = ctx.createBiquadFilter();
+      wood.type = 'peaking';
+      wood.frequency.value = 700;
+      wood.Q.value = 3;
+      wood.gain.value = 6;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      src.connect(bp);
+      bp.connect(wood);
+      wood.connect(g);
+      g.connect(out);
+      const dur = 1.5;
+      let tt = t;
+      let i = 0;
+      while (tt < t + dur) {
+        const k = (tt - t) / dur;
+        const peak = (0.3 + 0.08 * Math.sin(i * 2.1)) * v; // bec gauche, bec droit : un peu inégal
+        g.gain.setValueAtTime(0, tt);
+        g.gain.linearRampToValueAtTime(peak, tt + 0.0008);
+        g.gain.linearRampToValueAtTime(0, tt + 0.005);
+        tt += 1 / (8 + 6 * Math.sin(Math.PI * k));
+        i++;
+      }
+      src.start(t, (i * 0.137) % 0.4);
+      track(src, tt + 0.02);
+    },
+    // (V4) Une légende se réveille : souffle doux qui monte, puis clochettes graves → aiguës (do mi sol la do) et une
+    // note tenue chaude (marimba grave), comme une graine qui s'ouvre.
+    legend(t, v) {
+      hiss(t, 0.05 * v, 0.9, 'bandpass', 600, 3200, 1.6);
+      mallet(midiFreq(60), t + 0.05, 0.12 * v, 1.4, out, 0.6);
+      [72, 76, 79, 81, 84].forEach((m, i) => bell(midiFreq(m), t + 0.25 + i * 0.16, 0.055 * v, 1.3));
+      bell(midiFreq(91), t + 1.15, 0.045 * v, 2);
     },
     // Trouvaille / coffre ouvert : arpège montant chaleureux.
     reveal(t, v) {

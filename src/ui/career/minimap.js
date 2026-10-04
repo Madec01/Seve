@@ -165,7 +165,8 @@ export function createMinimap(app, hooks) {
     const s = app.scene;
     if (broken || !hooks.active() || !s?.careerMode || typeof s.getMinimap !== 'function') return false;
     if (app.sheets?.isOpen() || app.dialogs?.isOpen() || app.decor?.active) return false;
-    if (app.hints?.active || app.tutorial?.active) return false;
+    if (app.valleyView?.active) return false; // (Vallée V3) l'écran « La vallée » couvre la ferme
+    if (app.coach?.blocking) return false; // (accompagnement) une bulle de Joseph couvre l'écran
     if (document.body.classList.contains('is-loading')) return false;
     return true;
   }

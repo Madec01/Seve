@@ -9,8 +9,8 @@
 // feuilles « Acheter » et « Bilan » rangées à droite.
 //
 // Contenu v3 : progression permanente (src/ui/progress.js → src/core/progression.js), grange aux
-// souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), conseils « première fois »
-// (src/ui/hints.js), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
+// souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), leçons « première fois » de Joseph
+// (accompagnement, src/ui/coach/), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
 // démarrage (src/ui/v3.js) et tout est vérifié avant usage : sans eux, le jeu reste le jeu v2.
 //
 // Mode Carrière (docs/CARRIERE.md, src/ui/career/*) : « Ma ferme » au menu principal, création
@@ -49,14 +49,14 @@ import { createHud } from './ui/hud.js';
 import { createPanel } from './ui/panel.js';
 import { createField } from './ui/field.js';
 import { createDialogs } from './ui/dialogs.js';
-import { createTutorial } from './ui/tutorial.js';
 import { season, seasonArrives, cropName, cropCount, incomePhrase, difficultyName } from './ui/text.js';
 import { loadV3, v3 } from './ui/v3.js';
 import { createProgress } from './ui/progress.js';
 import { createGrange } from './ui/grange.js';
 import { createDecor } from './ui/decor.js';
-import { createHints } from './ui/hints.js';
-import { isProcessing } from './ui/buildings.js';
+import { createCoach } from './ui/coach/engine.js';
+import { LESSONS as COACH_LESSONS, REMINDERS as COACH_REMINDERS } from './ui/coach/lessons/index.js';
+import { SIGNALS } from './ui/coach/signals.js';
 import { productIcon } from './ui/icons.js';
 import { productName } from './ui/panel.js';
 import { createCareerUI } from './ui/career/index.js';
@@ -71,6 +71,11 @@ import { createVariety } from './ui/variety.js';
 import { createCozy } from './ui/cozy.js';
 import { createAlbum } from './ui/album.js';
 import { createValley } from './ui/career/valley.js';
+import { createHeritage } from './ui/career/heritage.js';
+import { createPlaces } from './ui/career/places.js';
+import { createValleyView } from './ui/career/valley-view.js';
+import { createStorks } from './ui/career/storks.js';
+import { createValleyBook } from './ui/career/valley-book.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -110,6 +115,7 @@ const pauseReasons = new Set();
 let resumeSpeed = 1;
 let lastPlaySpeed = settings.speed || 1;
 let hover = { hit: null, x: 0, y: 0 };
+let pendingFirstSteps = false; // nouvelle carrière avec « Premiers pas avec Joseph » (lu par startRun → coach.bind)
 
 // ── Interface ─────────────────────────────────────────────────────────────────────
 app.tooltip = createTooltip($('#tooltip'));
@@ -120,13 +126,15 @@ app.tabbar = createTabbar($('#tabbar'), app);
 app.panel = createPanel(app);
 app.field = createField(app);
 app.dialogs = createDialogs($('#modal-layer'), app);
-app.tutorial = createTutorial($('#tutorial'), app);
 app.input = createSceneInput(canvas, app);
 app.zoomUI = createZoomControls(app); // zoom de la scène (boutons + / −, préférence) ; pincement : gestures.js
 app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
-app.hints = createHints(app);
+// Accompagnement « Joseph vous montre » (docs/ACCOMPAGNEMENT.md, src/ui/coach/) : leçons, cours (tutoriel du niveau 1,
+// début de carrière), rappels, carnet de Joseph. Remplace l'ancien tutoriel (src/ui/tutorial.js) et les conseils.
+app.coach = createCoach(app);
+app.coach.register(COACH_LESSONS, COACH_REMINDERS);
 app.careerUI = createCareerUI(app);
 app.careerMenuButtons = (btn) => careerMenuButtons(app, btn);
 app.newFarm = () => openNewFarm(app, {});
@@ -138,7 +146,8 @@ app.toasts.setMoreHandler(() => app.messages.open());
 app.toasts.setMode(settings.messages, { active: () => !!app.game && !app.inMenu });
 app.todo = createTodo(app);
 app.toasts.setDigest((e) => app.todo.digest?.(e)); // infos non affichées : regroupées dans le résumé du matin
-app.openGuide = (opts = {}) => openGuide(app, opts);
+app.openGuide = (opts = {}) => openGuide(app, opts); // alias : le carnet de Joseph, onglet « Mots de la ferme »
+app.openCarnet = (opts = {}) => app.coach.openCarnet(opts);
 // Lot 2 « Toucher & surprises » : récolte juteuse (pièces qui volent, notes qui montent), qualité, géants,
 // surprises de l'aube, météos spéciales (vœu), trouvailles du défrichage.
 app.juice = createJuice(app);
@@ -155,6 +164,15 @@ app.cozy = createCozy(app);
 // La Vallée vivante, lot V1 « La boîte en fer » (carrière seulement : rien sans state.career.valley) : fiche « La Vallée »,
 // mode aménagement, boîte de Joseph, bocaux, observation des bêtes, lignes des fiches existantes (src/ui/career/valley.js).
 app.valley = createValley(app);
+app.heritage = createHeritage(app); // (Vallée V2) Grainothèque, troc, croisements, récits (appelé par app.valley)
+// (Vallée V3) Lieux de la vallée, terres sauvages, pêche, champignons (appelé par app.valley) ; l'écran « La vallée ».
+app.places = createPlaces(app);
+app.valleyView = createValleyView(app);
+// (Vallée V4) Légendes, visiteurs rares, cigognes, épilogue, générique, banc ; le livre de la vallée ; paysage sonore.
+app.storks = createStorks(app);
+app.valleyBook = createValleyBook(app);
+app.updateAmbience = () => updateAmbience(app.game);
+app.images = () => images;
 
 applyDisplaySettings();
 
@@ -175,6 +193,8 @@ app.updateSettings = (patch) => {
   app.saveSettings();
   if ('keepAwake' in patch) updateWakeLock();
   if ('messages' in patch) app.toasts.setMode(settings.messages);
+  if ('textScale' in patch) app.coach?.relayout();
+  if ('natureSound' in patch) updateAmbience(app.game); // (V4) « Sons de la vallée » : le paysage se recalcule
 };
 
 app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
@@ -308,12 +328,9 @@ app.openGrangeFromEnd = (tab = 'bonus') => {
   app.grange.open(tab);
 };
 
-/** Menu principal affiché : conseils de la grange et du décor (une fois pour toutes). */
+/** Menu principal affiché : les leçons du menu (grange, décor, carrière : src/ui/coach/lessons/levels.js) s'y déclenchent. */
 app.onMainMenu = () => {
-  const P = app.progression;
-  if (!P.available()) return;
-  if (P.canSpendStars()) app.hints.maybe('grange', { selector: '#menu-grange' });
-  else if (P.ecus() >= 10) app.hints.maybe('decor', { selector: '#menu-grange' });
+  app.coach?.signal(SIGNALS.menu, { screen: 'main-menu' });
 };
 app.onProgressChange = () => {
   app.grange?.refresh();
@@ -361,6 +378,7 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
     // Un choix explicite du joueur lève la pause du tutoriel (pas celle d'une fenêtre ouverte).
     if (app.dialogs.isOpen()) return;
     pauseReasons.delete('tutorial');
+    pauseReasons.delete('coach'); // (accompagnement) le joueur relance le temps : l'étape reste affichée
     pauseReasons.delete('hidden');
     // Pause de lecture d'une fiche (src/ui/sheets.js) : relancer le temps (clavier, bouton) la lève jusqu'à la fermeture.
     if (speed > 0) app.sheets.releasePause?.();
@@ -375,7 +393,7 @@ app.setSpeed = (speed, { fromUser = false } = {}) => {
         app.saveSettings();
       }
     }
-    app.tutorial.onSpeed(speed);
+    app.coach.onSpeed(speed);
     scheduleRefresh();
   }
 };
@@ -388,13 +406,13 @@ app.openPauseMenu = () => {
   addPauseGuidance(handle?.node);
 };
 
-/** Menu Pause : « Messages » et « Guide de la ferme », juste après « Reprendre » (lot 1 « confort »). */
+/** Menu Pause : « Messages » et « Le carnet de Joseph » (ex-« Guide de la ferme »), juste après « Reprendre ». */
 function addPauseGuidance(node) {
   const list = node?.querySelector('.menu-buttons');
   if (!list || list.querySelector('#pause-guide')) return;
   const unread = app.messages.unread;
   const messages = app.dialogs.btn([el('span', 'Messages'), unread ? el('span.pause-count', ` (${unread} nouveaux)`) : null], () => app.messages.open(), 'btn--big', { id: 'pause-messages' });
-  const guide = app.dialogs.btn('Guide de la ferme', () => app.openGuide(), 'btn--big', { id: 'pause-guide' });
+  const guide = app.dialogs.btn('Le carnet de Joseph', () => app.openCarnet(), 'btn--big', { id: 'pause-guide' });
   const after = list.querySelector('#pause-resume');
   if (after) after.after(messages, guide);
   else list.prepend(messages, guide);
@@ -646,6 +664,7 @@ function plantAllNow(g, cropId, firstIndex) {
     n += 1;
   }
   if (n > 1) app.toasts.show({ kind: 'success', sprite: cropIcon(cropId, 'sprite--sm'), text: `${n} parcelles semées (${cropName(cropId).toLowerCase()}).` });
+  if (n > 1) app.coach?.signal(SIGNALS.sowAll, { n });
   return n;
 }
 
@@ -758,7 +777,7 @@ function updateInsets() {
   // CSS : haut des onglets seulement (feuilles, messages, ligne « À faire » se posent dessus).
   document.documentElement.style.setProperty('--inset-bottom', `${insets.bottom - todoH}px`);
   if (typeof app.scene?.setInsets === 'function') app.scene.setInsets({ ...insets });
-  app.tutorial.relayout();
+  app.coach.relayout();
 }
 
 function resizeScene() {
@@ -782,7 +801,7 @@ function resizeScene() {
   }
   app.scene.resize(w, h, dpr);
   updateInsets();
-  app.tutorial.relayout();
+  app.coach.relayout();
 }
 
 /** Carrière : la scène passe en disposition « colonne de terrains » (lot RENDER : scene.setCareer). */
@@ -877,7 +896,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
-    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot'].includes(hit?.type)) pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot', 'valleyView', 'wildLand', 'wildCell', 'storkNest', 'visitor', 'seedLibrary'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -919,6 +938,12 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.valleyBook?.isOpen) return app.valleyBook.close(); // (Vallée V4) le livre de la vallée
+    if (app.valleyView?.crediting) return app.valleyView.endCredits({ skipped: true }); // (V4) « Passer »
+    if (app.valleyView?.contemplating) return app.valleyView.stopContemplate(); // (V4) se lever du banc
+    if (app.valleyView?.active) return app.valleyView.close(); // (Vallée V3) « ‹ La ferme »
+    if (app.places?.wilding) return app.places.leaveWild(); // (Vallée V3) fin du mode terres sauvages
+    if (app.heritage?.pairing) return app.heritage.leavePair(); // (Vallée V2) fin du mode paire
     if (app.valley.placing) return app.valley.leavePlacing(); // (Vallée) fin du mode aménagement
     if (!app.inMenu && app.game) app.openPauseMenu();
     return;
@@ -1011,8 +1036,8 @@ function onGameEvent(ev, game) {
     }
     if (!career) app.panel.onEvent(ev);
     app.field.onEvent(ev);
-    app.tutorial.onEvent(ev);
     app.todo.onEvent(ev, game);
+    app.coach.notify(ev); // accompagnement : réussite des étapes, déclencheurs des leçons, rappels
     reactAudio(ev, game);
     if (!career || SHARED_MESSAGES.has(ev.type)) reactMessages(ev, game);
     if (career) {
@@ -1044,10 +1069,6 @@ function onGameEvent(ev, game) {
         if (!career) pending.loan = ev;
         break;
       case 'purchased':
-        if (!career && isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
-          // Premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur.
-          app.field.openBuilding(ev.investmentId);
-        }
         queueAchievementCheck(game);
         break;
       case 'harvested':
@@ -1159,6 +1180,7 @@ function reactAudio(ev, game) {
       break;
     case 'dawn':
       audio.play('rooster', { pitch: 0.03 });
+      if (game.mode === 'career') updateAmbience(game); // (V4) le paysage sonore change avec le jour
       if (ev.incomes?.some((i) => i.amount > 0)) audio.play('coin', { delay: 0.4, volume: 0.6 });
       break;
     case 'seasonStart':
@@ -1304,7 +1326,7 @@ function reactMessages(ev, game) {
       const loan = (ev.chargesDetail || []).find((c) => c.source === 'loan');
       if (loan) t.show({ prio: 'info', digest: 'mensualité du prêt|mensualités du prêt', kind: 'warn', icon: 'bill', title: 'Mensualité du prêt', text: `−${fmt(loan.amount)} pièces` });
       if (game.state.money < 0) t.show({ kind: 'error', icon: 'coin', text: 'Vous êtes à découvert : récoltez vite !' });
-      maybeLowMoneyHint(game);
+      // (Accompagnement) L'ancien conseil « fermage en danger » est le rappel `money.low` (src/ui/coach/lessons/basics.js).
       break;
     }
     default:
@@ -1312,32 +1334,6 @@ function reactMessages(ev, game) {
   }
 }
 
-/**
- * Conseil doux quand l'argent risque de manquer au fermage (une fois par saison, à l'aube, 3 jours
- * avant au plus) : quoi faire concrètement, sans alarme ni pause.
- */
-let lowMoneyHint = null; // saison du dernier conseil
-function maybeLowMoneyHint(game) {
-  if (game.state.status !== 'playing' || app.tutorial.active) return;
-  const p = app.hud.projection();
-  if (p.state === 'ok' || p.daysLeft > 3 || p.daysLeft < 1) return;
-  const key = `${game.state.time.seasonIndex}`;
-  if (lowMoneyHint === key) return;
-  if (p.state === 'warn' && p.projected - p.amount > 15) return; // les récoltes prévues suffiront largement
-  lowMoneyHint = key;
-  const plots = game.query.plots();
-  const mature = plots.filter((x) => x.action === 'harvest').length;
-  const empty = plots.filter((x) => x.action === 'plant').length;
-  const c = game.query.calendar();
-  const fast = game.query.plantableCrops().filter((x) => x.kind !== 'tree' && !x.willFreeze && x.canAfford && x.daysToMature <= p.daysLeft).sort((a, b) => a.daysToMature - b.daysToMature || a.seedCost - b.seedCost)[0];
-  let text;
-  if (mature) text = `${plural(mature, 'culture est mûre', 'cultures sont mûres')} : récoltez-les, l'argent arrive tout de suite.`;
-  else if (empty && fast) text = `Des parcelles sont vides : semez des ${cropCount(fast.id, 2).replace(/^2 /, '')}, ${fast.daysToMature <= 2 ? 'ça pousse vite' : `récolte dans ${plural(fast.daysToMature, 'jour')}`}.`;
-  else text = 'Arrosez vos cultures pour qu\'elles soient mûres avant le soir du fermage.';
-  if (p.state === 'loan') text += ' Et pas de panique : Joseph peut vous avancer le reste.';
-  t0().show({ prio: 'important', kind: 'info', sprite: sprite('farmer', 'sprite--sm'), title: `Fermage ${season(c.seasonId, 'of')} dans ${plural(p.daysLeft, 'jour')}`, text, duration: 7000 });
-}
-const t0 = () => app.toasts;
 
 function frostHardy(cropId) {
   return !!getCrop(cropId)?.frostHardy;
@@ -1366,7 +1362,6 @@ function processPending() {
     queuedBanner = null;
     app.sheets.close('silent');
     app.tooltip.hide();
-    app.hints.clear();
     if (app.decor.active) app.decor.exit();
     pauseReasons.clear();
     updateWakeLock();
@@ -1471,11 +1466,24 @@ function recordAbandon(game) {
 function updateAmbience(game) {
   if (!game || app.inMenu) {
     audio.setAmbience({});
+    audio.setNature?.(null);
     return;
   }
   const c = game.query.calendar();
   const owned = game.state.investments;
-  audio.setAmbience(ambienceFor({ season: c.seasonId, weather: game.state.weather.today, owned }));
+  const levels = ambienceFor({ season: c.seasonId, weather: game.state.weather.today, owned });
+  // (Vallée V4) Paysage sonore de la vallée (carrière, Vallée commencée, V4) : la couche « birds » suit l'étape
+  // (× scape.birdsFactor, une seule multiplication, ici) et les sons synthétisés passent par audio.setNature. Hors V4
+  // (niveaux, carrière sans Vallée) : scape = null, rien ne change.
+  let scape = null;
+  try {
+    scape = app.storks?.scape?.(game) || null;
+  } catch (err) {
+    console.warn('Paysage sonore :', err);
+  }
+  if (scape) levels.birds *= scape.birdsFactor ?? 1;
+  audio.setAmbience(levels);
+  audio.setNature?.(scape && scape.on ? scape : null);
   audio.setWorld({ active: true, owned, season: c.seasonId, weather: game.state.weather.today });
 }
 
@@ -1549,14 +1557,12 @@ function startRun(game, { resumed = false, created = false } = {}) {
   if (unwire) unwire();
   app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
-  app.tutorial.stop();
-  app.hints.clear();
+  app.coach.unbind();
   pauseReasons.clear();
   pending = { billPaid: null, frost: null, end: null, contest: null, loan: null };
   grouped.toWorkshop.clear();
   grouped.sold = [];
   grouped.loan = null;
-  lowMoneyHint = null;
   queuedBanner = null;
   app.dialogs.closeAll();
   app.toasts.clearAll();
@@ -1572,6 +1578,11 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.variety.reset(game);
   app.cozy.reset(game);
   app.valley.reset(game);
+  app.heritage.reset(game);
+  app.places.reset(game);
+  app.valleyView.reset();
+  app.storks.reset(game);
+  app.valleyBook.reset();
   app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
@@ -1600,6 +1611,9 @@ function startRun(game, { resumed = false, created = false } = {}) {
     app.careerUI.bind(game, { resumed, created, quiet: resumed });
     // Reprise depuis le menu : « Où en étais-je ? » (fenêtre courte, la partie attend).
     if (resumed) app.todo.showResume(game);
+    // Accompagnement : cours de début de carrière (case « Premiers pas avec Joseph »), reprise d'un cours, leçons.
+    app.coach.bind(game, { mode: 'career', resumed, created, firstSteps: created && !!pendingFirstSteps });
+    pendingFirstSteps = false;
     save();
     scheduleRefresh();
     updateWakeLock();
@@ -1621,16 +1635,10 @@ function startRun(game, { resumed = false, created = false } = {}) {
     app.toasts.banner({ kind: 'season', icon: c.seasonId, title: `${lvl.name}`, text: `${farm}Niveau ${lvl.id} · ${modeName} · ${season(c.seasonId)}, jour 1`, duration: 3800 });
   }
 
-  const tuto = storage.loadTutorial();
-  if (lvl.tutorial && !tuto.done) app.tutorial.start(game, resumed ? tuto.step ?? 0 : 0);
-
-  // Conseils « première fois » (une fois pour toutes, après le tutoriel s'il y en a un).
-  const offered = new Set(lvl.availableInvestments || []);
-  const invs = game.query.investments();
-  if (invs.some(isProcessing)) app.hints.maybe('processing', { selector: '#tab-shop' });
-  if (offered.has('goat')) app.hints.maybe('goat', { selector: '#tab-shop' });
-  if (lvl.modifiers?.pollination) app.hints.maybe('pollination', { selector: '#tab-shop' });
-  if (lvl.contest) app.hints.maybe('contest', { selector: '#tab-stats' });
+  // Accompagnement : cours du niveau 1 (levels.firstYear, reprise à l'étape retenue), leçons des niveaux.
+  app.coach.bind(game, { mode: 'levels', resumed, created });
+  // Leçons « première fois » des niveaux (ateliers, chèvres, abeilles, concours…) : déclenchées par le catalogue
+  // (src/ui/coach/lessons/levels.js, signal `start` et aube).
 
   save();
   scheduleRefresh();
@@ -1708,8 +1716,7 @@ app.quitToMenu = ({ ended = false } = {}) => {
   if (!ended) save();
   app.careerUI.unbind();
   if (app.decor.active) app.decor.exit();
-  app.hints.clear();
-  app.tutorial.stop();
+  app.coach.unbind();
   if (unwire) unwire();
   unwire = null;
   pauseReasons.clear();
@@ -1723,6 +1730,11 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.variety.reset(null);
   app.cozy.reset(null);
   app.valley.reset(null);
+  app.heritage.reset(null);
+  app.places.reset(null);
+  app.valleyView.reset();
+  app.storks.reset(null);
+  app.valleyBook.reset();
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1791,12 +1803,15 @@ function archiveSavedCareer(endedBy = 'restart') {
  */
 app.startCareer = (opts, { archiveExisting = false } = {}) => {
   if (archiveExisting) archiveSavedCareer('restart');
+  // (Accompagnement) « Premiers pas avec Joseph » : la ferme commence avec 6 carottes mûres (option `starter` du cœur).
+  const { firstSteps = false, ...farm } = opts || {};
+  opts = farm;
   // La partie de niveau en cours (s'il y en a une) reste sauvegardée de son côté.
   if (app.game && !app.inMenu && app.game.mode !== 'career') save();
   let game;
   try {
     const decor = app.progression.available() ? { ...(app.progression.cosmetics().decor || {}) } : {};
-    game = createCareer({ seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, ...opts, cosmetics: { decor } });
+    game = createCareer({ seed: (Date.now() ^ (Math.random() * 0x7fffffff)) >>> 0, ...opts, starter: !!firstSteps, cosmetics: { decor } });
   } catch (err) {
     console.error(err);
     audio.play('error');
@@ -1804,6 +1819,7 @@ app.startCareer = (opts, { archiveExisting = false } = {}) => {
     return;
   }
   app.progression.careerStart?.();
+  pendingFirstSteps = !!firstSteps;
   startRun(game, { created: true });
 };
 
@@ -1941,8 +1957,7 @@ function frame(t) {
   app.careerUI.frame(); // mini-carte de la carrière (dessinée par la scène, cachée hors carrière)
   app.zoomUI.frame(); // zoom de la scène : préférence de la partie, boutons + / −
   // Lectures de mise en page (tutoriel) avant les écritures de style (HUD) : pas de reflow forcé.
-  app.tutorial.frame();
-  app.hints.frame();
+  app.coach.frame(t); // accompagnement : bulle, doigt, pastilles, déclencheurs d'état, rappels
   app.todo.tick();
   app.hud.frame(dt);
   app.juice.frame(dt);
@@ -1950,6 +1965,10 @@ function frame(t) {
   app.variety.frame();
   app.cozy.frame();
   app.valley.frame();
+  app.heritage.frame();
+  app.places.frame();
+  app.valleyView.frame(dt); // (Vallée V3) l'écran « La vallée » (dessin, défilement, textes)
+  app.storks.frame(dt); // (Vallée V4) fenêtres en file, paysage sonore qui suit la phase du jour
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1960,7 +1979,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg', 'valley4']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2084,6 +2103,7 @@ async function boot() {
   await loadV3();
   app.progression.reload();
   const legacyAchievements = app.progression.checkBoot();
+  app.coach.deduce(); // (accompagnement) ce que le joueur sait déjà (§ 10.3) : rudiments jamais rejoués
   applyViewport();
   attract = createAttractGame();
   resizeScene();
@@ -2240,7 +2260,6 @@ if (DEBUG) {
       let guard = 0;
       while (g.state.status === 'playing' && g.state.time.year < target && guard++ < 400) {
         while (app.dialogs.isOpen()) app.dialogs.closeTop() || app.dialogs.closeAll();
-        app.hints.clear();
         if (!window.__debug.skipDays(1)) {
           processPending();
         }
@@ -2603,6 +2622,164 @@ if (DEBUG) {
     ui: () => app.valley.debugState(),
     stats: () => app.scene?.valleyStats?.() || null,
   };
+  /**
+   * (Vallée vivante, lot V2) Aides de vérification : situations posées par l'action de débogage du cœur
+   * (triggerValley 'site' | 'library' | 'troc' | 'swap' | 'meet' | 'cross'), fenêtres ouvertes par l'interface.
+   */
+  window.__debug.valley2 = {
+    on: () => !!app.heritage?.on?.(),
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    site: () => vlTrigger('site'),
+    library: (n = 1) => vlTrigger('library', n),
+    troc: (clientId) => vlTrigger('troc', clientId),
+    swap: (clientId) => vlTrigger('swap', clientId),
+    meet: (cropId = 'carrot', n = 1) => vlTrigger('meet', cropId, n),
+    cross: (cropId = 'carrot') => vlTrigger('cross', cropId),
+    /** Mode paire (vraie interface) ; sans culture : quitte le mode. */
+    pair: (cropId) => (cropId ? app.heritage.enterPair(cropId) : (app.heritage.leavePair(), false)),
+    pairPlots: (cropId) => app.game?.query?.career?.valleyPairPlots?.(cropId) ?? null,
+    links: () => app.game?.query?.career?.valleyCrossLinks?.() ?? null,
+    box: () => app.heritage.openBox(),
+    story: (id) => app.heritage.openStory(id),
+    open: (tab) => app.heritage.openLibrary(tab),
+    trocUI: () => app.heritage.openTroc(),
+    /** Point (px de la page) : 'seedLibrary' | 'pairPlot' (index) | 'trocPin'. */
+    point(kind, id) {
+      const r = app.scene?.valleyItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    ui: () => app.heritage.debugState(),
+    stats: () => app.scene?.valleyStats?.() || null,
+  };
+  for (const k of ['site', 'library', 'troc', 'swap', 'meet', 'cross', 'pair', 'box', 'story']) if (!window.__debug.valley[k]) window.__debug.valley[k] = window.__debug.valley2[k];
+  /**
+   * (Vallée vivante, lot V3) Aides de vérification : situations posées par l'action de débogage du cœur (triggerValley
+   * 'view' | 'works' | 'recover' | 'place' | 'wild' | 'wildGrow' | 'mushrooms' | 'riverReset' | 'visible' | 'install' |
+   * 'stage'), écrans ouverts par l'interface ; touch() mesure les zones de toucher (px CSS) au zoom courant.
+   */
+  window.__debug.valley3 = {
+    on: () => !!app.places?.on?.(),
+    state: () => app.game?.query?.career?.valley?.() ?? null,
+    view: () => app.game?.query?.career?.valleyView?.() ?? null,
+    open: (placeId) => (vlTrigger('view'), app.valleyView.open(placeId ? { placeId } : {})),
+    close: () => app.valleyView.close(),
+    works: (placeId) => vlTrigger('works', placeId),
+    recover: (placeId) => vlTrigger('recover', placeId),
+    place: (placeId, step) => vlTrigger('place', placeId, step),
+    wild: (cellId, kind = 'wood') => vlTrigger('wild', cellId, kind),
+    wildGrow: (cellId) => vlTrigger('wildGrow', cellId),
+    wildMode: (on = true) => (on ? app.places.enterWild() : (app.places.leaveWild(), false)),
+    mushrooms: (n = 2) => vlTrigger('mushrooms', n),
+    fish: () => app.places.openRiver(),
+    riverReset: () => vlTrigger('riverReset'),
+    visible: (id) => vlTrigger('visible', id),
+    install: (id) => vlTrigger('install', id),
+    stage: (n) => vlTrigger('stage', n),
+    story: (id) => app.heritage.openStory(id),
+    list: () => app.places.openList(),
+    placeUI: (id) => app.places.openPlace(id),
+    wildUI: (cellId) => app.places.openWild(cellId),
+    todo: () => app.todo.items().map((x) => ({ id: x.id, prio: x.prio, text: x.text, items: x.items ? x.items.map((y) => y.id) : undefined })),
+    rawTodo: () => app.todo.rawItems().map((x) => ({ id: x.id, prio: x.prio, text: x.text })),
+    /** Rectangle de la page d'une cible de la vue : { type: 'place', id } | { type: 'viewAnimal', id } | { type: 'river' }… */
+    viewPoint(hit) {
+      const r = app.valleyView.targetPageRect(hit);
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height } : null;
+    },
+    /** Point (px de la page) : 'signpost' | 'wildCell' (cellId) | 'wildLand' (cellId) | 'wildSign' (cellId). */
+    point(kind, id) {
+      const r = app.scene?.placesItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    /** Zones de toucher (px CSS) des cibles isolées de la scène et de la vue, au zoom courant. */
+    async touch() {
+      const s = app.scene;
+      const out = { zoom: s?.zoom, dpr: s?.dpr, scene: [], view: [], plots: [] };
+      if (s?.careerMode) {
+        const { careerIsolatedTargets } = await import('./render/layout-career.js');
+        const k = s.zoom / s.dpr;
+        const m = (48 * s.dpr) / s.zoom;
+        for (const t of careerIsolatedTargets(s.layout, app.game?.state)) out.scene.push({ kind: t.kind, id: t.id, w: Math.round(Math.max(t.rect.w, m) * k), h: Math.round(Math.max(t.rect.h, m) * k) });
+        for (const p of s.layout.plots || []) {
+          if (p.retired) continue;
+          const c = s.layout.plotCell?.(p.index);
+          if (c) out.plots.push({ index: p.index, w: Math.round(c.w * k), h: Math.round(c.h * k) });
+        }
+      }
+      const R = app.valleyView.renderer;
+      if (R && app.valleyView.active) {
+        const { viewTargets } = await import('./render/valley-view.js');
+        const L = R.layout;
+        const k = L.zoom / L.dpr;
+        for (const t of viewTargets(L, app.game?.query?.career?.valleyView?.())) out.view.push({ hit: t.hit, w: Math.round(t.rect.w * k), h: Math.round(t.rect.h * k) });
+      }
+      return out;
+    },
+    ui: () => ({ places: app.places.debugState(), view: app.valleyView.stats() }),
+    stats: () => ({ scene: app.scene?.placesStats?.() || null, view: app.valleyView.stats() }),
+  };
+  for (const [k, f] of Object.entries(window.__debug.valley3)) if (!window.__debug.valley[k]) window.__debug.valley[k] = f;
+  /**
+   * (Vallée vivante, lot V4) Aides de vérification : situations posées par l'action de débogage du cœur (triggerValley
+   * 'legend' | 'legendRipe' | 'marvel' | 'visitor' | 'storks' | 'complete' | 'epilogue' | 'postcard' | 'stage'), écrans
+   * ouverts par l'interface (fiches, épilogue, générique, livre), paysage sonore (sound(id) → audio.playNature).
+   */
+  const sceneTouch = () => app.scene?.storksTouch?.();
+  window.__debug.valley4 = {
+    on: () => !!app.storks?.on?.(),
+    state: () => {
+      const v = app.game?.query?.career?.valley?.();
+      return v ? { storks4: v.storks4, legends: v.legends, visitors: v.visitors, stork: v.stork, epilogue: v.epilogue, postcards: v.postcards, stage: v.stage?.n } : null;
+    },
+    legend: (id = 'motherMelon') => (vlTrigger('legend', id), sceneTouch()),
+    ripe: (id = 'motherMelon') => (vlTrigger('legendRipe', id), sceneTouch()),
+    marvel: (n = 1) => vlTrigger('marvel', n),
+    /** Un visiteur : 'visible' (halte, « ? ») ou 'seen' (vu, comme touché). */
+    visitor: (id = 'crane', st = 'visible') => (vlTrigger('visitor', id, st), sceneTouch()),
+    /** Les cigognes : 'steeple' | 'farm' | 'chicks' | 'leave'. */
+    storks: (kind = 'steeple') => (vlTrigger('storks', kind), sceneTouch()),
+    complete: () => (vlTrigger('complete'), sceneTouch()),
+    epilogue: () => vlTrigger('epilogue'),
+    postcard: () => vlTrigger('postcard'),
+    stage: (n) => vlTrigger('stage', n),
+    /** Écrans : fiche d'une légende, segment Légendes, épilogue, générique, banc, livre (page). */
+    legendUI: (id) => app.storks.openLegend(id),
+    legendsTab: () => app.heritage.openLibrary('legends'),
+    epilogueUI: () => app.storks.openEpilogue(),
+    credits: () => app.storks.playCredits(),
+    bench: () => app.storks.openBench(),
+    sit: () => app.storks.contemplate(),
+    view: (opts = {}) => (vlTrigger('view'), app.valleyView.open(opts)),
+    book: (page) => app.valleyBook.open(page),
+    share: () => app.valleyBook.share(),
+    /** La forêt de la carte dans un état imposé (0..3) ; null : celui du jeu. */
+    forest: (n = null) => app.scene?.storksForceForest?.(n),
+    scenery: () => app.game?.query?.career?.valleyScenery?.() ?? null,
+    facts: () => app.game?.query?.career?.valleySounds?.() ?? null,
+    /** Joue un son de la vallée tout de suite (chant ou couche) : audio.playNature. */
+    sound: (id = 'robin', opts) => audio.playNature?.(id, opts),
+    scape: () => app.storks.scape(app.game),
+    voices: () => ({ voices: audio.natureVoices, engine: audio.natureStats?.() || null }),
+    detail: (mode = 'full') => (app.updateSettings({ natureSound: mode }), audio.natureStats?.() || null),
+    /** Point (px de la page) d'une cible de la scène : 'cloche' (legendId) | 'cloches' | 'storkNest' | 'visitor'. */
+    point(kind, id) {
+      const r = app.scene?.storksItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    /** Rectangle (page) d'une cible de la vue : { type: 'visitor', id } | { type: 'bench' }. */
+    viewPoint(hit) {
+      const r = app.valleyView.targetPageRect(hit);
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height } : null;
+    },
+    todo: () => app.todo.rawItems().filter((x) => /^vl-/.test(x.id)).map((x) => ({ id: x.id, text: x.text })),
+    ui: () => ({ storks: app.storks.debugState(), book: app.valleyBook.debugState(), credits: app.valleyView.creditsState?.() || null, contemplating: !!app.valleyView.contemplating }),
+    stats: () => {
+      const t0 = performance.now();
+      const st = app.scene?.storksStats?.() || null;
+      return { scene: st, view: app.valleyView.stats(), audio: { voices: audio.natureVoices, engine: audio.natureStats?.() || null }, ms: Math.round((performance.now() - t0) * 1000) / 1000 };
+    },
+  };
+  for (const [k, f] of Object.entries(window.__debug.valley4)) if (!window.__debug.valley[k]) window.__debug.valley[k] = f;
   window.__debug.lot3 = window.__debug.variety;
 }
 if (DEBUG) window.__debug.lot4 = window.__debug.cozy;

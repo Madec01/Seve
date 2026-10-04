@@ -9,7 +9,8 @@
 // « panneau » (achats, bilan) se rangent à droite, sans fond, et la scène reste utilisable.
 //
 // opts : { id, title, icon (nœud), content (nœud), kind: 'panel' | 'popup', tall: bool,
-//          onClose(reason), className, pauses: bool (false : jamais de pause de lecture) }
+//          onClose(reason), className, pauses: bool (false : jamais de pause de lecture),
+//          outsideClose: bool (false : un toucher sur la scène ne ferme pas la feuille) }
 //
 // Pause pendant la lecture (option d'accessibilité, activée par défaut en Détente) : tant qu'une
 // feuille est ouverte, le temps s'arrête (raison de pause « sheet », qui s'ajoute aux autres :
@@ -20,6 +21,7 @@
 import { clear, el } from './dom.js';
 import { icon } from './icons.js';
 import { pauseOnSheetActive } from './a11y.js';
+import { SIGNALS } from './coach/signals.js';
 
 /**
  * Glisser vers le bas pour fermer. `grab` : zones qui démarrent toujours le glissement (poignée,
@@ -134,6 +136,7 @@ export function createSheets(layer, app) {
   let closeTimer = null;
   let paused = false; // raison de pause « sheet » posée par cette feuille
   let released = false; // le joueur a relancé le temps, feuille ouverte
+  let openCount = 0; // (Vallée V3) nombre d'ouvertures : une seule bulle de Joseph par ouverture (src/ui/coach/scheduler.js)
 
   function syncPause() {
     const want = !!current && !released && current.opts.pauses !== false && pauseOnSheetActive(app) && !(current.opts.kind === 'panel' && document.body.classList.contains('layout-wide'));
@@ -161,6 +164,14 @@ export function createSheets(layer, app) {
   // fait rien d'autre (pas de plantation ou d'arrosage involontaire).
   backdrop.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    // Fenêtre à lire jusqu'au bout (boîte de Joseph, récits) : un toucher dehors ne la ferme pas, la feuille
+    // tressaille pour montrer son bouton (✕, glissement et Échap restent).
+    if (current?.opts.outsideClose === false) {
+      box.classList.remove('is-nudge');
+      void box.offsetWidth;
+      box.classList.add('is-nudge');
+      return;
+    }
     close('outside');
   });
 
@@ -185,6 +196,7 @@ export function createSheets(layer, app) {
       prev.onClose('replace');
     }
     current = { id: opts.id, opts };
+    openCount += 1;
     clear(headIcon);
     if (opts.icon) headIcon.append(opts.icon);
     title.textContent = opts.title || '';
@@ -211,6 +223,8 @@ export function createSheets(layer, app) {
     app.tooltip?.hide();
     if (!replacing) released = false;
     syncPause();
+    app.coach?.signal?.(SIGNALS.sheetOpen, { id: opts.id });
+    app.coach?.signal?.(SIGNALS.sheetShown, { id: opts.id, by: opts.by || null });
     return { body, close };
   }
 
@@ -230,6 +244,7 @@ export function createSheets(layer, app) {
     syncPause();
     opts.onClose?.(reason);
     publishHeight();
+    app.coach?.signal?.(SIGNALS.sheetClose, { id: opts.id || null, reason });
   }
 
   /** Le joueur relance le temps feuille ouverte : la pause de lecture est levée. true si elle l'était. */
@@ -253,6 +268,10 @@ export function createSheets(layer, app) {
     box,
     get current() {
       return current ? current.id : null;
+    },
+    /** Nombre d'ouvertures de feuille depuis le début (chaque ouverture, remplacement compris). */
+    get openCount() {
+      return openCount;
     },
     /** Remplace le contenu de la feuille ouverte (sans l'animation d'ouverture). */
     setContent(node, keepScroll = true) {

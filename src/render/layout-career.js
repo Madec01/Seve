@@ -146,6 +146,8 @@ export function careerLayoutKey(state) {
   k += '|';
   for (const [key, m] of Object.entries(c.machines || {})) if (m) k += `${key}:${m.id}:${m.lotId}:${m.level || 1};`;
   k += `|${c.rank >= 6 ? 'D' : ''}`;
+  // (Vallée V3) Poteau « Vers la vallée » (vue ouverte) et clairières de l'étape 7 : la couche fixe change.
+  if (c.valley) k += `|${c.valley.view?.open ? 'V' : ''}${(c.valley.stage || 0) >= 7 ? '7' : ''}`;
   return k;
 }
 
@@ -154,6 +156,10 @@ export function careerGridKey(grid) {
   if (!grid || !Array.isArray(grid.lots)) return '';
   let k = '';
   for (const e of grid.lots) if (e) k += `${e.id}@${e.col},${e.row}${e.owned ? 'o' : ''};`;
+  // (Vallée V3) Terres sauvages et forêts à confier : la carte change quand l'une d'elles change d'état.
+  for (const e of Array.isArray(grid.cells) ? grid.cells : []) {
+    if (e && (e.state === 'wildland' || e.state === 'wildable')) k += `|${e.id}@${e.col},${e.row}:${e.state}:${e.wildKind || ''}:${e.wildStage ?? ''}`;
+  }
   return k;
 }
 
@@ -197,7 +203,20 @@ export function careerGridCells(career, grid) {
     const top = owned.filter((o) => o.col === 0).reduce((m, o) => Math.max(m, o.row), 0);
     if (!taken.has(`0,${top + 1}`)) cands.push({ id: lotIdFor(FIRST_LOT_INDEX + n), col: 0, row: top + 1, name: LOT_NAMES[n] || '', price: LOT_PRICES[n] ?? null, buyable: true, lockedReason: null, lockedByRank: null, index: FIRST_LOT_INDEX + n });
   }
-  return { owned, cands };
+  // (Vallée V3) Terres sauvages (« wildland ») et forêts qu'on peut confier à la nature (« wildable ») : cellules de la
+  // grille du cœur (query.career.grid().cells), jamais à vendre, jamais possédées.
+  const wilds = [];
+  for (const e of grid && Array.isArray(grid.cells) ? grid.cells : []) {
+    if (!e || (e.state !== 'wildland' && e.state !== 'wildable')) continue;
+    const col = num(e.col);
+    const row = num(e.row);
+    if (col === null || row === null || row < 0) continue;
+    const key = `${col},${row}`;
+    if (taken.has(key)) continue;
+    taken.add(key);
+    wilds.push({ id: e.id, col, row, name: e.name || '', state: e.state, kind: e.wildKind || e.kind || 'wood', stage: Math.max(0, Math.min(2, Math.floor(num(e.wildStage) ?? num(e.stage) ?? 0))), price: num(e.price) });
+  }
+  return { owned, cands, wilds };
 }
 
 /**
@@ -210,13 +229,13 @@ export function createCareerLayout(level, opts = {}) {
   const lotsState = Array.isArray(career.lots) ? career.lots : [];
   const buildingsState = career.buildings || {};
   const machinesState = career.machines || {};
-  const { owned: ownedCells, cands } = careerGridCells(career, opts.grid || null);
+  const { owned: ownedCells, cands, wilds: wildCells } = careerGridCells(career, opts.grid || null);
 
   // ── Grille : colonnes et lignes couvertes ───────────────────────────────────────────
   let cMin = 0;
   let cMax = 0;
   let rMax = 0;
-  for (const o of [...ownedCells, ...cands]) {
+  for (const o of [...ownedCells, ...cands, ...wildCells]) {
     cMin = Math.min(cMin, o.col);
     cMax = Math.max(cMax, o.col);
     rMax = Math.max(rMax, o.row);
@@ -233,6 +252,7 @@ export function createCareerLayout(level, opts = {}) {
   const cellsAt = new Map();
   for (const o of ownedCells) cellsAt.set(`${o.col},${o.row}`, { owned: o });
   for (const c of cands) cellsAt.set(`${c.col},${c.row}`, { cand: c });
+  for (const w of wildCells) cellsAt.set(`${w.col},${w.row}`, { wild: w });
   const yardLot = lotsState.find((l) => l.id === 'yard') || { id: 'yard', index: 2, type: 'yard', slots: [null, null], name: 'La basse-cour' };
   const yard = { id: 'yard', index: 2, type: 'yard', name: yardLot.name, y0: rowY(0), rows: LOT_ROWS, lot: yardLot, col: 0, row: 0, ox: 0 };
   const saleBands = [];
@@ -243,7 +263,10 @@ export function createCareerLayout(level, opts = {}) {
       else {
         const at = cellsAt.get(`${c},${r}`);
         if (!at) continue;
-        if (at.cand) {
+        if (at.wild) {
+          const w = at.wild;
+          band = { id: w.id, index: -1, type: w.state, name: w.name, y0: rowY(r), rows: LOT_ROWS, wild: true, col: c, row: r, ox: c * COLS, kind: w.kind, stage: w.stage, price: w.price };
+        } else if (at.cand) {
           const k = at.cand;
           band = { id: k.id, index: k.index ?? -1, type: 'forSale', name: k.name, y0: rowY(r), rows: LOT_ROWS, forSale: true, col: c, row: r, ox: c * COLS, cand: k };
           saleBands.push(band);
@@ -272,7 +295,12 @@ export function createCareerLayout(level, opts = {}) {
   for (const b of bands) b.lane = b.type === 'home' ? b.y0 + 6 : b.y0 + b.rows - 1;
   const ownedAt = (c, r) => {
     const b = cell.get(`${c},${r}`);
-    return !!b && !b.forSale;
+    return !!b && !b.forSale && !b.wild;
+  };
+  /** (Vallée V3) Une terre sauvage continue son sol vers un terrain possédé ou une autre terre sauvage voisine. */
+  const groundAt = (c, r) => {
+    const b = cell.get(`${c},${r}`);
+    return !!b && !b.forSale && b.type !== 'wildable';
   };
   const rowBottom = yard.y0 + LOT_ROWS; // bas de la ligne 0 (haut du champ de départ)
   /** Bande sous une tuile (null : forêt, route, hors du monde). */
@@ -336,7 +364,7 @@ export function createCareerLayout(level, opts = {}) {
     }
   }
   for (const b of bands) {
-    if (b.forSale || b.type === 'home') continue;
+    if (b.forSale || b.wild || b.type === 'home') continue; // (V3) une terre sauvage n'a pas d'allée
     for (let x = b.ox + 2; x <= b.ox + SPINE_X; x++) addPath(x, b.lane);
   }
   // Allées d'un terrain à son voisin de droite (même ligne) : à travers la lisière.
@@ -372,11 +400,19 @@ export function createCareerLayout(level, opts = {}) {
   function forestAt(tx, ty) {
     if (pathSet.has(`${tx},${ty}`)) return false; // allée qui traverse une lisière
     const lx = tx - Math.floor(tx / COLS) * COLS;
-    if (lx <= 0 || lx >= COLS - 1) return true;
+    if (lx <= 0 || lx >= COLS - 1) {
+      // (Vallée V3) Lisière d'une terre sauvage : son sol continue vers un terrain ou une terre sauvage voisine.
+      if (ty >= rowTop && ty < rowBottom) {
+        const b = bandAtTile(tx, ty);
+        if (b && b.type === 'wildland' && groundAt(b.col + (lx <= 0 ? -1 : 1), b.row)) return false;
+      }
+      return true;
+    }
     if (ty < rowTop) return !ownedAt(Math.floor(tx / COLS), rMax); // lisière du haut
     const b = bandAtTile(tx, ty);
     if (!b) return true;
     if (b.forSale && ty < b.y0 + b.rows - 1) return true;
+    if (b.type === 'wildable') return true; // (Vallée V3) forêt qu'on peut confier : reste une forêt (plus claire)
     return false;
   }
 
@@ -485,10 +521,22 @@ export function createCareerLayout(level, opts = {}) {
     }
   }
 
+  // (Vallée V3) Terres sauvages (blocs sans clôture, sans allée, sans panneau de terrain) et forêts à confier.
+  const wildBands = [];
+  const wildable = [];
   for (const band of bands) {
     const y0 = band.y0;
     const ox = band.ox;
     const cr = { col: band.col, row: band.row, ox };
+    if (band.wild) {
+      const sign = { x: ox + 1, y: y0 + band.rows - 2 };
+      const entry = { cellId: band.id, col: band.col, row: band.row, name: band.name, rect: px({ x: ox, y: y0, w: COLS, h: band.rows }), sign };
+      if (band.type === 'wildland') {
+        wildBands.push({ ...entry, kind: band.kind, stage: band.stage });
+        mark({ x: ox, y: y0, w: COLS, h: band.rows });
+      } else wildable.push({ ...entry, price: band.price });
+      continue;
+    }
     if (band.forSale) {
       const k = band.cand;
       lotEntries.push({ id: band.id, index: band.index, type: null, name: band.name, forSale: true, rect: px({ x: ox, y: y0, w: COLS, h: band.rows }), sign: { x: ox + 6, y: y0 + band.rows - 2 }, lane: band.lane, ...cr, price: k.price, buyable: k.buyable, lockedReason: k.lockedReason, lockedByRank: k.lockedByRank, band });
@@ -683,6 +731,13 @@ export function createCareerLayout(level, opts = {}) {
     }
   }
   }
+  // (Vallée V2) La Grainothèque : le décor tiré sur ses 2 × 2 tuiles est retiré ensuite (même tirage qu'au V1 ailleurs).
+  if (career.valley && valley.tiles.library) {
+    const lt = valley.tiles.library;
+    const inLib = (d) => d.tx >= lt.x && d.tx < lt.x + lt.w && ((d.ty >= lt.y && d.ty < lt.y + lt.h) || (d.kind === 'treeTall' && d.ty - 1 >= lt.y && d.ty - 1 < lt.y + lt.h));
+    for (let k = deco.length - 1; k >= 0; k--) if (inLib(deco[k])) deco.splice(k, 1);
+    mark(lt);
+  }
   const props = [
     { name: 'barrel', x: 6, y: H + 3, dy: 1 },
   ];
@@ -714,6 +769,10 @@ export function createCareerLayout(level, opts = {}) {
     if (!spot || !sprite) continue;
     machineParking[key] = { x: spot.x * T, y: spot.y * T, w: size.w * T, h: size.h * T, sprite, id, lotId: m.lotId || null, key };
   }
+
+  // ── (Vallée V3) Poteau « Vers la vallée » : au bord de la route, en bas à droite (x 12, sous la route) — une tuile où
+  // aucun décor, aucun bâtiment ni aucun repère des lots 3 et 4 ne se pose (les décors s'arrêtent à x 11).
+  const signpost = { x: 12 * T, y: (ROAD_Y + 2) * T, w: T, h: 2 * T };
 
   // ── Personnages : maison du fermier et trajets ───────────────────────────────────────
   const farmerHome = { x: house.door.x * T + 8, y: (H + 6) * T + 12 };
@@ -857,6 +916,30 @@ export function createCareerLayout(level, opts = {}) {
     return { left: -1, right: -1 };
   }
 
+  /**
+   * (Vallée V3, reste du V2 n° 1) Cellule d'une parcelle pour le doigt (px) : la parcelle agrandie dans chaque sens de la
+   * moitié de l'écart jusqu'à sa voisine du même terrain (rien si elles se touchent), ou d'une tuile au bord (clôture
+   * comprise). Les cellules ne se chevauchent jamais.
+   */
+  const cellCache = new Map();
+  function plotCell(index) {
+    if (cellCache.has(index)) return cellCache.get(index);
+    const p = plots[index];
+    if (!p || p.retired) return null;
+    const same = plots.filter((q) => q && q !== p && !q.retired && q.lot === p.lot);
+    const overlapY = (q) => q.y < p.y + p.h && q.y + q.h > p.y;
+    const overlapX = (q) => q.x < p.x + p.w && q.x + q.w > p.x;
+    const gap = (list, f) => (list.length ? Math.min(...list.map(f)) : Infinity);
+    const pad = (g) => (g === Infinity ? T : Math.max(0, Math.min(T, g / 2)));
+    const left = pad(gap(same.filter((q) => overlapY(q) && q.x + q.w <= p.x), (q) => p.x - (q.x + q.w)));
+    const right = pad(gap(same.filter((q) => overlapY(q) && q.x >= p.x + p.w), (q) => q.x - (p.x + p.w)));
+    const up = pad(gap(same.filter((q) => overlapX(q) && q.y + q.h <= p.y), (q) => p.y - (q.y + q.h)));
+    const down = pad(gap(same.filter((q) => overlapX(q) && q.y >= p.y + p.h), (q) => q.y - (p.y + p.h)));
+    const r = { x: p.x - left, y: p.y - up, w: p.w + left + right, h: p.h + up + down };
+    cellCache.set(index, r);
+    return r;
+  }
+
   /** Rectangle (tuiles) d'un bâtiment de carrière (maison, grenier, étal, abri, atelier, serre, mare). */
   function buildingTiles(id) {
     if (HOME_BUILDINGS[id]) {
@@ -913,7 +996,7 @@ export function createCareerLayout(level, opts = {}) {
    * @param st     game.state (ruches, panneaux) ou null
    * @param slop   tolérance (px du monde) pour le doigt
    */
-  function hitTestCareer(wx, wy, st, slop = 0) {
+  function hitTestCareer(wx, wy, st, slop = 0, minWorld = 0) {
     const tx = Math.floor(wx / T);
     const ty = Math.floor(wy / T);
     // 1. Parcelles
@@ -922,9 +1005,9 @@ export function createCareerLayout(level, opts = {}) {
       if (wx >= p.x && wy >= p.y && wx < p.x + p.w && wy < p.y + p.h) return { type: 'plot', index: p.index };
     }
     const cands = [];
-    const add = (r, hit, pri = 0) => cands.push({ r, hit, pri });
+    const add = (r, hit, pri = 0, iso = false) => cands.push({ r, hit, pri, iso });
     // 2. Machines garées
-    for (const [key, m] of Object.entries(machineParking)) add({ x: m.x, y: m.y, w: m.w, h: m.h }, { type: 'machine', key }, 1);
+    for (const [key, m] of Object.entries(machineParking)) add({ x: m.x, y: m.y, w: m.w, h: m.h }, { type: 'machine', key }, 1, true);
     // 3. Bâtiments de la maison
     add(px(house), { type: 'building', buildingId: 'house' });
     add(px(storage), { type: 'building', buildingId: 'storage' });
@@ -949,16 +1032,22 @@ export function createCareerLayout(level, opts = {}) {
     }
     // 5. Ruches et panneaux solaires possédés
     const nHives = Math.min(hives.length, st?.investments?.beehive || 0);
-    for (let k = 0; k < nHives; k++) add(px({ x: hives[k].x, y: hives[k].y, w: 1, h: 1 }), { type: 'investment', id: 'beehive' });
+    for (let k = 0; k < nHives; k++) add(px({ x: hives[k].x, y: hives[k].y, w: 1, h: 1 }), { type: 'investment', id: 'beehive' }, 0, true);
     const nSolar = Math.min(4, st?.investments?.solarPanel || 0);
-    for (let k = 0; k < nSolar; k++) add(px({ x: solar[k].x, y: solar[k].y, w: 1, h: 1 }), { type: 'investment', id: 'solarPanel' });
+    for (let k = 0; k < nSolar; k++) add(px({ x: solar[k].x, y: solar[k].y, w: 1, h: 1 }), { type: 'investment', id: 'solarPanel' }, 0, true);
     // 6. Panneaux des terrains, emplacements libres
-    for (const s of lotSigns) add(px({ x: s.x, y: s.y - 1, w: 1, h: 2 }), { type: 'lotSign', lotId: s.lotId }, 1);
+    for (const s of lotSigns) add(px({ x: s.x, y: s.y - 1, w: 1, h: 2 }), { type: 'lotSign', lotId: s.lotId }, 1, true);
     for (const e of emptySlots) add(px(e.rect), { type: 'lotSign', lotId: e.lotId, slot: e.slot });
     for (const w of wilds) add(px(w.rect), { type: 'lotSign', lotId: w.lotId });
     // Enclos du verger, champ (hors parcelles) : fiche du terrain
     // 7. Terrains à vendre (tout le bloc)
     for (const sb of saleBands) add(px({ x: sb.ox, y: sb.y0, w: COLS, h: sb.rows }), { type: 'lotForSale', lotId: sb.id });
+    // 8. (Vallée V3) Terres sauvages (tout le bloc → sa fiche) ; forêt à confier : son poteau (cible agrandie, scène).
+    for (const w of wildBands) {
+      add(w.rect, { type: 'wildLand', cellId: w.cellId });
+      add(px({ x: w.sign.x, y: w.sign.y, w: 1, h: 1 }), { type: 'wildLand', cellId: w.cellId }, 1, true);
+    }
+    for (const w of wildable) add(px({ x: w.sign.x, y: w.sign.y, w: 1, h: 1 }), { type: 'wildCell', cellId: w.cellId }, 1, true);
     let best = null;
     let bestD = Infinity;
     for (const c of cands) {
@@ -969,6 +1058,27 @@ export function createCareerLayout(level, opts = {}) {
       }
     }
     if (best) return best;
+    if (slop <= 0 && minWorld <= 0) return null;
+    // (Vallée V3) Au doigt, une parcelle prend toute sa cellule (moitié de l'écart jusqu'à la voisine, clôture comprise).
+    for (const p of plots) {
+      if (p.retired) continue;
+      const cr = plotCell(p.index);
+      if (cr && inRect(cr, wx, wy)) return { type: 'plot', index: p.index };
+    }
+    // (Vallée V3) Cibles isolées (machines, ruches, panneaux, poteaux) : zone d'au moins 48 px CSS autour de leur centre ;
+    // deux zones qui se chevauchent : la plus proche du doigt.
+    if (minWorld > 0) {
+      let bc = null;
+      let bcd = Infinity;
+      for (const c of cands) {
+        if (!c.iso) continue;
+        const g = growRectBy(c.r, minWorld);
+        if (!inRect(g, wx, wy)) continue;
+        const d = (wx - (c.r.x + c.r.w / 2)) ** 2 + (wy - (c.r.y + c.r.h / 2)) ** 2;
+        if (d < bcd) { bcd = d; bc = c.hit; }
+      }
+      if (bc) return bc;
+    }
     if (slop <= 0) return null;
     // Tolérance du doigt : la parcelle la plus proche, sinon la cible la plus proche.
     let bi = -1;
@@ -1027,6 +1137,11 @@ export function createCareerLayout(level, opts = {}) {
       case 'lotForSale': {
         const sb = saleBands.find((b) => b.id === hit.lotId) || saleBand;
         return sb ? px({ x: sb.ox + 5, y: sb.y0 + sb.rows - 2, w: 4, h: 2 }) : null;
+      }
+      case 'wildLand':
+      case 'wildCell': {
+        const w = wildBands.find((b) => b.cellId === hit.cellId) || wildable.find((b) => b.cellId === hit.cellId);
+        return w ? { ...w.rect } : null;
       }
       default: return null;
     }
@@ -1105,7 +1220,21 @@ export function createCareerLayout(level, opts = {}) {
     conveyors,
     machineParking,
     collectors,
-    valley: { spots: valley.spots, box: valley.box, animalAnchors: valley.animalAnchors, reserved: !!career.valley },
+    valley: {
+      spots: valley.spots, box: valley.box, library: valley.library, animalAnchors: valley.animalAnchors, reserved: !!career.valley, signpost: career.valley ? { ...signpost } : null,
+      // (V4) Les 4 cloches des légendes (8 × 12, px, le long du bas de la Grainothèque) et le pied du nid (haut de la cheminée).
+      cloches: clocheRects(valley.library),
+      nest: career.valley ? nestPoint(house) : null,
+    },
+    // (Vallée V3) Terres sauvages : [{ cellId, col, row, name, rect (px), kind, stage, sign (tuiles) }] ; forêts à confier :
+    // [{ cellId, col, row, name, rect, price, sign }] ; cellule (px) de chaque parcelle pour le doigt.
+    wildBands,
+    wildable,
+    plotCell,
+    wildRect(cellId) {
+      const w = wildBands.find((b) => b.cellId === cellId) || wildable.find((b) => b.cellId === cellId);
+      return w ? { ...w.rect } : null;
+    },
     route,
     bandAt,
     lotRect(id) {
@@ -1115,13 +1244,51 @@ export function createCareerLayout(level, opts = {}) {
   };
 }
 
+// ── (Vallée vivante, lot V4 « Les cigognes ») Cloches des légendes et nid sur la maison ─────────────────────────
+
+/**
+ * Décalages (px) des 4 cloches de verre dans le rectangle de la Grainothèque (2 × 2 tuiles) : deux à gauche de la porte,
+ * deux à droite (la porte, au milieu du bas, reste visible ; les cloches se touchent à peine).
+ */
+export const CLOCHE_DX = Object.freeze([0, 7, 17, 24]);
+export const CLOCHE_W = 8;
+export const CLOCHE_H = 12;
+
+/** Les 4 cloches (ordre des légendes, de gauche à droite) : rectangles (px) posés sur le bas de la Grainothèque. */
+export function clocheRects(library) {
+  if (!library) return [];
+  const y = library.y + library.h - CLOCHE_H;
+  return CLOCHE_DX.map((dx) => ({ x: library.x + Math.min(dx, library.w - CLOCHE_W), y, w: CLOCHE_W, h: CLOCHE_H }));
+}
+
+/**
+ * Pied du nid (bas du poteau de la roue, px du sprite de la maison) pour chaque niveau de maison (1 à 5) : le haut de la
+ * cheminée (planche career, mesuré sur les dessins ; la roue et les nids de la planche valley4 ont leur pied en x = 12).
+ */
+export const NEST_ANCHORS = Object.freeze({ 1: { x: 24, y: 5 }, 2: { x: 40, y: 5 }, 3: { x: 24, y: 5 }, 4: { x: 24, y: 5 }, 5: { x: 72, y: 20 } });
+
+/** Pied du nid pour un niveau de maison (px du sprite de la maison). */
+export function nestAnchor(houseLevel) {
+  const n = Math.max(1, Math.min(5, Math.floor(Number(houseLevel) || 1)));
+  return { ...NEST_ANCHORS[n] };
+}
+
+/** Pied du nid dans le monde (px) pour la maison de la disposition ({ x, y (tuiles), w, h, level }). */
+export function nestPoint(house) {
+  if (!house) return null;
+  const a = nestAnchor(house.level);
+  return { x: house.x * T + a.x, y: house.y * T + a.y, level: Math.max(1, Math.min(5, house.level || 1)), roofY: house.y * T, houseRect: { x: house.x * T, y: house.y * T, w: house.w * T, h: house.h * T } };
+}
+
 /**
  * (Vallée vivante) Emplacements nature d'une disposition de carrière (tuiles, puis px) : haies sur les colonnes de lisière
  * du bloc (x 0 et x 13), bande fleurie au pied de la clôture du champ (à gauche du portail), nichoirs, tas, hôtels, chênes
  * et berges sur des tuiles libres du gabarit de chaque type de terrain ; maison : nichoir et boîte en fer sur des tuiles
  * libres proches de la façade (cherchées dans l'ordre), nichoir à chouette sous le pignon du grenier.
- * → { spots: { [spotId]: { x, y, w, h, kind } } (px), box: rect (px), animalAnchors: { [spotId]: { x, y } } (px),
- *     tiles: { [spotId | 'box']: rect (tuiles) + reserve } }
+ * (V2) La Grainothèque (`library`, 2 × 2, réservée) et les nichoirs à chauves-souris (`<lotId>.bat` : maison, verger,
+ * cour des ateliers).
+ * → { spots: { [spotId]: { x, y, w, h, kind } } (px), box: rect (px), library: rect (px, 2 × 2 tuiles),
+ *     animalAnchors: { [spotId]: { x, y } } (px), tiles: { [spotId | 'box' | 'library']: rect (tuiles) + reserve } }
  */
 export function careerValleySpots({ bands, house, storage, free, H }) {
   const tiles = {};
@@ -1133,13 +1300,26 @@ export function careerValleySpots({ bands, house, storage, free, H }) {
     if (!b || b.forSale) continue;
     const { ox, y0, id } = b;
     if (b.type === 'home') {
+      // Carré 2 × 2 où se pose d'ordinaire le panneau du village (lot 3, varietySpots) : rien de la Vallée dessus.
+      const board = (x, y) => x >= 8 && x <= 9 && y >= H + 1 && y <= H + 2;
+      // (V2) La Grainothèque : 2 × 2 tuiles réservées au bout de l'allée, derrière le grenier (en haut de la bande,
+      // jamais sur un emplacement de bâtiment), cherchée dans l'ordre parmi des carrés libres ; le porte-lanternes, la
+      // mangeoire et le stand de fête du lot 4 s'écartent ensuite (tuiles réservées).
+      const free2 = ([x, y]) => [[0, 0], [1, 0], [0, 1], [1, 1]].every(([dx, dy]) => free(x + dx, y + dy) && !board(x + dx, y + dy));
+      const lib = [[10, H], [1, H + 1], [10, H + 1], [4, H + 1], [5, H + 10]].find(free2) || [10, H];
+      const inLib = (x, y) => x >= lib[0] && x <= lib[0] + 1 && y >= lib[1] && y <= lib[1] + 1;
+      put('library', 'library', lib[0], lib[1], 2, 2); // réservée APRÈS le décor (le tirage du décor du V1 ne bouge pas)
       // À droite de l'allée du champ (x 7) : la gauche, au-dessus du toit, reste à la mangeoire et au porte-lanternes (lot 4).
-      const n = firstFree([[9, H + 2], [10, H + 1], [8, H + 2], [11, H + 2], [9, H + 1], [10, H + 3], [house.x + house.w + 2, H + 2], [6, H + 1]], [9, H + 1]);
+      // Jamais sous le panneau du village ni sur la Grainothèque (le nichoir s'y dessinait par-dessus le panneau).
+      const n = firstFree([[9, H + 2], [10, H + 1], [8, H + 2], [11, H + 2], [9, H + 1], [10, H + 3], [house.x + house.w + 2, H + 2], [6, H + 1]].filter(([x, y]) => !board(x, y) && !inLib(x, y)), [11, H + 2]);
       put(`${id}.nest`, 'nestbox', n[0], n[1], 1, 1, true);
       const sw = storage.w || 2;
       put(`${id}.owl`, 'owlbox', storage.x + Math.floor((sw - 1) / 2), storage.y + 1, 1, 1);
-      const bx = firstFree([[house.x + house.w + 1, H + 5], [house.x + house.w, H + 5], [house.x + house.w + 2, H + 5], [house.x + house.w + 1, H + 4], [house.x + house.w + 2, H + 4], [house.x - 1, H + 5]].filter(([x, y]) => !(x === n[0] && y === n[1])), [6, H + 5]);
+      const bx = firstFree([[house.x + house.w + 1, H + 5], [house.x + house.w, H + 5], [house.x + house.w + 2, H + 5], [house.x + house.w + 1, H + 4], [house.x + house.w + 2, H + 4], [house.x - 1, H + 5]].filter(([x, y]) => !(x === n[0] && y === n[1]) && !inLib(x, y)), [6, H + 5]);
       put('box', 'box', bx[0], bx[1], 1, 1, true);
+      // (V2) Nichoir à chauves-souris « sous l'avant-toit de la maison » : accroché au mur, sur le bâtiment (comme le
+      // nichoir à chouette sous le pignon du grenier).
+      put(`${id}.bat`, 'batbox', house.x, house.y + Math.max(1, house.h - 2), 1, 1);
       continue;
     }
     // Haies : colonnes de lisière du bloc (le champ de départ, plus haut, a 12 lignes de clôture).
@@ -1157,8 +1337,10 @@ export function careerValleySpots({ bands, house, storage, free, H }) {
       put(`${id}.nest`, 'nestbox', ox + 4, y0 + 3);
       put(`${id}.pile`, 'woodpile', ox + 10, y0 + 7);
       put(`${id}.hotel`, 'insectHotel', ox + 10, y0 + 1, 1, 2);
+      put(`${id}.bat`, 'batbox', ox + 7, y0 + 6); // (V2) « dans un vieux pommier » : entre deux rangs d'arbres
     } else if (b.type === 'workshops') {
       put(`${id}.hotel`, 'insectHotel', ox + 11, y0 + 1, 1, 2);
+      put(`${id}.bat`, 'batbox', ox + 7, y0 + 1); // (V2) « sous l'avant-toit », entre les deux ateliers
     } else if (b.type === 'pond') {
       put(`${id}.reeds`, 'reeds', ox + 3, y0 + 1, 8, 1);
     } else if (b.type === 'wild') {
@@ -1169,7 +1351,7 @@ export function careerValleySpots({ bands, house, storage, free, H }) {
   const spots = {};
   const animalAnchors = {};
   for (const [id, t] of Object.entries(tiles)) {
-    if (id === 'box') continue;
+    if (id === 'box' || id === 'library') continue;
     const r = { x: t.x * T, y: t.y * T, w: t.w * T, h: t.h * T, kind: t.kind };
     spots[id] = r;
     let a;
@@ -1180,7 +1362,31 @@ export function careerValleySpots({ bands, house, storage, free, H }) {
     animalAnchors[id] = a;
   }
   const b = tiles.box;
-  return { spots, box: b ? { x: b.x * T, y: b.y * T, w: T, h: T } : null, animalAnchors, tiles };
+  const lb = tiles.library;
+  return { spots, box: b ? { x: b.x * T, y: b.y * T, w: T, h: T } : null, library: lb ? { x: lb.x * T, y: lb.y * T, w: lb.w * T, h: lb.h * T } : null, animalAnchors, tiles };
+}
+
+/** Rectangle (px) agrandi autour de son centre jusqu'à `m` px dans chaque sens (jamais rétréci). */
+function growRectBy(r, m) {
+  const w = Math.max(r.w, m);
+  const h = Math.max(r.h, m);
+  return { x: r.x + r.w / 2 - w / 2, y: r.y + r.h / 2 - h / 2, w, h };
+}
+
+/**
+ * (Vallée V3) Cibles isolées d'une disposition de carrière (px du monde, rectangles NON agrandis), pour la mesure des zones
+ * de toucher (tests/touch-targets.test.js) : machines, ruches, panneaux solaires, panneaux des terrains, poteaux.
+ */
+export function careerIsolatedTargets(layout, st = null) {
+  const out = [];
+  for (const [key, m] of Object.entries(layout.machineParking || {})) out.push({ kind: 'machine', id: key, rect: { x: m.x, y: m.y, w: m.w, h: m.h } });
+  const nHives = Math.min((layout.hives || []).length, st?.investments?.beehive ?? (layout.hives || []).length);
+  for (let k = 0; k < nHives; k++) out.push({ kind: 'beehive', id: k, rect: { x: layout.hives[k].x * T, y: layout.hives[k].y * T, w: T, h: T } });
+  for (const s of layout.lotSigns || []) out.push({ kind: 'lotSign', id: s.lotId, rect: { x: s.x * T, y: (s.y - 1) * T, w: T, h: 2 * T } });
+  for (const w of layout.wildBands || []) out.push({ kind: 'wildSign', id: w.cellId, rect: { x: w.sign.x * T, y: w.sign.y * T, w: T, h: T } });
+  for (const w of layout.wildable || []) out.push({ kind: 'wildOffer', id: w.cellId, rect: { x: w.sign.x * T, y: w.sign.y * T, w: T, h: T } });
+  if (layout.valley?.signpost) out.push({ kind: 'signpost', id: 'valleyView', rect: { ...layout.valley.signpost } });
+  return out;
 }
 
 function unionTiles(a, b) {

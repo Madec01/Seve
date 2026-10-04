@@ -74,7 +74,8 @@ export function createCareerUI(app) {
   const minimap = createMinimap(app, {
     active,
     openLot: (lotId) => {
-      if (lotId) open.lot(lotId);
+      if (lotId && app.places?.isWildCell?.(lotId)) app.places.openWild(lotId); // (Vallée V3) terre sauvage / forêt à confier
+      else if (lotId) open.lot(lotId);
     },
     openMap: () => open.map(),
   });
@@ -313,7 +314,6 @@ export function createCareerUI(app) {
     },
     storage() {
       openLive({ id: 'c-storage', kind: 'panel', tall: true, title: 'Grenier et marché', icon: () => cIcon('storage', 'sprite--md', 'coin'), build: () => storageContent(ui) });
-      app.hints.maybe('career.storage', { selector: '#c-storage-mode' });
     },
     team() {
       openLive({ id: 'c-team', kind: 'panel', tall: true, title: 'Équipe', icon: () => cIcon('staff', 'sprite--md', 'harvest'), build: () => teamContent(ui) });
@@ -558,7 +558,6 @@ export function createCareerUI(app) {
         const amount = ch?.season?.amount ?? game.query.finance().nextBill.amount;
         const days = (ch?.season?.daysLeft ?? 0) + 1;
         windows.queueBanner({ kind: 'season', icon: ev.seasonId, title: `${season(ev.seasonId)} · année ${ev.year ?? game.state.time.year}`, text: `Charges de saison : ${fmt(amount)} pièces dans ${plural(days, 'jour')}` });
-        if (ev.seasonId === 'winter' && (c.staff || []).some((s) => !s.onLeave)) app.hints.maybe('career.leave', { selector: '#tab-staff' });
         break;
       }
       case 'seasonWarning': {
@@ -570,7 +569,6 @@ export function createCareerUI(app) {
           text: ev.frost ? 'Au premier matin d\'hiver, les cultures fragiles gèleront (sauf dans la serre).' : `Charges de saison : ${fmt(ch?.season?.amount ?? 0)} pièces`,
           duration: 5200,
         });
-        if (ev.yearEnd) app.hints.maybe('career.yearEnd', { selector: '#hud-bill' });
         break;
       }
       case 'billPaid':
@@ -587,7 +585,6 @@ export function createCareerUI(app) {
       case 'lotDeveloped':
         app.audio.play('build');
         t.show({ kind: 'success', sprite: lotIcon(ev.lotType, 'sprite--sm'), title: 'Terrain aménagé', text: developText(ev.lotType), duration: 4200 });
-        if (ev.lotType === 'field') app.hints.maybe('career.plan', { selector: '#c-plan-spring' });
         app.saveNow?.();
         break;
       case 'buildingBuilt':
@@ -595,8 +592,6 @@ export function createCareerUI(app) {
         const b = q('building', null, ev.buildingId);
         app.audio.play('build');
         t.show({ kind: 'success', sprite: buildingIcon(ev.buildingId, ev.level, 'sprite--sm'), title: ev.type === 'buildingBuilt' ? `${b?.name || 'Bâtiment'} construit !` : `${b?.name || 'Bâtiment'} : niveau ${ev.level}`, text: buildingText(b), duration: 4200 });
-        if (ev.buildingId === 'house' && ev.level >= 2) app.hints.maybe('career.hire', { selector: '#tab-staff' });
-        if (ev.buildingId === 'storage') app.hints.maybe('career.storage', null);
         app.saveNow?.();
         break;
       }
@@ -604,7 +599,6 @@ export function createCareerUI(app) {
       case 'machineUpgraded':
         app.audio.play('build');
         t.show({ kind: 'success', icon: 'star', title: ev.type === 'machineBought' ? 'Machine installée !' : `Machine : niveau ${ev.level}`, text: machineName(ev.id), duration: 3600 });
-        if (ev.type === 'machineBought') app.hints.maybe('career.machine', null);
         app.saveNow?.();
         break;
       case 'staffHired':
@@ -669,7 +663,6 @@ export function createCareerUI(app) {
           // Texte accordé du cœur (« Un corbeau dans les champs : touchez-le pour le chasser. »), sinon le nôtre.
           t.show({ kind: 'warn', sprite: cIcon('crow'), title: 'Des corbeaux !', text: ev.text || (n > 1 ? `${n} parcelles : touchez-les pour les chasser.` : 'Une parcelle : touchez-la pour les chasser.'), duration: 5000 });
         }
-        app.hints.maybe('career.crows', (ev.plots || []).length ? { plot: ev.plots[0] } : null);
         break;
       case 'crowChased':
         break;
@@ -699,7 +692,6 @@ export function createCareerUI(app) {
         app.audio.play('warning', { volume: 0.45 });
         t.show({ kind: 'info', sprite: joseph('content', 'sprite--sm'), title: 'Joseph a une demande', text: ev.quest?.text || 'Une quête vous attend.', duration: 6000, onClick: () => open.quest() });
         badges.journal = true;
-        app.hints.maybe('career.quest', { selector: '#tab-journal' });
         break;
       case 'questReminder':
         // Rappels à 3 jours et à 1 jour de l'échéance d'une quête acceptée (une fois chacun).
@@ -776,10 +768,6 @@ export function createCareerUI(app) {
       case 'bankrupt':
         windows.queue('bankrupt', ev);
         break;
-      case 'dawn':
-        maybeCollectHint();
-        maybeLotHint();
-        break;
       default:
         break;
     }
@@ -798,24 +786,6 @@ export function createCareerUI(app) {
     } catch {
       return null;
     }
-  }
-
-  function maybeCollectHint() {
-    const b = (q('buildings', []) || []).filter((x) => (x.pending || 0) > 0);
-    if (b.length) app.hints.maybe('career.collect', { selector: '#tab-farm' });
-    // Plusieurs abris à ramasser : le bouton « Tout ramasser » de la ligne « À faire ».
-    if (b.length >= 2) app.hints.maybe('career.collectAll', { selector: '#todo' });
-  }
-
-  /**
-   * « La forêt à vendre » : dès que le premier terrain devient abordable (ou presque), pas un an plus tard en
-   * ouvrant la boutique (le conseil couvrait alors le haut de la feuille « Acheter »).
-   */
-  function maybeLotHint() {
-    if ((game.state.career?.lotsBought || 0) > 0) return;
-    const next = q('nextLot', null);
-    if (!next) return;
-    if (next.canBuy || game.state.money >= (next.price || Infinity) * 0.8) app.hints.maybe('career.lotForSale', { selector: '#tab-buy' });
   }
 
   function developText(type) {
@@ -872,8 +842,10 @@ export function createCareerUI(app) {
     } else if (!created) {
       app.toasts.banner({ kind: 'season', icon: s?.seasonId || 'spring', title: s?.farmName || 'Ma ferme', text: `Année ${s?.year ?? 1} · ${s?.rankName || ''}`, duration: 3800 });
     }
-    if (created) windows.intro(g);
-    else app.hints.maybe('career.start', null);
+    // Nouvelle ferme : le cours « Premiers pas » de Joseph (src/ui/coach/lessons/basics.js) remplace l'ancien accueil à
+    // trois bulles ; ses idées (forêt à vendre, charges, poules) sont des leçons (src/ui/coach/lessons/career.js). Le
+    // moteur le lance lui-même (coach.bind(game, { created, firstSteps }), case « Premiers pas avec Joseph ») : ici, plus
+    // rien à ouvrir.
   }
 
   function unbind() {

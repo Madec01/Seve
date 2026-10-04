@@ -40,7 +40,8 @@
 //   careerYear {n}                commencer l'année n
 //   careerStock {n}               n unités au grenier en même temps
 //   careerYearNet {n}             n pièces de bénéfice en une année
-//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand
+//   careerValley {key, n}         (Vallée vivante) ctx.career.valley : started, fixed, installed, stage, hand ; (V2) fixedPays,
+//                                 installedV1, swaps, crosses, fixedCross, library, installedV2
 
 import { CROPS } from './crops.js';
 
@@ -127,11 +128,25 @@ export const COZY_ACHIEVEMENTS = [
 export const VALLEY_ACHIEVEMENTS = [
   career('valleyBox', 'La boîte en fer', 'Recevoir la boîte en fer de Joseph.', 10, { type: 'careerValley', key: 'started', n: 1 }),
   career('firstSaved', 'Graine sauvée', 'Sauver une première variété ancienne.', 10, { type: 'careerValley', key: 'fixed', n: 1 }),
-  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixed', n: 12 }),
+  career('seedKeeper', 'Gardien des semences', 'Sauver les 12 variétés du pays.', 40, { type: 'careerValley', key: 'fixedPays', n: 12 }),
   career('firstNeighbour', 'Premier habitant', 'Installer un premier habitant.', 10, { type: 'careerValley', key: 'installed', n: 1 }),
-  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installed', n: 12 }),
+  career('welcomingFarm', 'La ferme accueillante', 'Installer les 12 habitants de la ferme.', 40, { type: 'careerValley', key: 'installedV1', n: 12 }),
   career('valleySings', 'La vallée chante', 'Atteindre l\'étape 5 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 5 }),
   career('seedHands', 'Les mains dans les graines', '100 récoltes à la main de variétés anciennes.', 15, { type: 'careerValley', key: 'hand', n: 100 }),
+];
+
+/**
+ * (Vallée vivante, lot V2) 6 succès de carrière (catégorie « Carrière », écus seulement, 145 écus). Condition
+ * careerValley { key, n } : swaps (trocs faits), crosses (croisements trouvés), fixedCross (variétés croisées sauvées),
+ * library (niveau de la Grainothèque), installedV2 (habitants du V2 installés).
+ */
+export const HERITAGE_ACHIEVEMENTS = [
+  career('firstSwap', 'Premier troc', 'Échanger une graine avec un voisin du village.', 10, { type: 'careerValley', key: 'swaps', n: 1 }),
+  career('villageSeeds', 'Les graines du village', 'Faire les 12 trocs du village.', 30, { type: 'careerValley', key: 'swaps', n: 12 }),
+  career('firstCross', 'Un nom pour une graine', 'Trouver un premier croisement.', 15, { type: 'careerValley', key: 'crosses', n: 1 }),
+  career('farmHeritage', 'L\'héritage de la ferme', 'Sauver les 11 variétés croisées.', 40, { type: 'careerValley', key: 'fixedCross', n: 11 }),
+  career('livingLibrary', 'La grainothèque vivante', 'Agrandir la Grainothèque jusqu\'au niveau 5.', 30, { type: 'careerValley', key: 'library', n: 5 }),
+  career('valleyFriends', 'Les habitants (suite)', 'Installer les 4 nouveaux habitants (osmie, merle, lézard, pipistrelle).', 20, { type: 'careerValley', key: 'installedV2', n: 4 }),
 ];
 
 function cozy(id, name, description, ecus, check) {
@@ -143,7 +158,40 @@ function cozy(id, name, description, ecus, check) {
  * ACHIEVEMENTS reste la liste des niveaux (26) ; chaque succès de carrière porte category: 'career', ceux du lot 4
  * category: 'cozy'.
  */
-export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS];
+/**
+ * (Vallée vivante, lot V3) Les 8 succès du ruisseau (catégorie « Carrière », écus seulement ; rangés sous « La Vallée »).
+ * careerValley { key, n } : works (chantiers lancés), stage (étape), restoredN (lieux restaurés), valleyInstalledN
+ * (habitants de la vallée), wilds (terres confiées), riverFish (pêches au ruisseau).
+ */
+export const PLACES_ACHIEVEMENTS = [
+  career('firstWorks', 'Le premier chantier', 'Lancer un premier chantier dans la vallée.', 10, { type: 'careerValley', key: 'works', n: 1 }),
+  career('waterBack', 'L\'eau revient', 'Atteindre l\'étape 6 de la vallée.', 30, { type: 'careerValley', key: 'stage', n: 6 }),
+  career('livingValley', 'La vallée vivante', 'Atteindre l\'étape 7 de la vallée.', 40, { type: 'careerValley', key: 'stage', n: 7 }),
+  career('sixPlaces', 'La vallée restaurée', 'Restaurer les six lieux de la vallée jusqu\'à leur dernière étape.', 40, { type: 'careerValley', key: 'restoredN', n: 6 }),
+  career('helenesBook', 'Le carnet d\'Hélène', 'Installer les 10 habitants de la vallée.', 30, { type: 'careerValley', key: 'valleyInstalledN', n: 10 }),
+  career('firstWild', 'Une terre rendue', 'Confier une première terre à la nature.', 10, { type: 'careerValley', key: 'wilds', n: 1 }),
+  career('forestBack', 'La forêt revient', 'Confier les 18 terres sauvages.', 40, { type: 'careerValley', key: 'wilds', n: 18 }),
+  career('riverAngler', 'Pêcheur du ruisseau', '20 pêches au ruisseau.', 10, { type: 'careerValley', key: 'riverFish', n: 20 }),
+];
+
+/**
+ * (Vallée vivante, lot V4) Les 9 succès des cigognes (catégorie « Carrière », écus seulement ; rangés sous « La Vallée »).
+ * careerValley { key, n } : legendsAwake, legendHarvests, legendsHarvestedN, stage, storkNest (0 / 1),
+ * visitorsSeenNoStork, visitorsSeenN, epilogue (0 / 1), postcards.
+ */
+export const STORKS_ACHIEVEMENTS = [
+  career('firstLegend', 'La graine qui dormait', 'Réveiller une première légende.', 10, { type: 'careerValley', key: 'legendsAwake', n: 1 }),
+  career('legendHarvest', 'Récolte de légende', 'Récolter une légende à la main.', 10, { type: 'careerValley', key: 'legendHarvests', n: 1 }),
+  career('fourLegends', 'Les quatre légendes', 'Récolter les 4 légendes.', 40, { type: 'careerValley', key: 'legendsHarvestedN', n: 4 }),
+  career('storksBack', 'Les cigognes', 'Atteindre l\'étape 8 de la vallée.', 40, { type: 'careerValley', key: 'stage', n: 8 }),
+  career('storkNest', 'Une maison heureuse', 'Les cigognes nichent sur la maison.', 20, { type: 'careerValley', key: 'storkNest', n: 1 }),
+  career('rareVisitor', 'Un visiteur rare', 'Voir un premier visiteur rare (hors cigognes).', 10, { type: 'careerValley', key: 'visitorsSeenNoStork', n: 1 }),
+  career('allVisitors', 'Le ciel de la vallée', 'Voir les 6 visiteurs rares.', 40, { type: 'careerValley', key: 'visitorsSeenN', n: 6 }),
+  career('valleyBook', 'Le livre de la vallée', 'Lire l\'épilogue de Joseph.', 30, { type: 'careerValley', key: 'epilogue', n: 1 }),
+  career('furtherAway', 'Semer plus loin', 'Recevoir une première carte d\'une vallée voisine.', 10, { type: 'careerValley', key: 'postcards', n: 1 }),
+];
+
+export const ALL_ACHIEVEMENTS = [...ACHIEVEMENTS, ...CAREER_ACHIEVEMENTS, ...COZY_ACHIEVEMENTS, ...VALLEY_ACHIEVEMENTS, ...HERITAGE_ACHIEVEMENTS, ...PLACES_ACHIEVEMENTS, ...STORKS_ACHIEVEMENTS];
 
 export const ACHIEVEMENTS_BY_ID = Object.fromEntries(ALL_ACHIEVEMENTS.map((a) => [a.id, a]));
 

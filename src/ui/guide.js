@@ -1,15 +1,15 @@
-// « Guide de la ferme » (lot 1 « confort », E5 / A10) : tout ce que le tutoriel et les conseils
-// expliquent, à relire quand on veut, en français facile (phrases courtes, un mot difficile = une
-// explication). Ouvert depuis le menu Pause (niveaux et carrière), le Carnet (carrière) et la feuille
-// « Messages ».
+// « Guide de la ferme » (lot 1 « confort », E5 / A10) : les règles et les mots de la ferme, en français facile
+// (phrases courtes, un mot difficile = une explication).
+// (Accompagnement, 2026-10-04) Fusionné dans « Le carnet de Joseph » (src/ui/coach/carnet.js : Leçons · Mots de la
+// ferme · Rappels) : la section « Les conseils de Joseph » a disparu (remplacée par les leçons).
 //
-// openGuide(app, { topic }) → ouvre la feuille 'guide' (sections repliables, la première ouverte ;
-// `topic` : id d'une section à ouvrir, ex. 'words' pour les mots de la ferme).
-// GUIDE_SECTIONS, GLOSSARY : textes (exportés pour les tests et la doc).
+// openGuide(app, { topic }) → alias de openCarnet(app, { tab: 'words' }) (onglet « Mots de la ferme », règles comprises).
+// guideContent(app, { topic }) → contenu de l'ancien guide (sections repliables), gardé pour les écrans qui l'intègrent.
+// GUIDE_SECTIONS, GLOSSARY : textes (exportés pour les tests, la doc et le carnet).
 
 import { el } from './dom.js';
 import { icon } from './icons.js';
-import { HINTS } from './hints.js';
+import { openCarnet } from './coach/carnet.js';
 import { REAL_DAY_SECONDS } from '../data/balance.js';
 
 /** Mots de la ferme expliqués simplement. mode : 'levels' | 'career' | 'both'. */
@@ -209,13 +209,6 @@ export function guideContent(app, { topic = null } = {}) {
     icon: 'info',
     node: el('dl.guide-words', GLOSSARY.filter((g) => fits(g.mode)).flatMap((g) => [el('dt', g.word), el('dd', g.text)])),
   });
-  const hints = Object.entries(HINTS).filter(([id]) => (career ? id.startsWith('career.') || ['processing', 'processingBought', 'tree'].includes(id) : !id.startsWith('career.')));
-  sections.push({
-    id: 'hints',
-    title: 'Les conseils de Joseph',
-    icon: 'star',
-    node: el('ul.guide-hints', hints.map(([, h]) => el('li', el('b', h.title), el('span', h.text)))),
-  });
   const openIds = new Set([topic && sections.some((s) => s.id === topic) ? topic : sections[0].id]);
   return el(
     'div.guide',
@@ -225,9 +218,5 @@ export function guideContent(app, { topic = null } = {}) {
 }
 
 export function openGuide(app, { topic = null } = {}) {
-  if (!app.game || app.inMenu) return;
-  if (app.dialogs.isOpen()) app.dialogs.closeAll();
-  app.sheets.open({ id: 'guide', kind: 'panel', tall: true, title: 'Guide de la ferme', icon: icon('info', 'md'), content: guideContent(app, { topic }) });
-  app.audio.play('page', { volume: 0.5 });
-  if (topic) requestAnimationFrame(() => document.getElementById(`guide-${topic}`)?.scrollIntoView({ block: 'start' }));
+  return openCarnet(app, { tab: topic === 'words' || topic === 'rules' || !topic ? 'words' : topic === 'lessons' ? 'lessons' : 'words' });
 }

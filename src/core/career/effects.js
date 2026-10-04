@@ -6,6 +6,8 @@ import { SEASONS } from '../../data/balance.js';
 import { DIFFICULTY_CAREER, seasonScale } from '../../data/career/career.js';
 import { BUILDINGS_BY_ID, FARM_ITEMS } from '../../data/career/buildings.js';
 import { careerAnimals, careerFlag, providedFactor, providedSum } from './registry.js';
+// (Vallée V3) Lecteurs purs (heirlooms.js n'importe que des données : aucun cycle avec economy.js).
+import { heatingFactorOf, upkeepFactorOf } from './heirlooms.js';
 
 export const FARM_ITEMS_BY_ID = Object.fromEntries(FARM_ITEMS.map((i) => [i.id, i]));
 
@@ -145,15 +147,22 @@ export function careerIncomes(state, seasonIndex, weatherId, lastDayOfSeason) {
 export function careerDailyCharges(state, level, seasonIndex) {
   const farm = level.dailyCharge;
   let upkeep = 0;
+  let animalUpkeep = 0;
   for (const inv of careerInvestments()) {
     const n = state.investments[inv.id] || 0;
     if (n > 0) upkeep += (inv.upkeep || 0) * (inv.kind === 'upgrade' ? 1 : n);
+    if (n > 0 && inv.category === 'animal') animalUpkeep += (inv.upkeep || 0) * n;
   }
+  // (Vallée V3) Foin de la prairie des Coquelicots : entretien des ANIMAUX × 0,9 (− 10 % de leur part, arrondi au
+  // centième ; rien ne change sans l'avantage).
+  const hay = state.career.valley ? upkeepFactorOf(state) : 1;
+  if (hay !== 1 && animalUpkeep > 0) upkeep -= Math.round(animalUpkeep * (1 - hay) * 100) / 100;
   for (const id of Object.keys(state.career.buildings)) upkeep += buildingUpkeep(state, id);
   const solar = Math.min(farm + upkeep, careerEffectTotal(state, 'chargeReduction'));
   const fixed = Math.max(0, farm + upkeep - solar);
   const gh = buildingLevelData(state, 'greenhouse');
-  const heating = gh && SEASONS[seasonIndex] === 'winter' ? gh.heating || 0 : 0;
+  // (Vallée V3) Bois mort du bois de la Combe : chauffage de la serre × 0,5.
+  const heating = gh && SEASONS[seasonIndex] === 'winter' ? (gh.heating || 0) * (state.career.valley ? heatingFactorOf(state) : 1) : 0;
   const detail = [{ source: 'farm', amount: farm }];
   if (upkeep > 0) detail.push({ source: 'upkeep', amount: upkeep });
   if (solar > 0) detail.push({ source: 'solar', amount: -solar });

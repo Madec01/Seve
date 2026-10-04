@@ -3,7 +3,8 @@
 // thème de la carrière (C5), Basile le colporteur et graines rares (C7).
 //
 // createVariety(app) → app.variety = {
-//   onEvent(ev, game)        main.js (onGameEvent) : messages, sons, récompenses, conseils, pages en attente
+//   onEvent(ev, game)        main.js (onGameEvent) : messages, sons, récompenses, pages en attente
+//   (Les conseils « première fois » sont devenus des leçons de Joseph : src/ui/coach/lessons/lots.js.)
 //   frame()                  à chaque image : feuille ouverte « vivante », fenêtre de fin de saison de la carrière
 //   reset(game|null)         nouvelle partie / retour au menu
 //   openBoard(), openCart(), openMerchant(), openCards(), openChallenges(), openTheme()   feuilles du bas
@@ -29,34 +30,6 @@
 import { el, fmt, plural } from './dom.js';
 import { icon, spriteAny } from './icons.js';
 import { cropCount, cropName, season } from './text.js';
-import { HINTS } from './hints.js';
-
-// Conseils « première fois » (textes de VARIETY_HINTS du cœur s'ils existent, sinon ceux-ci).
-const DEFAULT_HINTS = {
-  'variety.board': { title: 'Le tableau du village', text: 'Les villageois y épinglent des commandes : récoltez ce qu\'ils demandent, ils paient une prime.' },
-  'variety.cart': { title: 'La charrette du marché', text: 'Remplissez ses caisses avec vos récoltes avant son départ : une prime en plus, même à moitié pleine.' },
-  'variety.cards': { title: 'Un cadeau pour la saison', text: 'Deux cartes gratuites : gardez celle qui vous plaît. Rien ne presse.' },
-  'variety.challenges': { title: 'Les défis de la saison', text: 'Gardez un ou deux défis : chaque palier donne une médaille et des écus.' },
-  'variety.merchant': { title: 'Basile le colporteur', text: 'Il passe le 5ᵉ jour de chaque saison avec des graines rares et des objets uniques.' },
-  'variety.rare': { title: 'Les graines rares', text: 'Un sachet contient ses graines : semez-les à la main, gratuitement, jusqu\'au bout du sachet.' },
-  'career.theme': { title: 'L\'année à thème', text: 'Chaque année a sa vedette (+25 %), sa fête et un visiteur unique qui apporte un cadeau.' },
-};
-for (const [id, h] of Object.entries(DEFAULT_HINTS)) if (!HINTS[id]) HINTS[id] = { ...h, where: 'game', who: id.startsWith('career.') ? 'joseph' : undefined };
-
-/** Textes du cœur (src/data/variety.js : VARIETY_HINTS), chargés sans casser le jeu s'ils manquent. */
-async function loadHintTexts() {
-  try {
-    const mod = await import('../data/variety.js');
-    const H = mod?.VARIETY_HINTS || {};
-    for (const [id, h] of Object.entries(H)) {
-      const text = typeof h === 'string' ? h : h?.text;
-      if (!text) continue;
-      HINTS[id] = { ...(HINTS[id] || { where: 'game' }), ...(typeof h === 'object' ? h : {}), text, where: 'game' };
-    }
-  } catch {
-    /* données du lot 3 absentes : textes par défaut */
-  }
-}
 
 const MEDALS = ['bronze', 'silver', 'gold'];
 const MEDAL_NAMES = { bronze: 'bronze', silver: 'argent', gold: 'or' };
@@ -111,8 +84,6 @@ function medalNode(level, got, cls = '') {
 }
 
 export function createVariety(app) {
-  loadHintTexts();
-
   let game = null;
   let live = null; // { id, build: () => node, sig: () => string, lastSig }
   let queued = false;
@@ -195,9 +166,6 @@ export function createVariety(app) {
   function morning(text) {
     if (text) app.todo?.morningNote?.(text);
   }
-  function hint(id, target = null) {
-    app.hints?.maybe?.(id, target);
-  }
 
   // ── Petits dessins ─────────────────────────────────────────────────────────────
   const portraitOf = (name, cls = 'sprite--portrait') => spriteAny([name, 'portrait.joseph'].filter(Boolean), cls, 'star');
@@ -234,7 +202,7 @@ export function createVariety(app) {
   // ── Tableau du village (C1) ───────────────────────────────────────────────────
   function boardSig() {
     const o = q('orders');
-    return JSON.stringify([o, game?.state?.money >= 0, [...doneToday.keys()]]);
+    return JSON.stringify([o, game?.state?.money >= 0, [...doneToday.keys()], app.game?.state?.career?.valley?.troc || null]);
   }
 
   function keepBtn(o) {
@@ -317,7 +285,7 @@ export function createVariety(app) {
     return el(
       `article.v-order${o.kept || o.started ? '.is-kept' : ''}`,
       { id: `v-order-${o.id}`, 'aria-label': `${o.clientName}, ${o.clientTitle || ''}` },
-      el('div.v-order-head', el('span.v-portrait', portraitOf(o.portrait)), el('div.v-who', el('b.v-name', o.clientName), o.clientTitle ? el('small.v-title', o.clientTitle) : null), el('span.v-premium', { 'aria-label': `Prime ${premium} pièces` }, coin(), el('b', `+${fmt(premium)}`))),
+      el('div.v-order-head', el('span.v-portrait', portraitOf(o.portrait), app.heritage?.orderMark?.(o) || null), el('div.v-who', el('b.v-name', o.clientName), o.clientTitle ? el('small.v-title', o.clientTitle) : null), el('span.v-premium', { 'aria-label': `Prime ${premium} pièces` }, coin(), el('b', `+${fmt(premium)}`))),
       o.text ? el('p.v-say', `« ${o.text} »`) : null,
       el('div.v-lines', lines),
       o.note ? el('p.v-note', icon('info', 'sm'), o.note) : null,
@@ -344,9 +312,11 @@ export function createVariety(app) {
 
   function boardContent() {
     const o = q('orders');
-    if (!o) return el('p.sheet-empty', 'Le tableau du village est vide.');
+    // (Vallée V2) Le troc épinglé au tableau : une carte « Troc » en tête (pas une commande : aucune place prise).
+    const troc = isCareer() ? app.heritage?.boardCard?.(app.game) || null : null;
+    if (!o) return troc ? el('div.v-board', troc) : el('p.sheet-empty', 'Le tableau du village est vide.');
     if (o.startsIn > 0) {
-      return el('div.v-board', el('p.v-lead', `Les villageois épingleront leurs premières commandes ${o.startsIn === 1 ? 'demain' : `dans ${plural(o.startsIn, 'jour')}`}.`));
+      return el('div.v-board', troc, el('p.v-lead', `Les villageois épingleront leurs premières commandes ${o.startsIn === 1 ? 'demain' : `dans ${plural(o.startsIn, 'jour')}`}.`));
     }
     const slots = o.slots || [];
     const reroll = el(
@@ -369,6 +339,7 @@ export function createVariety(app) {
     );
     return el(
       'div.v-board',
+      troc,
       el('p.v-lead', 'Récoltez ce qu\'ils demandent : payé tout de suite, et la prime quand c\'est complet.'),
       el('div.v-orders', { role: 'list' }, slots.map((s, i) => el('div', { role: 'listitem' }, s && !s.empty && s.id ? orderCard(s, i) : emptyCard(s, i)))),
       reroll,
@@ -377,9 +348,8 @@ export function createVariety(app) {
 
   function openBoard() {
     if (!enabled()) return false;
-    const r = openLive('v-board', { title: 'Le tableau du village', icon: sectionIco('board', 'info', 'sprite--md'), build: boardContent, sig: boardSig });
-    hint('variety.board', { selector: '#v-reroll' });
-    return r;
+    // Leçons du tableau et du troc : déclenchées par l'ouverture de la feuille (signal sheetOpen, accompagnement).
+    return openLive('v-board', { title: 'Le tableau du village', icon: sectionIco('board', 'info', 'sprite--md'), build: boardContent, sig: boardSig });
   }
 
   // ── Charrette du marché (C3) ──────────────────────────────────────────────────
@@ -432,7 +402,6 @@ export function createVariety(app) {
   function openCart() {
     if (!enabled()) return false;
     const r = openLive('v-cart', { title: 'La charrette du marché', icon: sectionIco('cart', 'harvest', 'sprite--md'), build: cartContent, sig: () => JSON.stringify(q('cart')), tall: false });
-    hint('variety.cart', null);
     return r;
   }
 
@@ -489,7 +458,6 @@ export function createVariety(app) {
   function openMerchant() {
     if (!enabled()) return false;
     const r = openLive('v-merchant', { title: 'Basile le colporteur', icon: sectionIco('merchant', 'coin', 'sprite--md'), build: merchantContent, sig: () => JSON.stringify([q('merchant'), Math.floor((app.game?.state.money || 0) / 5)]) });
-    hint('variety.merchant', null);
     return r;
   }
 
@@ -611,7 +579,6 @@ export function createVariety(app) {
     const ch = q('challenges');
     const title = ch?.seasonName ? `Les défis ${seasonOfTitle(ch)}` : 'Les défis de la saison';
     const r = openLive('v-challenges', { title, icon: sectionIco('challenge', 'star', 'sm'), build: challengesContent, sig: () => JSON.stringify(q('challenges')) });
-    hint('variety.challenges', null);
     return r;
   }
 
@@ -744,7 +711,6 @@ export function createVariety(app) {
   function later(kind) {
     const where = isCareer() ? 'le Carnet (Agenda)' : 'le Bilan';
     app.toasts.show({ prio: 'important', kind: 'info', icon: 'star', key: `v-later-${kind}`, title: kind === 'cards' ? 'Votre cadeau attend' : 'Les défis attendent', text: `Retrouvez-${kind === 'cards' ? 'le' : 'les'} dans ${where}.`, duration: 3600, log: false });
-    if (kind === 'cards') hint('variety.cards', null);
   }
 
   /** Carrière : fenêtre courte de fin de saison (charrette, médailles, cadeau, défis). */
@@ -785,14 +751,19 @@ export function createVariety(app) {
     game = g;
     const career = isCareer(g);
     // Carrière : la saison qui se termine est connue le soir (le cadeau n'est proposé qu'après l'aube suivante).
-    if (career && ['cartDeparted', 'challengesJudged', 'challengesOffered', 'billPaid'].includes(ev.type)) endingSeason = { id: SEASON_IDS[g.state.time.seasonIndex], at: performance.now() };
+    // Ces événements naissent le soir du dernier jour, mais l'aube suivante passe souvent dans la même mise à jour : au
+    // 1er jour de la saison suivante, la saison qui se termine est la précédente (sinon « Fin de l'automne » à la fin de l'été).
+    if (career && ['cartDeparted', 'challengesJudged', 'challengesOffered', 'billPaid'].includes(ev.type)) {
+      const t = g.state.time;
+      const si = ev.type === 'billPaid' && SEASON_IDS.includes(ev.seasonId) ? SEASON_IDS.indexOf(ev.seasonId) : t.dayOfSeason === 1 ? (t.seasonIndex + 3) % 4 : t.seasonIndex;
+      endingSeason = { id: SEASON_IDS[si], at: performance.now() };
+    }
     switch (ev.type) {
       case 'ordersRenewed': {
         const n = ev.added ?? (ev.slots || []).filter(Boolean).length;
         if (ev.reason === 'dawn' && n > 0) morning(`${n > 1 ? `${n} nouvelles commandes` : 'Une nouvelle commande'} au tableau du village.`);
         if (ev.reason === 'start' && n > 0) {
           app.toasts.show({ prio: 'info', kind: 'info', sprite: sectionIco('board', 'info'), title: 'Le tableau du village', text: 'Des villageois ont épinglé des commandes près du portail.', onClick: () => openBoard(), duration: 5200 });
-          hint('variety.board', null);
         }
         break;
       }
@@ -805,6 +776,9 @@ export function createVariety(app) {
         break;
       case 'orderDone': {
         const slot = slotOf.get(ev.orderId);
+        // (Vallée V2) Écho doux : une fois le troc fait, une commande sur trois parle du jardin du voisin.
+        const echo = isCareer() ? app.heritage?.echoThanks?.(ev) || null : null;
+        if (echo) ev = { ...ev, thanks: echo };
         doneToday.set(ev.orderId, { slot: slot ?? -1, day: dayOf(g), clientId: ev.clientId, clientName: ev.clientName, thanks: ev.thanks, premium: ev.premium, portrait: `portrait.client.${ev.clientId}` });
         app.audio.tone?.('chime', { volume: 0.85, delay: 0.1 });
         app.audio.play('coin', { delay: 0.35, volume: 0.7 });
@@ -820,7 +794,6 @@ export function createVariety(app) {
         if (!(evening && evening.day && !career && seasonFlip(g))) app.toasts.show({ prio: 'info', digest: 'arrivée de la charrette|arrivées de la charrette', kind: 'info', sprite: sectionIco('cart', 'harvest'), title: 'La charrette du marché', text: 'Jusqu\'au dernier soir : vos récoltes à la main remplissent ses caisses.', onClick: () => openCart(), duration: 5200 });
         morning('La charrette du marché est arrivée.');
         app.audio.play('page', { volume: 0.5, delay: 0.6 });
-        hint('variety.cart', null);
         break;
       case 'cartProgress':
         break;
@@ -847,7 +820,6 @@ export function createVariety(app) {
         break;
       }
       case 'cardsOffered':
-        hint('variety.cards', null);
         if (career) careerSeason = { at: performance.now() + 400, title: endTitle(g) };
         break;
       case 'cardPicked': {
@@ -863,7 +835,6 @@ export function createVariety(app) {
         app.messages?.add?.({ kind: 'info', title: 'Fin d\'un effet', text: `${ev.name || 'Une carte'} : c'est terminé.` });
         break;
       case 'challengesOffered':
-        hint('variety.challenges', null);
         if (career) careerSeason = careerSeason || { at: performance.now() + 400, title: endTitle(g) };
         break;
       case 'challengeMedal': {
@@ -886,7 +857,6 @@ export function createVariety(app) {
         app.audio.tone?.('magic', { volume: 0.7, delay: 0.5 });
         app.toasts.show({ prio: 'info', kind: 'info', key: 'v-merchant', sprite: portraitOf('portrait.merchant', 'sprite--sm'), title: 'Basile le colporteur est là', text: `${ev.merchant?.daysLeft === 0 ? 'Jusqu\'à ce soir' : 'Jusqu\'à demain soir'} : son étal vous attend.`, onClick: () => openMerchant(), duration: 6000 });
         morning('Basile le colporteur est là (jusqu\'à demain soir).');
-        hint('variety.merchant', null);
         break;
       case 'merchantLeft':
         if (live?.id === 'v-merchant' && app.sheets.current === 'v-merchant') app.sheets.close();
@@ -898,7 +868,6 @@ export function createVariety(app) {
           text = r?.already && ev.ecusIfOwned ? `Vous l'aviez déjà : +${plural(ev.ecusIfOwned, 'écu')} à la place.` : 'Posez-le avec « Décorer la ferme ».';
         } else if (ev.ecusIfOwned) grantEcus(ev.ecusIfOwned);
         app.toasts.show({ kind: 'success', sprite: itemIco({ itemId: ev.itemId }, 'sprite--sm'), title: `${ev.name || 'Objet'} acheté`, text: text || `−${plural(ev.price || 0, 'pièce')}`, duration: 3600 });
-        if (String(ev.itemId || '').startsWith('seeds.')) hint('variety.rare', null);
         break;
       }
       case 'themeAnnounced':
@@ -906,7 +875,6 @@ export function createVariety(app) {
       case 'themeStarted': {
         const t = ev.theme || {};
         app.toasts.banner?.({ kind: 'season', icon: 'spring', title: t.name || 'Une nouvelle année', text: t.text || (t.star?.names?.length ? `Vedette : ${t.star.names.join(', ')} (+25 %)` : ''), duration: 5200 });
-        hint('career.theme', null);
         break;
       }
       case 'offerResolved':
@@ -915,7 +883,6 @@ export function createVariety(app) {
         break;
       case 'planted':
         if (ev.rare) {
-          hint('variety.rare', null);
           if (ev.seedsLeft === 0) app.toasts.show({ kind: 'info', sprite: cropIco(ev.cropId), text: 'Dernière graine du sachet semée.', duration: 2600 });
         }
         break;
@@ -1124,7 +1091,7 @@ export function createVariety(app) {
         if (!isCareer(g)) app.tabbar?.setBadge('stats', on);
       }
     }
-    if (careerSeason && isCareer(g) && now >= careerSeason.at && !app.dialogs.isOpen() && !app.tutorial?.active && g.state.status === 'playing') {
+    if (careerSeason && isCareer(g) && now >= careerSeason.at && !app.dialogs.isOpen() && !app.coach?.blocking && g.state.status === 'playing') {
       const title = careerSeason.title;
       careerSeason = null;
       openCareerSeason(title);

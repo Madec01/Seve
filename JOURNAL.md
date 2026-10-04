@@ -36,9 +36,18 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/avant-vallee-vivante-2026-10-03` | Avant « La Vallée vivante » (grand projet de carrière), après les 4 lots |
 | 2026-10-03 | `backup/vallee-v1-2026-10-03` | Vallée vivante V1 « La boîte en fer » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-03 | `backup/avant-vallee-v2-2026-10-03` | Avant le lot V2 « Le troc et les croisements » (grainothèque, troc, croisements), commit `090ec5c` |
+| 2026-10-03 | `backup/vallee-v2-2026-10-03` | Vallée V2 « Le troc et les croisements » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
+| 2026-10-03 | `backup/avant-vallee-v3-2026-10-03` | Avant le lot V3 « Le ruisseau » (vue de la vallée, 6 lieux, terres sauvages), commit `c958599` |
+| 2026-10-03 | `backup/vallee-v3-2026-10-03` | Vallée V3 « Le ruisseau » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
+| 2026-10-04 | `backup/avant-vallee-v4-2026-10-04` | Avant le lot V4 « Les cigognes » (variétés légendaires, visiteurs rarissimes, paysage et sons), commit `ae003c1` |
+| 2026-10-04 | `backup/avant-accompagnement-2026-10-04` | Avant l'accompagnement (Joseph vous montre) et le code du V4, après le déplacement des boutons de zoom |
+| 2026-10-04 | `backup/accompagnement-v4-2026-10-04` | Accompagnement « Joseph vous montre » et Vallée V4 « Les cigognes » terminés, intégrés et vérifiés ; pull request n° 11 |
+| 2026-10-04 | `backup/avant-qa-coach-v4-2026-10-04` | Avant l'intégration et la QA finale de l'accompagnement et du V4, commit `c449436` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
+| 2026-10-03 | `backup/avant-qa-vallee2-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V2 de la Vallée, commit `a0c0e17` (branche et tag créés en local) |
+| 2026-10-03 | `backup/avant-qa-vallee3-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V3 de la Vallée, commit `5a64fd7` (branche et tag créés en local) |
 | 2026-09-30 | `backup/ui-detente-2026-09-30` | Avant l'interface des modes de difficulté et du prêt du voisin (lot UI), commit `42cc365` (branche et tag créés en local ; le chef de projet pousse la branche) |
 | 2026-09-30 | `backup/avant-integration-carriere-2026-09-30` | Avant l'intégration du mode Carrière (corrections entre lots, durée des saisons, performances, partie au doigt), commit `967a05e` (branche et tag créés en local ; le chef de projet pousse la branche) |
 
@@ -860,6 +869,41 @@ Sauvegarde avant : `backup/avant-qa-lot4-2026-10-03` (branche + tag locaux, comm
 - **À trancher par l'utilisateur** : `docs/VALLEE.md` § 15 (contenu du V1, observation obligatoire, dépenses au
   patrimoine, équipe et variétés fixées, chantiers du V3, longueur de la traîne, terres sauvages, page des habitants du V2).
 
+### 2026-10-04 — Accompagnement (Joseph vous montre) : conception
+
+- **Conception écrite avant le code** (aucun fichier de `src/` ni de `tests/` modifié, rien de commité ; documents
+  seulement, donc pas de sauvegarde : à faire avant le code, `backup/avant-accompagnement-<date>`) :
+  **`docs/ACCOMPAGNEMENT.md`** (nouveau : inventaire du guidage existant, toutes les mécaniques et leur moment
+  d'apparition, règles d'or, moteur de leçons, tutoriel de début de carrière geste par geste, refonte du tutoriel du
+  niveau 1, catalogue complet des leçons, rappels, carnet de Joseph, réglage Complet / Discret / Aucun, anciennes parties,
+  accessibilité, maquettes, cas limites, plan de test, points à trancher) et `docs/ARCHITECTURE.md` « Accompagnement —
+  contrats » (fichiers `src/ui/coach/`, API `app.coach`, format d'une leçon, contexte, cibles, signaux, rappels, points
+  d'accroche, sprites du doigt, 4 paquets MOTEUR + TUTORIELS · LEÇONS lots · LEÇONS Vallée · ART).
+- **Décisions de l'utilisateur** : le guide est **Joseph** (bulle avec portrait, il montre du doigt, textes courts) ;
+  **montrer, puis rappeler** (chaque mécanique montrée une fois pas à pas au bon moment, puis rappels discrets ; réglage
+  « Accompagnement : Complet / Discret / Aucun ») ; **vrai tutoriel en jouant au début de la carrière** sur de vraies
+  parcelles mûres, passable.
+- **Choix** : un seul moteur remplace le tutoriel du niveau 1, la soixantaine de conseils « première fois » dispersés
+  dans six fichiers, l'accueil à trois bulles de la carrière et le conseil « fermage en danger » (mêmes identifiants : ce
+  qui a été vu reste vu) ; chaque étape a une **cible** (interface ou objet de la scène, compatible zoom) et un **geste
+  montré** (toucher, glisser, appui long, pincer), avance quand le joueur **fait** le geste, ≤ 2 lignes FALC, temps en
+  pause pendant les étapes de lecture ; une leçon à la fois, file, ≤ 3 par jour de jeu, jamais pendant une fenêtre, une
+  fête, la vue de la vallée ou un mode de visée (sauf si la leçon le concerne) ; rappels sans culpabilité (≤ 1 par jour,
+  ≤ 4 par saison, silence après 3 ignorés, coupables un par un) branchés sur la ligne « À faire » et le résumé du matin ;
+  **le carnet de Joseph** (leçons relisibles et rejouables, mots de la ferme, rappels) remplace le guide de la ferme ;
+  rudiments déduits des anciennes parties (jamais rejoués à un joueur expérimenté).
+- **Tutoriel de début de carrière** : 6 carottes mûres, premier glissé de récolte en 5 s, ≈ 75 mots en 10 étapes
+  (récolter en glissant, payé tout de suite, semer, arroser, le temps, les œufs, acheter une poule, le carnet).
+  **Niveau 1** : 12 étapes, ≈ 90 mots au lieu de 206, avec glissés, appui long, ligne « À faire ».
+- **Parité Classique intacte** : l'accompagnement est hors de l'état de partie (vues dans `progression.hintsSeen`, réglage
+  dans les options, préférences du guidage) ; seule exception à trancher : l'option de création `createCareer({ starter })`
+  pour les carottes mûres (carrière seulement, désactivée par défaut côté cœur).
+- **À trancher par l'utilisateur** : `docs/ACCOMPAGNEMENT.md` § 15 (carottes mûres du début de carrière ; carnet et guide
+  fusionnés ou non ; réglage par défaut des joueurs qui ont déjà joué).
+- Travail en parallèle d'autres agents (boutons de zoom, conception du V4) : leurs sections n'ont pas été touchées ; le
+  changement d'une ligne de `src/ui/zoom.js` (`app.coach.blocking`) attendra leur livraison ; les 4 conseils du V4
+  (`valley.legend`, `valley.visitor`, `valley.book`, `valley.sounds`) deviennent des leçons du même identifiant.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -1032,6 +1076,31 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Vallée V1 : fiche d'une parcelle sauvée « À la main : + 2 graines gardées » (faux depuis l'écart CORE : plus de graine après fixation) ; étal de la foire « 3 graines » pour un greffon de Calville, sachet « dans la grainothèque » (bâtiment du V2) | Corrigé |
 | 2026-10-03 | Vallée V1 : texte à 150 % sur 360 px — puces de la feuille des graines (« Planche d'essai : récoltez-la à la main ») et cartes « Aménager » plus larges que l'écran ; lignes des habitants et plan de culture qui débordent de 3 px ; « Jachère fleurie » coupée à 100 % ; traits à 13 px dans la boîte de Joseph ; hors Vallée bouton « Installer : Moissonneuse 700 » | Corrigé (`valley.css`, `style.css`) |
 | 2026-10-03 | Vallée V1 : toucher la scène pendant la fenêtre « La boîte en fer » la ferme (comme toute feuille) ; le chapitre reste « à lire » (ligne « À faire », boîte du perron), mais le détail des trois graines ne se revoit pas | Noté (rien ne se perd) |
+| 2026-10-03 | Vallée V2 : l'étape 5 « La vallée chante » arrivait à l'an 6 du joueur tranquille au lieu de l'an 9 (les 23 variétés du V2 comptent comme signes de vie, paliers du V1 gardés) | Corrigé (paliers 2 / 6 / 11 / 22 / 38 avec le V2 ; étape 5 à l'an 9 ; jamais de recul) |
+| 2026-10-03 | Vallée V2 : fiche d'une parcelle d'essai — variété, traits, « Croisement avec … » et « À la main » rangés en colonnes écrasées (une lettre par ligne, débordement à droite) : `.tip-rows > div { display: flex }` l'emportait sur `.vl-plot` | Corrigé (`valley.css`) |
+| 2026-10-03 | Vallée V2 : « Ça ne vous coûte rien » (feuille du troc) à 13 px ; tampon ♥ de l'album (sans dessin) à 12 px | Corrigé (14 px) |
+| 2026-10-03 | Vallée V2 : texte à 150 % sur 360 px — bouton « Écouter Joseph » du prochain indice hors de la carte, carte « La Grainothèque » au nom coupé lettre à lettre, onglets « Habitants » / « Aménager » qui se chevauchent | Corrigé (cartes qui passent à la ligne, onglets à 16 px) |
+| 2026-10-03 | Lot 3 : en carrière, la fenêtre courte de fin de saison disait « Fin de l'automne » à la fin de l'été (saison lue après l'aube suivante) | Corrigé (`variety.js`) |
+| 2026-10-03 | Vallée V2 : au premier passage au tableau du village, le conseil du lot 3 (« Le tableau du village… », qui vise « Changer ») couvre le bouton « Choisir une graine » de la carte Troc | Noté (un toucher sur « Compris » suffit) |
+| 2026-10-03 | Vallée V2 : la case du troc dans l'album n'apparaît qu'à l'aube suivante (comme toutes les cases de l'album et les succès) | Noté (règle du lot 4) |
+| 2026-10-03 | Vallée V2 : au zoom minimal (toute la ferme visible), la Grainothèque et les parcelles du mode paire font 37 px à l'écran (comme toutes les parcelles à ce zoom) ; au zoom par défaut : 61 px (Pixel 7), 49 px (360 px) | Noté (choix du joueur ; zoom par défaut ≥ 48 px) |
+| 2026-10-03 | Vallée V3 : l'achat du 16ᵉ terrain (ou d'une série de terrains) ouvrait une fenêtre « Trouvailles » par terrain, qui passaient devant la vue de la vallée (et faisaient quitter le mode terres sauvages) | Corrigé (une seule carte groupée, qui attend la fin de la vue et des modes de visée — `lot2.js`, test) |
+| 2026-10-03 | Vallée V3 : vue fermée feuille ouverte (« Aménager », « Voir ») puis rouverte : trop défilée (place de l'ancienne feuille), la bête visée hors de l'écran | Corrigé (`valley-view.js`) |
+| 2026-10-03 | Vallée V3 : grande carte des terrains — terres sauvages et forêts à confier en cases muettes ; au toucher, « Ce terrain n'existe plus » | Corrigé (`lots.js` : couleur, nom de la sorte, prix, fiche ou mode terres sauvages ; test) |
+| 2026-10-03 | Vallée V3 : messages de la ferme (poulailler, demandes, « +13 messages ») par-dessus la vue de la vallée et la ferme à toucher | Corrigé (seuls les messages de la vallée et les refus dans la vue) |
+| 2026-10-03 | Vallée V3 : texte à 150 % — fiche d'un lieu et « Confier à la nature » plus larges que l'écran de 48 px (bouton « Voir », « Lancer le chantier » coupés) ; compte de la barre de la vue sur 4 lignes | Corrigé (`valley.css`) |
+| 2026-10-03 | Message « Écouter » (z 65) par-dessus le bouton « Compris » d'une bulle de conseil (z 64) | Corrigé (`style.css`) |
+| 2026-10-03 | Vallée V3 : texte de la canicule faux en Classique (« ½ jour au lieu de ¼ » : c'est ¼ au lieu de 0) | Corrigé (« ¼ de jour de plus ») |
+| 2026-10-03 | Vallée V3 : mini-carte — le trait « en reprise » ne se voyait pas sur la prairie sauvage (clair sur clair) | Corrigé (`scene.js`) |
+| 2026-10-03 | Vallée V3 : la case du « Carnet d'Hélène » n'arrive dans l'album qu'à l'aube suivante, alors que l'observation dit « ✓ Le carnet d'Hélène » | Noté (règle du lot 4 : l'album se remplit à l'aube) |
+| 2026-10-03 | Vallée V3 : au zoom minimal sur 360 px (× 2), un poteau « Terre sauvage ? » et le panneau du terrain voisin se partagent leurs zones de 48 px (le plus proche du doigt gagne) ; parcelles à 24–37 px (décision 5a : les modes de visée posent le zoom tactile) | Noté (conforme au contrat) |
+| 2026-10-04 | Accompagnement : pendant l'étape d'attente d'un cours (« Demain : les œufs », « Arrosez chaque matin »), d'autres leçons s'intercalaient (tableau, charrette, album…) | Corrigé (`allowedDuringCourse`, `scheduler.js` ; tests) |
+| 2026-10-04 | Accompagnement : l'anneau de `valley.sounds` (et de toute leçon visant un onglet du bas, dont l'onglet Menu au bord droit) débordait de l'écran : le liseré ne tombait pas pile sur l'onglet | Corrigé (liseré à l'intérieur des onglets, `css/coach.css`) |
+| 2026-10-04 | Accompagnement : au menu principal, les leçons « grange », « décor » et « menu.career » ne pouvaient jamais se déclencher (aucun mode lié à la partie) | Corrigé (`modeOk`, `engine.js`) |
+| 2026-10-04 | Accompagnement : en Discret, « Oui » à « Je vous montre les premiers pas ? » reposait la même question (« Je vous montre ? ») au niveau 1 | Corrigé (`engine.js`) |
+| 2026-10-04 | Accompagnement : dans la vue de la vallée, la cible d'une leçon (visiteur rare près de la barre, petit écran) n'avait ni anneau ni doigt (masquée par la règle de la barre d'onglets de la ferme) et la vue ne défilait pas vers elle | Corrigé (`valleyView.visibleRect` / `focusTarget`, `targets.js`, `engine.js`) |
+| 2026-10-04 | Vallée V4 : un message (« Joseph vous attend sur la colline ») pouvait rester à l'écran pendant le générique | Corrigé (`valley-view.js` : messages effacés au début du générique) |
+| 2026-10-04 | Accompagnement : une pastille de rappel arrivait 15 s après la fin du tutoriel de carrière | Corrigé (silence des rappels jusqu'au surlendemain après un cours, sauf sécurité) |
 
 ### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
 
@@ -1322,3 +1391,686 @@ Conception complète du lot V2 « Le troc et les croisements » et de ses contra
   de chance ; rythme du troc ; signes de vie du V2 pour les étapes 1 à 5 ; liens écartés ; nom des croisées.
 - **Idées** : une variété croisée × croisée (3ᵉ génération) pour les légendes du V4 ; visiteurs devant la Grainothèque
   qui sont les voisins du troc ; écho du jardin des voisins dans d'autres textes (fêtes, paniers de Noël).
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : planche de sprites `valley2.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley2.py` (reprend les outils de `generate-valley1.py`) → `assets/sprites/valley2.png`
+  (16 × 10 tuiles, 112 sprites), bloc `// <valley2:auto>` d'`src/render/atlas.js` (après celui du V1) et
+  `SHEETS.valley2` ; les 151 noms du tableau « Sprites » du contrat V2 (et ceux qu'il réutilise) vérifiés sous Node,
+  aucun heurt (le script refuse un nom déjà pris).
+- 12 variétés du village (icônes, stade mûr `.4`, plant `.3` quand la teinte le change ; carotte violette au cœur
+  orange, navet long blanc, gerbe barbue, chou pointu, tomate noire à épaules vertes, maïs blanc, tournesol rouge,
+  pomme de terre bleue coupée, grosse fraise ronde, courgette blanche ronde, citrouille galeuse, pomme Api étoilé +
+  `heirloom.apiEtoile.fruit`) ; 11 croisées (mélange des deux parents, petit sceau doré rond en bas à droite des
+  icônes) ; étapes 0 à 3 et fané manquantes = alias de la culture de base (fin du bloc) ; 3 géants 32 × 32.
+- Grainothèque : `library.site` (piquets, ficelle, panneau « ? ») et `library.1` … `library.5` (remise → auvent, tresses
+  et banc → maison de pierre à enseigne → jardin d'essai clos et ruche en paille → rosier grimpant, porte ouverte,
+  fenêtres allumées), `library.window` ; punaise du troc, sachets du village et doré, bocal vide, reflet de verre,
+  planche d'étagère ; osmie, merle (rouge-gorge du lot 4 repeint), lézard, pipistrelle en 2 images, 3 indices ; nichoir à
+  chauves-souris et son picto ; icônes Parfumée, Grainothèque, troc, croisement ; pollen (8 × 8) ; vignettes
+  `story.library`, `story.cross`, `story.library5` ; 3 onglets d'album ; 3 décors ; 6 succès (+ `.locked`).
+- `tools/atlas-preview.html` : case « Vallée V2 seulement » (`?valley2=1`). `CREDITS.md` : ligne `valley2.png` (CC0).
+- Écart : `nature.batbox` est posé sur un petit poteau (comme `nature.nestbox`) plutôt que sur un pan de mur, pour se
+  poser n'importe où sur la scène. Le paquet (`node tools/build.js`) reste à refaire au moment du commit.
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : rendu et interface (paquet UI/RENDER)
+
+Contrat : `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V2 » (+ écarts du CORE) ; détail du livré :
+« Vallée V2 — rendu et interface ». Écrans : `docs/VALLEE.md` § 16.9 et § 16.10.
+
+- **Scène** : la Grainothèque (2 × 2 tuiles réservées derrière le grenier ; panneau « ? » au rang 3, 5 dessins, fondu
+  quand elle grandit, visiteurs devant la porte au niveau 5), le sachet kraft épinglé au tableau quand un troc attend,
+  une abeille entre deux parents voisins (point de pollen fixe en mouvement réduit), « + 1 rencontre · 2 / 3 », le sachet
+  doré qui saute au croisement, le nichoir à chauves-souris (maison, verger, ateliers), les 4 habitants du V2 ; mode
+  « paire » (parcelles valides en pointillé épais avec « + », points sur la mini-carte). Variété sans dessin : la culture
+  teintée. Planche `valley2` facultative (replis dessinés).
+- **Interface** (`src/ui/career/heritage.js`, nouveau) : fiche « La Grainothèque » (construire / agrandir, L'étagère aux
+  35 bocaux, Croisements, Troc et ses 12 voisins), feuille du troc (♥ en tête, « ça ne coûte rien »), « Semer la paire »
+  d'un geste depuis la feuille des graines ou par le mode paire, popup du croisement au nom complet de la ferme, 4 récits,
+  « Revoir la boîte en fer » (état actuel des 3 variétés), carte « Troc » du tableau du village (et petit sachet sur la
+  commande du même voisin, écho des mercis une fois sur trois), onglet Graines groupé (En cours · Du pays · Du village ·
+  De la ferme), deux traits et « De la part de … » sur les fiches, lignes « À faire » `vl-troc` / `vl-story`, résumé du
+  matin, bilan annuel, Carnet, déblocages du rang, succès du V2 sous « La Vallée », tampon ♥ de l'album.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : récit « Une idée de
+  Joseph » au toucher du panneau, Grainothèque N1 construite, troc avec Lili au tableau (♥ : 4 graines), paire semée
+  depuis la feuille des graines puis deux par le mode paire, 3 récoltes à la main → 3 rencontres → sachet doré
+  « Carotte de la Ferme de test » puis le récit, nichoir à chauves-souris posé, lézard observé, « Revoir la boîte » (un
+  toucher dehors ne la ferme pas), Grainothèque N3 et N5 (mouvement réduit) ; cibles ≥ 48 px et textes ≥ 12 px mesurés
+  dans la fiche ; aucune erreur console. Captures : `scratchpad/screens/valley2-ui-*.png`.
+- **Bugs corrigés en passant** : le nichoir de la maison se dessinait sous le panneau du village (lot 3) — il se pose
+  maintenant à côté (le décor des fermes à Vallée change un peu) ; le message « touchez un emplacement » du mode
+  aménagement attendait sous la barre et arrivait après coup (retiré : la barre le dit) ; la fenêtre de la boîte de
+  Joseph se fermait d'un toucher sur la scène (option `outsideClose: false` des feuilles).
+- Tests : `tests/valley2-render.test.js` (Grainothèque sans chevauchement pour toutes les tailles de maison et de grenier,
+  nichoirs, dessins, abeille, mode paire, toucher) ; `tests/valley-render.test.js` et `tests/lot2-render.test.js` mis à
+  jour (nichoir sur la maison, 3 décors du V2).
+- Idée : un petit « + » flottant au-dessus de la parcelle voisine qui recevra la variété du pays, en mode paire.
+
+### 2026-10-03 — Vallée V2 « Le troc et les croisements » : paquet CORE (logique, simulation, équilibrage)
+
+Contrat : `docs/ARCHITECTURE.md` « Vallée vivante — contrats du lot V2 » ; écarts et précisions notés au fil de la
+livraison dans « Écarts et précisions (livraison CORE V2) » ; chiffres : `docs/VALLEE.md` § 16.12.7.
+
+- **Données** : `src/data/career/heritage.js` (nouveau, pur) — Grainothèque (5 niveaux), 12 variétés du village (une par
+  client du tableau), troc (ordre fixe, cercles, textes des voisins), 11 croisements (deux traits hérités), 4 habitants
+  (osmie, merle noir, lézard des murailles, pipistrelle), 4 récits de Joseph, `ofFarm` / `crossName` (« Tomate de la
+  Ferme des Tilleuls »). `src/data/career/valley.js` : `VALLEY_VERSION` 2, partie `heritage`, trait **Parfumée**, nichoir
+  à chauves-souris (et ses emplacements, seulement avec le V2), tables `ALL_VARIETIES` (35), `ALL_SPECIES` (16),
+  `SIGNS_ALL` (51) — `VARIETIES` et `SPECIES` du V1 intacts (ordre des tirages).
+- **Cœur** : `src/core/career/heritage.js` (nouveau : Grainothèque, troc, voisinage des parcelles, croisements, mode
+  paire, boîte, récits) ; `heirlooms.js` : **traits en liste** (`traitsOf`, `hasTrait`), effets des niveaux, Parfumée
+  (rendement d'atelier × 1,15 dans `runtime.js`), merle, lézard, pipistrelle (`staff.js`), touristes du niveau 5 ;
+  `habitat.js` : 16 espèces, 35 variétés, nichoir, prochain indice (récit, troc, paire, Grainothèque) ; `valley.js` :
+  état v2 et migration sans perte des carrières V1, vérification, panneau et récits, troc (foire et saison), rencontres à
+  la récolte à la main, croisement (sachet doré de 3 graines), habitants du V2 sur le flux **`valley2`** (4 nombres par
+  aube, rien d'autre), actions `buildSeedLibrary`, `swapSeeds`, `sowPair` (atomique), `readStory`, requêtes (`valley()`
+  enrichie, `valleyCrossLinks`, `valleyPairPlots`, fiches de parcelle et des graines), bilan, succès et album ; stand de
+  la fête (+ 1 point) dans `cozy.js` ; `crew.js` / `land.js` (plan de culture avec les variétés du V2).
+- **Progression** : pages d'album « Le troc du village » (tampon ♥), « Les variétés de la ferme », « Les habitants
+  (suite) » ; 6 succès (145 écus) ; 3 décors trouvés. « Gardien des semences » et « La ferme accueillante » comptent
+  désormais les 12 variétés du pays et les 12 habitants du V1 (sinon le V2 les donnait).
+- **Simulation** : `--compare-valley2` (sans la Vallée → V1 seul → V1 + V2, même graine), `--jobs N` (fils de travail),
+  `--first-seed`, robots du V2 (`HERITAGE_STYLES`, tirage propre `me.heritageRnd`).
+- **Équilibrage** (60 carrières × 14 ans) : tranquille revenu **+ 1,7 %** (V1 → V1 + V2 ; toute la Vallée + 4,9 %),
+  argent en caisse à l'an 14 **70 %** de sans la Vallée, nouveautés **89 %** des saisons (ans 6-10 : 80 %), rangs
+  identiques, V2 complet **an 13** ; débutant 10 trocs et 1 croisement à l'an 10 ; appliqué V2 complet an 9 ; ferme
+  laissée seule − 3,8 % ; aucune faillite. Réglages : prix de la Grainothèque 1 600 / 4 000 / 8 000 / 19 200 / 30 000
+  (62 800) ; une planche d'essai récoltée par l'équipe rend sa graine (V2) ; robots précisés (« la ferme d'abord »,
+  paires, plan de culture du tranquille avec la Grainothèque).
+- **Vérifications** : `{ heritage: false }` = le V1 exactement (empreinte de l'état de 9 carrières de 10 ans identique
+  avant / après) ; `node tools/simulate.js` identique octet pour octet ; tous les autres flux tirent les mêmes nombres.
+- **Bug évité** : sans le retour de la graine, une croisée géante récoltée par l'équipe était perdue pour toujours
+  (4 carrières simulées sur 6 n'auraient jamais fini le V2).
+- **Écart** : l'étape 5 « La vallée chante » vient vers l'an 6 au lieu de « l'an 9 » visé (les 23 variétés du V2 comptent,
+  paliers inchangés : décision de l'utilisateur) — à surveiller pour les étapes 6 et 7 du V3 (30 et 45 signes).
+- Tests : `tests/valley2.test.js`, `tests/valley2-troc.test.js`, `tests/valley2-cross.test.js`,
+  `tests/valley2-migration.test.js` (nouveaux) ; `valley`, `valley-seeds`, `valley-habitat`, `album`, `career-save`
+  adaptés (8 traits, 9 aménagements, 16 pages, 30 succès, règle du V1 testée avec `{ heritage: false }`).
+- Idée : un compteur « 2 / 3 rencontres » sur l'abeille elle-même ; au V3, revoir les paliers des étapes 6 et 7 avec
+  les 51 signes de vie mesurés ici.
+
+### 2026-10-03 — Vallée V2 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde : `backup/avant-qa-vallee2-2026-10-03` (branche + tag locaux, commit `a0c0e17`).
+
+- **Étapes de la vallée recalées** (décision gardée : les signes de vie du V2 comptent) : paliers **2 / 6 / 11 / 22 / 38**
+  quand le V2 est ouvert (`STAGE_SIGNS_V2`, `stageSigns`, `stageTarget`, `stageSignsOf`) ; sans le V2, ceux du V1. Une
+  étape déjà atteinte ne recule jamais (la vérification des sauvegardes borne avec les paliers du V1). Simulation 60 × 14
+  ans, avant → après : tranquille étapes 1-5 aux ans 2 / 3 / 4 / 5 / **6** → 2 / 3 / 4 / 6 / **9** (V1 seul : … / 11) ;
+  débutant inchangé (3 / 6 / 13) ; appliqué 4 → 5 ; revenu, rangs, argent en caisse, nouveautés inchangés.
+  `docs/VALLEE.md` § 16.7 et § 16.12.7, `docs/GAME_DESIGN.md` § 18.1, `docs/ARCHITECTURE.md` (« Intégration et
+  vérification du lot V2 »). À reprendre au V3 : étapes 6 et 7 au-dessus de 38 signes.
+- **Simulateur** : `--compare-valley2` affiche l'année de chaque étape et les signes de vie par an.
+- **Interface** : fiche d'une parcelle d'essai lisible (lignes pleines) ; textes du V2 à 14 px au moins (« Ça ne vous
+  coûte rien », tampon ♥ de l'album) ; cartes de l'indice, de la Grainothèque et du troc qui passent à la ligne à 150 % ;
+  onglets de « La Vallée » à 130–150 % sur petit écran ; fiche de la Grainothèque : les trois lignes du troc résumées en
+  une (« … (8 voisins) », 7 lignes au niveau 5 au lieu de 9) ; feuille du troc : le petit mot du voisin une seule fois,
+  puis « ♥ 4 graines au lieu de 3 ».
+- **Lot 3** : titre de la fenêtre de fin de saison en carrière (« Fin de l'été » à la fin de l'été).
+- **Cohérence CORE ↔ UI vérifiée** : prix 1 600 / 4 000 / 8 000 / 19 200 / 30 000 (boutons et dépenses réelles) ; planche
+  d'essai récoltée par l'équipe : la graine revient (aucun texte ne dit le contraire) ; « Gardien des semences » et « La
+  ferme accueillante » sur les 12 du pays / 12 habitants du V1 ; nichoir à chauves-souris seulement avec le V2 (9
+  aménagements contre 8, aucun emplacement `bat` sans `heritage`) ; ordre de l'indice (bête, récit, troc, bocal, graines,
+  Grainothèque).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `?debug=1&nosw`) : panneau → récit
+  « Une idée de Joseph » → Grainothèque construite puis agrandie jusqu'au niveau 5 (dépenses exactes ; N2 : + 3 graines par
+  récolte à la main ; N3 : croisée sauvée à la 5ᵉ récolte ; N4 : croisement du navet en 2 rencontres ; N5 : graine de
+  variété sauvée 5 → 4 pièces, touristes + 15 %) ; troc de saison proposé au 2ᵉ jour, qui attend 9 jours et une saison,
+  sachet du tableau touché dans la scène, carte « Troc » en tête du tableau, préférée en tête, ♥ 4 graines ; « Semer la
+  paire » d'un geste depuis la feuille des graines et par le mode paire ; 3 vraies rencontres (1 → 2 → 3), sachet doré
+  « Carotte de la Ferme des Tilleuls », semée puis sauvée, récit « Le premier croisement » (après le conseil) ; croisée
+  donnée en troc (phrase spéciale) ; Parfumée à l'atelier de confitures (rendement 1,15 contre 1) ; nichoir à
+  chauves-souris posé au doigt ; lézard accueilli au doigt (« Bienvenue, petit lézard ! ») ; « Revoir la boîte en fer »
+  (état actuel, un toucher dehors ne la ferme pas) ; album (pages du troc et des habitants (suite) à l'aube) ; **vraie
+  carrière du V1** fabriquée avec le code du commit `090ec5c` (rang 4, étape 2, 4 variétés, 3 habitants, 5 aménagements)
+  reprise sans rien perdre (étape gardée, prochaine à 11), panneau et récit à la première aube, rechargement identique ;
+  niveau 2 en Classique sans aucune trace du V2 ; mouvement réduit + texte 150 % ; zoom minimal et maximal (Grainothèque
+  et mode paire au toucher) ; paquet publié (`index.html`). Aucune erreur console ; cibles ≥ 48 px et textes ≥ 14 px dans
+  tous les écrans du V2 mesurés ; rien ne déborde (la bande des onglets de l'album défile, c'est voulu). Captures :
+  `scratchpad/screens/valley2-qa-*.png`.
+- **Vérifications** : `node --test tests/` 668 tests verts (3 nouveaux : paliers du V2, débogage de l'étape 5, carrière du
+  V1 à l'étape 4 qui la garde) ; `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate.js` identique
+  octet pour octet à celui du commit `090ec5c` ; `node tools/build.js --check` à jour.
+- Idées : la ligne « À faire » d'une carrière reprise peut compter 11 entrées (lot 3 surtout : cadeau, défis, charrette,
+  colporteur…) — un regroupement « Le village : 4 choses » serait plus doux ; le conseil du tableau du village pourrait
+  attendre que la carte Troc soit lue.
+
+
+### 2026-10-03 — Vallée V3 : conception
+
+Conception complète du lot V3 « Le ruisseau » et de ses contrats, sans code de jeu (rien de modifié dans `src/` ni
+`tests/`). Sauvegarde déjà faite avant le lot : `backup/avant-vallee-v3-2026-10-03` (commit `c958599`).
+
+- **`docs/VALLEE.md` § 17** (nouveau, remplace l'aperçu du § 11.3 là où ils diffèrent) : la **vue de la vallée** (écran à
+  part en portrait, panorama 192 × 432 px qu'on fait défiler, ferme petite au milieu, temps en pause, poteau « Vers la
+  vallée » en bas de la ferme, récit « Sur la colline » à l'étape 5) ; **6 lieux et 19 étapes** (Ru des Saules, bois de la
+  Combe, prairie des Coquelicots, étang du moulin, bocage du chemin creux, verger conservatoire), chacune avec chantier,
+  condition de vie, reprise, avantage réel, ligne de Joseph ; **10 habitants de la vallée** à toucher dans la vue (ils
+  ouvrent les étapes suivantes) ; pêche au ruisseau et champignons ; Reinette grise (variété), cerisier et poirier (arbres
+  hors de `CROPS`) ; **terres sauvages** (18 cases de forêt après le 16ᵉ terrain, bois / marais / prairie, carte et
+  mini-carte) ; **étapes 6 et 7** à 56 et 76 signes (au-dessus de 38) avec conditions de lieux ; 8 récits, Hélène la
+  naturaliste, 2 pages d'album, 8 succès, 3 décors ; maquettes ; équilibrage chiffré (repères de la trace `--seed 3`,
+  calendrier visé, sources de revenu, cibles `--compare-valley3`, robots, leviers) ; cas limites ; écarts avec l'aperçu ;
+  6 points à trancher. § 6, § 11.3, § 12.6 et § 16.7 renvoient au § 17.
+- **`docs/ARCHITECTURE.md`**, « Vallée vivante — contrats du lot V3 » : fichiers (nouveaux `src/data/career/places.js`,
+  `src/core/career/places.js`, `src/ui/career/{valley-view,places}.js`, `src/render/valley-view.js`,
+  `src/ui/todo-group.js`), état exact (`v: 3`), déroulé de l'aube, actions (`openValleyView`, `startWorks`, `fishRiver`,
+  `pickMushroom`, `rewild`), requêtes (`valley().places / wilds`, `valleyView()`, `grid()` avec cases `wildland` /
+  `wildable`, `wildCell()`), événements, flux **`valley3`** (10 + 3 + 2 nombres, rien d'autre ; tous les flux existants
+  inchangés), migration V2 → V3 sans perte (`{ places: false }` = V1 + V2 exact), simulation, rendu de la vue (cadrage
+  commun ART ↔ RENDER), terres sur la carte et la mini-carte, zoom tactile et zones agrandies, planche `valley3.png` (fond de
+  la vue en 4 saisons, chaque lieu dans chacun de ses états, habitants, terres sauvages, icônes, vignettes), découpage
+  CORE / ART / UI-RENDER et points de contact. L'aperçu V3 du contrat V1 renvoie à cette section.
+- **Restes du V2 intégrés au contrat UI** : cibles isolées ≥ 48 px en coordonnées écran même au zoom minimal (et zoom
+  tactile posé par les modes aménagement, paire et terres sauvages ; parcelles = case entière) ; « À faire » regroupée par
+  famille, 5 entrées au plus (`groupTodo`) ; une bulle de conseil par ouverture de feuille, `valley.troc` avant le conseil du
+  tableau du lot 3 (rien ne couvre « Choisir une graine »).
+- **`docs/GAME_DESIGN.md` § 18.2** : résumé du V3 ; § 18 : puits d'ensemble ≈ 340 000 (et non 450 000).
+- **Choix principaux** : puits **recalé à ≈ 251 000** (chantiers 160 000 + terres 90 900) — la trace du joueur tranquille
+  (≈ 290 000 disponibles des ans 9 à 18) montre que les 369 000 de l'aperçu ne finiraient que vers l'an 20-21 ; ouverture à
+  l'étape 5 ; habitants de la vallée comme conditions des étapes (le joueur au centre, `automator` bloqué) ; 2ᵉ pêche sur
+  le flux `valley3` (pas sur `events`) ; année à thème « L'année de la vallée » écartée (elle changerait le tirage du flux
+  `variety`) ; aucune recette ne dépend des terres sauvages.
+- **À trancher par l'utilisateur** (§ 17.16) : taille du puits (251 000 / 369 000 / 200 000) ; ouverture (étape 5 / rang 6 /
+  étape 4) ; chantiers en parallèle ; terres sauvages sans production ou avec une petite cueillette ; parcelles au zoom
+  minimal ; temps dans la vue.
+- **Idées** : confiture de cerises et jus de poire à l'atelier (les dessins `product.cherryJam` / `product.pearJuice`
+  existent) ; « avant / après » de la vue de la vallée au bilan (V4) ; Hélène qui commente les terres sauvages ; un
+  robot `handsOffLate` gardé pour mesurer les services passifs des lots suivants.
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : planches de sprites `valley3.png` et `valley3-bg.png` (paquet ART)
+
+- Nouveau `assets/sprites/generate-valley3.py` (reprend les outils de `generate-valley2.py` / `generate-valley1.py`) →
+  `assets/sprites/valley3.png` (16 × 80 tuiles, 140 sprites) et `assets/sprites/valley3-bg.png` (48 × 27 tuiles : les 4 fonds
+  `view.bg.<saison>` de 192 × 432 côte à côte), bloc `// <valley3:auto>` d'`src/render/atlas.js` (après celui du V2),
+  `SHEETS.valley3` et `SHEETS.valley3bg` ; 144 noms du tableau « Sprites » du contrat V3, aucun heurt (vérifié par le script).
+- Lieux dessinés à leur taille exacte pour le cadrage commun de la vue, en été, avec les trois verts d'herbe Kenney (recolorés par
+  les planches de saison) ; le fond a ses quatre saisons et ses rectangles de lieux prennent exactement l'herbe recolorée de la
+  saison (`SEASON_GRASS`) : **les lieux doivent être tirés des planches de saison** pour se fondre dans le fond. Le ruisseau
+  (64 × 312, `h: 19.5`) nourrit l'étang (rien n'est dessiné entre son entrée et sa sortie), le bocage laisse transparente la
+  bande où passe le ruisseau (gué, passerelle, puis pont de pierre dessinés par le ruisseau). Grands dessins de la vue au
+  contour (64, 39, 50) : pas de neige automatique en hiver (givre laissé au rendu).
+- En plus du contrat : `portrait.helene` (32 × 32, gabarit de `portrait.joseph`). Cerisier et poirier : `tree.cherry.*` /
+  `tree.pear.*` existants réutilisés (comme prévu par le contrat).
+- `tools/atlas-preview.html` : case « Vallée V3 seulement » (`?valley3=1`). `CREDITS.md` : ligne `valley3.png` / `valley3-bg.png` (CC0).
+- Contrôle : planches ×6 et aperçus de la vue complète par saison et par étape (`--contact DOSSIER`), vue composée au zoom × 5
+  dans Chromium (412 × 915, DPR 2,625).
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : rendu et interface (paquet UI/RENDER)
+
+- **La vue de la vallée** : `src/render/valley-view.js` (disposition pure `viewLayout` : zoom entier ≥ 3, × 5 sur le Pixel 7 et
+  sur 360 × 740 ; cadrage commun des lieux ; cibles agrandies à ≥ 48 px CSS ; ordre des touchers ; dessin : fond de saison, lieux
+  tirés des **planches de saison** (consigne d'ART), givre l'hiver, ruisseau qui passe devant l'étang et sous le bocage, moulin
+  dont la roue tourne au Ru 4, panneau de chantier et pousses selon la reprise, fondu de 1,2 s à l'arrivée d'une étape, eau
+  animée, champignons, bêtes qui attendent (« ? »), habitants qui passent, Hélène, Joseph sur le banc, brume et oiseaux dès
+  l'étape 6 ; replis dessinés sans la planche) et `src/ui/career/valley-view.js` (écran plein `#valley-view`, temps en pause,
+  ruban « La vallée · Étape 6 · L'eau revient », barre « ‹ La ferme · 7 / 19 étapes · 62 signes de vie · Liste », défilement
+  au doigt avec élan, Échap et bouton retour d'Android, résumé lu par les lecteurs d'écran, le lieu gardé au-dessus de la
+  feuille ouverte).
+- **Lieux, habitants, gestes** : `src/ui/career/places.js` (fiche d'un lieu avec conditions cochées, « Voir » vers ce qui manque,
+  « Lancer le chantier · 13 000 » et sa confirmation, reprise en barre lue, ce que le lieu rend, habitants, ligne de Joseph,
+  récit relisible ; liste des lieux ; segment **Lieux** de « La Vallée » ; groupe replié « De la vallée » ; observation dans
+  la vue « ✓ Le carnet d'Hélène » ; pêche au ponton ; champignons ; récit « Sur la colline » qui ouvre la vue ; indices
+  `valleyAnimal` / `place` / `placeNeed` / `wild` ; messages, résumé du matin, bilan, Carnet › Bilan ; conseils `PLACES_HINTS`).
+- **Terres sauvages** : `layout.wildBands` / `layout.wildable` (`src/render/layout-career.js`, cellules `wildland` / `wildable`
+  de `grid()`), dessin du sol et des objets de chaque sorte et état (`src/render/places-actors.js`, nouveau : tirés par
+  `tileHash`, sans flux), lisières ouvertes vers un terrain ou une autre terre, aucune clôture ni allée, poteau à feuille ;
+  forêts à confier plus claires ; visiteurs du jour ; clairières de l'étape 7 ; mini-carte (couleur, pictogramme, trait de
+  reprise, pointillé vert, points du mode) ; mode terres sauvages (`#vl-wildbar`, cases qui pulsent, feuille « Confier à la
+  nature » à trois cartes, « …deviendra un bois, pour toujours »). Poteau « Vers la vallée » en x 12 sous la route.
+- **Les trois restes du V2** : (1) `touchZoom`, `expandHitCss`, `minWorldFor` (`camera-zoom.js`), zones ≥ 48 px CSS pour toutes
+  les cibles isolées (machines, ruches, panneaux, poteaux, personnages, tableau, visiteur du thème), parcelles = leur cellule
+  (`layout.plotCell`), zoom tactile posé et rendu par les modes aménagement, paire et terres sauvages (`scene.ensureTouchZoom` /
+  `restoreZoom`, jamais enregistré comme préférence) ; (2) `src/ui/todo-group.js` (« Le village : 4 choses », 5 entrées au
+  plus, petite feuille de 4 lignes) ; (3) une bulle par ouverture de feuille (`sheets.openCount`), `maybe(id, target,
+  { avoid })`, cible `sheet:`, le conseil du troc avant celui du tableau, rien ne couvre « Choisir une graine ».
+- Tests : `tests/valley3-render.test.js`, `tests/touch-targets.test.js`, `tests/todo-group.test.js` ; `tests/lot2-render.test.js`
+  connaît les 3 décors du V3. Débogage : `__debug.valley3.{ … touch(), viewPoint(hit), point(kind, id) … }`.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, touch, `?debug=1&nosw`, dev.html puis le paquet publié) : récit, poteau,
+  vue, liste, fiche, chantier lancé (3 500), reprise, martin-pêcheur touché (installé), pêche (vairon / goujon), champignon cueilli,
+  mode terres sauvages, forêt confiée (bois), terre reprise dessinée, « À faire » 4 à 5 entrées, conseil du troc sans couvrir
+  « Choisir une graine » puis celui du tableau à l'ouverture suivante, zoom tactile 3 → 4 → 3, texte à 150 % et mouvements
+  réduits ; 35 cibles de la scène et 11 de la vue ≥ 48 px CSS au zoom minimal ; aucune erreur console. Captures :
+  `valley3-ui-*.png` du dossier de travail.
+- **Bugs trouvés** : allée dessinée sur la dernière ligne des terres sauvages (corrigé) ; voile de la feuille qui laissait une bande
+  claire sous le ruban de la vue (corrigé) ; retour d'historique asynchrone qui refermait la vue rouverte aussitôt (corrigé) ; une
+  bulle cachée par une fenêtre ne revenait pas pendant la même ouverture (corrigé). Pour CORE : `triggerValley('wildGrow')` ne
+  fait pas passer une terre à l'état suivant (`at` posé au jour 1 seulement) ; 11 tests de logique attendent encore les comptes
+  du V3 (pages, succès, parties).
+
+### 2026-10-03 — Vallée V3 « Le ruisseau » : paquet CORE (logique, simulation, équilibrage)
+
+- **Logique** (contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V3 » ; écarts : « Écarts et précisions
+  (livraison CORE V3) ») : `src/data/career/places.js` (nouveau : 6 lieux en 19 étapes, 10 habitants de la vallée, poissons,
+  champignons, Reinette grise, cerisier et poirier hors de `CROPS`, terres sauvages, étapes 6 et 7, 8 récits, textes) ;
+  `src/core/career/places.js` (nouveau, lectures pures) ; extension `valley` : vue ouverte à l'étape 5 (« Sur la colline »),
+  chantier payé + condition de vie + reprise (un par lieu, les six en parallèle), pêche au ruisseau, champignons d'automne,
+  terres sauvages (2 500 + 300 × n, de proche en proche, sorte pour toujours, reprise en 1 puis 3 saisons), Hélène au premier
+  habitant de la vallée, étapes 6 (56 signes + Ru 2) et 7 (76 signes + six lieux à 2), signes de vie 99 ; avantages lus dans
+  `heirlooms.js` (canicule, l'eau revient, moulin, chauffage, foin, ruches, jachère, poissons, touristes, abris, corbeaux,
+  cueillette, trouvailles) ; grille des terrains (`wildland` / `wildable`, jamais à vendre) ; 2 pages d'album, 8 succès,
+  3 décors ; migration V2 → V3 sans perte ; flux `valley3` seulement (tous les autres flux tirent les mêmes nombres, la
+  2ᵉ pêche du jour comprise ; les corbeaux à 0 tirent quand même leur nombre).
+- **Vérifié** : `{ places: false }` = le V1 + V2 octet pour octet (empreinte de 4 carrières de 18 ans, test d'une carrière
+  de 18 ans) ; `{ heritage: false }` = le V1 (empreinte du V2 inchangée) ; `node tools/simulate.js` identique ; parité
+  400 / 400.
+- **Simulation** : `--compare-valley3` (18 ans, `--jobs`), robots `PLACES_STYLES`, nouveau robot `handsOffLate`.
+  Trouvé en mesurant : les terres sauvages (moins chères) affamaient les chantiers ; avec l'aide d'équipe, le tranquille ne
+  semait jamais de jachère (le Ru des Saules restait à l'étape 1 et bloquait l'étang, l'étape 6 et l'étape 7) ; le robot
+  ne gardait que 4 à 6 saisons d'impôts (≈ 1 500 pièces). Robots précisés (la vallée d'abord, l'argent qui dort ×3,
+  jachères demandées).
+- **Équilibrage** (60 carrières × 18 ans, `docs/VALLEE.md` § 17.12.8) : reprises 1 / 2 / 4 → **2 / 3 / 4 saisons** ; prix
+  et paliers inchangés. Tranquille : revenu + 0,6 % ; argent en caisse an 14 ≈ 33 400 (V2 seul : 128 300 ; visé 55 000,
+  écart documenté), an 18 ≈ 55 600 (16 % de sans) ; étape 6 an 13, étape 7 an 16, vallée complète an 18 (93 %) ;
+  nouveautés 94 % des saisons des ans 10-18 ; rangs identiques ; aucune faillite (Classique comprise) ; `handsOff` + 0 %,
+  `handsOffLate` − 2,9 % ; appliqué complet an 13.
+- **Retours de l'UI traités** : `triggerValley('wildGrow')` avance réellement d'un état ; `valley().wilds.total` = 18 ;
+  tests du V1 et du V2 mis aux nombres du V3. Tests nouveaux : `tests/valley3.test.js`, `valley3-places`, `valley3-wild`,
+  `valley3-migration`.
+- **Idée** : le « visé » de 55 000 pièces à l'an 14 demanderait que les terres sauvages viennent plus tard (le 16ᵉ terrain
+  arrive vers l'an 10-11) ; à rediscuter si l'argent dormant gêne encore.
+
+### 2026-10-03 — Vallée V3 : intégration CORE ↔ UI et vérification au doigt
+
+Sauvegarde : `backup/avant-qa-vallee3-2026-10-03` (branche + tag locaux, commit `5a64fd7`).
+
+- **Trouvailles du 16ᵉ terrain** : une seule carte « Des trouvailles ! » groupée par terrain (16 terrains → une carte de 20
+  à 23 trouvailles, défilante), qui attend la fin de la vue de la vallée et des modes de visée (`src/ui/lot2.js`,
+  `findsGroups`).
+- **Vue de la vallée** : place d'une ancienne feuille remise à zéro (la vue se rouvrait trop défilée) ; dans la vue, seuls
+  les messages de la vallée et les refus (les autres attendent dans l'historique) ; barre du bas à 130–150 % : le compte
+  sur sa propre ligne.
+- **Grande carte des terrains** : terres sauvages (couleur, nom de la sorte, fiche) et forêts à confier (pointillé, prix,
+  mode terres sauvages) ; légende « Terre sauvage ». Mini-carte : trait « en reprise » visible sur la prairie.
+- **Feuilles à 150 %** (fiche d'un lieu, « Confier à la nature », fiche d'une terre) bornées à l'écran ; « 12 haies sur la
+  ferme (1 / 12) » ; bulle de conseil au-dessus des messages à toucher ; texte de la canicule juste en Classique.
+- **Cohérence CORE ↔ UI vérifiée** : reprises 2 / 3 / 4 et Ru 2 / 2 / 3 / 3 (fiche, confirmation, message, jours exacts) ;
+  canicule + 0,25 ; champignons (2 cueillis, pièces × rang) ; cerisier et poirier jamais au grenier ; `wilds.total` = 18 ;
+  `wildGrow` ; `PLACES_ACHIEVEMENTS` déjà sous « La Vallée » (« La Vallée · n / 21 »).
+- **Terres sauvages : pas d'attente ajoutée** (évalué) : le tranquille n'en confie que 2 avant l'an 14 (≈ 5 300 pièces) ;
+  l'essai « terres après l'étape 6 » ne donne que + 1 000 pièces à l'an 14 et entasse les 18 terres sur les ans 16-18.
+  L'écart aux 55 000 visés vient des chantiers (12 étapes à l'an 14) : levier à trancher (`docs/VALLEE.md` § 17.12.8).
+- **Vérifié au doigt** (Pixel 7 et 360 × 740, toucher seulement) : carrière du V2 (code de `c958599`) reprise sans perte ;
+  « Sur la colline » → vue ; poteau ; défilement ; 5 lieux lancés et repris saison après saison ; avantages constatés ;
+  martin-pêcheur depuis « À faire », Hélène, carnet ; pêche ; champignons ; étapes 6 et 7 ; 3 terres (mode, 3 sortes, carte,
+  mini-carte, reprise en 3 saisons) ; arbres du verger ; « À faire » 11 → 5 ; une bulle au tableau ; 4 saisons de la vue ;
+  mouvement réduit + 150 % ; niveaux Détente et Classique sans trace ; toutes les feuilles du V3 mesurées à 100 et 150 %
+  (cibles ≥ 48 px, textes ≥ 14 px, rien ne déborde ; mentions des cases de la grande carte à 12 px, secondaires) ; cibles
+  isolées mesurées au zoom minimal par `hitTest` réel. Aucune erreur console. Captures `scratchpad/screens/valley3-qa-*.png`.
+- **Vérifications** : `node --test tests/` 711 tests verts (4 nouveaux : `tests/valley3-qa.test.js`) ;
+  `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate-career.js --compare-valley3 --runs 60` identique
+  au tableau du § 17.12.8 ; `node tools/simulate.js` identique octet pour octet ; `node tools/build.js --check` à jour. Non
+  commité (à la demande).
+- **Relecture « joueur cosy »** : l'observation d'une bête de la vallée disait « Le ruisseau peut maintenant passer à… »
+  même s'il manquait l'autre condition — elle dit maintenant « Un pas de plus vers « Les truites reviennent » : il manque
+  encore le bois de la Combe à l'étape 1. » quand quelque chose manque.
+- Idées : la case de l'album pourrait se cocher tout de suite pour les habitants de la vallée (aujourd'hui à l'aube, règle
+  du lot 4) ; levier des chantiers pour l'argent de l'an 14 (à trancher).
+
+
+### 2026-10-04 — Boutons de zoom au bord de l'écran, au-dessus de la mini-carte (retour joueur)
+
+Retour de l'utilisateur, testé sur son téléphone : « Les boutons de zoom sont mal placés, ils devraient être au bord de
+l'écran, au-dessus de la mini-carte. » (Avant : en carrière, la colonne + / − / 1:1 flottait à 130 px du bord, à gauche
+de la mini-carte, au milieu de la ferme ; repliée, à 68 px du bord.)
+
+- **Placement** (`css/style.css`, `src/ui/zoom.js`) : colonne collée au bord (`--safe-r` + 6 px ; + 4 px sur petit écran,
+  pastilles alignées sur le cadre de la mini-carte). Carrière : juste au-dessus de la mini-carte et de ses boutons de
+  coin (6 px d'écart), ou du bouton « Carte » quand elle est repliée. Niveaux : même bord, au-dessus de la ligne
+  « À faire ». Gaucher : la mini-carte ne change pas de côté, la colonne reste au-dessus d'elle en carrière ; bord
+  gauche en Niveaux. Ancrée par le bas, « 1:1 » en haut : + et − ne bougent pas quand « 1:1 » apparaît. La mini-carte
+  et la colonne partagent les variables `--mm-bottom` / `--mm-h` / `--mm-right` (une seule source). Grand écran :
+  au-dessus de la mini-carte aussi (vérifié en 1280 × 800).
+- **Place des messages** (`src/ui/zoom.js`, `css/guidance.css`) : la hauteur réservée ne compte plus que la mini-carte
+  (`--float-reserve`) ; la colonne, au bord, réserve une largeur (`--float-col-r` / `--float-col-l`) et les messages se
+  rangent à côté d'elle, centrés dans la place restante. Ils restent ainsi près du bas en Niveaux au lieu de monter
+  au-dessus de la colonne. Rien n'est publié dans la vue de la vallée (la mini-carte y est seulement invisible).
+- **Vérification au doigt** (Playwright, touch seul, Pixel 7 et 360 × 740, texte 100 / 150 %, droitier / gaucher,
+  carrière mini-carte ouverte / repliée + Niveaux : 24 combinaisons) : rectangles mesurés, bord ≤ 8 px + safe-area,
+  aucun chevauchement avec la mini-carte, « À faire », onglets, barre du haut, vitesse ni messages (deux messages
+  forcés) ; « + » au doigt fait apparaître « 1:1 » sans déplacer la colonne, « 1:1 » au doigt revient au défaut ;
+  cachés sous une fiche et dans la vue de la vallée ; aucune erreur console. Captures `screens/zoompos-before-*.png`
+  et `screens/zoompos-after-*.png`.
+- Remarque : à 150 % sur 360 px, les messages (plus étroits de 62 px) coupent plus souvent leur texte sur deux lignes
+  (« … ») ; le texte complet reste dans l'historique (cloche).
+
+### 2026-10-04 — Vallée V4 : conception
+
+Conception complète du lot V4 « Les cigognes » (dernier lot de la Vallée, décoratif) et de ses contrats, sans code de jeu
+(rien de modifié dans `src/` ni `tests/` ; non commité). Sauvegarde déjà faite avant le lot :
+`backup/avant-vallee-v4-2026-10-04` (commit `ae003c1`).
+
+- **`docs/VALLEE.md` § 18** (nouveau, remplace l'aperçu du § 11.4 là où ils diffèrent ; § 2.1, § 6 et § 11.4 y renvoient) :
+  **4 légendes** (melon de la boîte — Petit Gris de Rennes — à l'étape 6 « quand l'eau revient, tout revient » ; engrain du
+  moulin au Ru 4 ; Merveille de la ferme par 3 étés de sélection à la main de la Tomate croisée ; pois du jour des cigognes)
+  sous **4 cloches** devant la Grainothèque, jamais vendues ; **6 visiteurs rares** (cigognes déterministes « le même jour »,
+  grues, cerf, loriot, castor, vers luisants) qui attendent qu'on les touche, puis reviennent en décor ; **étape 8** sans
+  chantier (les cigognes viennent quand la vallée les nourrit ; roue offerte par Joseph, nid sur la maison) ; 5 récits et
+  le chapitre 8 ; **épilogue** de Joseph en 3 pages + **générique doux** (la vallée au soir, sans musique) ; **livre de la
+  vallée** (chronique de la carrière, avant / après, partage en image locale) ; forêt de la carte en 4 états ; **plan
+  sonore** complet ; après l'an 18 (visiteurs étalés, cigognes et cigogneaux chaque printemps, 8 cartes de vallées
+  voisines, une page du livre par an, le banc) ; maquettes ; équilibrage (aucun effet économique, empreinte), robots,
+  leviers, performances ; cas limites ; écarts avec l'aperçu ; 7 points à trancher.
+- **`docs/ARCHITECTURE.md`**, « Vallée vivante — contrats du lot V4 » : fichiers (nouveaux `src/data/career/storks.js`,
+  `src/core/career/storks.js`, `src/audio/{soundscape,nature}.js`, `src/ui/career/{storks,valley-book}.js`,
+  `src/render/storks-actors.js`), état exact (`v: 4`), déroulé de l'aube, actions (`sowLegend`, `harvestLegend`,
+  `observeVisitor`, `readEpilogue`, `seeCredits`, `sendPostcardSeeds`…), requêtes (`valleyScenery`, `valleyBook`,
+  `valleySounds`…), événements, flux **`valley4`** (5 nombres par aube, rien d'autre), migration V3 → V4 sans perte
+  (`{ storks: false }` = V3 exact ; `stageAt` reconstruit), simulation `--compare-valley4` avec **empreinte économique**,
+  rendu (cloches, nid par niveau de maison, passages, lueurs, forêt dans la couche fixe, vue : visiteurs, générique,
+  contemplation), **plan audio technique** (chaîne Web Audio, 22 sources avec leurs recettes de synthèse, faits du jeu →
+  paysage pur et testé, budgets), planche `valley4.png` (noms, tailles, descriptions), découpage **CORE / ART / AUDIO /
+  UI-RENDER** et points de contact. L'aperçu V4 du contrat V1 renvoie à cette section.
+- **`docs/GAME_DESIGN.md` § 18.3** : résumé du V4 ; § 18 : étapes 6 à 8 et ligne du V4 mises à jour.
+- **Constat (bug de conception, sans effet de jeu)** : les ambiances promises par les étapes 1 (« le chant du matin »), 5
+  (« la vallée qui chante ») et 6 (« le ruisseau s'entend ») n'ont jamais été faites : `main.js` ne joue que `ambienceFor`
+  (fichier `birds` générique, le même de l'étape 0 à l'étape 7). Le V4 les réalise (§ 18.8).
+- **Choix principaux** : décoratif strict (aucune pièce gagnée ni dépensée, contrôlé par empreinte) ; pas de chantier du
+  clocher (règle « pas Stardew » : aucun bâtiment public restauré contre de l'argent) ; la « 3ᵉ génération croisée × croisée »
+  de l'aperçu remplacée par une sélection paysanne (il n'existe qu'une croisée par culture) ; sons en **synthèse
+  procédurale** (aucun fichier, aucune licence, hors ligne) ; légendes et visiteurs **hors** signes de vie (les 99 restent
+  « toute la vallée ») ; une légende ou un récit par aube au plus (pas de rafale à la mise à jour) ; Joseph ne part pas : il
+  se repose sur le banc avec Hélène.
+- **À trancher par l'utilisateur** (§ 18.16) : légendes sous cloche ou aussi aux champs ; cigognes sans chantier / chantier
+  du clocher / roue à acheter ; sons synthétisés / hybrides CC0 / enregistrés ; couche d'oiseaux qui suit l'étape ou non ;
+  fin douce (épilogue + générique / épilogue seul / fête jouable) ; après l'an 18 (avec ou sans cartes, nouveau puits) ;
+  prénom de la mère de Joseph.
+- **Idées** : un « carnet sonore » dans le livre (réécouter chaque chant découvert) ; Hélène qui commente les terres
+  sauvages ; confiture de cerises et jus de poire (idée du V3, toujours ouverte) ; la case d'album des habitants de la
+  vallée cochée tout de suite (idée du V3).
+
+### 2026-10-04 — Vallée V4 : paysage sonore (paquet AUDIO)
+
+Sons de la vallée **entièrement synthétisés** (Web Audio) : aucun fichier, aucune licence. Non commité (intégration par le
+chef de projet). Fichiers : `src/audio/soundscape.js` (nouveau, pur), `src/audio/nature.js` (nouveau, moteur),
+`src/audio/synth.js` et `src/audio/audio.js` (ajouts), `tests/soundscape.test.js` (21 tests), `tools/nature-preview.html`
+(page d'écoute et laboratoire hors ligne) et `tools/measure-nature.js` (mesures Playwright, Pixel 7 émulé).
+
+- **`soundscape.js`** : `NATURE_SOURCES` (5 couches : ruisseau, moulin, feuilles, grillons, grenouilles ; 17 chants : 11
+  habitants, le coucou, 5 visiteurs ; recette, saisons, phases, lieux), `BIRDS_BY_STAGE` (× 0,25 → × 1), `phaseOf`,
+  `farmBirdsFactor`, `spatial`, `natureScape(facts, ctx)` (conditions et lieux du § 18.8, météo, plafond 12 / 16 phrases par
+  minute au prorata, « Légers » 4 voix sans écho, « Coupés » et hors Vallée : rien de neuf, `birdsFactor` 1), `demoFacts()`.
+- **`nature.js`** : `createNature(ctx, destination, { detail })` → `set`, `setListener`, `setDetail`, `play(id)` (débogage),
+  `stop`, `voices`, `layers`, `stats()`, `advance(t)` (rendu hors ligne). Programmateur à 250 ms, couches en fondu
+  (`setTargetAtTime`), couches tombées à 0 arrêtées après 4 s, un seul tampon de bruit rose bouclé sans couture, un
+  oscillateur automatisé par phrase (pas un nœud par note), écho 0,18 s seulement en « Complets » dans la vue, **limiteur
+  doux** (WaveShaper, linéaire jusqu'à 0,3, borné à 0,48) au lieu d'un compresseur (celui de Web Audio ajoute un gain de
+  rattrapage ≈ × 2), minuterie arrêtée quand l'application passe en arrière-plan.
+- **`synth.js`** : tons `clatter` (claquement de bec des cigognes, 1,5 s) et `legend` (souffle qui monte, marimba grave,
+  clochettes do-mi-sol-la-do).
+- **`audio.js`** : `setNature(scape | null)` (mémorisé avant le déverrouillage), `setNatureListener`, `setNatureDetail`,
+  `setMusicScale(k)` (facteur à part, × 0,6 dans la vue), `playNature(id, opts)` (pour `__debug.valley4.sound(id)`),
+  `natureVoices`, `natureStats()` (pour `voices()` / `stats()`) ; moteur arrêté si son coupé, « Ambiance » à 0 ou « Coupés »,
+  relancé au retour ; réglage initial `settings.natureSound`.
+- **Mesures** (`node tools/measure-nature.js`, Chromium, Pixel 7 émulé, Xeon 2,8 GHz) : charge de rendu 0,7 à 2,6 % d'un
+  cœur (pire cas, chants × 30 : 2,9 %) ; pic ≤ 0,44 (limite 0,5), aucun échantillon écrêté ; RMS : vue complète 0,05 à 0,06,
+  ferme 0,02 à 0,03 (le fichier `birds` : 0,055 × 0,8) ; transitions (phase, lieu, défilement brusque, Légers ↔ Complets,
+  pluie, arrêt) : saut d'échantillon ≤ celui du régime établi (aucun craquement), silence total après `stop()` ; temps réel :
+  12 voix au plus (Complets), 4 (Légers), plus aucune phrase nouvelle en arrière-plan. Le ralentissement CPU de Chrome
+  (`--throttle 4`) n'agit pas sur le fil audio : sur un téléphone 2 à 3 fois plus lent, compter ≈ 5 à 8 % d'un cœur.
+- **Précisions au contrat** (pour UI/RENDER) : (1) `audio.js` ne multiplie **pas** la couche `birds` : `main.js` passe
+  `birds: levels.birds × scape.birdsFactor` (une seule multiplication) ; (2) les chants de la ferme (rouge-gorge, merle,
+  hulotte, geai) s'entendent aussi dans la vue, depuis la ferme (« on entend toute la vallée ») ; (3) `natureScape` rend en
+  plus `on`, `where`, `detail`, `phase`, `brook` (`'open' | 'frozen' | 'far'`) et accepte `ctx.afterRain` (grenouilles × 1,5)
+  et `ctx.spots` (places des visiteurs dans la vue : `steeple`, `crane`, `oriole`, `redDeer`, `beaver`) ; (4) phases fortes
+  réglées à l'oreille : les chouettes et le cerf se taisent en pleine journée, l'été les grenouilles ne chantent que le soir.
+- **Échecs d'autres paquets constatés** (non touchés) : tests des lots V1 à V3 (empreintes, activation, données) et de
+  `build` pendant que CORE V4 et l'accompagnement travaillent.
+- **Idées** : rythme des chants à relever un peu si la vue paraît trop calme (les fréquences de base du § 18.8 donnent
+  ≈ 0,4 à 0,6 voix en moyenne, les couches remplissent) ; un « carnet sonore » dans le livre pourra réutiliser
+  `playNature(id)`.
+
+### 2026-10-04 — Accompagnement « Joseph vous montre » : leçons des lots (paquet LEÇONS lots)
+
+Catalogue de leçons et de rappels hors Vallée (`docs/ACCOMPAGNEMENT.md` §§ 7.2 à 7.6, § 8.4), au format figé du contrat
+(`docs/ARCHITECTURE.md`, « Accompagnement — contrats »). Catalogues PURS (aucun DOM), textes FALC (≤ 90 caractères par
+étape, ≤ 12 mots par phrase, jamais culpabilisants), cibles réelles vérifiées dans le code.
+
+- **`src/ui/coach/lessons/levels.js`** (22 leçons) : contrainte de chaque niveau (sécheresse, pluie, petit lopin, hiver
+  sans fin, marché fou, crédit, année bio, montagne), prêt de Joseph, ateliers (`processing`, `processingBought`),
+  `tree`, `pollination`, `goat`, `contest`, arrosage automatique, mouton ; menu principal (`grange`, `decor`,
+  `menu.career`, `menu.achievements`). Déjà su : niveau déjà gagné ou commencé (progression).
+- **`src/ui/coach/lessons/career.js`** (≈ 40 leçons, 6 rappels) : rangs 1 → 6 (œufs, but du rang, charges, forêt à
+  vendre, carte, aménager, plan, abri, étal, ruches, visiteurs, corbeaux, trouvailles, prêt, coup dur, fin d'année,
+  embauche, affectation, congé, grenier, machines, verger, ateliers, serre, quêtes, amitié, comice, cheval ou tracteur,
+  cochons/lapins/chevaux, chambre d'hôte, mare, tracteur, humeur, embellissements, Domaine) ; **`career.rank2` à
+  `career.rank6`** : 3 nouveautés pointées une à une dans « Acheter » (la section est dépliée par l'étape) ;
+  `RANK_HIGHLIGHTS` exporté. Rappels `shelter`, `waiting`, `leave`, `stock`, `quest`, `offer`.
+- **`src/ui/coach/lessons/lots.js`** (28 leçons, 8 rappels) : qualité, géant, surprises du matin, cueillette, temps
+  spéciaux, heure dorée, vœu ; tableau, cadeau, défis, charrette, Basile, graines rares, année à thème, visiteur de
+  l'année ; album, page complète, « vos récoltes vous attendent », fête (annonce, chasse, soupe, stand, paniers, fête de
+  l'année), foire aux graines, trouvailles d'hiver, mangeoire, veillée, lanternes. Rappels `cart`, `cards`,
+  `challenges`, `merchant`, `fete`, `winter`, `veillee`, `album`. Rien sans `state.surprises` / `variety` / `cozy`
+  (Classique intact).
+- Anciens identifiants repris tels quels (« déjà vu » reste vu) ; règles « déjà su » (`acquired`) par l'état de la
+  partie, la sauvegarde de carrière (`careerSave`), l'album et les compteurs de la progression. Grand écran à la souris :
+  « Cliquez » au lieu de « Touchez ».
+- **Points d'accroche** : `career/windows.js` (fenêtre du rang : 3 nouveautés mises en avant, le reste replié ; signal
+  `rankClosed` à la fermeture ; `intro()` retirée), `career/index.js` (tous les `app.hints.maybe` retirés ; l'accueil d'une nouvelle
+  ferme est le cours `career.firstSteps`, lancé par le moteur dans `coach.bind`), `career/journal.js` (Carnet ›
+  Joseph : « Ses leçons » ; bouton « Le carnet de Joseph »), `cozy.js` (signal `feteMode`, leçon des lanternes demandée
+  à l'affichage de leur page, tables `DEFAULT_HINTS` retirées), `variety.js` (tables et appels retirés, y compris le
+  conseil du troc : la leçon Vallée se déclenche à l'ouverture du tableau), `album.js`, `field.js` (conseil du pommier retiré ;
+  le signal `sowAll` est émis par `app.plantAll`, paquet MOTEUR).
+- **Reste** : les exports `VARIETY_HINTS` (`src/data/variety.js`) et `COZY_HINTS` (`src/data/cozy.js`) ne sont plus lus
+  par l'interface ; leur retrait (paquet du contrat) est laissé à l'intégration (consigne : ne pas toucher `src/data`).
+
+### 2026-10-04 — Sprites du lot V4 et du doigt de Joseph (paquet ART)
+
+Deux planches générées, CC0, création originale (palette et style Kenney). Non commité (intégration par le chef de projet ;
+`node tools/build.js` à relancer : deux planches nouvelles dans `SHEETS`).
+
+- **`assets/sprites/generate-valley4.py` → `valley4.png`** (bloc `// <valley4:auto>` d'`atlas.js`, après valley3 ;
+  `SHEETS.valley4`) : les **97 noms exacts** du tableau des contrats V4 (légendes et pousses sous cloche de verre
+  translucide 8 × 12, bocal ; cigognes debout / en vol, roue, 3 nids, clocher ; grue et vol en V, cerf 32 × 32, loriot,
+  castor et barrage, vers luisants, lueurs 8 × 8 ; 5 indices ; forêt mêlée et vieillie raccordée à `forest.green.fill` ;
+  `valley.stage.8` ; lumières du village, Joseph et Hélène assis, boîte au ruban ; 6 récits, 3 pages d'épilogue,
+  8 cartes postales ; couverture 64 × 80 et signet ; pictogrammes, onglets, 3 décors, 9 succès). Tailles non multiples de
+  16 : rangées dans des cases entières, entrées d'atlas à taille exacte (`w`/`h` fractionnaires). Roue et nids au **même
+  pied** (bas du poteau, x = 12). Succès sans `.locked` (grisés par le code, comme dit le contrat).
+  `--contact DOSSIER` : planches ×6, forêt de la carte dans ses 4 états, nid sur les 5 maisons, cloches devant les
+  5 Grainothèques (et sur la neige).
+- **`assets/sprites/generate-coach.py` → `coach.png`** (bloc `// <coach:auto>`, `SHEETS.coach`) : `coach.hand`, `.1`,
+  `.press`, `.pinch`, `.pinch.1`, `coach.arrow`, `portrait.joseph.point` (portrait de `career.png` + main qui montre en
+  bas). Gant blanc, contour sombre et ombre portée douce : lisible sur l'herbe, la neige, le parchemin, le bois et le
+  sombre. Points chauds notés dans l'en-tête du bloc (bout de l'index de `coach.hand` en (2, 1), etc.).
+- `tools/atlas-preview.html` : filtres `?valley4=1` et `?coach=1`, démos animées (doigt sur 4 fonds ; cloches, nids,
+  cigognes). `CREDITS.md` : lignes `valley4.png`, `coach.png` et « Sons de la vallée : synthétisés ». Vérifié par script
+  (tous les noms du contrat présents, tailles, aucun heurt) et à l'écran (Playwright, aucune erreur de console).
+- **Idées** : une version automnale (roux et or) des tuiles `forest.mixed.*` ; un `coach.hand` en miroir dessiné (gaucher)
+  si le retournement par le code ne suffit pas.
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7, toucher seulement, `dev.html?debug=1&nosw`) : `levels.drought`
+  (niveau 2, 2 bulles), `career.rank2` (fenêtre du rang → « Acheter » → section dépliée, 3 cartes entourées une à une),
+  `surprise.giant` (anneau sur le géant, finie par la vraie récolte), `variety.board` (tableau touché → feuille, punaise),
+  `fete.chasse` (en mode fête : doigt sur un œuf, puis « Indice ») ; les 14 rappels des lots évalués sur une vraie partie
+  (texte et cible justes dans l'état voulu), et une vraie pastille « Le poulailler est plein… » qui pointe la ligne
+  « À faire ». Aucune erreur console. Captures `coach-lots-*.png` (dossier de travail).
+- **Remarques pour MOTEUR** : le lien « Passer » s'affiche « null » sur les étapes à bouton (bulle) ; les rappels
+  `leave`, `stock`, `album` donnent leur entrée « À faire » par une fonction `todo(ctx)` (non branchée sur
+  `todo.addProvider` par `reminders.js` : la pastille marche grâce à `go`) ; signal `sheetShown` pas encore émis (la leçon
+  `surprise.quality` a « Compris » en secours).
+
+### 2026-10-04 — Accompagnement : leçons et rappels de la Vallée (paquet LEÇONS Vallée)
+
+- **`src/ui/coach/lessons/valley.js`** (pur) : **42 leçons** de Joseph pour la Vallée V1 → V4 et **8 rappels**, au format
+  figé des contrats. V1 : `valley.box`, `valley.sheet`, `valley.jar` (boîte → « Un bocal à ouvrir » → « Ouvrir le
+  bocal »), `valley.trial` (planche d'essai mûre, à la main), `valley.fixed`, `valley.traits`, `valley.fallow`,
+  `valley.nature` (boîte → « Aménager » → bouton) puis **`valley.naturePlace`** (mode aménagement : « Touchez une place qui
+  brille »), `valley.recipe`, `valley.speciesHint`, `valley.species`, `valley.hedge`, `valley.stage` (étapes 1 → 8, une
+  fois), `valley.reserve`, `valley.fair`. V2 : `valley.librarySign`, `valley.library`, `valley.libraryLevel`,
+  **`valley.trocPin`** (sur la ferme : le sachet du tableau) puis **`valley.troc`** (à l'ouverture de la feuille du tableau
+  `v-board` quand un troc est épinglé — l'ancien conseil de `variety.js` est retiré par LEÇONS lots ; priorité 75 : le troc
+  passe avant le conseil du tableau, une bulle par ouverture), `valley.pair` (Grainothèque → « Croisements » → « Semer la
+  paire ») puis **`valley.pairPlace`** (mode paire) et `valley.meet` (les rencontres), `valley.cross`, `valley.scented`,
+  `valley.revisitBox`. V3 : `valley.viewOpen` (le poteau, après la première visite), `valley.view` → `valley.place`
+  (fiche d'un lieu : ✓ / ✗, chantier), `valley.works`, `valley.valleyAnimal`, `valley.helene`, `valley.river`,
+  `valley.mushrooms`, `valley.grafts`, `valley.wild` (le poteau d'une forêt) puis **`valley.wildMode`** (mode terres
+  sauvages, feuille « Confier à la nature »). V4 (contrat, codé en parallèle ; cibles prudentes : Grainothèque, vue,
+  onglet Menu) : `valley.legend`, `valley.visitor`, `valley.book`, `valley.sounds`.
+- Identifiants des anciens conseils (`VALLEY_HINTS`, `HERITAGE_HINTS`, `PLACES_HINTS`, `STORKS_HINTS`) repris : déjà vu =
+  vu. Règles de déduction (`acquired`) pour les anciennes carrières sur l'état de la Vallée (bocal ouvert, graines
+  récoltées à la main, aménagement acheté, troc fait, vue visitée deux fois, lieu commencé, terre confiée…).
+- **Rappels** (sans culpabiliser, « rien ne presse ») : `jar`, `species` (ferme et vallée), `troc`, `chapter` (chapitres
+  et récits), `trial`, **`works`** (chantier prêt : la pastille ouvre la vue sur le lieu), **`legend`** (légende mûre sous
+  sa cloche), **`visitor`** (visiteur rare). Leur `since` est traduit dans l'unité de `ctx.day.abs` du moteur (l'écart
+  seul compte).
+- **Interface** (`src/ui/career/{valley,heritage,places,valley-view}.js`) : tables `HINT_TITLES` / `HINT_TEXTS`,
+  enregistrement dans `HINTS` et tous les `hint(...)` / `app.hints.maybe('valley.*')` retirés (déclencheurs dans les
+  leçons) ; signaux `valleySheet { tab, sheet }` (onglets de « La Vallée » et de la Grainothèque), `placing { kind }` /
+  `placing { kind: 'pair', cropId }` / `placing { kind: null }`, `wildPlacing { on }` (émis **avant** la fermeture de la
+  feuille : la leçon passe au mode de visée au lieu de revenir en arrière), `viewOpen` / `viewClose` ;
+  `app.coach.blocking` à la place de `app.hints.active || app.tutorial.active` pour les fenêtres en file. Les exports
+  `*_HINTS` de `src/data/career/*` restent (consigne : ne pas toucher `src/data` ; plus lus par l'interface).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7, toucher seulement, `index.html?dev=1&debug=1&nosw`) : `valley.box`
+  → `valley.sheet` (V1), `valley.nature` → `valley.naturePlace` jusqu'à la vraie pose d'une haie (mode de visée),
+  `valley.trocPin` → `valley.troc` jusqu'au vrai troc, et `valley.troc` seul à la 1ʳᵉ ouverture du tableau puis
+  `variety.board` à la suivante (V2), `valley.view` → `valley.place` puis `valley.viewOpen` (V3) ; les 6 rappels
+  testables (`jar`, `species`, `troc`, `chapter`, `trial`, `works`) : une vraie pastille chacun, et son toucher mène au
+  bon endroit (bocal, scène, troc, chapitre, planches, vue sur le lieu). `legend` / `visitor` : V4 pas encore livré.
+  Aucune erreur console. Captures `coach-valley-*.png` (dossier de travail).
+- **Remarques pour MOTEUR** : `ctx.ui.placing` n'est qu'un booléen (un `ui.placingKind` — genre d'aménagement, `'pair'`,
+  `'wild'` — éviterait de deviner le genre choisi : repli sur le moins cher qui a une place libre) ; `ctx.day.abs` vaut
+  `année × 1000 + jour` (pas le jour absolu du cœur : à un changement d'année l'attente des rappels saute) ; `canShow`
+  lit le `where` de la leçon pour chaque étape (d'où les leçons de visée séparées) ; le lien « Passer » s'affiche
+  « null » sur les étapes à bouton.
+
+### 2026-10-04 — Accompagnement « Joseph vous montre » : moteur de leçons et tutoriels (paquet MOTEUR + TUTORIELS)
+
+- **Moteur** (`src/ui/coach/`) : `engine.js` (file, contexte, étapes, pause `coach`, réglage, cours, rejeu, pont des
+  anciens conseils), `scheduler.js` (PUR : priorités, respiration 20 s, 3 leçons par jour, bon moment, Complet / Discret /
+  Aucun, quotas des rappels), `acquired.js` (PUR : ce qui est déjà su, § 10.3), `bubble.js` (bulle de Joseph pleine
+  largeur jamais sur sa cible, pastille, doigt animé — planche `coach.png` d'ART, repli CSS —, anneau, liseré),
+  `targets.js` (interface, parcelles, chemin d'un glissé, objets de la scène par `scene.targetRect(hit)`, suivent le zoom
+  et le défilement), `store.js` (hors partie : `hintsSeen`, « à lire », rappels coupés, reprise des cours),
+  `reminders.js` (pastille ≤ 1 par jour / ≤ 4 par saison, silence après 3 ignorées, ligne du matin), `carnet.js`
+  (« Le carnet de Joseph » : Leçons · Mots de la ferme · Rappels, fusion du Guide de la ferme), `signals.js`, `css/coach.css`.
+- **Cours** : `levels.firstYear` (niveau 1, 13 bulles, ≈ 95 mots au lieu de 206, gestes enfin appris : glisser, appui
+  long, ligne « À faire » ; reprise à l'étape retenue, anciens index convertis) et `career.firstSteps` (nouvelle ferme avec
+  **6 carottes mûres** : première bulle à 1,2 s, glisser, payé, semer, arroser, le temps, les œufs, acheter une poule,
+  le carnet). Leçons `basics.*` et rappels `harvest`, `water`, `sow`, `money.low` (ex-conseil « fermage en danger »), `order`.
+- **Cœur** : `createCareer({ starter: true })` (carrière seulement, sans tirage, désactivé par défaut ; test
+  `tests/career-starter.test.js`) ; parité Classique 400 / 400.
+- **Réglage** : `settings.guidance` (Complet / Discret / Aucun) dans les Options (« Accompagnement » + « Ouvrir le
+  carnet »), la fenêtre « Bienvenue ! » et le carnet ; anciens joueurs : une seule question de Joseph, **Discret
+  présélectionné**, rudiments marqués sus sans être rejoués. Case « Premiers pas avec Joseph » dans « Nouvelle ferme ».
+- **Retraits** : `src/ui/tutorial.js`, `maybeLowMoneyHint`, conseils du guide, `VARIETY_HINTS`, `COZY_HINTS` ;
+  `hints.js` devient un pont vers `coach.request` ; `zoom.js`, `minimap.js`, `todo.js` testent `app.coach.blocking`.
+- **Tests** : `tests/coach.test.js` (ordonnanceur, réglages, rappels, déduction, reprise), `tests/coach-lessons.test.js`
+  (catalogue : unicité, FALC, événements connus, anciens conseils couverts — vert avec les paquets LEÇONS).
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `dev.html` et `index.html`
+  `?debug=1&nosw`) : nouvelle carrière jusqu'à la poule (bulle jamais sur sa cible à chaque étape, temps arrêté pendant
+  les lectures), niveau 1 avec le cours puis l'année jusqu'à la victoire (rechargement au milieu : reprise à l'étape
+  « time »), « Je connais », 360 × 740 + texte 150 % + mouvement réduit, ancien joueur (question unique, rudiments non
+  rejoués), Discret (cours proposé, pastille sans pause), Aucun (tout dans le carnet), carnet (relire, « Me montrer »,
+  rappel coupé), pincement pendant une leçon (l'anneau suit), rappels (pastille et ligne « À faire » pointée ; Discret :
+  ligne du matin), `aria-live`. Cibles ≥ 48 px, textes ≥ 14 px, aucune erreur console. Captures `screens/coach-*.png`.
+- **Bugs corrigés en route** : doigt invisible (visibilité CSS), lien « null » à côté du bouton, glissé lent qui sautait
+  une étape (attente de la fin du geste), section « Animaux » repliée (dépliée par l'étape), feuille restée ouverte sur
+  la dernière bulle.
+- **Idées** : lecture à voix haute (`coach.onSay`) ; anneau du poulailler plus serré (la zone de l'abri entier est grande).
+
+
+### 2026-10-04 — Vallée V4 « Les cigognes » : paquet CORE (logique, simulation, équilibrage)
+
+Contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V4 » ; écarts : « Écarts et précisions (livraison
+CORE V4) » (rédigés au début du travail pour ART, AUDIO et UI/RENDER). Non commité (intégration par le chef de projet).
+
+- **Données** : `src/data/career/storks.js` (nouveau, n'importe rien) — 4 légendes, 6 visiteurs (5 tirés), règles,
+  étape 8 « Les cigognes » (100 écus, aucun palier de signes), 5 récits, épilogue en 3 pages et générique, 8 cartes des
+  vallées voisines, 16 phrases du banc, 12 phrases d'Hélène, forêt en 4 états, textes. `src/data/career/valley.js` :
+  version 4, partie `storks`, 9 étapes (`MAX_STAGE_ALL` 8, `MAX_STAGE_V3` 7), `stageSigns(8)` → null.
+- **Logique** : `src/core/career/storks.js` (nouveau, lectures pures) ; extension `valley` : légendes sous cloche (réveil
+  à l'étape 6, au moulin, après 3 étés de sélection de la Tomate croisée, à l'étape 8 ; semis gratuit toute saison, pousse
+  en jours de culture, mûre sans limite, récolte à la main, jamais vendue) ; visiteurs rares (flux `valley4` : 5 nombres
+  par aube, vue ouverte ; 6 % puis 50 %, au plus tard la 3ᵉ aube ; une venue annoncée par aube toutes espèces confondues ;
+  ils attendent qu'on les touche puis reviennent en décor) ; cigognes déterministes (jour des cigognes par hachage, clocher,
+  étape 8 à l'aube qui suit leur visite, roue offerte, nid au printemps suivant, cigogneaux, départ) ; vallée complète et
+  épilogue (jamais le matin d'un autre récit) ; générique ; cartes (un sachet à la fois, la carte à la saison suivante) ;
+  livre de la vallée (une page par année, reconstruite depuis les jours gardés ; `stageAt` reconstruit pour les anciennes
+  carrières) ; décor de la ferme (forêt, nid, passages, lueurs, cerf, loriot, arc-en-ciel) ; extras de la vue ; faits
+  sonores `valleySounds()` (forme figée pour AUDIO) ; prochain indice (visiteur, épilogue, carte, légende mûre, légende à
+  semer une fois, ce qui manque aux cigognes) ; Merveille par `valleyHarvest(…, { quality })` (une ligne dans
+  `runtime.js`). **Au plus une légende ou un récit par aube**, toutes parties confondues.
+- **Progression** : 2 pages d'album (« Les légendes », « Les visiteurs rares » : 20 pages, 201 cases), 9 succès (210 écus ;
+  47 succès de carrière), 3 décors trouvés (`melon.cloche`, `stork.vane`, `iron.box`), `recordValleyEpilogue`.
+- **Décoratif strict, vérifié** : aucune action du V4 ne gagne ni ne dépense ; empreinte économique (argent de chaque jour,
+  24 ans, robots compris) **identique** avec et sans le V4 (test sur une carrière ; simulation : 40 320 jours × 7 robots,
+  0 jour différent). `{ storks: false }` = le V3 exactement (empreinte de l'état d'une carrière de 24 ans relevée avant le
+  lot, inchangée ; empreintes du V2 et du V3 inchangées) ; `node tools/simulate.js` identique octet pour octet ; parité
+  400 / 400 ; aucun autre flux ne tire un nombre de plus.
+- **Simulation** : `--compare-valley4` (24 ans, `--jobs`), robots `STORKS_STYLES` (`me.storksRnd`), `trackMoney`,
+  `moneyFingerprint`. Mesuré en route : le tranquille qui ressemait ses 4 légendes chaque saison ajoutait 1,1 geste par
+  jour ; il ne regarde plus ses cloches que « quand il veut » (0,15 par saison) et envoie un sachet une saison sur deux.
+- **Résultats** (60 carrières × 24 ans, `docs/VALLEE.md` § 18.12.6) : revenu + 0,0 % ; melon an 13, Merveille an 13,
+  engrain et pois an 17 ; cigognes au clocher an 17 (97 % à l'an 20) ; nid an 18 ; épilogue an 18 (97 % à l'an 20 et à
+  l'an 22) ; visiteurs 4 / 5 / 6 aux ans 18 / 20 / 22 ; nouveautés dans 64 % des saisons des ans 19-24 ; + 0,24 geste par
+  jour ; `automator` ne touche à rien ; débutant : jamais le V4. Aucun chiffre de jeu changé.
+- **Tests** : `tests/valley4.test.js`, `valley4-legends`, `valley4-visitors`, `valley4-storks`, `valley4-book`,
+  `valley4-migration` (+ `tests/valley4-helpers.js`) ; tests du V1 au V3, de l'album, des succès et du rendu du lot 2 mis
+  aux nombres du V4.
+- **Idée** : 2 à 3 % des carrières tranquilles n'ont pas l'étape 8 à l'an 22 (leur étape 7 du V3 arrive tard) ; à voir
+  avec l'équilibrage du V3 si cela gêne.
+
+### 2026-10-04 — Vallée V4 « Les cigognes » : rendu et interface (paquet UI/RENDER)
+
+- **Nouveaux fichiers** : `src/render/storks-actors.js` (cloches, roue et nid, passages, vers luisants, cerf, loriot,
+  arc-en-ciel, forêt en 4 états), `src/ui/career/storks.js` (légendes, visiteurs, cigognes, épilogue, générique, banc,
+  contemplation, paysage sonore), `src/ui/career/valley-book.js` (le livre de la vallée et le partage en image locale),
+  `tests/valley4-ui.test.js` (12 tests purs).
+- **Modifiés** : `layout-career.js` (cloches, pied du nid), `scene.js` (acteurs, couche fixe, mini-carte, touchers, cibles),
+  `valley-view.js` (visiteurs, clocher, barrage, fenêtres, banc, teinte, défilement automatique, écoute), `valley-actors.js`
+  (vers luisants laissés au V4, boîte au ruban doré), `atlas.js` (3 décors), UI `valley`, `heritage` (segment et étagère
+  Légendes), `places`, `valley-view` (générique, contemplation), `dialogs` (« Sons de la vallée »), `grange`, `album`,
+  `storage` (`natureSound`), `main.js` (câblage, paysage sonore, débogage `__debug.valley4`), leçons V4 (cibles réelles),
+  `css/valley.css`.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, mouvements réduits) : tout le parcours du V4 et les 4 leçons ;
+  aucune erreur console ; captures `valley4-ui-*.png` du bloc-notes. `node --test tests/` : 808 / 808.
+- **Remarques** : les cartes du générique passent au fil du temps (pas exactement quand le lieu croise le milieu de
+  l'écran : le ruisseau et le bocage sont plus bas que la ferme où s'arrête le défilement). Sur 412 × 915 sans ruban ni
+  barre, la vue tient presque entière à l'écran pendant le générique (défilement court). Idée : un vrai « effet de
+  page » dans le livre ; une carte postale visible au perron le jour où elle arrive.
+
+### 2026-10-04 — Accompagnement et V4 : intégration et QA finale
+
+- **Sauvegarde** : `backup/avant-qa-coach-v4-2026-10-04` (branche + tag, commit `c449436`).
+- **Cours sans interruption** : pendant un cours (tutoriel de carrière ou du niveau 1), y compris ses étapes d'attente,
+  aucune autre leçon ne s'intercale (`allowedDuringCourse`, `src/ui/coach/scheduler.js`) ; elles attendent la fin du cours
+  dans la file et sortent ensuite espacées (20 s, 3 par jour). Exceptions : un danger réel (`urgent: true` : gel,
+  dépannages de Joseph, coup dur, corbeaux) quand le cours attend ; une attente de 3 jours de jeu « libère la place »
+  (ex. l'argent du poulailler au niveau 1, que le joueur peut ne jamais atteindre). Les rappels se taisent pendant le cours,
+  sauf la sécurité (fermage / charges en danger : la pastille d'attente du cours lui laisse la place).
+- **Pont des anciens conseils retiré** : `src/ui/hints.js` supprimé (`app.hints`, la table `HINTS`, la leçon « legacy »
+  du moteur) ainsi que l'alias `app.tutorial` ; les derniers appels de `main.js` (ateliers, chèvre, ruche, concours, grange,
+  décor) sont des leçons du catalogue, déclenchées par leurs propres déclencheurs (le premier atelier n'ouvre plus sa fiche
+  tout seul : Joseph montre où toucher). `valley.js`, `heritage.js`, `places.js`, `storks.js`, `variety.js`, `lot2.js` lisent
+  `app.coach.blocking`. `tests/guidance.test.js` vérifie les leçons du catalogue au lieu de la table.
+- **Leçons du menu principal** (grange, décor, carrière) : elles se déclenchent enfin (mode non lié au menu) ; les écus
+  attendent la leçon des étoiles (une seule leçon du menu à la fois).
+- **Ordre du V4** : légende 70, visiteur 70, livre 20, sons 15 ; `valley.sounds` attend que la leçon d'une légende réveillée
+  soit passée (jamais avant elle la même aube) ; `valley.legend` se déclenche aussi à l'aube si une légende est réveillée.
+- **Cibles** : liseré des onglets du bas dessiné à l'intérieur du bouton (l'onglet Menu au bord droit, la barre collée au
+  bas : l'anneau tombe pile) ; vue de la vallée : la cible est montrée au-dessus de la barre de la vue et hors de la bulle
+  (la vue défile vers elle).
+- **Relecture « joueur cosy »** : une leçon utile (U) restée 2 jours de jeu dans la file va au carnet (« à lire ») au lieu
+  d'arriver à contretemps (après le tutoriel : l'album, l'étal, les messages… ne tombent plus d'un coup) ; aucune pastille de
+  rappel avant le surlendemain d'un cours ; en Discret, « Oui » ne repose plus la question d'accueil ; le générique efface les
+  messages.
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `index.html?debug=1&nosw`,
+  Complet / Discret / Aucun) : nouvelle carrière (premier glissé en ≈ 1,2 s, tutoriel jusqu'à la poule sans aucune autre
+  bulle, puis tableau, charges, fête espacés de ≥ 20 s, une leçon par jour au plus à ×2) ; niveau 1 jusqu'à la victoire, avec
+  reprise après rechargement ; ancien joueur (sauvegarde fabriquée avec le jeu du commit `ae003c1` : progression + carrière
+  an 3) : question unique (Discret présélectionné), rudiments non rejoués, carnet rempli (31 leçons déduites) ; carnet
+  (relire, « Me montrer », couper un rappel) ; réglage dans les Options et la fenêtre « Bienvenue ! » ; les 27 rappels
+  (pastille ≥ 48 px, toucher → leur action) ; leçons des lots 2 à 4 et de la Vallée (géant, hiver, boîte, fiche, visée
+  « aménager », fête, vue) ; V4 de bout en bout (légende réveillée, semée, récoltée par la cloche ; cigognes au clocher puis
+  nid ; grues ; épilogue, générique, livre et partage ; sons Complets / Légers / Coupés ; les 4 leçons) ; mouvement réduit et
+  texte 150 % sur 360 × 740 ; `aria-live` ; cibles ≥ 48 px, textes ≥ 14 px, rien ne déborde ; aucune erreur console. Captures
+  `screens/final-*.png` du bloc-notes.
+- **Parité et simulations** : `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate.js` identique à HEAD
+  (octet pour octet) ; `node tools/simulate-career.js --compare-valley4 --runs 60` : argent identique chaque jour pour les 7
+  robots (40 320 jours chacun, 0 différent ; revenu + 0,0 %). Aucun fichier de `src/core` ni `src/data` touché.
+- **Reste noté** : la cible de `valley.view` (le ruisseau) est plus haute que l'écran : la bulle en couvre forcément une
+  partie (l'anneau reste visible) ; les tables `*_HINTS` des données de la Vallée (`VALLEY_HINTS`, `HERITAGE_HINTS`,
+  `PLACES_HINTS`, `STORKS_HINTS`) ne servent plus qu'aux tests des données (à retirer avec eux) ; le quota de 3 leçons par
+  jour peut faire attendre une leçon propre à un écran (vue, fête) jusqu'au lendemain.
+

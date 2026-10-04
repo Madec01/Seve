@@ -549,6 +549,8 @@ function standPointsOf(state, fete, item) {
     if ((y.giants[item.id] || 0) > 0) pts += g?.giant ?? STAND_POINTS.giant;
   }
   if (item.kind === 'product') pts += STAND_POINTS.homemade;
+  // (Vallée V2, carrière) + 1 point pour une culture dont une variété ancienne a été récoltée cette année.
+  if (item.kind === 'crop' && state.career?.valley && state.career.valley.parts?.heritage !== false && (state.career.valley.year?.heirloomCrops || []).includes(item.id)) pts += STAND_POINTS.heirloom;
   if (starOf(state, item.kind, item.id)) pts += STAND_POINTS.star;
   if (g?.bonus?.[item.id]) pts += g.bonus[item.id];
   return pts;

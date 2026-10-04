@@ -252,7 +252,7 @@ test('succès de carrière : 17, 440 écus, sans étoile ; conditions évaluées
   assert.deepEqual(Object.keys(real.career).sort(), ['animals', 'bestYearNet', 'contestAll', 'cropsInSeason', 'hearts', 'houseLevel', 'lots', 'machines', 'maxStaffLevel', 'rank', 'species', 'staffCount', 'stock', 'stockCapacity', 'truffles', 'year', 'yearNet'].sort());
   assert.deepEqual(P.checkAchievements(p, real), ['careerStart']);
   const list = P.careerAchievementList(p, real);
-  assert.equal(list.length, 24, '17 succès de carrière + 7 de la Vallée');
+  assert.equal(list.length, 47, '17 succès de carrière + 7 de la Vallée (V1) + 6 du V2 + 8 du V3 + 9 du V4');
   assert.equal(list[0].category, 'career');
   assert.equal(P.achievementList(p, null).length, 26);
 });

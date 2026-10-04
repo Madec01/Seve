@@ -1,0 +1,330 @@
+/* ─── Accompagnement « Joseph vous montre » (src/ui/coach/, docs/ACCOMPAGNEMENT.md § 4.6, § 11) ─────────────
+   Couche au-dessus des feuilles (25), des onglets (30) et des messages (35), sous les fenêtres (60) ; au-dessus des
+   fenêtres seulement pour une leçon du menu ou d'une fenêtre (.is-over-dialog). La bulle reprend le parchemin de
+   l'ancien tutoriel ; le doigt est la planche « coach » d'ART, ou un repli dessiné ici (.coach-hand-css). */
+
+#coach { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+#coach.is-over-dialog { z-index: 64; }
+body.is-rotated #coach { visibility: hidden; }
+
+/* ── Bulle ── */
+.coach-bubble {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  display: flex;
+  gap: 8px;
+  width: min(30rem, calc(100vw - 16px));
+  max-height: 40vh;
+  max-height: 40dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 2px 2px;
+  border-style: solid;
+  border-width: calc(var(--u) * 7);
+  border-image: var(--img-parch) 8 fill / calc(var(--u) * 8) stretch;
+  image-rendering: pixelated;
+  color: var(--text);
+  pointer-events: auto;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--t-med) ease, transform var(--t-med) var(--ease-pop);
+  filter: drop-shadow(0 calc(var(--u) * 2) 0 rgba(30, 15, 20, 0.35));
+}
+.coach-bubble.is-visible { opacity: 1; transform: none; }
+.coach-bubble:not(.is-visible) { pointer-events: none; visibility: hidden; }
+.coach-bubble::after {
+  content: '';
+  position: absolute;
+  display: none;
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 8);
+  background: var(--parch);
+  box-shadow: var(--u) var(--u) 0 var(--wood-dark), calc(var(--u) * 2) calc(var(--u) * 2) 0 var(--wood-dark);
+}
+/* La flèche pointe vers la cible : bulle au-dessus (data-side=top) → flèche en bas. */
+.coach-bubble[data-side='top']::after { display: block; bottom: calc(var(--u) * -12); left: var(--ax, 50%); transform: translateX(-50%) rotate(45deg); }
+.coach-bubble[data-side='bottom']::after { display: block; top: calc(var(--u) * -12); left: var(--ax, 50%); transform: translateX(-50%) rotate(-135deg); }
+.coach-bubble[data-side='left']::after { display: block; right: calc(var(--u) * -12); top: var(--ay, 50%); transform: translateY(-50%) rotate(-45deg); }
+.coach-bubble[data-side='right']::after { display: block; left: calc(var(--u) * -12); top: var(--ay, 50%); transform: translateY(-50%) rotate(135deg); }
+.coach-bubble[data-side]::after { overflow: visible; }
+.coach-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: max(48px, calc(var(--u) * 26));
+  height: max(48px, calc(var(--u) * 26));
+  padding: 0;
+  border: 0;
+  background: url('../assets/sprites/ui/round-wood.png') center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  cursor: pointer;
+}
+.coach-avatar .sprite { --sk: 2; }
+.coach-avatar:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.coach-body { flex: 1; min-width: 0; }
+.coach-name { font-size: 0.875rem; color: var(--text-soft); }
+.coach-title { font-size: 1rem; font-weight: 700; line-height: 1.15; }
+.coach-text { margin: 4px 0 6px; font-size: 1.0625rem; line-height: 1.35; }
+.coach-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.coach-actions .btn { flex: 1 1 auto; min-height: 48px; }
+.coach-skip {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.coach-skip:focus-visible, .coach-actions .btn:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.coach-dots { display: flex; flex-wrap: wrap; gap: calc(var(--u) * 2); margin-top: 4px; }
+.coach-dot { width: calc(var(--u) * 3); height: calc(var(--u) * 3); background: var(--parch-3); box-shadow: 0 0 0 var(--px1) var(--wood-dark); }
+.coach-dot.is-past { background: var(--wood-light); }
+.coach-dot.is-on { background: var(--red); box-shadow: 0 0 0 var(--u) var(--red-dark); }
+
+/* ── Pastille (leçon réduite, étape qui attend, Discret, rappel) ── */
+.coach-pill {
+  position: fixed;
+  left: 8px;
+  top: 0;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  max-width: min(24rem, calc(100vw - 16px));
+  min-height: 52px;
+  padding: 2px 6px 2px 2px;
+  border-style: solid;
+  border-width: calc(var(--u) * 4);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 5) stretch;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  pointer-events: auto;
+  cursor: pointer;
+  filter: drop-shadow(0 var(--u) 0 rgba(30, 15, 20, 0.35));
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.coach-pill.is-visible { display: flex; animation: toast-in 260ms var(--ease-pop); }
+.coach-pill.is-static { cursor: default; pointer-events: none; }
+.coach-pill.is-static .coach-pill-chev { display: none; }
+.coach-pill.is-reminder { border-image: var(--img-slot-wood) 5 fill / calc(var(--u) * 5) stretch; color: var(--parch); }
+.coach-pill.is-reminder .coach-pill-title { color: var(--parch-3); }
+.coach-pill:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.coach-pill-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: max(40px, calc(var(--u) * 20));
+  height: max(40px, calc(var(--u) * 20));
+  background: url('../assets/sprites/ui/round-wood.png') center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+}
+.coach-pill-body { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.coach-pill-title { font-size: 0.875rem; color: var(--text-soft); }
+.coach-pill-text { font-size: 0.9375rem; }
+.coach-pill-chev { flex: none; padding: 0 2px; font-size: 1.25rem; }
+.reduced-motion .coach-pill.is-visible { animation: none; }
+
+/* ── Anneau doré (scène) et liseré clair + sombre (interface) ── */
+.coach-rings, .coach-ring { pointer-events: none; }
+.coach-ring {
+  position: fixed;
+  display: block;
+  border: calc(var(--u) * 1.5) solid var(--gold);
+  box-shadow: 0 0 0 var(--u) var(--outline), inset 0 0 0 var(--u) var(--outline), 0 0 calc(var(--u) * 6) rgba(253, 220, 0, 0.7);
+  animation: coach-ring 1.1s ease-in-out infinite;
+}
+.coach-ring[hidden] { display: none; }
+@keyframes coach-ring { 50% { transform: scale(1.08); } }
+.coach-target {
+  position: relative;
+  z-index: 2;
+  outline: calc(var(--u) * 1.5) solid #fff7d6 !important;
+  outline-offset: var(--u);
+  box-shadow: 0 0 0 calc(var(--u) * 3.5) var(--outline), 0 0 calc(var(--u) * 8) rgba(253, 220, 0, 0.85) !important;
+  animation: coach-target 1.1s ease-in-out infinite;
+}
+@keyframes coach-target { 50% { outline-color: var(--gold); } }
+/* Onglets du bas (Menu au bord droit, barre collée au bas de l'écran) : liseré DANS le bouton, sinon il sort de l'écran
+   et l'anneau ne tombe pas pile sur l'onglet visé (leçons valley.sounds, cozy.album, basics.carnet…). */
+.tabbar-btn.coach-target {
+  outline-offset: calc(var(--u) * -2.5);
+  box-shadow: inset 0 0 0 calc(var(--u) * 4) var(--outline), inset 0 0 calc(var(--u) * 6) rgba(253, 220, 0, 0.9) !important;
+}
+html.high-contrast .coach-ring { border-width: calc(var(--u) * 2.5); }
+html.high-contrast .coach-bubble { filter: none; }
+.reduced-motion .coach-ring, .reduced-motion .coach-target { animation: none; }
+
+/* ── Doigt ── */
+.coach-finger {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  visibility: hidden;
+  will-change: transform;
+}
+.coach-finger > * { position: absolute; left: -6px; top: -4px; }
+.coach-finger .sprite--coach-hand { --sk: 3; }
+/* Repli sans la planche ART : main gantée claire, contour sombre, index tendu (pixel art en SVG). */
+.coach-hand-css {
+  display: block;
+  width: 48px;
+  height: 48px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'%3E%3Cpath fill='%233f2631' d='M3 0h3v1H3zM2 1h1v6H2zM6 1h1v4H6zM7 4h3v1H7zM10 5h2v1h-2zM12 6h1v1h-1zM13 7h1v5h-1zM1 7h1v1H1zM0 8h1v3H0zM1 11h1v2H1zM2 13h1v1H2zM3 14h9v1H3zM12 12h1v2h-1z'/%3E%3Cpath fill='%23fff7e6' d='M3 1h3v4h4v1h2v1h1v5h-1v2H3v-1H2v-2H1V8h1v1h1z'/%3E%3Cpath fill='%23e6cfa8' d='M4 6h1v4H4zM7 6h1v3H7zM10 7h1v3h-1zM3 12h9v1H3z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  filter: drop-shadow(1px 2px 0 rgba(30, 15, 20, 0.45));
+}
+.coach-finger.is-tap > *, .coach-finger.is-press > * { animation: coach-tap 1.2s ease-in-out infinite; }
+.coach-finger.is-press > * { animation-duration: 1.6s; }
+.coach-finger.is-press::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: -18px;
+  width: 36px;
+  height: 36px;
+  border: 3px dotted #fff7d6;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--outline);
+  animation: coach-press 1.6s ease-in-out infinite;
+}
+.coach-finger.is-swipe.is-down > * { transform: translate(2px, 3px) scale(0.94); }
+.coach-finger.is-pinch > *:first-child { animation: coach-pinch-a 1.6s ease-in-out infinite; }
+.coach-finger.is-pinch > *:last-child { animation: coach-pinch-b 1.6s ease-in-out infinite; }
+.coach-finger.is-nudge { animation: coach-nudge 0.5s ease-in-out 2; }
+@keyframes coach-tap { 0%, 100% { transform: translate(0, -6px); } 40%, 60% { transform: translate(2px, 2px) scale(0.92); } }
+@keyframes coach-press { 0% { transform: scale(0.4); opacity: 0.2; } 60%, 100% { transform: scale(1); opacity: 1; } }
+@keyframes coach-pinch-a { 0%, 100% { transform: translate(-6px, 6px); } 50% { transform: translate(-34px, 30px); } }
+@keyframes coach-pinch-b { 0%, 100% { transform: translate(6px, -6px) scaleX(-1); } 50% { transform: translate(34px, -30px) scaleX(-1); } }
+@keyframes coach-nudge { 50% { transform: translateY(-8px); } }
+/* Mouvement réduit : doigt posé, pointillés pour un glissé, aucun rebond. */
+.reduced-motion .coach-finger > *, .reduced-motion .coach-finger::before, .reduced-motion .coach-finger.is-nudge { animation: none !important; }
+.reduced-motion .coach-finger.is-pinch > *:first-child { transform: translate(-24px, 22px); }
+.reduced-motion .coach-finger.is-pinch > *:last-child { transform: translate(24px, -22px) scaleX(-1); }
+.coach-trail {
+  position: fixed;
+  height: 0;
+  border-top: 4px dashed #fff7d6;
+  filter: drop-shadow(0 0 1px var(--outline)) drop-shadow(0 0 1px var(--outline));
+  transform-origin: 0 50%;
+  visibility: hidden;
+  pointer-events: none;
+}
+.coach-trail::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: -9px;
+  border: 7px solid transparent;
+  border-left: 10px solid #fff7d6;
+}
+.left-handed .coach-finger > * { transform: scaleX(-1); }
+
+/* ── La ligne « À faire » pointée par un rappel ── */
+.todo-main.is-pointed { animation: coach-target 1.1s ease-in-out 4; outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.reduced-motion .todo-main.is-pointed { animation: none; }
+
+/* ── Réglage Complet / Discret / Aucun (options, « Bienvenue ! », carnet, question unique) ── */
+.coach-levels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.coach-levels.is-rows { grid-template-columns: 1fr; }
+.coach-level {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-height: 52px;
+  padding: 4px 10px;
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 4) stretch;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.coach-levels:not(.is-rows) .coach-level { align-items: center; text-align: center; }
+.coach-level small { font-size: 0.875rem; color: var(--text-soft); }
+.coach-level.is-on { border-image: var(--img-slot-wood) 5 fill / calc(var(--u) * 4) stretch; color: var(--parch); }
+.coach-level.is-on small { color: var(--parch-3); }
+.coach-level.is-on b::before { content: '● '; }
+.coach-level:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+
+/* ── Le carnet de Joseph ── */
+.carnet { display: flex; flex-direction: column; gap: 10px; }
+.carnet-head { display: flex; align-items: center; gap: 10px; }
+.carnet-face .sprite { --sk: 2; }
+.carnet-face { flex: none; display: grid; place-items: center; width: 64px; height: 64px; overflow: hidden; background: url('../assets/sprites/ui/round-wood.png') center / 100% 100% no-repeat; image-rendering: pixelated; }
+.carnet-quote { margin: 0; font-size: 1rem; font-style: italic; }
+.carnet-level { display: flex; flex-direction: column; gap: 6px; }
+.carnet-tabs { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.carnet-tab { min-height: 48px; }
+.carnet-tab .seg-pct { font-size: 0.9375rem; line-height: 1.1; }
+.carnet-chapter-sec { margin-bottom: 6px; }
+.carnet-chapter, .carnet-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 10px;
+  border-style: solid;
+  border-width: calc(var(--u) * 3);
+  border-image: var(--img-slot-parch) 5 fill / calc(var(--u) * 4) stretch;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.carnet-chapter { border-image: var(--img-slot-wood) 5 fill / calc(var(--u) * 4) stretch; color: var(--parch); font-weight: 700; }
+.carnet-chapter-title { flex: 1; }
+.carnet-count { font-size: 0.875rem; font-weight: 400; }
+.carnet-chev { flex: none; font-size: 1.25rem; transition: transform 160ms ease; }
+.carnet-chapter[aria-expanded='true'] .carnet-chev { transform: rotate(90deg); }
+.carnet-rows { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 0 8px; }
+.carnet-mark { flex: none; width: 1.4em; text-align: center; font-weight: 700; }
+.carnet-row.is-unread .carnet-mark { color: var(--red-dark); }
+.carnet-row-title { flex: 1; min-width: 0; }
+.carnet-row-state { flex: none; font-size: 0.875rem; color: var(--text-soft); }
+.carnet-more { margin: 4px 0 0; color: var(--text-soft); font-size: 0.9375rem; }
+.carnet-page-title { margin: 0; font-size: 1.125rem; }
+.carnet-steps { margin: 0; padding-left: 1.4em; font-size: 1rem; line-height: 1.4; }
+.carnet-steps li + li { margin-top: 6px; }
+.carnet-why { margin: 0; min-height: 1em; color: var(--text-soft); font-size: 0.9375rem; }
+.carnet-actions { display: flex; gap: 8px; }
+.carnet-actions .btn { flex: 1 1 0; min-height: 48px; }
+.carnet-sub { margin: 8px 0 0; font-size: 1.0625rem; }
+.carnet-rule { padding: 0; }
+.carnet-rule summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 4px 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.carnet-rule summary::-webkit-details-marker { display: none; }
+.carnet-rule .guide-lines { margin: 0 0 8px; padding-left: 1.4em; font-size: 0.9375rem; line-height: 1.4; }
+.carnet-rem { width: 100%; }
+.carnet-rem .opt-label { display: flex; flex-direction: column; }
+.carnet-rem small { font-size: 0.875rem; }
+.dialog--carnet .dialog-body { max-height: min(70vh, 640px); overflow-y: auto; }
+.welcome-coach, .nf-firststeps { margin: 4px 0; }
+.nf-firststeps { width: 100%; }
+.nf-firststeps .opt-label { display: flex; flex-direction: column; }
+.nf-firststeps small { font-size: 0.875rem; }

@@ -16,6 +16,8 @@ Le jeu se joue **d'abord sur téléphone, en portrait** (Android + Chrome), inst
 ## Documents de référence
 
 - `docs/MOBILE.md` : cahier des charges de la version téléphone (prioritaire).
+- `docs/ACCOMPAGNEMENT.md` : accompagnement du joueur par Joseph (leçons, rappels, tutoriels, carnet).
+- `docs/VALLEE.md` : « La Vallée vivante », grand projet de la carrière (lots V1 à V4).
 
 - `docs/GAME_DESIGN.md` : règles du jeu, économie, niveaux (la source de vérité du gameplay).
 - `docs/ARCHITECTURE.md` : organisation du code, contrats entre modules, conventions.

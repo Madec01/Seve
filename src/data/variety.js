@@ -239,17 +239,7 @@ export const MERCHANT_ITEMS_BY_ID = Object.fromEntries(MERCHANT_ITEMS.map((m) =>
 /** Décor déjà possédé : écus à la place (comme au lot 2). */
 export const MERCHANT_ECUS_IF_OWNED = 5;
 
-// ── Conseils « première fois » (hints.js) ──────────────────────────────────────────────────────
-
-export const VARIETY_HINTS = {
-  'variety.board': 'Le tableau du village : des voisins demandent quelques récoltes. Récoltez-les à la main : elles sont payées tout de suite, et la prime arrive quand la commande est complète.',
-  'variety.cart': 'La charrette du marché attend des caisses de récoltes jusqu\'au dernier soir de la saison. Même à moitié pleine, elle paie une prime.',
-  'variety.cards': 'Un cadeau pour la saison : choisissez une des deux cartes. Rien ne presse, le choix attend.',
-  'variety.challenges': 'Les défis de la saison : gardez-en un ou deux. Chaque palier atteint donne une médaille et des écus.',
-  'variety.merchant': 'Basile le colporteur passe deux jours avec sa roulotte : graines rares et petits trésors.',
-  'variety.rare': 'Graines rares : chaque semis prend une graine du sachet, sans rien payer.',
-  'career.theme': 'Chaque année a désormais son thème : une vedette mieux payée, une fête spéciale et un visiteur unique.',
-};
+// (Accompagnement) Les conseils « première fois » sont des leçons de Joseph : src/ui/coach/lessons/lots.js.
 
 /** Textes. */
 export const VARIETY_TEXTS = {

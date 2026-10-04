@@ -181,6 +181,7 @@ import {
 } from './cozy.js';
 import { careerCozyHost, careerAchievementExtras, triggerCareerCozy } from './career/cozy.js';
 import { valleyAchievementContext, valleyPlantable } from './career/valley.js';
+import { treesUnlocked } from './career/places.js';
 import { returnTrialSeed } from './career/heirlooms.js';
 import { treeSeedCost as treeSeedCostOf } from './trees.js';
 
@@ -1579,7 +1580,10 @@ function wrap(state, { fresh = false } = {}) {
         if (plot && inGreenhouse(plot)) return !tree;
         return c.seasons.includes(sid) && (!plot || !tree);
       };
+      // (Vallée V3) Cerisier et poirier du verger conservatoire (hors de CROPS), une fois débloqués : au verger seulement.
+      const valleyTrees = rt && state.career.valley ? treesUnlocked(state).map((id) => getCrop(id)) : [];
       const rows = crops
+        .concat(valleyTrees)
         .filter(allowed)
         .map((c) => {
           const tree = isTreeCrop(c);
@@ -1627,6 +1631,7 @@ function wrap(state, { fresh = false } = {}) {
             tree: treeData,
             noWater: !tree && !needsWaterToday(c, 'sunny', level),
             sowAll: !tree,
+            ...(c.valleyTree ? { valleyTree: true, seal: 'du verger conservatoire', anecdote: c.anecdote } : {}),
             ...(state.variety ? varietyPlantFields(c) : {}),
             // (lot 4) Carrière : semis prépayés de la foire aux graines (pris d'abord, sans payer).
             ...(rt && state.cozy ? { bank: state.cozy.seedBank[c.id] || 0, ...((state.cozy.seedBank[c.id] || 0) > 0 ? { canAfford: true } : {}) } : {}),

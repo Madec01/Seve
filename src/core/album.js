@@ -66,7 +66,8 @@ function emptyFacts() {
     crops: S(), cropGold: S(), cropGiant: S(), products: S(), animalProducts: S(), animals: S(), pets: S(), weather: S(), special: S(),
     surprises: S(), finds: S(), forage: false, wish: false, clients: S(), merchantMet: false, themes: S(), themeFetes: S(), themeVisitors: S(),
     fetes: S(), feteBest: S(), comice: false, contest: false, cartFull: false, goldMedal: false, winterFinds: S(), traces: S(), birds: S(),
-    fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(),
+    fish: S(), stories: 0, heirloomsFixed: S(), wildlifeInstalled: S(), swapsDone: S(), swapsFav: S(), placesRestored: S(),
+    legendsHarvested: S(), visitorsSeen: S(),
   };
 }
 
@@ -120,6 +121,14 @@ function addContext(f, ctx) {
     // (Vallée vivante) Variétés fixées, habitants installés.
     addAll(f.heirloomsFixed, ctx.career?.valley?.fixed);
     addAll(f.wildlifeInstalled, ctx.career?.valley?.installed);
+    // (Vallée V2) Trocs faits (voisins) et ceux d'une préférée (♥).
+    addAll(f.swapsDone, ctx.career?.valley?.swaps);
+    addAll(f.swapsFav, ctx.career?.valley?.swapsFav);
+    // (Vallée V3) Lieux de la vallée à leur dernière étape.
+    addAll(f.placesRestored, ctx.career?.valley?.restored);
+    // (Vallée V4) Légendes récoltées une première fois, visiteurs rares vus.
+    addAll(f.legendsHarvested, ctx.career?.valley?.legendsHarvested);
+    addAll(f.visitorsSeen, ctx.career?.valley?.visitorsSeen);
   } else if (!ctx.cozy) {
     // Classique (rien de plus n'est exposé) : un poulailler à l'aube donne des œufs, une vache ou une chèvre du lait,
     // des moutons de la laine après la tonte du dernier jour de printemps.
@@ -259,6 +268,14 @@ export function caseDone(c, f) {
       return f.heirloomsFixed.has(ch.id);
     case 'wildlifeInstalled':
       return f.wildlifeInstalled.has(ch.id);
+    case 'swapDone':
+      return f.swapsDone.has(ch.id);
+    case 'placeRestored':
+      return f.placesRestored.has(ch.id);
+    case 'legendHarvested':
+      return f.legendsHarvested.has(ch.id);
+    case 'visitorSeen':
+      return f.visitorsSeen.has(ch.id);
     default:
       return false;
   }
@@ -277,6 +294,8 @@ export function stampDone(c, stamp, f) {
       return f.themeVisitors.has(c.id);
     case 'best':
       return f.feteBest.has(c.id);
+    case 'heart':
+      return f.swapsFav.has(c.id);
     default:
       return false;
   }
@@ -504,6 +523,8 @@ export function contextFromSave(saved) {
         fixed: Object.entries(c.valley.varieties || {}).filter(([, e]) => isObj(e) && e.fixedAt).map(([id]) => id),
         installed: Object.entries(c.valley.species || {}).filter(([, e]) => isObj(e) && e.state === 'installed').map(([id]) => id),
         stage: c.valley.stage || 0,
+        swaps: Object.keys(isObj(c.valley.swaps) ? c.valley.swaps : {}),
+        swapsFav: Object.entries(isObj(c.valley.swaps) ? c.valley.swaps : {}).filter(([, e]) => isObj(e) && e.fav).map(([id]) => id),
       };
     }
   }

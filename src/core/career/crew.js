@@ -13,7 +13,7 @@ import { MACHINES_BY_ID } from '../../data/career/machines.js';
 import { GARDENER_ACTIONS, MOODS, TRAITS_BY_ID, WORK } from '../../data/career/staff.js';
 import { daysLeftInSeason } from '../calendar.js';
 import { inGreenhouse, isMature, plotWateredRate } from '../farm.js';
-import { VARIETIES_BY_ID } from '../../data/career/valley.js';
+import { ALL_VARIETIES_BY_ID as VARIETIES_BY_ID } from '../../data/career/valley.js';
 import { canHelpersSow, fixedSeedCost, planVariety, survivesFrost } from './heirlooms.js';
 
 export { DAY_SECONDS };
@@ -268,7 +268,7 @@ function valleyChoice(api, p, want) {
   const hardy = survivesFrost(state, { ...p, variety: id });
   if (!hardy && wouldFreeze(state, api.level, p, crop)) return null;
   const seeds = state.career.valley.seeds[id] || 0;
-  const cost = seeds > 0 ? 0 : fixedSeedCost(api.seedCost(crop.id));
+  const cost = seeds > 0 ? 0 : fixedSeedCost(api.seedCost(crop.id), state);
   if (cost > state.money) return null;
   return `heirloom:${id}`;
 }

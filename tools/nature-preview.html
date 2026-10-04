@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sons de la vallée</title>
+<style>
+  :root { --bg: #2b2633; --fg: #f3e9dc; --muted: #b9a9c9; --accent: #8fcf6f; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.35 system-ui, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 12px 16px 48px; }
+  h1 { font-size: 20px; margin: 4px 0 8px; }
+  h2 { font-size: 16px; margin: 18px 0 6px; color: var(--accent); }
+  p { margin: 4px 0; color: var(--muted); }
+  label { display: flex; justify-content: space-between; gap: 8px; align-items: center; min-height: 40px; }
+  select, input[type=range] { font: inherit; min-width: 50%; }
+  button { font: inherit; min-height: 48px; padding: 6px 10px; border-radius: 8px; border: 1px solid #5c5068; background: #3b3445; color: var(--fg); cursor: pointer; }
+  button:active { background: #514660; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px; }
+  .grid button { text-align: left; font-size: 14px; }
+  .grid small { display: block; color: var(--muted); font-size: 12px; }
+  #info { font: 12px/1.4 ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; background: #231f2a; padding: 8px; border-radius: 6px; }
+  canvas { width: 100%; height: 120px; background: #1d1a22; border-radius: 6px; display: block; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Sons de la vallée (lot V4)</h1>
+  <p>Paysage sonore synthétisé (Web Audio, aucun fichier). Page de travail : écoute, réglage, mesures
+    (<code>node tools/measure-nature.js</code>). Dans le jeu : <code>__debug.valley4.sound(id)</code>.</p>
+
+  <h2>Paysage</h2>
+  <label>Faits <select id="preset">
+    <option value="complete">vallée complète (étape 8, tout installé, tout vu)</option>
+    <option value="stage0">étape 0 (la vallée s'est tue)</option>
+    <option value="stage3">étape 3 (rouge-gorge, merle, hirondelles)</option>
+    <option value="stage6">étape 6 (le ruisseau s'entend)</option>
+  </select></label>
+  <label>Lieu <select id="where"><option value="farm">la ferme</option><option value="view">la vue de la vallée</option></select></label>
+  <label>Saison <select id="season"><option value="spring">printemps</option><option value="summer">été</option><option value="autumn">automne</option><option value="winter">hiver</option></select></label>
+  <label>Météo <select id="weather"><option>sunny</option><option>cloudy</option><option>rain</option><option>storm</option><option>snow</option></select></label>
+  <label>Heure <input id="day" type="range" min="0" max="0.99" step="0.01" value="0.1"></label>
+  <label>Réglage <select id="detail"><option value="full">Complets</option><option value="light">Légers</option><option value="off">Coupés</option></select></label>
+  <label>Vue : centre de l'écran (y) <input id="ly" type="range" min="0" max="432" step="4" value="200"></label>
+  <label>Volume « Ambiance » <input id="vol" type="range" min="0" max="1" step="0.05" value="0.6"></label>
+  <div class="grid">
+    <button id="start">▶ Jouer le paysage</button>
+    <button id="stop">■ Arrêter</button>
+  </div>
+
+  <h2>Un son à la fois</h2>
+  <div class="grid" id="sources"></div>
+  <h2>Tons d'événement (bus des effets)</h2>
+  <div class="grid">
+    <button data-tone="clatter">clatter<small>cigognes qui claquent du bec</small></button>
+    <button data-tone="legend">legend<small>une légende se réveille</small></button>
+  </div>
+
+  <h2>État</h2>
+  <canvas id="scope" width="600" height="120"></canvas>
+  <div id="info">—</div>
+</main>
+<script type="module">
+import { NATURE_SOURCES, LAYER_IDS, SONG_IDS, natureScape, demoFacts } from '../src/audio/soundscape.js';
+import { createNature } from '../src/audio/nature.js';
+import { createSynth } from '../src/audio/synth.js';
+
+const $ = (id) => document.getElementById(id);
+const PRESETS = {
+  complete: () => demoFacts(),
+  stage0: () => demoFacts({ stage: 0, installed: [], seen: [], places: {}, farm: {}, complete: false }),
+  stage3: () => demoFacts({ stage: 3, installed: ['robin', 'blackbird', 'swallow'], seen: [], places: { brook: 1 }, farm: { strips: 2 }, complete: false }),
+  stage6: () => demoFacts({ stage: 6, installed: ['robin', 'blackbird', 'swallow', 'tawnyOwl', 'jay', 'frog', 'kingfisher', 'heron'], seen: [], places: { brook: 2, millpond: 2, combe: 2, poppies: 1 }, farm: { frogs: true, strips: 2 }, complete: false }),
+};
+const ctxOf = () => ({ where: $('where').value, season: $('season').value, weather: $('weather').value, dayProgress: +$('day').value, detail: $('detail').value });
+
+let ac = null, bus = null, fx = null, synth = null, engine = null, analyser = null;
+function audio() {
+  if (ac) return ac;
+  ac = new AudioContext();
+  bus = ac.createGain();
+  fx = ac.createGain();
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 2048;
+  bus.connect(analyser); fx.connect(analyser);
+  analyser.connect(ac.destination);
+  synth = createSynth(ac, fx);
+  applyVol();
+  return ac;
+}
+function applyVol() { if (bus) { const v = +$('vol').value; bus.gain.value = v * v; fx.gain.value = 0.64; } }
+function scape() { return natureScape(PRESETS[$('preset').value](), ctxOf()); }
+function ensureEngine() {
+  audio();
+  if (ac.state !== 'running') ac.resume();
+  const mode = $('detail').value;
+  if (mode === 'off') { if (engine) engine.stop(); engine = null; return null; }
+  if (!engine) engine = createNature(ac, bus, { detail: mode });
+  engine.setDetail(mode);
+  engine.setListener({ y: +$('ly').value, h: 180 });
+  return engine;
+}
+$('start').onclick = () => { const e = ensureEngine(); if (e) e.set(scape()); };
+$('stop').onclick = () => { if (engine) engine.stop(); engine = null; };
+for (const id of ['where', 'season', 'weather', 'day', 'detail', 'preset']) $(id).oninput = () => { if (engine || $('detail').value !== 'off') { const e = engine && ensureEngine(); if (e) e.set(scape()); } };
+$('ly').oninput = () => engine && engine.setListener({ y: +$('ly').value, h: 180 });
+$('vol').oninput = applyVol;
+
+const box = $('sources');
+for (const id of [...LAYER_IDS, ...SONG_IDS]) {
+  const s = NATURE_SOURCES[id];
+  const b = document.createElement('button');
+  b.innerHTML = `${id}<small>${s.name}</small>`;
+  b.title = s.recipe;
+  b.onclick = () => { const e = ensureEngine() || (createNature(audio(), bus, { detail: 'full' })); e.play(id, { seconds: 6 }); if (!engine) engine = e; };
+  box.appendChild(b);
+}
+document.querySelectorAll('[data-tone]').forEach((b) => (b.onclick = () => { audio(); ac.resume(); synth.play(b.dataset.tone, { when: ac.currentTime + 0.05 }); }));
+
+const scope = $('scope').getContext('2d');
+const buf = new Float32Array(2048);
+function draw() {
+  requestAnimationFrame(draw);
+  if (!analyser) return;
+  analyser.getFloatTimeDomainData(buf);
+  scope.fillStyle = '#1d1a22'; scope.fillRect(0, 0, 600, 120);
+  scope.strokeStyle = '#8fcf6f'; scope.beginPath();
+  let peak = 0;
+  for (let i = 0; i < 600; i++) { const v = buf[Math.floor(i * 2048 / 600)]; peak = Math.max(peak, Math.abs(v)); scope.lineTo(i, 60 - v * 110); }
+  scope.stroke();
+  const st = engine ? engine.stats() : null;
+  $('info').textContent = st ? `voix ${st.voices}/${st.maxVoices} · couches ${JSON.stringify(st.layers)} · écho ${st.echo}\nchants : ${st.birds.join(', ') || '—'}\npic affiché ${peak.toFixed(3)}` : `moteur arrêté · pic ${peak.toFixed(3)}`;
+}
+draw();
+
+// ── Laboratoire hors ligne (tools/measure-nature.js) ─────────────────────────────────
+function seeded(seed = 1) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+function fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; } }
+  for (let len = 2; len <= n; len <<= 1) {
+    const a = (-2 * Math.PI) / len, wr = Math.cos(a), wi = Math.sin(a);
+    for (let i = 0; i < n; i += len) { let cr = 1, ci = 0; for (let k = 0; k < len / 2; k++) { const ur = re[i + k], ui = im[i + k], vr = re[i + k + len / 2] * cr - im[i + k + len / 2] * ci, vi = re[i + k + len / 2] * ci + im[i + k + len / 2] * cr; re[i + k] = ur + vr; im[i + k] = ui + vi; re[i + k + len / 2] = ur - vr; im[i + k + len / 2] = ui - vi; const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t; } }
+  }
+}
+/** Analyse d'un rendu : pic, RMS, enveloppe (10 ms), durée audible, spectre moyen (Welch), sauts d'échantillons. */
+function analyse(buffer, { from = 0, to = Infinity } = {}) {
+  const sr = buffer.sampleRate;
+  const L = buffer.getChannelData(0), Rt = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : L;
+  const a = Math.floor(from * sr), b = Math.min(L.length, Math.floor(to * sr));
+  let peak = 0, peakAt = 0, sum = 0, maxDiff = 0, clipped = 0;
+  for (let i = a; i < b; i++) {
+    const v = Math.max(Math.abs(L[i]), Math.abs(Rt[i]));
+    if (v > peak) { peak = v; peakAt = i / sr; } sum += (L[i] * L[i] + Rt[i] * Rt[i]) / 2;
+    if (v >= 0.99) clipped++;
+    if (i > a) maxDiff = Math.max(maxDiff, Math.abs(L[i] - L[i - 1]), Math.abs(Rt[i] - Rt[i - 1]));
+  }
+  const rms = Math.sqrt(sum / Math.max(1, b - a));
+  const win = Math.floor(sr * 0.01), env = [];
+  for (let i = a; i + win <= b; i += win) { let s = 0; for (let k = 0; k < win; k++) s += L[i + k] * L[i + k] + Rt[i + k] * Rt[i + k]; env.push(Math.sqrt(s / (2 * win))); }
+  const envPeak = Math.max(1e-9, ...env);
+  const on = env.map((v, i) => [v, i]).filter(([v]) => v > envPeak * 0.01);
+  const audible = on.length ? (on[on.length - 1][1] - on[0][1] + 1) * 0.01 : 0;
+  const N = 4096, mag = new Float64Array(N / 2);
+  let frames = 0;
+  for (let i = a; i + N <= b; i += N / 2) {
+    let e = 0; for (let k = 0; k < N; k++) e += L[i + k] * L[i + k];
+    if (e < 1e-8 * N) continue;
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let k = 0; k < N; k++) re[k] = (L[i + k] + Rt[i + k]) * 0.5 * (0.5 - 0.5 * Math.cos((2 * Math.PI * k) / (N - 1)));
+    fft(re, im);
+    for (let k = 0; k < N / 2; k++) mag[k] += re[k] * re[k] + im[k] * im[k];
+    frames++;
+  }
+  let tot = 0, cen = 0, top = 0, topK = 0;
+  const bands = { '<300': 0, '300-1k': 0, '1-3k': 0, '3-6k': 0, '>6k': 0 };
+  for (let k = 1; k < N / 2; k++) {
+    const f = (k * sr) / N, p = mag[k];
+    tot += p; cen += f * p; if (p > top) { top = p; topK = k; }
+    bands[f < 300 ? '<300' : f < 1000 ? '300-1k' : f < 3000 ? '1-3k' : f < 6000 ? '3-6k' : '>6k'] += p;
+  }
+  for (const k of Object.keys(bands)) bands[k] = tot ? Math.round((bands[k] / tot) * 100) : 0;
+  return { peak: +peak.toFixed(4), peakAt: +peakAt.toFixed(2), rms: +rms.toFixed(4), clipped, maxDiff: +maxDiff.toFixed(4), audible: +audible.toFixed(2), centroid: tot ? Math.round(cen / tot) : 0, dominant: Math.round((topK * sr) / N), bands, env };
+}
+const SR = 48000;
+/**
+ * Rend `seconds` d'un paysage (programmateur appelé au fil du rendu, comme en vrai : voix libérées à leur fin).
+ * `stress` : chaque chant × stress (pire cas : le budget de voix plein en permanence).
+ */
+async function renderScene({ facts = demoFacts(), ctx = {}, seconds = 20, detail = 'full', seed = 7, listener, stress = 1 } = {}) {
+  const off = new OfflineAudioContext(2, SR * seconds, SR);
+  const engine = createNature(off, off.destination, { detail, clock: 'manual', random: seeded(seed) });
+  if (listener) engine.setListener(listener);
+  const sc = natureScape(facts, { detail, ...ctx });
+  if (stress > 1) sc.birds = sc.birds.map((b) => ({ ...b, rate: b.rate * stress }));
+  engine.set(sc);
+  let maxVoices = 0, sumVoices = 0, n = 0;
+  for (let t = 0.25; t < seconds; t += 0.25) {
+    const tt = t;
+    off.suspend(tt).then(() => { engine.advance(tt + 0.05); maxVoices = Math.max(maxVoices, engine.voices); sumVoices += engine.voices; n++; off.resume(); });
+  }
+  engine.advance(0.05);
+  const t0 = performance.now();
+  const buffer = await off.startRendering();
+  const wall = performance.now() - t0;
+  const an = analyse(buffer, { from: 3 });
+  delete an.env;
+  return { seconds, wallMs: Math.round(wall), load: +(wall / (seconds * 1000)).toFixed(4), voicesPeak: maxVoices, voicesMean: +(sumVoices / Math.max(1, n)).toFixed(2), birds: sc.birds.length, layers: sc.layers, ...an };
+}
+/** Rend un seul son de la vallée (chant : une phrase ; couche : `seconds`), pour l'analyser. */
+async function renderSource(id, { seconds, seed = 3, level = 0.6 } = {}) {
+  const src = NATURE_SOURCES[id];
+  const dur = seconds ?? (src.kind === 'song' ? (id === 'skylark' ? 17 : 5) : 6);
+  const off = new OfflineAudioContext(2, SR * dur, SR);
+  const engine = createNature(off, off.destination, { clock: 'manual', random: seeded(seed) });
+  engine.play(id, { seconds: dur + 5, level });
+  return analyse(await off.startRendering(), { from: src.kind === 'layer' ? 2.5 : 0 });
+}
+/** Rend un ton du synthétiseur (clatter, legend). */
+async function renderTone(name) {
+  const off = new OfflineAudioContext(2, SR * 4, SR);
+  const s = createSynth(off, off.destination);
+  s.play(name, { when: 0.05 });
+  return analyse(await off.startRendering());
+}
+/**
+ * Transitions (craquements) : rend un paysage et applique des changements en cours de rendu (suspend/resume) :
+ * steps = [{ at, ctx?, facts?, listener?, detail?, stop? }]. Renvoie le saut d'échantillon maximal autour de chaque
+ * changement (± 0,5 s) comparé à celui du régime établi.
+ */
+async function renderTransitions({ facts = demoFacts(), ctx = {}, seconds = 24, detail = 'full', steps = [], seed = 11 } = {}) {
+  const off = new OfflineAudioContext(2, SR * seconds, SR);
+  const engine = createNature(off, off.destination, { detail, clock: 'manual', random: seeded(seed) });
+  let curFacts = facts, curCtx = { detail, ...ctx };
+  engine.set(natureScape(curFacts, curCtx));
+  const pending = [...steps].sort((a, b) => a.at - b.at);
+  for (let t = 0.25; t < seconds; t += 0.25) {
+    const tt = t;
+    off.suspend(tt).then(() => {
+      while (pending.length && pending[0].at <= tt + 1e-6) {
+        const s = pending.shift();
+        if (s.facts) curFacts = s.facts;
+        if (s.ctx) curCtx = { ...curCtx, ...s.ctx };
+        if (s.detail) { engine.setDetail(s.detail); curCtx.detail = s.detail; }
+        if (s.listener) engine.setListener(s.listener);
+        if (s.stop) engine.stop();
+        else if (s.facts || s.ctx || s.detail) engine.set(natureScape(curFacts, curCtx));
+      }
+      engine.advance(tt + 0.05);
+      off.resume();
+    });
+  }
+  engine.advance(0.05);
+  const buffer = await off.startRendering();
+  const base = analyse(buffer, { from: 3, to: steps.length ? Math.max(3.5, steps[0].at - 0.5) : seconds });
+  const around = steps.map((s) => { const a = analyse(buffer, { from: Math.max(0, s.at - 0.02), to: Math.min(seconds, s.at + 0.6) }); return { at: s.at, what: Object.keys(s).filter((k) => k !== 'at').join('+'), maxDiff: a.maxDiff, peak: a.peak }; });
+  const all = analyse(buffer);
+  return { baseMaxDiff: base.maxDiff, basePeak: base.peak, peak: all.peak, peakAt: all.peakAt, tail: analyse(buffer, { from: seconds - 1 }).peak, around };
+}
+window.natureLab = { renderScene, renderSource, renderTone, renderTransitions, natureScape, demoFacts, NATURE_SOURCES, LAYER_IDS, SONG_IDS, ready: true };
+</script>
+</body>
+</html>

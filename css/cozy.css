@@ -290,7 +290,7 @@ button.cz-crate:active { transform: translateY(var(--u)); }
 .al-case.is-new { box-shadow: 0 0 0 calc(var(--u) * 1.5) var(--gold-2), 0 calc(var(--u) * 2) 0 var(--u) rgba(63, 38, 49, 0.14); }
 .al-new { position: absolute; top: 3px; right: 3px; padding: 0 3px; font-size: 14px; line-height: 1.15; font-weight: 700; color: var(--parch); background: var(--red-dark); text-shadow: var(--text-outline); }
 .al-stamps { display: inline-flex; gap: 3px; min-height: 16px; }
-.al-stamp { display: inline-grid; place-items: center; min-width: 16px; height: 16px; font-size: 0.75rem; line-height: 1; }
+.al-stamp { display: inline-grid; place-items: center; min-width: 16px; height: 16px; font-size: 0.875rem; line-height: 1; }
 .al-stamp-empty { color: var(--parch-3); font-weight: 700; font-size: 0.875rem; }
 .al-stamp.is-on.is-gold { color: var(--gold-dark); }
 .al-stamp.is-on.is-giant { color: var(--green-dark); }

@@ -881,6 +881,8 @@ body.in-menu .banner { top: calc(var(--safe-t) + 10px); z-index: 32; }
 }
 /* Message à toucher (« Nouvelle version disponible ») : au-dessus des fenêtres, sinon le menu le recouvre. */
 #toasts:has(.toast.is-action) { z-index: 65; }
+/* (QA du V3) … sauf sous une bulle de conseil : le message à toucher recouvrait le bouton « Compris » de la bulle. */
+body:has(#hints.is-active) #toasts:has(.toast.is-action) { z-index: 35; }
 body.in-menu #toasts { bottom: calc(var(--safe-b) + 12px); }
 /* Feuille haute (achats, bilan) : pas de place au-dessus d'elle ; les messages passent en bas,
    sur la fin de la liste (sans capter les touchers), plutôt que sur son titre et son ✕. */
@@ -2533,11 +2535,14 @@ body.is-career.has-dialog #toasts:has(.toast.is-action) { z-index: 35; }
 .c-trait-text { flex-basis: 100%; color: var(--text-soft); font-size: 0.875rem; }
 
 /* ─── Carrière v2 : mini-carte (en bas à droite, au-dessus des onglets) ──────── */
+/* Place de la mini-carte en variables (bas, hauteur du cadre, marge à droite) : la colonne de zoom + / − / 1:1 se pose
+   juste au-dessus d'elle (plus bas, « Zoom de la scène »). La ligne « À faire » posée remonte --mm-bottom (guidance.css). */
+:root { --mm-bottom: calc(var(--inset-bottom) + 10px); --mm-h: 132px; --mm-right: 10px; }
 .minimap {
   position: fixed;
   z-index: 18; /* sous la barre du haut, les onglets, les feuilles et les messages */
-  right: calc(var(--safe-r) + 10px);
-  bottom: calc(var(--inset-bottom) + 10px);
+  right: calc(var(--safe-r) + var(--mm-right));
+  bottom: var(--mm-bottom);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
@@ -2600,7 +2605,7 @@ body.is-career.has-dialog #toasts:has(.toast.is-action) { z-index: 35; }
 .minimap.is-collapsed .minimap-frame, .minimap.is-collapsed .minimap-btn { display: none; }
 .minimap.is-collapsed .minimap-show { display: grid; }
 @media (max-height: 699px), (max-width: 369px) {
-  .minimap { right: calc(var(--safe-r) + 8px); bottom: calc(var(--inset-bottom) + 8px); }
+  :root { --mm-bottom: calc(var(--inset-bottom) + 8px); --mm-h: 116px; --mm-right: 8px; }
   .minimap-frame { width: 84px; height: 116px; }
 }
 
@@ -2682,6 +2687,13 @@ body.is-career.has-dialog #toasts:has(.toast.is-action) { z-index: 35; }
 .c-cell.is-owned.t-greenhouse { background: #b7e2d8; }
 .c-cell.is-buyable { background: #6b5a34; color: #fff3b0; box-shadow: inset 0 0 0 2px #fddc00; }
 .c-cell.is-locked { background: #4b4a45; color: #e8e0d0; }
+/* (Vallée V3) Terres sauvages (couleurs de la mini-carte) et forêts à confier (pointillé vert clair, lisible sans la couleur). */
+.c-cell.is-wildland { background: #2e5a2a; }
+.c-cell.is-wildland.w-marsh { background: #3f6f6a; }
+.c-cell.is-wildland.w-grassland { background: #a3b64f; color: var(--outline); }
+.c-cell.is-wildland.w-grassland .c-cell-label { text-shadow: none; }
+.c-cell.is-wildable { background: #3c5c3f; box-shadow: inset 0 0 0 2px rgba(190, 235, 160, 0.85); outline: 2px dashed rgba(190, 235, 160, 0.85); outline-offset: -6px; }
+.c-legend-item.is-wildland i { background: #2e5a2a; }
 .c-cell.is-here::after { content: ''; position: absolute; inset: -2px; box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--outline); pointer-events: none; }
 .c-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 2px 2px 4px; font-size: 0.875rem; color: var(--text-soft); }
 .c-legend-item { display: inline-flex; align-items: center; gap: 4px; }
@@ -2902,12 +2914,18 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
 }
 
 /* ─── Zoom de la scène : boutons + / − (src/ui/zoom.js) ──────────────────────────
-   À droite (à gauche pour gaucher), au-dessus de la ligne « À faire » et des onglets ; en carrière, à
-   gauche de la mini-carte. Cibles de 48 px, pastille de 40 px, discrète (un peu transparente au repos). */
+   Colonne collée au bord de l'écran (marge de sécurité comprise), à portée de pouce :
+   - carrière : à droite, juste AU-DESSUS de la mini-carte (de ses boutons « Cacher » / « Agrandir »), alignée sur son
+     cadre (pastilles et cadre au même bord) ; mini-carte repliée : au-dessus du bouton « Carte ». Gaucher : la
+     mini-carte reste à droite, la colonne aussi (au-dessus d'elle, jamais à côté) ;
+   - niveaux (pas de mini-carte) : au même endroit, juste au-dessus de la ligne « À faire » ; à gauche pour gaucher.
+   Ancrée par le BAS, « 1:1 » en haut : + et − ne bougent pas quand « 1:1 » apparaît ou disparaît.
+   Cibles de 48 px, pastille de 40 px, discrète (un peu transparente au repos). Retour joueur 2026-10-04 : « les
+   boutons de zoom devraient être au bord de l'écran, au-dessus de la mini-carte ». */
 .zoom-controls {
   position: fixed;
   z-index: 18; /* comme la mini-carte : sous la barre du haut, les onglets, les feuilles et les messages */
-  right: calc(var(--safe-r) + 6px);
+  right: calc(var(--safe-r) + 6px); /* pastille de 40 px dans une cible de 48 : bord de la pastille à 10 px */
   bottom: calc(var(--inset-bottom) + var(--todo-h, 0px) + 8px);
   display: flex;
   flex-direction: column;
@@ -2919,15 +2937,19 @@ html.high-contrast .bill-glyph { width: 20px; height: 20px; background-size: 16p
   -webkit-touch-callout: none;
 }
 .zoom-controls[hidden] { display: none; }
-.zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 10px + 96px + 24px + 4px); } /* + bouton « Cacher » qui déborde de 24 px */
-.zoom-controls[data-minimap='collapsed'] { right: calc(var(--safe-r) + 10px + 52px + 6px); }
-html.left-handed .zoom-controls,
-html.left-handed .zoom-controls[data-minimap] { right: auto; left: calc(var(--safe-l) + 6px); }
-body.layout-wide .zoom-controls { bottom: 12px; }
-body.layout-wide.has-sheet .zoom-controls { right: calc(var(--panel-w) + 12px); }
-@media (max-height: 699px), (max-width: 369px) {
-  .zoom-controls[data-minimap='shown'] { right: calc(var(--safe-r) + 8px + 84px + 24px + 4px); }
+/* Au-dessus du cadre et de ses boutons de coin (qui dépassent de 26 px), 6 px d'écart ; cible alignée au cadre. */
+.zoom-controls[data-minimap='shown'] {
+  right: calc(var(--safe-r) + var(--mm-right) - 4px);
+  bottom: calc(var(--mm-bottom) + var(--mm-h) + 26px + 6px);
 }
+/* Mini-carte repliée : au-dessus du bouton « Carte » (52 px). */
+.zoom-controls[data-minimap='collapsed'] {
+  right: calc(var(--safe-r) + var(--mm-right) - 4px);
+  bottom: calc(var(--mm-bottom) + 52px + 6px);
+}
+html.left-handed .zoom-controls:not([data-minimap='shown']):not([data-minimap='collapsed']) { right: auto; left: calc(var(--safe-l) + 6px); }
+body.layout-wide .zoom-controls:not([data-minimap='shown']):not([data-minimap='collapsed']) { bottom: 12px; }
+body.layout-wide.has-sheet .zoom-controls { right: calc(var(--panel-w) + 12px); }
 .zoom-btn {
   display: grid;
   place-items: center;

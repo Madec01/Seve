@@ -34,13 +34,13 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '6ddfbe3caf4e';
-// 150 fichiers, 27.0 Mo ; installés d'emblée (core) : 68 fichiers, 1.93 Mo
+const VERSION = '0e09b1e481ce';
+// 155 fichiers, 27.9 Mo ; installés d'emblée (core) : 73 fichiers, 2.78 Mo
 const PRECACHE = [
-  ["index.html", '778601efa975ecb8', 26045, 'core'],
+  ["index.html", 'dcd0cfc338bb1a47', 26017, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.ddfc8aa79d.js", '9a396be3a1359824', 1506612, 'core'],
-  ["dist/game.cf80c27a4b.css", 'cf80c27a4b235ce7', 170718, 'core'],
+  ["dist/game.c823a8702e.js", '684a03b5d9c56ddf', 2093659, 'core'],
+  ["dist/game.098d785949.css", '098d785949fea7d5', 216929, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],
@@ -136,6 +136,7 @@ const PRECACHE = [
   ["assets/icons/icon-maskable-512.png", 'adfb6dc71f0d09e7', 2647, 'core'],
   ["assets/icons/icon-monochrome-512.png", '0e59bf529a1bdbba', 1506, 'core'],
   ["assets/sprites/career.png", '5a56f900f27067c2', 90000, 'core'],
+  ["assets/sprites/coach.png", 'f7635ae6471261e0', 1417, 'core'],
   ["assets/sprites/extra.png", '098e40185d5f7f51', 1950, 'core'],
   ["assets/sprites/lot2.png", '5655cb48e14ec3cd', 13147, 'core'],
   ["assets/sprites/lot3.png", '3420c4cb1bb93369', 28369, 'core'],
@@ -187,6 +188,10 @@ const PRECACHE = [
   ["assets/sprites/ui/slot-wood.png", '77631b56d79873e0', 174, 'core'],
   ["assets/sprites/v3.png", '897aacf1899d5794', 18649, 'core'],
   ["assets/sprites/valley1.png", 'e1043eae1319e9fc', 36791, 'core'],
+  ["assets/sprites/valley2.png", 'b2661ef9d217f278', 21406, 'core'],
+  ["assets/sprites/valley3-bg.png", '8b0fb8bff6d3feb8', 100055, 'core'],
+  ["assets/sprites/valley3.png", 'f387654c61f853c7', 111052, 'core'],
+  ["assets/sprites/valley4.png", '7f9ad2e12fe8d503', 26855, 'core'],
 ];
 // </precache>
 

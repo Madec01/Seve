@@ -137,3 +137,9 @@
 .hud-weather.is-tight .w-tomorrow,
 .hud-weather.is-tight .w-name { display: none; }
 .hud-weather.is-tight { align-items: center; justify-content: center; }
+/* (Vallée V3) Plusieurs terrains défrichés d'un coup : une seule carte, groupée par terrain. */
+.finds-lot { display: grid; gap: 4px; width: 100%; }
+.finds-lot + .finds-lot { margin-top: 6px; }
+.finds-lot-name { margin: 0; font-size: 0.875rem; font-weight: normal; opacity: 0.85; }
+/* Carte haute (beaucoup de terrains) : la première ligne ne passe plus sous le bord du cadre. */
+.dialog--finds .dialog-body { padding-top: 12px; }

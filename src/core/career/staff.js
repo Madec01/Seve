@@ -28,6 +28,7 @@ import { daysLeftInSeason } from '../calendar.js';
 import { stream } from '../rng.js';
 import { capacity as workshopCapacity } from '../processing.js';
 import { absDay, actionsPerDay, addWorkStat, coversLot, ensureWork, isWorking, pausedOf, traitEffects } from './crew.js';
+import { staffNeverTiredOf } from './heirlooms.js';
 
 // ── Données dérivées ─────────────────────────────────────────────────────────────────────────
 
@@ -75,7 +76,8 @@ function tiredDays(state) {
 export function moodOf(state, s) {
   const day = absDay(state);
   if ((s.joyUntilDay || 0) > day) return 'joyful';
-  if (!traitEffects(s).neverTired && (s.streak || 0) >= tiredDays(state)) return 'tired';
+  // (Vallée V2) Pipistrelle installée : l'été, l'équipe n'est jamais lasse (on prend le frais à les regarder voler).
+  if (!traitEffects(s).neverTired && !(state.career?.valley && staffNeverTiredOf(state)) && (s.streak || 0) >= tiredDays(state)) return 'tired';
   return 'content';
 }
 

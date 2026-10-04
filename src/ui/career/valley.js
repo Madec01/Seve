@@ -20,6 +20,13 @@
 //   journalCard(ui), reportSection(ui)   Carnet › Ferme (carte « La Vallée ») et Carnet › Bilan
 //   frame(), reset(game|null), enabled(game), started(game), debugState()
 // }
+// (Lot V3) Délègue à app.places (src/ui/career/places.js) : le segment « Lieux », les habitants de la vallée (groupe
+// « De la vallée »), le prochain indice (valleyAnimal, place, placeNeed, wild), les gestes de la scène (poteau, terres
+// sauvages), les lignes « À faire » vl-view-animal / vl-mushrooms ; chapitres 6 et 7 ; repaint().
+// (Lot V4) Délègue à app.storks (src/ui/career/storks.js) : le bouton « Le livre » de l'en-tête, le groupe « Légendes »
+// (Graines), « Visiteurs rares » (Habitants), le prochain indice (visitor, legendRipe, legendSow, storkNeed, epilogue,
+// postcard), les touchers de la scène (nid, vers luisants), les lignes « À faire » vl-visitor, vl-storks, vl-legend,
+// vl-epilogue, vl-postcard, le bilan (avant / après) ; chapitre 8.
 //
 // Règles : carrière seulement (rien sans state.career.valley) ; rien ne presse, rien ne culpabilise (une bête attend
 // sans limite de temps, un bocal attend qu'on l'ouvre) ; cibles ≥ 48 px, textes ≥ 14 px, peu de texte ; traits en
@@ -29,24 +36,23 @@ import { el, fmt, plural } from '../dom.js';
 import { icon, cropIcon, hasSprite, sprite } from '../icons.js';
 import { cropName as cropNameOf } from '../text.js';
 import { getCrop } from '../../data/crops.js';
-import { HINTS } from '../hints.js';
+import { SIGNALS } from '../coach/signals.js';
 import { v3 } from '../v3.js';
 import { readPrefs } from '../guide-prefs.js';
-import { SEED_RULES, STAGES, VALLEY_HINTS, NATURE_ITEMS_BY_ID, SPECIES_BY_ID, VARIETIES_BY_ID, TRAITS_BY_ID, JOSEPH_BOX, BOON_TEXTS, agreeWith, savedText } from '../../data/career/valley.js';
+import { SEED_RULES, STAGES, NATURE_ITEMS_BY_ID, TRAITS_BY_ID, JOSEPH_BOX, BOON_TEXTS, agreeWith, savedText } from '../../data/career/valley.js';
+import * as VD from '../../data/career/valley.js';
+import { BOON_TEXTS_V3, STAGES_V3, VALLEY_SPECIES_BY_ID } from '../../data/career/places.js';
+
+/** (V3) Habitant de la vallée (il attend dans la vue de la vallée, pas sur la ferme). */
+const isValleySp = (id) => !!VALLEY_SPECIES_BY_ID?.[id];
+
+// (V2) Lectures par identifiant sur les tables réunies (35 variétés, 16 habitants) quand elles existent.
+const VARIETIES_BY_ID = VD.ALL_VARIETIES_BY_ID || VD.VARIETIES_BY_ID;
+const SPECIES_BY_ID = VD.ALL_SPECIES_BY_ID || VD.SPECIES_BY_ID;
 
 // ── Textes et petits dessins ─────────────────────────────────────────────────────────
 
-const HINT_TITLES = {
-  'valley.box': 'La boîte en fer',
-  'valley.jar': 'Un bocal de graines',
-  'valley.trial': 'La planche d\'essai',
-  'valley.nature': 'Votre premier aménagement',
-  'valley.species': 'Une bête est venue',
-  'valley.fixed': 'Une variété sauvée',
-  'valley.fallow': 'La jachère fleurie',
-  'valley.stage': 'La vallée revit',
-};
-for (const [id, text] of Object.entries(VALLEY_HINTS || {})) if (!HINTS[id]) HINTS[id] = { title: HINT_TITLES[id] || 'La Vallée', text, where: 'game', who: 'joseph' };
+// Les anciens conseils « première fois » (VALLEY_HINTS) sont des leçons de Joseph : src/ui/coach/lessons/valley.js.
 
 /** Articles et accords des habitants (fenêtre d'observation, lignes « À faire »). */
 const WHO = {
@@ -62,6 +68,11 @@ const WHO = {
   hare: { the: 'Le lièvre', a: 'Un lièvre', pl: false, welcome: 'Bienvenue, petit lièvre !' },
   squirrel: { the: 'L\'écureuil roux', a: 'Un écureuil roux', pl: false, welcome: 'Bienvenue, petit écureuil !' },
   jay: { the: 'Le geai des chênes', a: 'Un geai des chênes', pl: false, welcome: 'Bienvenue, beau geai !' },
+  // (V2) docs/VALLEE.md § 16.6
+  wildBee: { the: 'L\'osmie', a: 'Une osmie', pl: false, welcome: 'Bienvenue, petite osmie !' },
+  blackbird: { the: 'Le merle noir', a: 'Un merle noir', pl: false, welcome: 'Bienvenue, beau merle !' },
+  lizard: { the: 'Le lézard des murailles', a: 'Un lézard des murailles', pl: false, welcome: 'Bienvenue, petit lézard !' },
+  bat: { the: 'La pipistrelle', a: 'Une pipistrelle', pl: false, welcome: 'Bienvenue, petite pipistrelle !' },
 };
 const who = (id, name) => (WHO[id] ? { ...WHO[id], g: SPECIES_BY_ID[id]?.g || 'm' } : { the: name || 'Une bête', a: name || 'Une bête', pl: false, g: 'f', welcome: 'Bienvenue !' });
 /** Accords d'une variété (genre du nom : « Navet Boule d'or » masculin) : vAgree(x, 'sauvé') → « sauvé » | « sauvée ». */
@@ -73,9 +84,9 @@ const comes = (s) => `${s.pl ? (s.g === 'f' ? 'elles' : 'ils') : (s.g === 'f' ? 
 /** « la graine », « le greffon ». */
 const theUnit = (unit) => (unit === 'greffon' ? 'le greffon' : 'la graine');
 
-const TRAIT_EMOJI = { early: '⏱', dry: '💧', hardy: '❄', fine: '★', tasty: '♥', bee: '🐝', giant: '◆' };
-const NATURE_EMOJI = { hedge: '🌳', strip: '🌼', nestbox: '🏠', owlbox: '🦉', woodpile: '🪵', insectHotel: '🐞', loneTree: '🌳', reeds: '🌾', fallow: '🌸' };
-const WILD_EMOJI = { robin: '🐦', hedgehog: '🦔', ladybird: '🐞', bumblebee: '🐝', butterfly: '🦋', swallow: '🐦', tawnyOwl: '🦉', frog: '🐸', dragonfly: '🪲', hare: '🐇', squirrel: '🐿', jay: '🐦' };
+const TRAIT_EMOJI = { early: '⏱', dry: '💧', hardy: '❄', fine: '★', tasty: '♥', bee: '🐝', giant: '◆', scented: '❀' };
+const NATURE_EMOJI = { hedge: '🌳', strip: '🌼', nestbox: '🏠', owlbox: '🦉', woodpile: '🪵', insectHotel: '🐞', loneTree: '🌳', reeds: '🌾', fallow: '🌸', batbox: '🦇' };
+const WILD_EMOJI = { robin: '🐦', hedgehog: '🦔', ladybird: '🐞', bumblebee: '🐝', butterfly: '🦋', swallow: '🐦', tawnyOwl: '🦉', frog: '🐸', dragonfly: '🪲', hare: '🐇', squirrel: '🐿', jay: '🐦', wildBee: '🐝', blackbird: '🐦', lizard: '🦎', bat: '🦇' };
 const FIND_EMOJI = { blackberry: '🫐', elderflower: '🌼', sloe: '🫐', hazelnut: '🌰' };
 const SEASON_END = { spring: 'du printemps', summer: 'de l\'été', autumn: 'de l\'automne', winter: 'de l\'hiver' };
 
@@ -83,7 +94,7 @@ const lower = (t) => (t ? t.charAt(0).toLowerCase() + t.slice(1) : t);
 const capitalize = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
 
 /** Sprite de l'atlas, sinon un petit dessin de remplacement (emoji décoratif, caché aux lecteurs d'écran). */
-function vIcon(names, cls = 'sprite--md', emoji = '•') {
+export function vIcon(names, cls = 'sprite--md', emoji = '•') {
   const list = (Array.isArray(names) ? names : [names]).filter(Boolean);
   for (const n of list) if (hasSprite(n)) return sprite(n, cls);
   const size = /--(xs)\b/.test(cls) ? 'xs' : /--(sm)\b/.test(cls) ? 'sm' : /--(lg|hero|card|vl-big|vl-vignette)\b/.test(cls) ? 'lg' : 'md';
@@ -94,6 +105,14 @@ function vIcon(names, cls = 'sprite--md', emoji = '•') {
 export function traitChip(t, { long = false } = {}) {
   if (!t) return null;
   return el(`span.vl-trait.is-${t.id}`, vIcon([t.icon, `icon.trait.${t.id}`], 'sprite--xs', TRAIT_EMOJI[t.id] || '•'), el('span', long && t.text ? `${t.name} : ${lower(t.text)}` : t.name));
+}
+
+/** (V2) Une ou deux pastilles de traits (croisées : deux traits) ; accepte `traits` (V2) ou `trait` (V1). */
+export function traitsChips(x, opts) {
+  const list = Array.isArray(x?.traits) && x.traits.length ? x.traits.map((t) => (typeof t === 'string' ? TRAITS_BY_ID[t] : t)).filter(Boolean) : x?.trait ? [typeof x.trait === 'string' ? TRAITS_BY_ID[x.trait] : x.trait] : [];
+  if (!list.length) return null;
+  if (list.length === 1) return traitChip(list[0], opts);
+  return el(`span.vl-traits${opts?.long ? '.is-long' : ''}`, list.map((t) => traitChip(t, opts)));
 }
 
 /** Barre de fixation lue « 4 récoltes à la main sur 6 ». */
@@ -112,6 +131,11 @@ export function fixBar(hand, need, unit = 'graine') {
 export function signsRow(signs, target) {
   const max = Math.max(1, target);
   const n = Math.max(0, Math.min(max, signs));
+  // (V3) Jusqu'à 99 signes : au-delà de 40 points, une barre lue (la rangée irait sur trois lignes).
+  if (max > 40) {
+    const pct = Math.round((n / max) * 100);
+    return el('span.vl-signs.is-bar', { role: 'img', 'aria-label': `${n} signes de vie sur ${max}` }, el('span.vl-signs-fill', { style: { width: `${pct}%` }, 'aria-hidden': 'true' }));
+  }
   return el(
     'span.vl-signs',
     { role: 'img', 'aria-label': `${n} signes de vie sur ${max}` },
@@ -132,7 +156,6 @@ export function createValley(app) {
   const visToasts = new Map(); // espèce → message « … vous attend » (retiré quand elle s'installe)
   let sceneStage = -1;
   const day = { key: '', seeds: 0, hand: 0 };
-  let lastTrialHint = '';
 
   // ── Accès protégés ──────────────────────────────────────────────────────────────
   const enabled = (g = app.game) => !!(g && g.mode === 'career' && g.state?.career?.valley);
@@ -181,7 +204,7 @@ export function createValley(app) {
     return res;
   }
   const morning = (text) => text && app.todo?.morningNote?.(text);
-  const hint = (id, target = null) => app.hints?.maybe?.(id, target);
+  const signal = (name, data) => app.coach?.signal?.(name, data);
   const tone = (name, opts) => app.audio.tone?.(name, opts);
   const reduced = () => !!app.reducedMotion?.();
   const grantEcus = (n) => {
@@ -190,12 +213,11 @@ export function createValley(app) {
     return v;
   };
   const sceneRect = (kind, id) => safe(() => app.scene?.valleyItemRect?.(kind, id), null);
-  const rectTarget = (kind, id) => ({ rect: () => { const r = sceneRect(kind, id); return r ? app.worldPageRect?.(r) : null; } });
 
   // ── Feuilles « vivantes » ──────────────────────────────────────────────────────
-  function openLive(id, { title, icon: ico, build, sig, tall = true, pauses }) {
+  function openLive(id, { title, icon: ico, build, sig, tall = true, pauses, outsideClose }) {
     const node = safe(build, null) || el('p.sheet-empty', 'Rien pour l\'instant.');
-    app.sheets.open({ id, kind: 'popup', tall, title, icon: ico, content: node, className: `vl-sheet vl-sheet--${id}`, pauses, onClose: () => { if (live?.id === id) live = null; } });
+    app.sheets.open({ id, kind: 'popup', tall, title, icon: ico, content: node, className: `vl-sheet vl-sheet--${id}`, pauses, outsideClose, onClose: () => { if (live?.id === id) live = null; } });
     live = { id, build, sig, lastSig: safe(sig, '') };
     return true;
   }
@@ -254,8 +276,8 @@ export function createValley(app) {
     const next = st.next;
     return el(
       'div.vl-head',
-      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶'][st.n] || '🌿')),
-      el('p.vl-stage', el('b', `Étape ${st.n}`), ` · ${st.name}`),
+      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶', '💧', '🌳', '🕊'][st.n] || '🌿')),
+      el('div.vl-stage-row', el('p.vl-stage', el('b', `Étape ${st.n}`), ` · ${st.name}`), app.storks?.bookButton?.() || null), // (V4) « Le livre »
       el(
         'div.vl-signs-line',
         signsRow(st.signs, next ? next.signs : st.total || 24),
@@ -267,6 +289,12 @@ export function createValley(app) {
   function hintAction(h) {
     if (!h) return null;
     const t = h.target || null;
+    const v2 = app.heritage?.hintAction?.(h); // (V2) troc, paire, Grainothèque, récit
+    if (v2) return v2;
+    const v3 = app.places?.hintAction?.(h); // (V3) bête de la vallée, lieu prêt, ce qui manque, terre sauvage
+    if (v3) return v3;
+    const v4 = app.storks?.hintAction?.(h); // (V4) visiteur rare, légende, cigognes, épilogue, carte postale
+    if (v4) return v4;
     switch (h.kind) {
       case 'observe':
         return { label: 'Aller voir', go: () => showInScene('wildlife', t?.id) };
@@ -310,10 +338,11 @@ export function createValley(app) {
       { id: 'seeds', label: 'Graines', on: V()?.parts?.seeds !== false },
       { id: 'wildlife', label: 'Habitants', on: V()?.parts?.wildlife !== false },
       { id: 'nature', label: 'Aménager', on: true },
+      { id: 'places', label: 'Lieux', on: !!app.places?.placesOpen?.() }, // (V3) 4ᵉ segment, une fois la vue ouverte
     ].filter((t) => t.on);
     if (!T.some((t) => t.id === tab)) tab = T[0]?.id || 'nature';
     return el(
-      'div.seg.vl-seg',
+      `div.seg.vl-seg${T.length >= 4 ? '.is-four' : ''}`,
       { role: 'tablist', 'aria-label': 'La Vallée' },
       T.map((t) =>
         el(
@@ -323,6 +352,7 @@ export function createValley(app) {
             app.audio.play('page', { volume: 0.6 });
             tab = t.id;
             repaint();
+            signal(SIGNALS.valleySheet, { tab: t.id, sheet: 'vl-valley' });
           } },
           el('span', t.label),
         ),
@@ -336,13 +366,13 @@ export function createValley(app) {
       const raw = enabled() ? q('valley') : null;
       return el('div.vl-valley', el('p.cz-lead', raw?.startsAtRank ? `La Vallée commence au rang ${raw.startsAtRank} : Joseph passera avec une boîte en fer.` : 'La Vallée n\'est pas active dans cette ferme.'));
     }
-    const body = tab === 'wildlife' ? wildlifeTab(v) : tab === 'nature' ? natureTab(v) : seedsTab(v);
+    const body = tab === 'wildlife' ? wildlifeTab(v) : tab === 'nature' ? natureTab(v) : tab === 'places' && app.places ? app.places.lieuxTab(v) : seedsTab(v);
     return el('div.vl-valley', stageHead(v), hintCard(v), tabs(), el('div.vl-panel', { role: 'tabpanel' }, body), chaptersSection(v));
   }
 
   function open(t = null) {
     if (!enabled()) return false;
-    if (t && ['seeds', 'wildlife', 'nature'].includes(t)) tab = t;
+    if (t && ['seeds', 'wildlife', 'nature', 'places'].includes(t)) tab = t;
     if (placing) leavePlacing({ silent: true });
     return openLive('vl-valley', { title: 'La Vallée', icon: vIcon(['icon.valley'], 'sprite--md', '🌿'), build: valleyContent, sig: valleySig });
   }
@@ -357,9 +387,9 @@ export function createValley(app) {
         : el('span.vl-row-sub', `${plural(x.seeds, x.unit || 'graine')}${x.growing ? ` · ${x.growing} en terre` : ''}`, fixBar(x.hand, x.need, x.unit));
     return el(
       `button.vl-row.vl-variety${unknown ? '.is-unknown' : ''}${x.state === 'fixed' ? '.is-fixed' : ''}`,
-      { type: 'button', id: `vl-var-${x.id}`, 'aria-label': `${x.name}, ${x.trait?.name || ''}, ${unknown ? 'à retrouver' : x.state === 'fixed' ? vAgree(x, 'sauvé') : `${plural(x.seeds, x.unit || 'graine')}, ${x.hand} récoltes à la main sur ${x.need}`}`, onclick: () => openVariety(x.id) },
-      el('span.vl-row-ico', unknown ? cropIcon(x.cropId, 'sprite--md') : vIcon([x.icon, x.ripeIcon], 'sprite--md', '🌱')),
-      el('span.vl-row-main', el('span.vl-row-name', x.name), traitChip(x.trait), status),
+      { type: 'button', id: `vl-var-${x.id}`, 'aria-label': `${x.name}, ${(x.traits || [x.trait]).filter(Boolean).map((t) => t.name).join(' et ')}, ${unknown ? 'à retrouver' : x.state === 'fixed' ? vAgree(x, 'sauvé') : `${plural(x.seeds, x.unit || 'graine')}, ${x.hand} récoltes à la main sur ${x.need}`}`, onclick: () => openVariety(x.id) },
+      el(`span.vl-row-ico${x.group === 'cross' ? '.is-cross' : ''}`, unknown ? cropIcon(x.cropId, 'sprite--md') : vIcon([x.icon, x.ripeIcon, `crop.${x.cropId}.icon`, `tree.${x.cropId}.icon`], 'sprite--md', '🌱')),
+      el('span.vl-row-main', el('span.vl-row-name', x.name), traitsChips(x), status),
       el('span.c-row-go', { 'aria-hidden': 'true' }, '›'),
     );
   }
@@ -373,11 +403,21 @@ export function createValley(app) {
     if (fair) parts.push(fair);
     const list = v.varieties || [];
     const fixed = list.filter((x) => x.state === 'fixed').length;
+    // (V2) En tête : la carte « La Grainothèque » et la proposition de troc.
+    const H = app.heritage?.on?.() ? app.heritage : null;
+    if (H) parts.unshift(H.seedsTop(v));
     parts.push(el('p.vl-count', `${fixed} / ${list.length} variétés sauvées`));
-    // Les variétés qu'on a en main d'abord (graines à semer), puis les sauvées, puis celles à retrouver.
-    const rank = { seeds: 0, fixed: 1, unknown: 2 };
-    parts.push(el('div.vl-rows', [...list].sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2)).map(varietyRow)));
-    parts.push(el('p.sheet-hint', `Récoltez une variété ancienne à la main : + ${SEED_RULES.handSeeds} graines. Après ${SEED_RULES.fixHand} récoltes à la main, elle est sauvée.`));
+    if (H) parts.push(...H.seedGroups(v, varietyRow));
+    else {
+      // Les variétés qu'on a en main d'abord (graines à semer), puis les sauvées, puis celles à retrouver.
+      const rank = { seeds: 0, fixed: 1, unknown: 2 };
+      parts.push(el('div.vl-rows', [...list].sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2)).map(varietyRow)));
+    }
+    parts.push(el('p.sheet-hint', `Récoltez une variété ancienne à la main : + ${v.library?.level >= 2 ? 3 : SEED_RULES.handSeeds} graines. Après ${v.library?.level >= 3 ? 5 : SEED_RULES.fixHand} récoltes à la main, elle est sauvée.`));
+    // (V4) Groupe replié « Légendes » (2 / 4) et les cloches de la Grainothèque.
+    if (app.storks?.on?.()) parts.push(app.storks.legendsGroup(v));
+    // (V2) « Revoir la boîte en fer » (§ 16.10).
+    if (app.heritage) parts.push(app.heritage.boxButton());
     return el('div.vl-seeds', parts);
   }
 
@@ -387,12 +427,14 @@ export function createValley(app) {
     if (!x) return el('p.sheet-empty', 'Variété inconnue.');
     const unknown = x.state === 'unknown';
     const parts = [
-      el('div.vl-big', unknown ? cropIcon(x.cropId, 'sprite--hero') : vIcon([x.ripeIcon, x.icon], 'sprite--hero', '🌱'), unknown ? null : vIcon([x.icon], 'sprite--card', '🌱')),
-      el('p.vl-trait-long', traitChip(x.trait, { long: true })),
+      el('div.vl-big', unknown ? cropIcon(x.cropId, 'sprite--hero') : vIcon([x.ripeIcon, x.icon, `crop.${x.cropId}.4`, `tree.${x.cropId}.icon`], 'sprite--hero', '🌱'), unknown ? null : vIcon([x.icon, `crop.${x.cropId}.icon`], 'sprite--card', '🌱')),
+      el('p.vl-trait-long', traitsChips(x, { long: true })),
+      // (V2) « De la part de Lili », croisement « 2 / 3 rencontres » et « Semer la paire ».
+      app.heritage?.varietyExtra?.(x) || null,
     ];
     if (unknown) {
       parts.push(el('p.cz-lead', x.hint || 'À retrouver.'));
-      if (x.label) parts.push(el('p.vl-label', `Étiquette d'un vieux bocal : « ${x.label} »`));
+      if (x.label && x.group !== 'village' && x.group !== 'cross') parts.push(el('p.vl-label', `Étiquette d'un vieux bocal : « ${x.label} »`));
     } else {
       if (x.anecdote) parts.push(el('p.cz-say', `« ${x.anecdote} »`));
       if (x.state === 'fixed') parts.push(el('p.vl-ok', `${capitalize(vAgree(x, 'sauvé'))} ✓ · ${x.tree ? 'greffons illimités' : 'graines illimitées'}${x.seedCost ? ` (${fmt(x.seedCost)} ${theUnit(x.unit)})` : ''} · l'équipe peut ${x.tree ? 'le planter' : `${vPron(x)} semer`}.`));
@@ -452,7 +494,6 @@ export function createValley(app) {
     const plots = safe(() => app.game.query.plots(), []) || [];
     const p = plots.find((x) => x.action === 'plant' && x.env === 'field' && !x.fallow);
     if (!p) return refused('Une jachère se fait sur une parcelle de champ vide.');
-    hint('valley.fallow', null);
     sowAt(p.index);
   }
 
@@ -496,7 +537,6 @@ export function createValley(app) {
     tone('pop', { volume: 0.9 });
     app.vibrate?.([12, 40, 12]);
     repaint();
-    hint('valley.jar', null);
   }
   function openJar() {
     if (!started()) return false;
@@ -538,7 +578,7 @@ export function createValley(app) {
   }
 
   // ── Onglet Habitants ──────────────────────────────────────────────────────────
-  function speciesRow(s) {
+  function speciesRow(s, { goValley = null } = {}) {
     const unknown = s.state === 'unknown';
     const sp = { g: s.g || who(s.id).g, pl: s.pl ?? who(s.id).pl };
     const recipe = el(
@@ -552,7 +592,7 @@ export function createValley(app) {
     if (s.state === 'installed') state = el('p.vl-row-sub.is-ok', `${capitalize(agreeWith(sp, 'installé'))} ✓ — ${lower(s.service?.text || '')}`);
     else if (s.state === 'visible') {
       state = el('p.vl-row-sub.is-wait', `${sp.pl ? `${sp.g === 'f' ? 'Elles' : 'Ils'} vous attendent` : 'Vous attend'} ${s.where || ''}.`);
-      action = el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-see-${s.id}`, onclick: () => showInScene('wildlife', s.id) }, 'Aller voir');
+      action = el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-see-${s.id}`, onclick: () => (goValley ? goValley() : showInScene('wildlife', s.id)) }, 'Aller voir');
     } else if (s.state === 'hint') state = el('p.vl-row-sub', `Indice : ${lower(s.hint || '')}`);
     else if (s.recipeOk) state = el('p.vl-row-sub', s.inSeason ? `Tout est prêt : ${comes(sp)} bientôt.` : `Tout est prêt : ${comes(sp)} ${s.seasonsWhen || 'à sa saison'}.`);
     else state = null;
@@ -566,7 +606,10 @@ export function createValley(app) {
   }
 
   function wildlifeTab(v) {
-    const list = v.species || [];
+    const all = v.species || [];
+    // (V3) Les habitants de la vallée vivent dans un groupe replié « De la vallée » (en bas).
+    const isValley = (s) => s.group === 'valley' || isValleySp(s.id);
+    const list = all.filter((s) => !isValley(s));
     const n = list.filter((s) => s.state === 'installed').length;
     const order = { visible: 0, hint: 1, unknown: 2, installed: 3 };
     const sorted = [...list].sort((a, b) => (order[a.state] ?? 2) - (order[b.state] ?? 2));
@@ -574,7 +617,9 @@ export function createValley(app) {
     return el(
       'div.vl-wild',
       el('p.vl-count', `${n} / ${list.length} habitants installés`),
-      el('div.vl-rows', sorted.map(speciesRow)),
+      el('div.vl-rows', sorted.map((s) => speciesRow(s))),
+      app.places?.speciesGroup?.(all.filter(isValley), speciesRow) || null,
+      app.storks?.on?.() ? app.storks.visitorsGroup(v) : null, // (V4) « Visiteurs rares »
       services.length ? el('section.vl-services', el('h3.stats-title', 'Ce que la vallée vous rend'), el('ul', services.map((s) => el('li', s.text)))) : null,
       el('p.sheet-hint', 'Une bête venue vous attend, sans limite de temps : touchez-la pour qu\'elle s\'installe.'),
     );
@@ -625,11 +670,12 @@ export function createValley(app) {
   }
   function chaptersSection(v) {
     const list = (v.chapters || []).filter((c) => c.available);
-    if (!list.length) return null;
+    const stories = app.heritage?.on?.() ? app.heritage.storyButtons(v) : []; // (V2) récits de la Grainothèque
+    if (!list.length && !stories.length) return null;
     return el(
       'section.vl-chapters',
       el('h3.stats-title', vIcon(['portrait.joseph'], 'sprite--sm', '💬'), 'Les récits de Joseph'),
-      el('div.vl-chap-list', list.map((c) => el(`button.btn.vl-chap${c.read ? '' : '.is-new'}`, { type: 'button', id: `vl-chap-${c.n}`, onclick: () => openChapter(c.n) }, c.read ? '' : el('span.vl-new', 'Nouveau · '), c.title))),
+      el('div.vl-chap-list', list.map((c) => el(`button.btn.vl-chap${c.read ? '' : '.is-new'}`, { type: 'button', id: `vl-chap-${c.n}`, onclick: () => openChapter(c.n) }, c.read ? '' : el('span.vl-new', 'Nouveau · '), c.title)), stories),
     );
   }
 
@@ -639,10 +685,11 @@ export function createValley(app) {
     if (!c) return el('p.sheet-empty', 'Chapitre inconnu.');
     return el(
       'div.vl-chapter.cz-veillee',
-      el('div.cz-vignette.vl-vignette', vIcon(n === 0 ? [JOSEPH_BOX.vignette, 'story.box'] : [`valley.stage.${n}`], 'sprite--vl-vignette', '🔥')),
+      el('div.cz-vignette.vl-vignette', vIcon(n === 0 ? [JOSEPH_BOX.vignette, 'story.box'] : n === 8 ? ['story.storks', 'valley.stage.8'] : [`valley.stage.${n}`], 'sprite--vl-vignette', '🔥')),
       el('h3.cz-story-title', c.title),
       el('div.cz-story', c.lines.map((l, i) => el('p.cz-story-line', { style: { '--cz-delay': `${i}` } }, `« ${l} »`))),
       n > 0 && STAGES[n]?.reward?.boon ? el('p.vl-ok', BOON_TEXTS[STAGES[n].reward.boon]) : null,
+      n >= 6 && (STAGES_V3 || []).find((x) => x.n === n)?.reward?.boon ? el('p.vl-ok', BOON_TEXTS_V3?.[(STAGES_V3 || []).find((x) => x.n === n).reward.boon] || '') : null,
       el('button.btn.btn--red.btn--big.btn--wide.vl-go', { type: 'button', id: 'vl-chap-ok', onclick: () => readChapter(n) }, 'Merci, Joseph'),
     );
   }
@@ -655,6 +702,8 @@ export function createValley(app) {
   }
   function openChapter(n = firstUnread()) {
     if (!started()) return false;
+    // (V2) « La boîte en fer » déjà lue : la même fenêtre que le premier jour, avec l'état actuel des trois variétés.
+    if (n === 0 && app.heritage && (V()?.chapters || []).find((c) => c.n === 0)?.read && V()?.box) return app.heritage.openBox();
     tone('magic', { volume: 0.6 });
     return openLive('vl-chapter', { title: 'Joseph raconte', icon: vIcon(['portrait.joseph'], 'sprite--md', '💬'), build: () => chapterContent(n), sig: () => '' });
   }
@@ -682,13 +731,13 @@ export function createValley(app) {
         act('readChapter', 0);
         app.sheets.close();
         tone('chime', { volume: 0.6 });
-        setTimeout(() => hint('valley.box', rectTarget('valleyBox')), 300);
       } }, 'Merci, Joseph'),
     );
   }
   function openBox(data) {
     tone('magic', { volume: 0.7 });
-    return openLive('vl-box', { title: JOSEPH_BOX.title, icon: vIcon(['valley.box'], 'sprite--md', '🍪'), build: () => boxContent(data), sig: () => '' });
+    // Ne se ferme plus d'un toucher hors d'elle (§ 16.10) : il faut « Merci, Joseph ».
+    return openLive('vl-box', { title: JOSEPH_BOX.title, icon: vIcon(['valley.box'], 'sprite--md', '🍪'), build: () => boxContent(data), sig: () => '', outsideClose: false });
   }
 
   // ── Observer une bête ────────────────────────────────────────────────────────
@@ -700,11 +749,12 @@ export function createValley(app) {
       el('h3.vl-obs-title', { role: 'status' }, `${w.the} ${w.pl ? 's\'installent' : 's\'installe'} !`),
       r.anecdote ? el('p.cz-say', `« ${r.anecdote} »`) : null,
       el('p.vl-service', el('span.vl-heart', { 'aria-hidden': 'true' }, '♥ '), r.service?.text || ''),
-      el('p.vl-ok', '✓ Album : Les habitants de la ferme'),
+      el('p.vl-ok', `✓ Album : ${SPECIES_BY_ID[r.speciesId]?.group === 'v2' ? 'Les habitants (suite)' : 'Les habitants de la ferme'}`),
       el('button.btn.btn--red.btn--big.btn--wide.vl-go.vl-welcome', { type: 'button', id: 'vl-welcome', onclick: () => app.sheets.close() }, w.welcome),
     );
   }
   function observe(id) {
+    if (isValleySp(id)) return app.places?.observe?.(id) || false; // (V3) dans la vue
     const rect = sceneRect('wildlife', id);
     const res = act('observe', id);
     if (!res?.ok) return false;
@@ -765,12 +815,14 @@ export function createValley(app) {
     if (!spots.length) return refused('Tous les emplacements de cet aménagement sont pris.'), false;
     buildBar();
     placing = kind;
+    // Signal avant la fermeture de la feuille : la leçon de Joseph passe au mode de visée (pas de retour en arrière).
+    signal(SIGNALS.placing, { kind });
     app.sheets.close('silent');
     app.input?.cancel?.();
-    app.hints?.clear?.();
     app.pushPause('valley');
     document.body.classList.add('in-valley-place');
     app.scene?.setValleyPlacing?.(kind);
+    app.scene?.ensureTouchZoom?.({ animate: !reduced() }); // (V3) zoom tactile : emplacements ≥ 48 px
     paintBar();
     app.audio.play('open', { volume: 0.6 });
     app.onDecorChange?.(true);
@@ -791,7 +843,7 @@ export function createValley(app) {
       }
     }
     if (best && view && !(best.x >= view.x && best.x + best.w <= view.x + view.w && best.y >= view.y && best.y + best.h <= view.y + view.h)) safe(() => s.focusWorld?.(best.x + best.w / 2, best.y + best.h / 2, { animate: !reduced() }), null);
-    app.toasts.show({ prio: 'important', kind: 'info', key: 'vl-place', sprite: vIcon([it.icon], 'sprite--sm', NATURE_EMOJI[kind] || '🌿'), text: 'Touchez un emplacement qui clignote.', duration: 2600, log: false });
+    // (Pas de message « touchez un emplacement » : la barre le dit ; gardé pendant le mode, il arrivait après.)
     if (app.keyboardMode) requestAnimationFrame(() => bar.querySelector('#vl-bar-done')?.focus());
     return true;
   }
@@ -800,6 +852,8 @@ export function createValley(app) {
     placing = null;
     document.body.classList.remove('in-valley-place');
     app.scene?.setValleyPlacing?.(null);
+    if (!app.heritage?.pairing && !app.places?.wilding) app.scene?.restoreZoom?.({ animate: !reduced() });
+    signal(SIGNALS.placing, { kind: null });
     app.popPause('valley');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.onDecorChange?.(false);
@@ -827,7 +881,7 @@ export function createValley(app) {
     return true;
   }
   function articleOf(kind) {
-    return { hedge: 'une haie', strip: 'une bande fleurie', nestbox: 'un nichoir', owlbox: 'le nichoir à chouette', woodpile: 'un tas de bois', insectHotel: 'un hôtel à insectes', loneTree: 'un chêne', reeds: 'les berges' }[kind] || 'un aménagement';
+    return { hedge: 'une haie', strip: 'une bande fleurie', nestbox: 'un nichoir', owlbox: 'le nichoir à chouette', woodpile: 'un tas de bois', insectHotel: 'un hôtel à insectes', loneTree: 'un chêne', reeds: 'les berges', batbox: 'un nichoir à chauves-souris' }[kind] || 'un aménagement';
   }
   function place(spotId, kind) {
     const res = act('placeNature', spotId, kind);
@@ -836,7 +890,6 @@ export function createValley(app) {
     app.audio.play('plant', { volume: 0.8 });
     tone('pop', { volume: 0.6, delay: 0.1 });
     app.vibrate?.(14);
-    hint('valley.nature', null);
     requestAnimationFrame(() => {
       paintBar();
       const left = (q('valleySpots', app.game, kind) || []).filter((s) => s.free).length;
@@ -847,6 +900,9 @@ export function createValley(app) {
   // ── Toucher dans la scène ────────────────────────────────────────────────────
   function onHit(hit) {
     if (!hit || !enabled()) return false;
+    if (app.heritage?.onHit?.(hit)) return true; // (V2) Grainothèque, parcelle du mode paire
+    if (app.places?.onHit?.(hit)) return true; // (V3) poteau « Vers la vallée », terres sauvages
+    if (app.storks?.onHit?.(hit)) return true; // (V4) nid de cigognes, vers luisants
     switch (hit.type) {
       case 'wildlife':
         return observe(hit.id) || true;
@@ -860,6 +916,11 @@ export function createValley(app) {
       }
       case 'valleyBox': {
         const v = V();
+        // (V4) Après l'épilogue, la boîte en fer (au ruban doré) ouvre le livre de la vallée.
+        if (v?.epilogue?.read && app.valleyBook && !v.chapters?.some((c) => c.available && !c.read)) {
+          app.valleyBook.open();
+          return true;
+        }
         if (v?.chapters?.some((c) => c.available && !c.read)) openChapter(firstUnread(v));
         else if (v?.jars?.pending > 0) openJar();
         else open();
@@ -879,7 +940,7 @@ export function createValley(app) {
     const v = V(g);
     if (!v) return [];
     const out = [];
-    const vis = (v.species || []).filter((s) => s.state === 'visible');
+    const vis = (v.species || []).filter((s) => s.state === 'visible' && s.group !== 'valley' && !isValleySp(s.id)); // (V3) vallée : vl-view-animal
     if (vis.length) {
       const s = vis[0];
       const w = who(s.id, s.name);
@@ -893,6 +954,9 @@ export function createValley(app) {
       const x = trials[0].variety;
       out.push({ id: 'vl-trial', prio: 39, icon: () => vIcon([x.icon], 'sprite--sm', '🌱'), text: `${x.name} : récoltez à la main (+ ${x.seedsOnHand || 2} ${x.unit === 'greffon' ? 'greffon' : 'graines'}, ${Math.min(x.hand, x.need)} / ${x.need})`, short: `${lower(x.name)} à récolter à la main`, go: () => app.todo?.focusPlots?.(trials.map((p) => p.index), trials[0].index, 'harvest') });
     }
+    for (const it of app.heritage?.todoItems?.(g) || []) out.push(it); // (V2) vl-troc, vl-story
+    for (const it of app.places?.todoItems?.(g) || []) out.push(it); // (V3) vl-view-animal, vl-mushrooms
+    for (const it of app.storks?.todoItems?.(g) || []) out.push(it); // (V4) vl-storks, vl-visitor, vl-epilogue, vl-legend, vl-postcard
     const finds = v.finds || [];
     if (finds.length) out.push({ id: 'vl-finds', prio: 66, icon: () => vIcon([finds[0].icon], 'sprite--sm', FIND_EMOJI[finds[0].kind] || '🫐'), text: finds.length > 1 ? `${finds.length} cueillettes dans les haies` : `${finds[0].name} dans une haie`, short: `${plural(finds.length, 'cueillette')} dans les haies`, go: () => showInScene('hedgeFind', finds[0].id) });
     return out;
@@ -904,8 +968,11 @@ export function createValley(app) {
     const rows = [];
     const x = p.variety;
     if (x && p.cropId) {
-      rows.push(el('div.tip-strong.vl-plot-var', vIcon([x.icon], 'sprite--xs', '🌱'), el('span', `Variété ancienne${x.trial ? ' (planche d\'essai)' : ' · sauvée ✓'}`)));
-      rows.push(el('div.vl-plot-trait', traitChip(x.trait, { long: true })));
+      const kind = x.group === 'cross' ? 'Variété de la ferme' : x.group === 'village' ? 'Variété du village' : 'Variété ancienne';
+      rows.push(el('div.tip-strong.vl-plot-var', vIcon([x.icon, `crop.${p.cropId}.icon`], 'sprite--xs', '🌱'), el('span', `${kind}${x.trial ? ' (planche d\'essai)' : ` · ${vAgree(x, 'sauvé')} ✓`}`)));
+      rows.push(el('div.vl-plot-trait', traitsChips(x, { long: true })));
+      const cross = app.heritage?.plotRows?.(p); // (V2) « Croisement avec … : 2 / 3 rencontres »
+      if (cross) rows.push(cross);
       if (x.trial) rows.push(el('div.tip-ok.vl-plot-hand', el('span', `À la main : + ${x.seedsOnHand} ${x.unit === 'greffon' ? (x.seedsOnHand > 1 ? 'greffons' : 'greffon') : 'graines'} `), fixBar(x.hand, x.need, x.unit)));
     }
     if (p.fallow) rows.push(el('div.tip-ok.vl-plot-fallow', vIcon(['icon.nature.fallow'], 'sprite--xs', '🌸'), el('span', p.fallow.text)));
@@ -922,7 +989,7 @@ export function createValley(app) {
   function plotIcon(p) {
     if (!enabled() || !p) return null;
     if (!p.cropId && p.fallow) return vIcon(['icon.nature.fallow'], 'sprite--md', '🌸');
-    if (p.cropId && p.variety) return vIcon([p.variety.icon], 'sprite--md', '🌱');
+    if (p.cropId && p.variety) return vIcon([p.variety.icon, `crop.${p.cropId}.icon`, `tree.${p.cropId}.icon`], 'sprite--md', '🌱');
     return null;
   }
 
@@ -934,6 +1001,9 @@ export function createValley(app) {
     const p = safe(() => app.game.query.plot(index), null);
     const parts = [];
     if (p?.fallow) parts.push(el('p.vl-note', vIcon(['icon.nature.fallow'], 'sprite--xs', '🌸'), 'En jachère fleurie : semer par-dessus l\'arrête (sans sol reposé).'));
+    // (V2) « Semer la paire » d'un geste sur cette parcelle (parent du village ici, celui du pays juste à côté).
+    const pairs = app.heritage?.seedRows?.(list, index, { close }) || null;
+    if (pairs) parts.push(el('h3.vl-seed-title', vIcon(['icon.cross'], 'sprite--xs', '🐝'), 'Croisements'), pairs);
     if (list.length) {
       parts.push(el('h3.vl-seed-title', vIcon(['seedpack.heirloom'], 'sprite--xs', '🌱'), 'Graines anciennes'));
       parts.push(
@@ -944,11 +1014,11 @@ export function createValley(app) {
             return el(
               `button.seed-row.vl-seed-row${h.canSow ? '' : '.is-disabled'}`,
               { type: 'button', id: `seed-heirloom-${h.varietyId}`, dataset: { variety: h.varietyId }, 'aria-disabled': h.canSow ? 'false' : 'true', onclick: () => sowHeirloom(index, h, close) },
-              el('span.seed-icon', vIcon([h.icon], 'sprite--seed', '🌱')),
+              el(`span.seed-icon${h.group === 'cross' ? '.is-cross' : ''}`, vIcon([h.icon, `crop.${h.cropId}.icon`, `tree.${h.cropId}.icon`], 'sprite--seed', '🌱')),
               el(
                 'span.seed-main',
                 el('span.seed-name', h.name),
-                el('span.seed-facts', traitChip(h.trait), el('span', h.seeds > 0 ? '' : icon('seed', 'xs'), facts)),
+                el('span.seed-facts', traitsChips(h), el('span', h.seeds > 0 ? '' : icon('seed', 'xs'), facts)),
                 el('span.seed-warns', h.trial ? el('span.warn-chip.vl-chip-trial', vIcon(['valley.label'], 'sprite--xs', '🏷'), 'Planche d\'essai : récoltez-la à la main') : null, !h.canSow && h.reason ? el('span.warn-chip.is-frost', h.reason) : null),
               ),
             );
@@ -1005,15 +1075,14 @@ export function createValley(app) {
     app.audio.play('plant', { volume: 0.7 });
     tone('pop', { volume: 0.5, delay: 0.1 });
     app.vibrate?.(10);
-    hint('valley.fallow', null);
     close?.();
   }
 
   /** Plan de culture : valeur 'heirloom:<id>' → libellé et icône. */
   function planLabel(value) {
     const id = typeof value === 'string' && value.startsWith('heirloom:') ? value.slice(9) : null;
-    const x = id ? VARIETIES_BY_ID[id] : null;
-    return x ? [vIcon([x.icon], 'sprite--sm', '🌱'), el('span.vl-plan-name', x.name)] : null;
+    const x = id ? (V()?.varieties || []).find((y) => y.id === id) || VARIETIES_BY_ID[id] : null;
+    return x ? [vIcon([x.icon, `crop.${x.cropId}.icon`], 'sprite--sm', '🌱'), el('span.vl-plan-name', x.name)] : null;
   }
   function planRows({ seasonId: sid, greenhouse, cur, pick }) {
     const v = V();
@@ -1028,8 +1097,8 @@ export function createValley(app) {
         el(
           `button.seed-row.c-plan-pick.vl-plan-row${cur === value ? '.is-current' : ''}`,
           { type: 'button', id: `c-plan-heirloom-${x.id}`, onclick: () => pick(value), 'aria-pressed': cur === value ? 'true' : 'false' },
-          el('span.seed-icon', vIcon([x.icon], 'sprite--seed', '🌱')),
-          el('span.seed-main', el('span.seed-name', x.name), el('span.seed-facts', traitChip(x.trait), el('span', icon('seed', 'xs'), x.seedCost ? fmt(x.seedCost) : '—'))),
+          el('span.seed-icon', vIcon([x.icon, `crop.${x.cropId}.icon`], 'sprite--seed', '🌱')),
+          el('span.seed-main', el('span.seed-name', x.name), el('span.seed-facts', traitsChips(x), el('span', icon('seed', 'xs'), x.seedCost ? fmt(x.seedCost) : '—'))),
           cur === value ? el('span.c-check', '✓') : null,
         ),
       );
@@ -1057,7 +1126,7 @@ export function createValley(app) {
           ? el('span.vl-ok', '✓')
           : it?.locked
             ? el('span.vl-lock', icon('lock', 'sm'), it.reason || `Rang ${it.rank}`)
-            : el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-lot-${s.spotId.replace(/\./g, '-')}`, onclick: () => { const r = act('placeNature', s.spotId, s.kind); if (r?.ok) { app.audio.play('plant', { volume: 0.8 }); hint('valley.nature', null); app.careerUI?.refresh?.(); } } }, `${s.kind === 'hedge' || s.kind === 'loneTree' || s.kind === 'reeds' ? 'Planter' : s.kind === 'strip' ? 'Semer' : 'Poser'} · ${it?.reserve > 0 ? 'gratuit' : fmt(it?.price ?? 0)}`);
+            : el('button.btn.btn--red.vl-small', { type: 'button', id: `vl-lot-${s.spotId.replace(/\./g, '-')}`, onclick: () => { const r = act('placeNature', s.spotId, s.kind); if (r?.ok) { app.audio.play('plant', { volume: 0.8 }); app.careerUI?.refresh?.(); } } }, `${s.kind === 'hedge' || s.kind === 'loneTree' || s.kind === 'reeds' ? 'Planter' : s.kind === 'strip' ? 'Semer' : 'Poser'} · ${it?.reserve > 0 ? 'gratuit' : fmt(it?.price ?? 0)}`);
         return el('div.vl-lot-row', vIcon([it?.icon, `icon.nature.${s.kind}`], 'sprite--sm', NATURE_EMOJI[s.kind] || '🌿'), el('span.vl-lot-name', name), right);
       }),
     );
@@ -1076,10 +1145,14 @@ export function createValley(app) {
     if (y.placed) bits.push(`${plural(y.placed, 'aménagement posé', 'aménagements posés')}`);
     if (y.seedsSaved) bits.push(`${plural(y.seedsSaved, 'graine gardée', 'graines gardées')}`);
     if (y.finds) bits.push(`${plural(y.finds, 'cueillette', 'cueillettes')} dans les haies`);
+    for (const t of app.heritage?.yearLines?.(report) || []) bits.push(t); // (V2) trocs, croisements, Grainothèque
+    for (const t of app.places?.yearLines?.(report) || []) bits.push(t); // (V3) chantiers, étapes de lieux, terres sauvages
+    for (const t of app.storks?.yearLines?.(report) || []) bits.push(t); // (V4) visiteurs, légendes, cigogneaux, cartes
     const names = [...(r.installed || []).map((id) => SPECIES_BY_ID[id]?.name), ...(r.fixed || []).map((id) => VARIETIES_BY_ID[id]?.name)].filter(Boolean);
     return el(
       'section.vl-year',
       el('h3.sum-title', vIcon(['icon.valley'], 'sprite--sm', '🌿'), 'La vallée cette année'),
+      app.storks?.yearBlock?.(report) || null, // (V4) avant / après
       el('p.vl-year-line', bits.length ? `${capitalize(bits.join(', '))}.` : 'Une année tranquille pour la vallée.'),
       names.length ? el('p.stats-note', names.join(' · ')) : null,
       el('p.stats-note', `Étape ${r.stage} · ${r.stageName} · ${plural(r.signs || 0, 'signe de vie', 'signes de vie')}${r.natureTotal ? ` · ${plural(r.natureTotal, 'aménagement', 'aménagements')} en tout` : ''}.`),
@@ -1096,7 +1169,7 @@ export function createValley(app) {
       if (!raw?.startsAtRank) return null;
       return el('section.c-sec.vl-jcard.is-soon', el('p.stats-note', vIcon(['icon.valley'], 'sprite--xs', '🌿'), ` La Vallée commence au rang ${raw.startsAtRank}.`));
     }
-    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0;
+    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0 || !!app.heritage?.pending?.(v) || !!app.places?.pending?.(v) || !!app.storks?.pending?.(v);
     return el(
       'button.vl-jcard',
       { type: 'button', id: 'c-j-valley', onclick: () => open(), 'aria-label': `La Vallée : étape ${v.stage.n}, ${v.stage.name}, ${v.stage.signs} signes de vie${pending ? ', quelque chose vous attend' : ''}` },
@@ -1122,6 +1195,9 @@ export function createValley(app) {
       line('Récoltes à la main de variétés', fmt(s.hand || 0)),
       line('Graines gardées', fmt(s.seedsSaved || 0)),
       line('Aménagements posés', fmt(v.nature?.placed || 0)),
+      ...(app.heritage?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
+      ...(app.places?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
+      ...(app.storks?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
       line('Dépensé pour la vallée', `${fmt(v.spent || 0)} pièces`),
       el('p.stats-note', 'Ces dépenses comptent entièrement dans le patrimoine.'),
     );
@@ -1147,7 +1223,6 @@ export function createValley(app) {
     morning(`La vallée : « ${ev.name} ».`);
     const cosName = cosmetic ? (v3.cosmetics?.COSMETICS || []).find((c) => c.id === cosmetic)?.name || cosmetic : null;
     app.toasts.show({ prio: 'important', kind: 'achievement', key: 'vl-stage', sprite: vIcon([`valley.stage.${ev.n}`, 'icon.valley'], 'sprite--sm', '🌿'), title: `La vallée : ${ev.name}`, text: [e ? `+${plural(e, 'écu')}` : null, cosName ? `nouveau décor : ${cosName}` : null].filter(Boolean).join(' · ') || 'Joseph a quelque chose à vous dire.', actionLabel: 'Écouter', onClick: () => openChapter(ev.n), duration: 6000 });
-    hint('valley.stage', null);
     void g;
   }
 
@@ -1155,6 +1230,27 @@ export function createValley(app) {
   function onEvent(ev, g) {
     if (!g || !enabled(g)) return;
     game = g;
+    try {
+      app.heritage?.onEvent?.(ev, g); // (V2) troc, croisements, Grainothèque, récits
+    } catch (err) {
+      console.warn('Grainothèque (événement) :', err);
+    }
+    try {
+      app.places?.onEvent?.(ev, g); // (V3) lieux, reprises, pêche, champignons, terres sauvages, bêtes de la vallée
+      app.valleyView?.onEvent?.(ev, g);
+    } catch (err) {
+      console.warn('Lieux de la vallée (événement) :', err);
+    }
+    try {
+      app.storks?.onEvent?.(ev, g); // (V4) légendes, visiteurs rares, cigognes, épilogue, cartes
+    } catch (err) {
+      console.warn('Cigognes (événement) :', err);
+    }
+    // (V3) Les bêtes de la vallée attendent dans la vue : leurs messages et leur fenêtre sont ceux de app.places.
+    if ((ev.type === 'speciesVisible' || ev.type === 'speciesInstalled') && isValleySp(ev.id)) {
+      if (live) schedule();
+      return;
+    }
     switch (ev.type) {
       case 'valleyStarted':
         windows.push({ kind: 'box', data: ev });
@@ -1177,7 +1273,6 @@ export function createValley(app) {
         tone('chime', { volume: 0.85, delay: 0.5 });
         app.vibrate?.([14, 50, 14]);
         app.toasts.show({ prio: 'important', kind: 'achievement', key: `vl-fixed-${ev.varietyId}`, sprite: vIcon([VARIETIES_BY_ID[ev.varietyId]?.icon], 'sprite--sm', '🌱'), title: ev.text || (VARIETIES_BY_ID[ev.varietyId] ? savedText(VARIETIES_BY_ID[ev.varietyId]) : `${ev.name} : variété sauvée !`), text: 'Dans l\'album et le plan de culture.', actionLabel: 'Voir', onClick: () => openVariety(ev.varietyId), duration: 5200 });
-        hint('valley.fixed', null);
         break;
       case 'heirloomSown':
         if ((ev.by === 'player' || !ev.by) && ev.fromSeeds) app.toasts.show({ prio: 'info', kind: 'info', key: 'vl-sown', sprite: vIcon([VARIETIES_BY_ID[ev.varietyId]?.icon], 'sprite--sm', '🌱'), text: `Planche d'essai : il reste ${plural(ev.seedsLeft || 0, 'graine')}.`, duration: 2400, log: false });
@@ -1201,9 +1296,6 @@ export function createValley(app) {
         const node = app.toasts.show({ prio: 'important', kind: 'info', key: `vl-vis-${ev.id}`, sprite: vIcon([`wild.${ev.id}`], 'sprite--sm', WILD_EMOJI[ev.id] || '🐾'), text: `${w.a} vous attend${w.pl ? 'ent' : ''} ${ev.where || ''} : touchez-${w.pl ? 'les' : 'le'} !`, actionLabel: 'Voir', onClick: () => showInScene('wildlife', ev.id), duration: 5600 });
         if (node) visToasts.set(ev.id, node);
         tone('chirp', { volume: 0.6, delay: 0.4 });
-        setTimeout(() => {
-          if (app.game?.state?.career?.valley?.species?.[ev.id]?.state === 'visible') hint('valley.species', rectTarget('wildlife', ev.id));
-        }, 800);
         break;
       }
       case 'speciesInstalled':
@@ -1230,12 +1322,6 @@ export function createValley(app) {
         break;
       case 'dawn': {
         for (const line of morningLines(ev)) morning(line);
-        // Première planche d'essai mûre : un conseil.
-        const k = dayKey(g);
-        if (lastTrialHint !== k) {
-          lastTrialHint = k;
-          if (V(g)?.hint?.kind === 'trial') hint('valley.trial', null);
-        }
         break;
       }
       default:
@@ -1271,7 +1357,7 @@ export function createValley(app) {
       app.scene?.setValleyStage?.(n);
     }
     // Fenêtres en attente (boîte de Joseph) : seulement quand rien d'autre n'est affiché.
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.hints?.active && !app.tutorial?.active && !app.cozy?.feteMode && !placing && !app.decor?.active) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.coach?.blocking && !app.cozy?.feteMode && !placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'box') openBox(w.data);
     }
@@ -1288,11 +1374,11 @@ export function createValley(app) {
     day.hand = 0;
     jarResult = null;
     tab = 'seeds';
-    lastTrialHint = '';
   }
 
   return {
     open,
+    repaint,
     openJar,
     openVariety,
     openSpecies,

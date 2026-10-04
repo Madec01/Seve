@@ -291,6 +291,7 @@ export function createToasts(stack, bannerNode) {
     if (o.onClick) node.classList.add('is-action');
     node._o = o; // (feuille ouverte) le message peut se retirer et attendre la fermeture
     node._at = Date.now();
+    if (o.key) node.dataset.key = String(o.key); // (Vallée V3) l'écran « La vallée » ne montre que ses messages (style.css)
     node.dataset.prio = prio; // info : une ligne ; important : deux lignes au plus (style.css)
     if (o.keepTouch) node.classList.add('is-sticky'); // reste touchable même sur une feuille haute (mise à jour)
     if (duration >= 5000) node.dataset.important = '1';

@@ -31,10 +31,24 @@
 //
 // Rien n'est dessiné sans state.career.valley commencée. Sprite absent (planche valley1 facultative) → repli dessiné une
 // fois sur un petit canvas. Mouvements réduits : rien ne traverse le ciel, fleurs et bêtes immobiles, apparitions en fondu.
+//
+// (Lot V2 « Le troc et les croisements », docs/VALLEE.md § 16.9.5) : la Grainothèque (library.<1..5>, ou le panneau
+// library.site ; rien avant), visiteurs devant la porte au niveau 5, sachet kraft épinglé au tableau du village quand un
+// troc attend (troc.pin), abeille (fx.pollen) qui fait l'aller-retour entre deux parents voisins (valleyCrossLinks ;
+// mouvements réduits : point de pollen fixe), « + 1 rencontre · 2 / 3 », sachet doré qui saute au croisement
+// (seedpack.cross), mode « paire » (parcelles de valleyPairPlots qui pulsent, contour pointillé épais + « + »), nichoir à
+// chauves-souris (nature.batbox), habitants du V2 (couleurs de repli). Planche valley2 facultative (replis dessinés).
+//   Purs : librarySpriteName(level, site), trocPinRect(board), beePos(a, b, t, reduced), pairTargets(list, layout)
+//   hitTest + { type: 'seedLibrary' } | { type: 'pairPlot', plotIndex } (mode paire : SEULEMENT celles-ci)
+//   setPair(cropId | null), pair ; itemRect('seedLibrary' | 'pairPlot' (index) | 'trocPin')
 
 import { TILE, drawSprite } from './atlas.js';
 import { canDraw } from './effects.js';
-import { VARIETIES_BY_ID } from '../data/career/valley.js';
+import * as VD from '../data/career/valley.js';
+
+const VARIETIES_BY_ID = VD.VARIETIES_BY_ID;
+/** Variété (V1, du village ou croisée) par identifiant : tables `ALL_*` du V2 quand elles existent. */
+const varietyDef = (id) => (VD.ALL_VARIETIES_BY_ID || VARIETIES_BY_ID || {})[id] || null;
 
 const T = TILE;
 const OUTLINE = '#3f2631';
@@ -45,7 +59,10 @@ const WILD_COLORS = {
   robin: ['#a0603a', '#e0663a'], hedgehog: ['#7a5a40', '#c9a27a'], ladybird: ['#d8322a', '#2a2026'], bumblebee: ['#e8b82a', '#2a2026'],
   butterfly: ['#d8562a', '#3a5ac8'], swallow: ['#2a3a6a', '#f2ece0'], tawnyOwl: ['#8a5a32', '#e8d0a0'], frog: ['#b8763a', '#6a8a3a'],
   dragonfly: ['#3a8ae8', '#a8e0f8'], hare: ['#a8865a', '#e8d8b8'], squirrel: ['#c8582a', '#f0c890'], jay: ['#b88a6a', '#3a6ae8'],
+  // (V2) osmie, merle noir, lézard des murailles, pipistrelle
+  wildBee: ['#c8682a', '#2a2026'], blackbird: ['#2a2026', '#f2c23a'], lizard: ['#8a7a5a', '#c8b88a'], bat: ['#6a4a3a', '#a8886a'],
 };
+const LIBRARY_ROOF = ['#b8583a', '#a8503a', '#9a4a3a', '#9a4a3a', '#8a4a3a'];
 
 // ── Purs ─────────────────────────────────────────────────────────────────────────────
 
@@ -149,6 +166,53 @@ export function growRect(r, minWorld = 0) {
   const ex = Math.max(0, (minWorld - r.w) / 2);
   const ey = Math.max(0, (minWorld - r.h) / 2);
   return { x: r.x - ex, y: r.y - ey, w: r.w + 2 * ex, h: r.h + 2 * ey };
+}
+
+/** (V2) Dessin de la Grainothèque : `library.<1..5>`, le panneau `library.site` (rang 3 atteint), sinon rien. */
+export function librarySpriteName(level, site) {
+  const n = Math.floor(Number(level) || 0);
+  if (n >= 1) return `library.${Math.min(5, n)}`;
+  return site ? 'library.site' : null;
+}
+
+/** (V2) Sachet kraft épinglé en haut à droite du tableau du village (px du monde). */
+export function trocPinRect(board) {
+  if (!board) return null;
+  return { x: Math.round(board.x + board.w - 14), y: Math.round(board.y + 1), w: T, h: T };
+}
+
+/**
+ * (V2) Abeille entre deux parents voisins : aller-retour (vague triangulaire, une traversée ≈ 1,6 s) avec un petit
+ * rebond ; mouvements réduits : un point de pollen fixe au milieu. a, b : centres (px). → { x, y, flip, still }
+ */
+export function beePos(a, b, t = 0, reduced = false) {
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  if (reduced) return { x: mx, y: my - 6, flip: false, still: true };
+  const ph = ((t / 1.6) % 2 + 2) % 2;
+  const u = ph < 1 ? ph : 2 - ph;
+  const e = u * u * (3 - 2 * u);
+  return { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e - 8 - Math.abs(Math.sin(u * Math.PI)) * 6, flip: (b.x - a.x) * (ph < 1 ? 1 : -1) > 0, still: false };
+}
+
+/** (V2) Parcelles du mode paire : rectangles (px) des `plotIndex` de valleyPairPlots(), sans doublon. */
+export function pairTargets(list, layout) {
+  const out = [];
+  const seen = new Set();
+  for (const p of list || []) {
+    const i = p?.plotIndex;
+    if (!Number.isInteger(i) || seen.has(i)) continue;
+    let r = null;
+    try {
+      r = layout?.plotRect?.(i) || null;
+    } catch {
+      r = null;
+    }
+    if (!r) continue;
+    seen.add(i);
+    out.push({ plotIndex: i, partnerPlot: Number.isInteger(p.partnerPlot) ? p.partnerPlot : null, rect: { x: r.x, y: r.y, w: r.w, h: r.h } });
+  }
+  return out;
 }
 
 // ── Replis dessinés ───────────────────────────────────────────────────────────────────
@@ -291,6 +355,110 @@ const FALLBACK = {
       const c = ['#ffffff', '#f2d23a', '#e87aa8'][v % 3];
       for (const [x, y] of [[3, 10], [8, 12], [12, 9], [6, 6]]) { R(g, x, y, 2, 2, c); R(g, x, y + 2, 1, 2, '#3f8a34'); }
     }),
+  // ── (V2) ──
+  library: (level) =>
+    makeCanvas(32, 32, (g) => {
+      if (level <= 0) {
+        // Panneau « ? » sur un coin d'herbe tondue, piquets et ficelle.
+        R(g, 2, 20, 28, 10, '#7ab84a');
+        for (const x of [3, 28]) R(g, x, 18, 2, 10, '#8a6a4a');
+        R(g, 3, 19, 27, 1, '#e8e0c8');
+        R(g, 14, 12, 2, 16, '#6a4a32');
+        R(g, 8, 5, 14, 10, OUTLINE);
+        R(g, 9, 6, 12, 8, '#c8945a');
+        g.fillStyle = OUTLINE;
+        for (const [x, y] of [[13, 7], [14, 7], [15, 7], [16, 8], [15, 9], [14, 10], [14, 12]]) g.fillRect(x, y, 1, 1);
+        return;
+      }
+      const L = Math.min(5, level);
+      const big = L >= 3;
+      // Murs de pierre sèche, toit de tuiles, porte bleue, fenêtre aux bocaux.
+      const wx = big ? 3 : 6;
+      const ww = big ? 26 : 20;
+      R(g, wx, 14, ww, 16, OUTLINE);
+      R(g, wx + 1, 15, ww - 2, 14, '#b8b0a0');
+      for (let y = 17; y < 29; y += 3) for (let x = wx + 2 + (y % 2) * 2; x < wx + ww - 2; x += 5) R(g, x, y, 3, 1, '#8a8478');
+      R(g, wx - 2, 8, ww + 4, 7, OUTLINE);
+      R(g, wx - 1, 9, ww + 2, 5, LIBRARY_ROOF[L - 1]);
+      R(g, wx, 6, ww, 3, OUTLINE);
+      R(g, wx + 1, 7, ww - 2, 2, LIBRARY_ROOF[L - 1]);
+      if (L <= 2) for (let x = wx; x < wx + ww; x += 4) R(g, x, 9, 2, 1, '#6a9a4a'); // tuiles moussues
+      const dx = wx + 4;
+      R(g, dx, 20, 6, 10, OUTLINE);
+      R(g, dx + 1, 21, 4, 9, L >= 5 ? '#3a2a2f' : '#3a6ac8');
+      R(g, wx + ww - 10, 18, 6, 5, OUTLINE);
+      R(g, wx + ww - 9, 19, 4, 3, '#fff3b0');
+      R(g, wx + ww - 8, 20, 1, 2, '#e8783a');
+      R(g, wx + ww - 6, 19, 1, 2, '#6cbf4a');
+      if (big) {
+        R(g, wx + ww - 18, 18, 6, 5, OUTLINE);
+        R(g, wx + ww - 17, 19, 4, 3, '#fff3b0');
+        R(g, 9, 11, 14, 3, '#e8d8b0'); // enseigne
+        R(g, 10, 12, 12, 1, '#6a4a32');
+      }
+      if (L >= 2) {
+        // Auvent et tresses de maïs, banc.
+        R(g, 0, 15, 5, 2, '#8a5a32');
+        R(g, 1, 17, 1, 5, '#f2c23a');
+        R(g, 3, 17, 1, 4, '#e8a83a');
+        R(g, 0, 27, 4, 2, '#8a5a32');
+      }
+      if (L >= 4) {
+        for (let x = 0; x < 32; x += 3) R(g, x, 29, 1, 3, '#e8e0c8'); // piquets du jardin clos
+        R(g, 27, 24, 4, 5, '#d8a83a'); // ruche en paille
+        R(g, 27, 26, 4, 1, '#a8782a');
+      }
+      if (L >= 5) {
+        // Rosier grimpant.
+        for (const [x, y] of [[wx, 16], [wx + 1, 19], [wx, 22], [wx + 2, 25], [wx + 1, 13]]) { R(g, x, y, 2, 2, '#3f8a34'); R(g, x + 1, y, 1, 1, '#e8486a'); }
+      }
+    }),
+  trocPin: () =>
+    makeCanvas(16, 16, (g) => {
+      R(g, 4, 4, 9, 11, OUTLINE);
+      R(g, 5, 5, 7, 9, '#d8b07a');
+      R(g, 5, 8, 7, 1, '#a8804a');
+      R(g, 7, 10, 3, 2, '#7ab84a');
+      R(g, 7, 2, 3, 3, OUTLINE);
+      R(g, 8, 3, 1, 1, '#e8323a');
+    }),
+  seedpackCross: () =>
+    makeCanvas(16, 16, (g) => {
+      R(g, 3, 3, 10, 12, OUTLINE);
+      R(g, 4, 4, 8, 10, '#f2c23a');
+      R(g, 4, 6, 8, 1, '#c89a2a');
+      g.fillStyle = '#fffbe8';
+      for (const [x, y] of [[8, 8], [7, 9], [8, 9], [9, 9], [8, 10], [6, 9], [10, 9]]) g.fillRect(x, y, 1, 1);
+    }),
+  pollen: (f) =>
+    makeCanvas(8, 8, (g) => {
+      if (f) {
+        for (const [x, y] of [[1, 2], [4, 1], [6, 4], [2, 5], [5, 6]]) R(g, x, y, 1, 1, '#f2d23a');
+        return;
+      }
+      R(g, 2, 3, 4, 3, OUTLINE);
+      R(g, 3, 3, 1, 2, '#f2c23a');
+      R(g, 5, 3, 1, 2, '#f2c23a');
+      R(g, 2, 1, 2, 2, '#e8f4ff');
+      R(g, 4, 1, 2, 2, '#e8f4ff');
+    }),
+  batbox: () =>
+    makeCanvas(16, 16, (g) => {
+      R(g, 4, 2, 8, 12, OUTLINE);
+      R(g, 5, 3, 6, 10, '#6a4a32');
+      R(g, 5, 11, 6, 1, OUTLINE);
+      R(g, 4, 1, 8, 2, '#4a3226');
+    }),
+  visitor: (k) =>
+    makeCanvas(16, 16, (g) => {
+      const shirt = ['#3a6ac8', '#c8483a', '#6a9a4a'][k % 3];
+      R(g, 6, 2, 4, 4, OUTLINE);
+      R(g, 7, 3, 2, 2, '#f0c8a0');
+      R(g, 5, 6, 6, 6, OUTLINE);
+      R(g, 6, 7, 4, 4, shirt);
+      R(g, 6, 12, 2, 3, '#3a3040');
+      R(g, 8, 12, 2, 3, '#3a3040');
+    }),
 };
 
 // ── Acteurs ───────────────────────────────────────────────────────────────────────────
@@ -311,6 +479,8 @@ export function createValleyActors(effects) {
   const info = {
     season: 'spring', nature: [], animals: [], finds: [], fallow: [], trials: [], boxPending: false, started: false,
     placingSpots: [], stageN: 0,
+    // (V2)
+    library: 0, site: false, troc: false, board: null, links: [], pairPlots: [],
   };
   const grows = new Map(); // spotId → âge (s)
   const picks = []; // { kind, x, y, t }
@@ -320,6 +490,11 @@ export function createValleyActors(effects) {
   let birdClock = 0;
   let lastSpark = 0;
   let lastHarvestPlot = null;
+  // (V2) mode « paire », fondu du bâtiment qui change, sachets dorés, rencontres.
+  let pair = null;
+  let libFade = null; // { from, t }
+  const packs = []; // { x, y, t } sachet doré qui saute au croisement
+  let lastMeet = null; // { plotIndex, partnerPlot }
 
   const has = (name) => canDraw(images, name);
   function fallback(key, ...args) {
@@ -347,7 +522,7 @@ export function createValleyActors(effects) {
     info.stageN = v.stage || 0;
     info.nature = Object.entries(v.nature || {}).map(([spotId, n]) => ({ spotId, kind: n.kind, oak: n.kind === 'loneTree' ? oakStage(st, n) : null }));
     info.finds = (v.finds || []).map((f) => ({ id: f.id, kind: f.kind, spotId: f.spotId }));
-    info.animals = (typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || [];
+    info.animals = ((typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || []).filter((a) => !a.visitor); // (V4) les vers luisants : src/render/storks-actors.js
     info.fallow = [];
     info.trials = [];
     (st.plots || []).forEach((p, i) => {
@@ -358,7 +533,18 @@ export function createValleyActors(effects) {
     const pendingJars = Math.max(0, (st.career.heirlooms || []).length - (v.jars?.opened || 0));
     const unread = Array.from({ length: (v.stage || 0) + 1 }, (_, n) => n).some((n) => !(v.chapters?.read || []).includes(n));
     info.boxPending = pendingJars > 0 || unread;
+    info.gift = !!v.epilogue?.readAt; // (V4) boîte au ruban doré
     info.placingSpots = placing && typeof game.query.career?.valleySpots === 'function' ? (safe(() => game.query.career.valleySpots(placing), []) || []).filter((s) => s.free) : [];
+    // (V2) La Grainothèque, le troc en attente, les paires qui poussent, le mode paire.
+    const heritage = v.parts?.heritage !== false && (v.v || 1) >= 2;
+    const lv = heritage ? Math.max(0, Math.floor(v.library?.level || 0)) : 0;
+    if (info.library !== lv && lv > info.library && info.started) libFade = { from: info.library, t: 0 };
+    info.library = lv;
+    info.site = heritage && !!v.site;
+    info.troc = heritage && !!v.troc;
+    const cq = game.query.career || {};
+    info.links = heritage && typeof cq.valleyCrossLinks === 'function' ? (safe(() => cq.valleyCrossLinks(), []) || []).slice(0, 12) : [];
+    info.pairPlots = pair && typeof cq.valleyPairPlots === 'function' ? pairTargets(safe(() => cq.valleyPairPlots(pair), []) || [], lastLayout) : [];
   }
 
   function sync(game, layout, opts = {}) {
@@ -388,6 +574,9 @@ export function createValleyActors(effects) {
     const sp = spotsOf();
     if (kind === 'natureSpot' || kind === 'spot') return sp[id] ? { ...sp[id] } : null;
     if (kind === 'valleyBox') return lastLayout?.valley?.box ? { ...lastLayout.valley.box } : null;
+    if (kind === 'seedLibrary') return lastLayout?.valley?.library ? { ...lastLayout.valley.library } : null;
+    if (kind === 'pairPlot') return Number.isInteger(id) ? safe(() => lastLayout.plotRect(id), null) : null;
+    if (kind === 'trocPin') return trocPinRect(boardRect());
     if (kind === 'hedgeFind') {
       const f = info.finds.find((x) => x.id === id);
       return f ? findRect(sp[f.spotId], f.id) : null;
@@ -399,6 +588,11 @@ export function createValleyActors(effects) {
       return animalRect(list[k], sameSpotIndex(list, k));
     }
     return null;
+  }
+
+  /** Tableau du village (lot 3) : repère publié par variety-actors.js sur la disposition. */
+  function boardRect(layout = lastLayout) {
+    return layout?.variety?.board || null;
   }
 
   function sameSpotIndex(list, k) {
@@ -483,7 +677,7 @@ export function createValleyActors(effects) {
         const r = plotRect(layout, lastHarvestPlot);
         if (r) {
           effects.burst?.(r.x + r.w / 2, r.y + r.h / 2, reduced ? 8 : 20, 'gold', 44, 0.4, 1);
-          effects.floatText?.(r.x + r.w / 2, r.y - 26, VARIETIES_BY_ID[p.varietyId]?.g === 'm' ? 'Sauvé !' : 'Sauvée !', '#ffd23a', { icon: false, life: 2.2, delay: 0.6, pop: true });
+          effects.floatText?.(r.x + r.w / 2, r.y - 26, varietyDef(p.varietyId)?.g === 'm' ? 'Sauvé !' : 'Sauvée !', '#ffd23a', { icon: false, life: 2.2, delay: 0.6, pop: true });
         }
         infoT = -1;
         break;
@@ -491,6 +685,58 @@ export function createValleyActors(effects) {
       case 'fallowSown': {
         const r = plotRect(layout, p.plotIndex);
         if (r) effects.sparkle?.(r, 8, 'gold', 0);
+        infoT = -1;
+        break;
+      }
+      // ── (V2) ──
+      case 'seedLibraryBuilt': {
+        const r = layout.valley?.library;
+        if (r) {
+          libFade = { from: Math.max(0, (p.level || 1) - 1), t: 0 };
+          effects.sparkle?.(r, reduced ? 8 : 22, 'gold', 0.1);
+          if (!reduced) effects.dirt?.(r.x + r.w / 2, r.y + r.h - 2, 10, 1);
+        }
+        info.library = Math.max(info.library, p.level || 0);
+        infoT = -1;
+        break;
+      }
+      case 'storyAvailable':
+        if (p.id === 'heritage0') {
+          const r = layout.valley?.library;
+          if (r) effects.sparkle?.(r, 10, 'gold', 0.3);
+        }
+        infoT = -1;
+        break;
+      case 'trocOffered':
+      case 'seedSwapped': {
+        const r = trocPinRect(boardRect(layout));
+        if (r) effects.sparkle?.(r, type === 'trocOffered' ? 8 : 6, 'gold', 0.1);
+        infoT = -1;
+        break;
+      }
+      case 'pairSown':
+        for (const i of p.plots || []) {
+          const r = plotRect(layout, i);
+          if (r) effects.sparkle?.(r, 6, 'gold', 0.05);
+        }
+        infoT = -1;
+        break;
+      case 'crossMeeting': {
+        lastMeet = { plotIndex: p.plotIndex, partnerPlot: p.partnerPlot };
+        const r = plotRect(layout, p.plotIndex);
+        if (r) effects.floatText?.(r.x + r.w / 2, r.y - 40, `+ 1 rencontre · ${Math.min(p.meet, p.need)} / ${p.need}`, '#ffe680', { icon: false, life: 2, delay: 0.7 });
+        const r2 = plotRect(layout, p.partnerPlot);
+        if (r && r2 && !reduced) effects.sparkle?.({ x: Math.min(r.x, r2.x), y: Math.min(r.y, r2.y), w: Math.max(r.x + r.w, r2.x + r2.w) - Math.min(r.x, r2.x), h: Math.max(r.y + r.h, r2.y + r2.h) - Math.min(r.y, r2.y) }, 8, 'gold', 0.5);
+        infoT = -1;
+        break;
+      }
+      case 'crossFound': {
+        const i = lastMeet?.plotIndex ?? lastHarvestPlot;
+        const r = plotRect(layout, i);
+        if (r) {
+          packs.push({ x: r.x + r.w / 2 - 8, y: r.y + r.h / 2 - 8, t: reduced ? 0.5 : -0.9 });
+          effects.burst?.(r.x + r.w / 2, r.y + r.h / 2, reduced ? 8 : 24, 'gold', 46, 1, 1);
+        }
         infoT = -1;
         break;
       }
@@ -521,6 +767,8 @@ export function createValleyActors(effects) {
       else grows.set(k, n);
     }
     for (let i = picks.length - 1; i >= 0; i--) if ((picks[i].t += dt) > 0.9) picks.splice(i, 1);
+    if (libFade && (libFade.t += dt) > (reduced ? 0.01 : 1.1)) libFade = null;
+    for (let i = packs.length - 1; i >= 0; i--) if ((packs[i].t += dt) > 2.2) packs.splice(i, 1);
     for (let i = installs.length - 1; i >= 0; i--) if ((installs[i].t += dt) > 1.6) installs.splice(i, 1);
     // Oiseaux : `stage` vols par minute (aucun en mouvements réduits).
     const rate = birdsPerMinute(stage, reduced);
@@ -566,6 +814,10 @@ export function createValleyActors(effects) {
       }
       const b = lastLayout?.valley?.box;
       if (b && info.boxPending) effects.sparkle?.(b, reduced ? 1 : 3, 'gold', 0.5);
+      const pin = info.troc ? trocPinRect(boardRect()) : null;
+      if (pin) effects.sparkle?.({ x: pin.x + 3, y: pin.y + 2, w: 10, h: 10 }, reduced ? 1 : 2, 'gold', 0.8);
+      const lib = lastLayout?.valley?.library;
+      if (lib && info.site && !info.library) effects.sparkle?.({ x: lib.x + 8, y: lib.y + 4, w: 16, h: 12 }, reduced ? 1 : 2, 'gold', 1.1);
     }
   }
 
@@ -679,6 +931,10 @@ export function createValleyActors(effects) {
         case 'insectHotel':
           P('nature.insectHotel', () => fallback('insectHotel'), r.x, r.y, r.y + r.h - 1, o);
           break;
+        case 'batbox':
+          // Accroché sous un avant-toit ou dans un arbre : dessiné par-dessus le mur ou le tronc.
+          P('nature.batbox', () => fallback('batbox'), r.x, r.y, r.y + 3 * T, o);
+          break;
         case 'loneTree': {
           const st = n.oak || 'sapling';
           const name = oakSpriteName(st, s);
@@ -704,9 +960,38 @@ export function createValleyActors(effects) {
       const dy = reduced ? 0 : -Math.sin(Math.min(1, pk.t / 0.6) * Math.PI) * 12;
       P(`hedgefind.${pk.kind}`, () => fallback('find', pk.kind), pk.x, pk.y + dy, pk.y + T + 0.5, { alpha: Math.max(0, 1 - pk.t / 0.9) });
     }
+    // (V2) La Grainothèque (ou son panneau), avec un fondu quand elle change de niveau ; visiteurs au niveau 5.
+    const lib = lastLayout.valley?.library;
+    const libName = librarySpriteName(info.library, info.site);
+    if (lib && libName) {
+      const lvl = info.library;
+      const bottom = lib.y + lib.h - 1;
+      if (libFade && !reduced) {
+        const k = Math.min(1, libFade.t / 1.1);
+        const prev = librarySpriteName(libFade.from, true);
+        if (prev && k < 1) P(prev, () => fallback('library', libFade.from), lib.x, lib.y, bottom - 0.2, { alpha: 1 - k });
+        P(libName, () => fallback('library', lvl), lib.x, lib.y, bottom, { alpha: Math.max(0.05, k) });
+      } else P(libName, () => fallback('library', lvl), lib.x, lib.y, bottom);
+      if (lvl >= 5) {
+        for (let k = 0; k < 2; k++) {
+          const sway = reduced ? 0 : Math.round(Math.sin(time * 0.6 + k * 2.1) * 2);
+          const vx = lib.x + (k ? lib.w - 2 : -12) + sway;
+          const vy = lib.y + lib.h - 13;
+          P(`npc.visitor.${k + 1}`, () => fallback('visitor', k), vx, vy, lib.y + lib.h + 1 + k * 0.1, k ? {} : { flipX: true });
+        }
+      }
+    }
+    // Sachets dorés d'un croisement : sautent de la parcelle, puis s'effacent.
+    for (const pk of packs) {
+      if (pk.t < 0) continue;
+      const u = Math.min(1, pk.t / 0.7);
+      const dy = reduced ? -10 : -Math.sin(u * Math.PI * 0.85) * 22 - u * 6;
+      P('seedpack.cross', () => fallback('seedpackCross'), pk.x, pk.y + dy, pk.y + 40, { alpha: Math.max(0, Math.min(1, (2.2 - pk.t) / 0.5)) });
+    }
     // Boîte en fer du perron.
     const b = lastLayout.valley?.box;
-    if (b && info.started) P(info.boxPending ? 'valley.box.open' : 'valley.box', () => fallback('box', info.boxPending ? 1 : 0), b.x, b.y, b.y + T - 1);
+    // (V4) Après l'épilogue de Joseph : la boîte porte un ruban doré (elle ouvre le livre de la vallée).
+    if (b && info.started) P(info.boxPending ? 'valley.box.open' : info.gift && has('valley.box.gift') ? 'valley.box.gift' : 'valley.box', () => fallback('box', info.boxPending ? 1 : 0), b.x, b.y, b.y + T - 1);
     // Bêtes : qui attendent (étincelle « ? »), habitants du jour en promenade douce.
     const list = info.animals.filter((a) => a.state !== 'hint');
     list.forEach((a, k) => {
@@ -733,6 +1018,41 @@ export function createValleyActors(effects) {
     });
   }
 
+  /** Contour pointillé épais qui pulse, remplissage clair et « + » au centre (lisible sans la couleur). */
+  function dashedBox(c, r, pulse) {
+    const x = Math.round(r.x);
+    const y = Math.round(r.y);
+    c.globalAlpha = 0.42 * pulse;
+    c.fillStyle = '#fff3b0';
+    c.fillRect(x, y, r.w, r.h);
+    c.globalAlpha = pulse;
+    for (let d = 0; d < r.w; d += 4) {
+      c.fillStyle = OUTLINE;
+      c.fillRect(x + d, y, 2, 2);
+      c.fillRect(x + d, y + r.h - 2, 2, 2);
+      c.fillStyle = '#fffbe8';
+      c.fillRect(x + d + 2, y, 2, 1);
+      c.fillRect(x + d + 2, y + r.h - 1, 2, 1);
+    }
+    for (let d = 0; d < r.h; d += 4) {
+      c.fillStyle = OUTLINE;
+      c.fillRect(x, y + d, 2, 2);
+      c.fillRect(x + r.w - 2, y + d, 2, 2);
+      c.fillStyle = '#fffbe8';
+      c.fillRect(x, y + d + 2, 1, 2);
+      c.fillRect(x + r.w - 1, y + d + 2, 1, 2);
+    }
+    const cx = x + Math.floor(r.w / 2);
+    const cy = y + Math.floor(r.h / 2);
+    c.fillStyle = OUTLINE;
+    c.fillRect(cx - 3, cy - 1, 7, 3);
+    c.fillRect(cx - 1, cy - 3, 3, 7);
+    c.fillStyle = '#fffbe8';
+    c.fillRect(cx - 2, cy, 5, 1);
+    c.fillRect(cx, cy - 2, 1, 5);
+    c.globalAlpha = 1;
+  }
+
   /** Au-dessus : étiquettes des planches d'essai, « ? », cœurs, emplacements à poser, lisière, oiseaux, papillons. */
   function drawOverlay(c, layout) {
     if (!enabled) return;
@@ -748,6 +1068,24 @@ export function createValleyActors(effects) {
       if (!r || !inView(r.x, r.y, r.w, r.h)) continue;
       drawImg(c, 'valley.label', () => fallback('label'), r.x + r.w - 9, r.y + r.h - 10);
     }
+    // (V2) Sachet kraft épinglé au tableau du village (un troc attend).
+    if (info.troc) {
+      const pin = trocPinRect(boardRect(layout));
+      if (pin && inView(pin.x, pin.y, pin.w, pin.h)) drawImg(c, 'troc.pin', () => fallback('trocPin'), pin.x, pin.y + (reduced ? 0 : Math.sin(time * 1.3) > 0.85 ? -1 : 0));
+    }
+    // (V2) Une abeille entre chaque paire de parents voisins (mouvements réduits : un point de pollen fixe).
+    info.links.forEach((lk, k) => {
+      const ra = plotRect(layout, lk.a);
+      const rb = plotRect(layout, lk.b);
+      if (!ra || !rb) return;
+      if (!inView(Math.min(ra.x, rb.x), Math.min(ra.y, rb.y), 64, 64)) return;
+      const p = beePos({ x: ra.x + ra.w / 2, y: ra.y + ra.h / 2 }, { x: rb.x + rb.w / 2, y: rb.y + rb.h / 2 }, time + k * 0.7, reduced);
+      if (p.still) drawImg(c, 'fx.pollen.1', () => fallback('pollen', 1), p.x - 4, p.y - 4);
+      else {
+        const f = Math.floor(time * 10 + k) % 2;
+        drawImg(c, 'fx.pollen', () => fallback('pollen', 0), p.x - 4, p.y - 4 - f, 1, p.flip ? { flipX: true } : undefined);
+      }
+    });
     const list = info.animals.filter((a) => a.state !== 'hint');
     list.forEach((a, k) => {
       if (a.state !== 'visible') return;
@@ -813,6 +1151,15 @@ export function createValleyActors(effects) {
         c.globalAlpha = 1;
       }
     }
+    // (V2) Mode « paire » : les parcelles vides qui ont une voisine vide pulsent (contour pointillé épais + « + »).
+    if (pair) {
+      const pulse = reduced ? 0.85 : 0.55 + 0.45 * Math.abs(Math.sin(time * 3));
+      for (const t0 of info.pairPlots) {
+        const r = t0.rect;
+        if (!inView(r.x, r.y, r.w, r.h)) continue;
+        dashedBox(c, r, pulse);
+      }
+    }
     for (const b of birds) {
       if (b.t < 0) continue;
       const f = Math.floor(b.t * 5) % 2;
@@ -830,7 +1177,10 @@ export function createValleyActors(effects) {
     const minWorld = opts.minWorld || 0;
     const within = (r, s) => r && wx >= r.x - s && wy >= r.y - s && wx < r.x + r.w + s && wy < r.y + r.h + s;
     const targets = [];
-    if (placing) {
+    if (pair) {
+      // (V2) Mode paire : seules les parcelles qui pulsent répondent (le défilement et le zoom restent).
+      for (const t0 of info.pairPlots) targets.push([growRect(t0.rect, minWorld), { type: 'pairPlot', plotIndex: t0.plotIndex }]);
+    } else if (placing) {
       const sp = spotsOf();
       for (const s0 of info.placingSpots) if (sp[s0.spotId]) targets.push([growRect(sp[s0.spotId], minWorld), { type: 'natureSpot', spotId: s0.spotId }]);
     } else {
@@ -846,6 +1196,9 @@ export function createValleyActors(effects) {
       }
       const b = lastLayout.valley?.box;
       if (b && info.started) targets.push([growRect(b, minWorld), { type: 'valleyBox' }]);
+      // (V2) La Grainothèque ou son panneau (cible agrandie pour le doigt).
+      const lib = lastLayout.valley?.library;
+      if (lib && librarySpriteName(info.library, info.site)) targets.push([growRect(lib, minWorld), { type: 'seedLibrary' }]);
     }
     const pick = (lst) => {
       let best = null;
@@ -881,6 +1234,14 @@ export function createValleyActors(effects) {
     info.trials = [];
     info.placingSpots = [];
     info.started = false;
+    info.library = 0;
+    info.site = false;
+    info.troc = false;
+    info.links = [];
+    info.pairPlots = [];
+    packs.length = 0;
+    libFade = null;
+    lastMeet = null;
     infoT = -1;
     lastLayout = null;
     edges = [];
@@ -902,6 +1263,10 @@ export function createValleyActors(effects) {
     for (const f of flies) {
       f.x += dx;
       f.y += dy;
+    }
+    for (const pk of packs) {
+      pk.x += dx;
+      pk.y += dy;
     }
   }
 
@@ -931,6 +1296,16 @@ export function createValleyActors(effects) {
       return placing;
     },
     placingSpots: () => info.placingSpots.map((s) => ({ ...s })),
+    /** (V2) Mode « paire » : culture choisie (les parcelles de valleyPairPlots(cropId) pulsent) ou null. */
+    setPair(cropId) {
+      pair = cropId || null;
+      info.pairPlots = [];
+      infoT = -1;
+    },
+    get pair() {
+      return pair;
+    },
+    pairTargets: () => info.pairPlots.map((t0) => ({ plotIndex: t0.plotIndex, partnerPlot: t0.partnerPlot, rect: { ...t0.rect } })),
     sync,
     onEvent,
     update,
@@ -957,6 +1332,13 @@ export function createValleyActors(effects) {
       edges: edges.length,
       birds: birds.length,
       butterflies: flies.length,
+      library: info.library,
+      site: info.site,
+      troc: info.troc,
+      links: info.links.length,
+      pair,
+      pairPlots: info.pairPlots.map((t0) => t0.plotIndex),
+      packs: packs.length,
     }),
   };
 }

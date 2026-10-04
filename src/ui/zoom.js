@@ -11,11 +11,15 @@
 //   changed()  le zoom vient de changer (geste) : enregistre tout de suite.
 // Préférence locale (localStorage, clé `une-annee-a-la-ferme.zoom`) : { levels, career } = rapport au zoom
 // par défaut (indépendant de l'écran), null ou absent = défaut.
-// Boutons : colonne à droite (à gauche pour gaucher), au-dessus de la ligne « À faire » et des onglets, à
-// gauche de la mini-carte en carrière ; cibles de 48 px ; cachés sous une feuille, une fenêtre, une bulle.
-// Place des messages : frame() publie la hauteur occupée en bas par ces boutons et la mini-carte
-// (`--float-reserve` sur <html>, classe `body.has-float-ui`) ; les messages se posent au-dessus (css/guidance.css),
-// jamais sur un bouton + / − / 1:1, sur la mini-carte ni sur la ligne « À faire ».
+// Boutons : colonne collée au bord de l'écran (marge de sécurité comprise). Carrière : à droite, juste au-dessus de
+// la mini-carte (ou de son bouton « Carte » quand elle est repliée), alignée sur elle, gaucher compris (la mini-carte
+// ne change pas de côté). Niveaux : au même endroit, au-dessus de la ligne « À faire » ; à gauche pour gaucher.
+// Ancrée par le bas, « 1:1 » en haut : + et − ne bougent pas. Cibles de 48 px ; cachés sous une feuille, une fenêtre,
+// une bulle, dans la vue de la vallée. Placement en CSS (css/style.css, `data-minimap` = shown | collapsed | none).
+// Place des messages : frame() publie la hauteur occupée en bas par la mini-carte (`--float-reserve`) et la largeur
+// occupée au bord par la colonne (`--float-col-r` / `--float-col-l`) sur <html>, classe `body.has-float-ui` ; les
+// messages se posent au-dessus de la mini-carte et à côté de la colonne (css/guidance.css), jamais sur un bouton
+// + / − / 1:1, sur la mini-carte ni sur la ligne « À faire ».
 
 import { el } from './dom.js';
 
@@ -84,9 +88,10 @@ export function createZoomControls(app) {
   root.addEventListener('pointerdown', (e) => e.stopPropagation());
   root.addEventListener('dblclick', (e) => e.preventDefault());
 
-  // ── Place réservée au-dessus des boutons et de la mini-carte (messages) ──────────────────
-  // Colonne comptée avec « 1:1 » même au zoom par défaut : les messages ne sautent pas quand on zoome.
-  const COLUMN_H = 3 * 48 + 2 * 4;
+  // ── Place réservée aux messages (#toasts, src/ui/toasts.js ; css/guidance.css) ─────────────────────
+  // En hauteur : la mini-carte (cadre, boutons de coin, ou bouton « Carte ») ; les messages se posent au-dessus.
+  // En largeur : la colonne de zoom, collée au bord ; les messages se rangent à côté d'elle (sur toute la hauteur,
+  // « 1:1 » ou pas : la largeur ne change pas, les messages ne sautent pas quand on zoome).
   const RESERVE_GAP = 8;
   let reserveAt = 0;
   let reserveKey = '';
@@ -95,33 +100,43 @@ export function createZoomControls(app) {
     const now = performance.now();
     if (!force && now - reserveAt < 250) return;
     reserveAt = now;
-    const vh = document.documentElement.clientHeight || window.innerHeight;
+    const de = document.documentElement;
+    const vh = de.clientHeight || window.innerHeight;
+    const vw = de.clientWidth || window.innerWidth;
+    const wide = document.body.classList.contains('layout-wide');
+    const off = wide || app.valleyView?.active; // grand écran : messages ailleurs ; vue de la vallée : tout est caché
     let top = Infinity;
-    if (!root.hidden) {
+    let colL = 0;
+    let colR = 0;
+    if (!off && !root.hidden) {
       const r = root.getBoundingClientRect();
-      if (r.height > 0) top = Math.min(top, r.bottom - COLUMN_H);
+      if (r.height > 0 && r.width > 0) {
+        if (r.left + r.width / 2 > vw / 2) colR = Math.ceil(vw - r.left);
+        else colL = Math.ceil(r.right);
+      }
     }
     const mm = app.careerUI?.minimap;
-    if (mm && !mm.root.hidden) {
+    if (!off && mm && !mm.root.hidden) {
       for (const n of mm.root.querySelectorAll('.minimap-frame, .minimap-btn, .minimap-show')) {
         const r = n.getBoundingClientRect();
         if (r.height > 0 && r.width > 0) top = Math.min(top, r.top);
       }
     }
-    const wide = document.body.classList.contains('layout-wide');
-    const h = Number.isFinite(top) && !wide ? Math.max(0, Math.ceil(vh - top + RESERVE_GAP)) : 0;
-    const key = String(h);
+    const h = Number.isFinite(top) ? Math.max(0, Math.ceil(vh - top + RESERVE_GAP)) : 0;
+    const key = `${h}|${colL}|${colR}`;
     if (key === reserveKey) return;
     reserveKey = key;
-    document.documentElement.style.setProperty('--float-reserve', `${h}px`);
-    document.body.classList.toggle('has-float-ui', h > 0);
+    de.style.setProperty('--float-reserve', `${h}px`);
+    de.style.setProperty('--float-col-l', `${colL}px`);
+    de.style.setProperty('--float-col-r', `${colR}px`);
+    document.body.classList.toggle('has-float-ui', h > 0 || colL > 0 || colR > 0);
   }
 
   function save() {
     const s = app.scene;
     if (!s?.zoomInfo || app.inMenu || !app.game) return;
     const info = s.zoomInfo();
-    if (info.gesture) return;
+    if (info.gesture || info.forced) return; // (Vallée V3) zoom tactile d'un mode de visée : pas une préférence
     const r = info.ratio;
     if (r === lastRatio) return;
     lastRatio = r;
@@ -133,6 +148,7 @@ export function createZoomControls(app) {
 
   function changed() {
     save();
+    app.coach?.signal?.('zoom', { ratio: app.scene?.zoomInfo?.().ratio ?? null });
   }
 
   /** Préférence de la partie (ou zoom par défaut au menu) appliquée une fois par partie et par mode. */
@@ -154,7 +170,9 @@ export function createZoomControls(app) {
     // Grand écran : la feuille est rangée à droite, la ferme reste visible (les boutons se décalent, CSS).
     const wide = document.body.classList.contains('layout-wide');
     if ((app.sheets?.isOpen() && !wide) || app.dialogs?.isOpen()) return false;
-    if (app.hints?.active || app.tutorial?.active) return false;
+    // (Accompagnement) Une bulle de Joseph couvre l'écran : les boutons se cachent, sauf pendant la leçon du zoom.
+    if (app.coach?.blocking && app.coach.current?.lessonId !== 'basics.zoom') return false;
+    if (app.valleyView?.active) return false; // (Vallée V3) l'écran « La vallée »
     return !document.body.classList.contains('is-loading');
   }
 
@@ -167,7 +185,8 @@ export function createZoomControls(app) {
       root.hidden = !want;
       lastReserveState = ''; // mesure tout de suite
     }
-    // Place : à gauche de la mini-carte (carrière), ou de son bouton « Carte » quand elle est cachée.
+    // Place (CSS, data-minimap) : au bord, au-dessus de la mini-carte (carrière), ou de son bouton « Carte » quand
+    // elle est repliée ; au-dessus de la ligne « À faire » en Niveaux.
     const mm = app.careerUI?.minimap;
     const mmState = mm && !mm.root.hidden ? (mm.hidden ? 'collapsed' : 'shown') : 'none';
     const info = app.scene.zoomInfo();

@@ -113,14 +113,23 @@ html.reduced-motion .todo { animation: none; }
 
 /* La ligne posée, les messages et la mini-carte passent au-dessus d'elle. */
 body.has-todo:not(.has-sheet) #toasts { bottom: calc(var(--inset-bottom) + var(--todo-h) + 14px); }
-body.has-todo .minimap { bottom: calc(var(--inset-bottom) + var(--todo-h) + 12px); }
-/* Boutons de zoom + / − / 1:1 et mini-carte à l'écran (téléphone) : les messages se posent AU-DESSUS d'eux
-   (--float-reserve, publié par src/ui/zoom.js : hauteur occupée depuis le bas de l'écran, colonne de zoom comptée
-   avec « 1:1 »), en droitier comme en gaucher ; ils ne recouvrent ni ces boutons, ni la mini-carte, ni la ligne
-   « À faire ». Jamais plus haut que sous la barre du haut. */
-:root { --float-reserve: 0px; }
-body.has-float-ui:not(.has-sheet):not(.layout-wide):not(.in-menu) #toasts {
+body.has-todo { --mm-bottom: calc(var(--inset-bottom) + var(--todo-h) + 12px); } /* mini-carte (et colonne de zoom au-dessus) */
+/* Boutons de zoom + / − / 1:1 et mini-carte à l'écran (téléphone) : les messages ne se posent jamais sur eux
+   (src/ui/zoom.js publie la place, en droitier comme en gaucher) :
+   - --float-reserve : hauteur occupée depuis le bas par la mini-carte (cadre et boutons, ou bouton « Carte ») ; les
+     messages se posent AU-DESSUS d'elle ;
+   - --float-col-r / --float-col-l : largeur occupée depuis le bord par la colonne de zoom (collée au bord) ; les messages
+     se rangent à côté d'elle, centrés dans la place qui reste (même sans « 1:1 » : rien ne saute quand on zoome).
+   Ils ne recouvrent pas non plus la ligne « À faire ». Jamais plus haut que sous la barre du haut. */
+:root { --float-reserve: 0px; --float-col-l: 0px; --float-col-r: 0px; }
+body.has-float-ui:not(.has-sheet):not(.layout-wide):not(.in-menu):not(.in-valley-view) #toasts {
   bottom: min(max(calc(var(--inset-bottom) + var(--todo-h) + 14px), var(--float-reserve)), calc(var(--app-h) - var(--inset-top) - 62px));
+  left: calc(var(--float-col-l) + 8px);
+  right: calc(var(--float-col-r) + 8px);
+  width: auto;
+  max-width: 30rem;
+  margin: 0 auto;
+  transform: none;
 }
 
 /* Grand écran : une ligne compacte en bas à gauche. */

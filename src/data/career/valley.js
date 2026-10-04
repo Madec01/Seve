@@ -1,13 +1,21 @@
 // La Vallée vivante — lot V1 « La boîte en fer » (données pures, carrière seulement). Règles et contenus :
 // docs/VALLEE.md (§ 2 à § 10) ; contrat : docs/ARCHITECTURE.md, « Vallée vivante — contrats du lot V1 ». Moteur :
 // src/core/career/{valley,heirlooms,habitat}.js. Les chiffres font foi ici (réglés par tools/simulate-career.js
-// --compare-valley, docs/VALLEE.md § 12).
+// --compare-valley, docs/VALLEE.md § 12). Lot V2 « Le troc et les croisements » : données dans ./heritage.js (importées ici),
+// tables réunies `ALL_*` en bas de ce fichier ; VARIETIES et SPECIES du V1 ne changent jamais (ordre des tirages).
 
-/** Version de state.career.valley (V2 : 2, etc. ; rien n'est jamais retiré). */
-export const VALLEY_VERSION = 1;
+import { CROSSES, SPECIES_V2, VILLAGE_VARIETIES } from './heritage.js';
+import { ORCHARD_VARIETIES, PLACE_STEPS_TOTAL, STAGES_V3, VALLEY_SPECIES, WILD_RULES } from './places.js';
+import { STAGE_V4 } from './storks.js';
 
-/** Parties (tests, simulation) : graines anciennes, habitants. */
-export const VALLEY_PARTS = ['seeds', 'wildlife'];
+/** Version de state.career.valley (V1 : 1, V2 : 2, V3 : 3, V4 : 4 ; rien n'est jamais retiré). */
+export const VALLEY_VERSION = 4;
+
+/**
+ * Parties (tests, simulation) : graines anciennes, habitants, le V2 (Grainothèque, troc, croisements, habitants du V2),
+ * le V3 (`places` : vue de la vallée, lieux, habitants de la vallée, terres sauvages ; n'existe pas sans `heritage`).
+ */
+export const VALLEY_PARTS = ['seeds', 'wildlife', 'heritage', 'places', 'storks'];
 
 /** La Vallée commence à la première aube où la ferme est à ce rang (ou plus). */
 export const VALLEY_START = { rank: 2 };
@@ -28,11 +36,13 @@ export const TRAITS = [
   { id: 'tasty', name: 'Savoureuse', icon: 'icon.trait.tasty', text: '+ 10 % à la vente.', price: 0.1 },
   { id: 'bee', name: 'Mellifère', icon: 'icon.trait.bee', text: 'Un coin fleuri pour les bêtes ; à partir de 2 parcelles en pousse, chaque ruche rapporte 1 pièce de plus par jour.', minPlots: 2, perHive: 1 },
   { id: 'giant', name: 'Géante', icon: 'icon.trait.giant', text: 'Chance de légume géant doublée pour un carré de 2 × 2.', giant: 2 },
+  // (V2) Parfumée : à l'atelier, le produit fait de cette récolte vaut + 15 % (rendement de la place × 1,15).
+  { id: 'scented', name: 'Parfumée', icon: 'icon.trait.scented', text: 'À l\'atelier, ce qu\'on en fait vaut 15 % de plus (confiture, jus, farine, pain).', product: 0.15 },
 ];
 export const TRAITS_BY_ID = Object.fromEntries(TRAITS.map((t) => [t.id, t]));
 
 /** Les douze variétés du pays (une par culture ; (†) : vraies variétés anciennes du domaine public). */
-const variety = (id, cropId, name, trait, label, anecdote, tint) => ({ id, cropId, name, g: VARIETY_GENDER[cropId] || 'f', trait, label, anecdote, icon: `heirloom.${id}.icon`, ripe: `heirloom.${id}.4`, tint });
+const variety = (id, cropId, name, trait, label, anecdote, tint) => ({ id, cropId, name, g: VARIETY_GENDER[cropId] || 'f', trait, traits: [trait], label, anecdote, icon: `heirloom.${id}.icon`, ripe: `heirloom.${id}.4`, tint, group: 'pays' });
 /** Genre du nom de chaque variété (premier nom : « Navet Boule d'or » est masculin, « Vitelotte » féminin) : accords. */
 const VARIETY_GENDER = { carrot: 'f', turnip: 'm', wheat: 'm', cabbage: 'm', tomato: 'f', corn: 'm', sunflower: 'm', potato: 'f', strawberry: 'f', zucchini: 'f', pumpkin: 'f', apple: 'f' };
 export const VARIETIES = [
@@ -82,6 +92,8 @@ export const NATURE_ITEMS = [
   { id: 'owlbox', name: 'Nichoir à chouette', icon: 'icon.nature.owlbox', price: { base: 150, step: 0 }, rank: 2, needs: 'granary', text: 'Sous le pignon du grenier : la chouette hulotte, contre les corbeaux.', beauty: 1 },
   { id: 'loneTree', name: 'Arbre isolé (un chêne)', icon: 'icon.nature.loneTree', price: { base: 250, step: 100 }, rank: 3, text: 'Jeune plant, jeune arbre, puis chêne adulte en deux saisons : le geai l\'attend.', beauty: 1 },
   { id: 'reeds', name: 'Berges plantées', icon: 'icon.nature.reeds', price: { base: 300, step: 0 }, rank: 3, text: 'Roseaux et iris au bord de la mare : les libellules arrivent.', beauty: 1 },
+  // (V2, partie `heritage`) : n'existe que si le V2 est actif.
+  { id: 'batbox', name: 'Nichoir à chauves-souris', icon: 'icon.nature.batbox', price: { base: 100, step: 50 }, rank: 4, text: 'Une caisse plate de bois sombre, fente en bas : la pipistrelle y dort le jour.', beauty: 1, heritage: true },
 ];
 export const NATURE_ITEMS_BY_ID = Object.fromEntries(NATURE_ITEMS.map((n) => [n.id, n]));
 export const NATURE_KINDS = NATURE_ITEMS.map((n) => n.id);
@@ -92,14 +104,15 @@ export const LONE_TREE = { youngSeasons: 1, adultSeasons: 2 };
 const HEDGES = [{ slot: 'hedgeL', kind: 'hedge', side: 'côté gauche' }, { slot: 'hedgeR', kind: 'hedge', side: 'côté droit' }];
 /**
  * Emplacements par type de terrain (identifiant `<lotId>.<slot>`) ; le cœur ne connaît que les identifiants, RENDER
- * leur position. `startOnly` : seulement sur le champ de départ ; `needs` : le grenier construit.
+ * leur position. `startOnly` : seulement sur le champ de départ ; `needs` : le grenier construit ; `heritage` : seulement
+ * avec le V2 (nichoir à chauves-souris), toujours en fin de liste (l'ordre des emplacements du V1 ne change pas).
  */
 export const NATURE_SPOTS = {
-  home: [{ slot: 'nest', kind: 'nestbox', side: 'près de la maison' }, { slot: 'owl', kind: 'owlbox', side: 'sous le pignon du grenier', needs: 'granary' }],
+  home: [{ slot: 'nest', kind: 'nestbox', side: 'près de la maison' }, { slot: 'owl', kind: 'owlbox', side: 'sous le pignon du grenier', needs: 'granary' }, { slot: 'bat', kind: 'batbox', side: 'sous l\'avant-toit de la maison', heritage: true }],
   field: [...HEDGES, { slot: 'strip', kind: 'strip', side: 'en bas du champ' }, { slot: 'hotel', kind: 'insectHotel', side: 'au coin du champ', startOnly: true }],
   meadow: [...HEDGES, { slot: 'nest', kind: 'nestbox', side: 'sur un poteau' }, { slot: 'pile', kind: 'woodpile', side: 'au bord du pré' }, { slot: 'tree', kind: 'loneTree', side: 'au milieu' }],
-  orchard: [...HEDGES, { slot: 'nest', kind: 'nestbox', side: 'dans un pommier' }, { slot: 'pile', kind: 'woodpile', side: 'au pied des arbres' }, { slot: 'hotel', kind: 'insectHotel', side: 'au bout des rangs' }],
-  workshops: [...HEDGES, { slot: 'hotel', kind: 'insectHotel', side: 'contre le mur' }],
+  orchard: [...HEDGES, { slot: 'nest', kind: 'nestbox', side: 'dans un pommier' }, { slot: 'pile', kind: 'woodpile', side: 'au pied des arbres' }, { slot: 'hotel', kind: 'insectHotel', side: 'au bout des rangs' }, { slot: 'bat', kind: 'batbox', side: 'dans un vieux pommier', heritage: true }],
+  workshops: [...HEDGES, { slot: 'hotel', kind: 'insectHotel', side: 'contre le mur' }, { slot: 'bat', kind: 'batbox', side: 'sous l\'avant-toit', heritage: true }],
   wild: [...HEDGES, { slot: 'pile', kind: 'woodpile', side: 'dans les herbes' }, { slot: 'tree', kind: 'loneTree', side: 'au milieu' }],
   pond: [...HEDGES, { slot: 'reeds', kind: 'reeds', side: 'les berges' }],
   yard: [...HEDGES, { slot: 'nest', kind: 'nestbox', side: 'près du poulailler' }, { slot: 'pile', kind: 'woodpile', side: 'au fond de la cour' }],
@@ -125,6 +138,7 @@ export const RECIPE_TEXTS = {
   owlbox: ['nichoir à chouette', 'nichoirs à chouette'],
   loneTree: ['chêne isolé', 'chênes isolés'],
   reeds: ['berges plantées', 'berges plantées'],
+  batbox: ['nichoir à chauves-souris', 'nichoirs à chauves-souris'],
   pond: ['la mare', 'la mare'],
   orchard: ['verger', 'vergers'],
   wildGround: ['friche ou jachère fleurie', 'friches ou jachères fleuries'],
@@ -136,7 +150,7 @@ export const RECIPE_TEXTS = {
 };
 
 /** Aménagement à poser pour avancer un genre de recette (bouton « Aménager » de l'indice). */
-export const RECIPE_NATURE = { hedge: 'hedge', strip: 'strip', nestbox: 'nestbox', woodpile: 'woodpile', insectHotel: 'insectHotel', owlbox: 'owlbox', loneTree: 'loneTree', oakAdult: 'loneTree', treeAdult: 'loneTree', reeds: 'reeds', flowers: 'strip', wildGround: 'fallow' };
+export const RECIPE_NATURE = { hedge: 'hedge', strip: 'strip', nestbox: 'nestbox', woodpile: 'woodpile', insectHotel: 'insectHotel', owlbox: 'owlbox', loneTree: 'loneTree', oakAdult: 'loneTree', treeAdult: 'loneTree', reeds: 'reeds', flowers: 'strip', wildGround: 'fallow', batbox: 'batbox' };
 
 const ALL_YEAR = ['spring', 'summer', 'autumn', 'winter'];
 const species = (id, name, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, extra = {}) => ({ id, name, ...SPECIES_FORMS[id], icon: `wild.${id}`, seasons, recipe, spotKinds, service, hint, hintIcon, anecdote, ...extra });
@@ -238,6 +252,43 @@ export const STAGES = [
 ];
 export const MAX_STAGE = STAGES.length - 1;
 
+/**
+ * (V2, intégration 2026-10-03) Paliers des étapes 1 à 5 quand le lot V2 est ouvert (partie `heritage`) : les 23 variétés et
+ * les 4 habitants du V2 comptent comme signes de vie (décision de l'utilisateur), alors les deux dernières étapes demandent
+ * davantage pour que « La vallée chante » arrive toujours vers l'an 9 du joueur tranquille (et pas vers l'an 6) ; les
+ * étapes 1 à 3 ne changent pas (le débutant n'est pas retardé). Une étape déjà atteinte ne recule jamais. Sans le V2 :
+ * `STAGES[n].signs` (2 / 6 / 11 / 17 / 24). docs/VALLEE.md § 16.7 et § 16.12.7.
+ */
+export const STAGE_SIGNS_V2 = [0, 2, 6, 11, 22, 38];
+/**
+ * (V3) Paliers des étapes 0 à 7 quand le lot V3 est ouvert (partie `places`) : les étapes 1 à 5 sont celles du V2 ; les
+ * étapes 6 et 7 demandent aussi une condition de lieux (STAGES_V3[].needs, lue par src/core/career/habitat.js).
+ */
+export const STAGE_SIGNS_V3 = [...STAGE_SIGNS_V2, ...STAGES_V3.map((s) => s.signs)];
+/** Les 9 étapes (0 à 8) : celles du V1, les deux du V3, puis (V4) l'étape 8 « Les cigognes » (sans palier de signes). */
+export const STAGES_ALL = [...STAGES, ...STAGES_V3, STAGE_V4];
+/** Dernière étape possible : 5 (V1, V2), 7 (avec le V3), 8 (avec le V4). */
+export const MAX_STAGE_ALL = STAGES_ALL.length - 1;
+/** (V4) Dernière étape du V3 (7) : le plafond d'une partie sans les cigognes. */
+export const MAX_STAGE_V3 = STAGES.length - 1 + STAGES_V3.length;
+/** Étape la plus haute d'une partie selon ses parties actives (`places` exige `heritage` ; `storks` exige `places`). */
+export function maxStageOf(parts) {
+  if (!parts || parts.places === false || parts.heritage === false) return MAX_STAGE;
+  return parts.storks === false ? MAX_STAGE_V3 : MAX_STAGE_ALL;
+}
+/**
+ * Palier de l'étape n (signes de vie), selon que le V2 (et le V3) est ouvert ou non. (V4) L'étape 8 n'a pas de palier :
+ * `stageSigns(8, true, true)` → null (il faut avoir vu les cigognes).
+ */
+export function stageSigns(n, heritage = false, places = false) {
+  if (heritage && places) {
+    if (n >= MAX_STAGE_ALL) return null;
+    return STAGE_SIGNS_V3[Math.max(0, Math.min(MAX_STAGE_V3, n))];
+  }
+  const k = Math.max(0, Math.min(MAX_STAGE, n));
+  return heritage ? STAGE_SIGNS_V2[k] : STAGES[k].signs;
+}
+
 /** Ce que rend chaque étape (une phrase, fiche « La Vallée »). */
 export const BOON_TEXTS = {
   hedgeFinds: 'Cueillette des haies : mûres, sureau, prunelles, noisettes, l\'été et l\'automne.',
@@ -299,3 +350,29 @@ export function savedText(x) {
 
 /** Signes de vie du V1 (12 habitants + 12 variétés). */
 export const SIGNS_V1 = SPECIES.length + VARIETIES.length;
+
+// ── (V2) Tables réunies : lectures par identifiant (VARIETIES et SPECIES du V1 restent l'ordre des tirages du V1) ─────
+
+/**
+ * Les 36 variétés : du pays (12), du village (12), croisées (11), (V3) du verger de la commune (1) ; champ `group` 'pays' |
+ * 'village' | 'cross' | 'orchard'. Les tables du V2 et du V3 viennent à la fin (l'ordre du V1 ne change jamais).
+ */
+export const ALL_VARIETIES = [...VARIETIES, ...VILLAGE_VARIETIES, ...CROSSES, ...ORCHARD_VARIETIES];
+export const ALL_VARIETIES_BY_ID = Object.fromEntries(ALL_VARIETIES.map((x) => [x.id, x]));
+
+/** Traits d'une variété (identifiant ou définition) : V1 et village [trait] ; croisée : ses deux traits. */
+export function varietyTraits(x) {
+  const v = typeof x === 'string' ? ALL_VARIETIES_BY_ID[x] : x;
+  if (!v) return [];
+  return Array.isArray(v.traits) ? [...v.traits] : v.trait ? [v.trait] : [];
+}
+
+/** Les 26 habitants (12 du V1, 4 du V2, puis (V3) les 10 de la vallée : group 'v1' | 'v2' | 'valley'). */
+export const ALL_SPECIES = [...SPECIES.map((s) => ({ ...s, group: 'v1' })), ...SPECIES_V2, ...VALLEY_SPECIES];
+export const ALL_SPECIES_BY_ID = Object.fromEntries(ALL_SPECIES.map((s) => [s.id, s]));
+
+/** Signes de vie, V2 compris (16 habitants + 35 variétés) — sans le V3. */
+export const SIGNS_ALL = SPECIES.length + SPECIES_V2.length + VARIETIES.length + VILLAGE_VARIETIES.length + CROSSES.length;
+
+/** (V3) Signes de vie avec le V3 : 26 habitants + 36 variétés + 19 étapes de lieux + 18 terres sauvages reprises = 99. */
+export const SIGNS_ALL_V3 = ALL_SPECIES.length + ALL_VARIETIES.length + PLACE_STEPS_TOTAL + WILD_RULES.total;

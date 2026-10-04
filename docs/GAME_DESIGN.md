@@ -2307,19 +2307,21 @@ Conception complète, chiffrée et découpée en lots : **`docs/VALLEE.md`** ; c
   habitants à recette d'habitat lisible (rouge-gorge, hérisson, coccinelles, bourdons, paon-du-jour, hirondelles, chouette
   hulotte, grenouille, libellules, lièvre, écureuil, geai) qui viennent puis **attendent que le joueur les touche** pour
   s'installer, et rendent un service doux (qualité, pousse, corbeaux, pêche, hiver…).
-- **Étapes de la vallée** (0 à 5 au V1, 8 au V4), comptées en **signes de vie** (habitants + variétés fixées) : la lisière
+- **Étapes de la vallée** (0 à 5 au V1, 6 et 7 au V3, 8 au V4 — les cigognes, sans palier de signes), comptées en **signes de vie** (habitants + variétés fixées) : la lisière
   fleurit, les oiseaux reviennent, cueillette des haies, pollinisation, sol vivant, décor « Le tilleul de la vallée ».
 - **Lots** : **V1** « La boîte en fer » (graines et premiers habitants, structurant) ; **V2** « Le troc et les croisements »
   (Grainothèque à 5 niveaux, troc avec les villageois, variétés croisées au nom de la ferme) ; **V3** « Le ruisseau »
-  (vue de la vallée, 6 lieux à restaurer par chantiers et conditions de vie, terres sauvages après les 16 terrains : le
-  grand puits d'argent) ; **V4** « Les cigognes » (légendes, visiteurs rarissimes, paysage et sons complets).
+  (vue de la vallée, 6 lieux à restaurer par chantiers, conditions de vie et temps de reprise, terres sauvages après les
+  16 terrains : le grand puits d'argent ; conception détaillée au § 18.2) ; **V4** « Les cigognes » (légendes, visiteurs
+  rarissimes, paysage et sons complets, épilogue de Joseph ; décoratif ; conception détaillée au § 18.3).
 - **Règles d'or** : carrière seulement (parité des niveaux intacte ; seules deux pages d'album se voient dans la grange),
   rien ne se perd, aucune monnaie nouvelle, gestes réservés au joueur (« aider sans remplacer »), un seul indice à la
   fois, aucune peur de rater, flux aléatoire unique `valley`.
 - **Équilibre** (cibles, `tools/simulate-career.js --compare-valley`) : V1 **+ 1 à + 5 %** de revenu pour le joueur
   tranquille (toute la Vallée ≤ + 8 %), rangs et Domaine à un an près, ferme laissée seule ≤ + 3 %, ≥ 1 nouveauté par
-  saison ; ≈ 450 000 pièces de puits « pour la beauté » sur l'ensemble des lots (argent en caisse à l'an 14 divisé par 2
-  au V3) ; dépenses comptées à 100 % au patrimoine (décidé : 100 %).
+  saison ; ≈ 340 000 pièces de puits « pour la beauté » sur l'ensemble des lots (V1 ≈ 27 000, V2 62 800, V3 ≈ 251 000 ;
+  l'aperçu disait ≈ 450 000, recalé pour finir vers l'an 18) ; argent en caisse à l'an 14 divisé par 2 au V3 ; dépenses
+  comptées à 100 % au patrimoine (décidé : 100 %).
 
 ### 18.1 Lot V2 « Le troc et les croisements » (conception détaillée, 2026-10-03)
 
@@ -2327,8 +2329,8 @@ Conception complète : **`docs/VALLEE.md` § 16** ; contrats : `docs/ARCHITECTUR
 V2 ». En bref :
 
 - **La Grainothèque** : un ouvrage de la Vallée sur un emplacement réservé de la bande de la maison (panneau au rang 3,
-  récit « Une idée de Joseph »), **5 niveaux : 2 000 / 5 000 / 10 000 / 16 000 / 25 000** (rangs 3, 4, 5, 5, 6 ; **58 000**,
-  100 % au patrimoine) : N1 troc de saison ; N2 3 graines par récolte à la main ; N3 variété sauvée en 5 récoltes ; N4
+  récit « Une idée de Joseph »), **5 niveaux : 1 600 / 4 000 / 8 000 / 19 200 / 30 000** (rangs 3, 4, 5, 5, 6 ; **62 800**
+  après réglage — départ 2 000 / 5 000 / 10 000 / 16 000 / 25 000 —, 100 % au patrimoine) : N1 troc de saison ; N2 3 graines par récolte à la main ; N3 variété sauvée en 5 récoltes ; N4
   croisement en 2 rencontres ; N5 graines des variétés sauvées au prix normal et touristes + 15 %. Sa fiche est la
   vitrine de la collection (35 bocaux, croisements, voisins).
 - **Le troc** : chacun des **12 clients du tableau** garde une variété de son jardin (Carotte violette de Lili, Tomate
@@ -2346,9 +2348,104 @@ V2 ». En bref :
   `wildlife2` ; 6 succès ; stand de la fête + 1 point par culture à variété ancienne.
 - **Aléatoire** : un flux nouveau `valley2` (4 nombres par aube, les habitants du V2) ; troc et croisements sans hasard ;
   aucun flux existant ne tire un nombre de plus. Niveaux et Classique strictement inchangés (parité).
+- **Étapes avec le V2** : les 51 signes de vie comptent (décision) ; paliers recalés à **2 / 6 / 11 / 22 / 38** pour que
+  « La vallée chante » arrive toujours vers l'**an 9** du joueur tranquille (et pas l'an 6) ; une étape déjà atteinte ne
+  recule jamais ; sans le V2, les paliers du V1 (2 / 6 / 11 / 17 / 24). Détail : `docs/VALLEE.md` § 16.7.
 - **Équilibre** (cibles `--compare-valley2`, V1 → V1 + V2) : tranquille **+ 0 à + 4 %** de revenu (estimé + 1 à + 1,5 %),
   rangs à un an près, argent en caisse à l'an 14 ≤ 70 % de sans la Vallée, **≥ 80 % des saisons avec une nouveauté** (le
   V1 seul : 65 %), ferme laissée seule ≤ + 3 %, `automator` sans troc ni croisement ; V2 complet vers l'an 11 à 13, toute
   la Vallée vers l'an 18 avec le V3.
 - **À trancher** (`docs/VALLEE.md` § 16.15) : emplacement de la Grainothèque, croisements déterministes ou avec une part
   de chance, rythme du troc, signes de vie du V2 pour les étapes 1 à 5, liens écartés (comice, quête), nom des croisées.
+
+### 18.2 Lot V3 « Le ruisseau » (conception détaillée, 2026-10-03)
+
+Conception complète : **`docs/VALLEE.md` § 17** ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot
+V3 ». Décisions de l'utilisateur suivies : lieux = chantier payé + condition de vie + temps de reprise ; restauration
+complète vers l'an 18 ; terres sauvages au V3 après les 16 terrains ; dépenses à 100 % au patrimoine. En bref :
+
+- **La vue de la vallée** : à l'étape 5 (« La vallée chante »), Joseph emmène le joueur « Sur la colline » ; un poteau
+  « Vers la vallée » se plante en bas de la ferme. La vue est un **écran à part, en portrait** (panorama de 192 × 432 px
+  qu'on fait défiler au doigt, la ferme petite au milieu, temps en pause), avec une barre du bas (« ‹ La ferme », compte des
+  étapes, « Liste ») et une liste des lieux lisible sans le dessin.
+- **Six lieux, 19 étapes, 160 000 pièces** : le Ru des Saules (4 étapes, 45 500 : canicule, pêche au ruisseau, truites et
+  écrevisses, moulin à eau + 1 place), le bois de la Combe (21 500 : chauffage de la serre − 50 %, champignons d'automne, une
+  trouvaille d'hiver de plus), la prairie des Coquelicots (17 000 : entretien des animaux − 10 %, ruches + 1, jachère + 30 %),
+  l'étang du moulin (34 500 : poissons + 15 %, touristes + 10 %, abris + 5 %), le bocage du chemin creux (19 000 : cueillette
+  des haies × 1,5 puis × 2, corbeaux plus rares puis absents), le verger conservatoire (22 500 : Reinette grise du Canada,
+  cerisier Montmorency, poirier Louise-Bonne). Chaque étape : un **chantier** d'un geste, une **condition de vie** venue de la
+  ferme (haies, jachères, bandes fleuries, habitants installés, variétés sauvées, arbres adultes) et une **reprise** de 1, 2
+  ou 4 saisons, visible sur le dessin.
+- **Dix habitants de la vallée** (martin-pêcheur, écrevisses, loutre, héron cendré, pic noir, chevreuil, salamandre, alouette,
+  huppe, chouette chevêche), qui reviennent après les étapes et **attendent qu'on les touche dans la vue** ; ce sont eux qui
+  ouvrent les étapes suivantes (une vallée ne se restaure pas sans fermier). Hélène, la naturaliste, tient leur carnet.
+- **Pêche au ruisseau** (une par jour, en plus de la mare, flux `valley3`) et **champignons d'automne** (cèpe, girolle,
+  pied-de-mouton) : les deux gestes du V3.
+- **Terres sauvages** : une fois les **16 terrains** achetés, les **18 cases de forêt** restantes de la grille peuvent être
+  confiées à la nature, de proche en proche (bois, marais ou prairie sauvage, **2 500 + 300 × n**, 90 900 pour les 18) :
+  aucune production, aucune charge ; un bloc sans clôture qui reprend en 3 saisons et accueille des visiteurs ; couleur et
+  pictogramme sur la mini-carte.
+- **Étapes 6 et 7** au-dessus du palier 38 de l'étape 5 : « L'eau revient » (56 signes + le ruisseau à l'étape 2 ; + 0,1
+  jour de pousse sans arrosage, 60 écus) et « La vallée vivante » (76 signes + les six lieux à l'étape 2 ; banc du belvédère,
+  80 écus) ; 99 signes de vie avec le V3. 8 récits de Joseph, 2 pages d'album (« Le carnet d'Hélène », « Les lieux de la
+  vallée »), 8 succès, 3 décors.
+- **Restes du V2 intégrés** : zones de toucher ≥ 48 px en coordonnées écran même au zoom minimal (et zoom tactile posé par
+  les modes de visée) ; lignes « À faire » regroupées par famille, 5 au plus ; le conseil du tableau ne couvre plus le troc.
+- **Aléatoire** : un flux nouveau `valley3` (10 nombres par aube pour les habitants de la vallée, 3 en automne pour les
+  champignons, 2 par pêche au ruisseau) ; chantiers, reprises et terres sans hasard ; aucun flux existant ne tire un nombre
+  de plus ; « L'année de la vallée » (année à thème) **écartée** (elle changerait le tirage du thème). Niveaux et Classique
+  des niveaux strictement inchangés.
+- **Équilibre** (cibles `--compare-valley3`, V1 + V2 → V1 + V2 + V3, 60 carrières × 18 ans) : puits recalé à **≈ 251 000**
+  (l'aperçu en demandait 369 000, impossible à finir vers l'an 18 : le joueur tranquille dispose de ≈ 290 000 des ans 9 à
+  18) ; revenu du tranquille **+ 0 à + 4 %** (estimé + 1,5 à + 2,5 % sur les ans 10 à 18) ; argent en caisse à l'an 14 plus
+  bas qu'avec le V2 (visé ≈ 55 000 contre 128 000, ≤ 50 % de sans la Vallée) ; vallée complète **vers l'an 18** (étape 6
+  vers l'an 13, étape 7 vers l'an 16) ; ferme laissée seule ≤ + 3 % ; rangs à un an près ; aucune faillite.
+- **À trancher** (`docs/VALLEE.md` § 17.16) : taille du puits, moment d'ouverture de la vallée, chantiers en parallèle,
+  terres sauvages sans production, parcelles au zoom minimal, temps dans la vue.
+
+### 18.3 Lot V4 « Les cigognes » (conception détaillée, 2026-10-04)
+
+Conception complète : **`docs/VALLEE.md` § 18** ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot
+V4 ». Dernier lot de la Vallée, **décoratif** : aucun revenu, aucun service, aucun coût. En bref :
+
+- **Quatre légendes** — des graines qui « dormaient » et qu'un moment du récit réveille : le **melon de la boîte** (Melon
+  Petit Gris de Rennes, la promesse du V1) à l'étape 6 « L'eau revient » (« quand l'eau revient, tout revient ») ;
+  l'**engrain du moulin** quand le moulin tourne ; la **Merveille de la ferme**, née de trois étés de sélection à la main de
+  la Tomate croisée (la « 3ᵉ génération ») ; les **pois du jour des cigognes** de la grand-mère de Joseph. Elles poussent
+  sous **quatre cloches de verre** devant la Grainothèque (toute saison, sans eau), se récoltent à la main, **ne se vendent
+  jamais** (on les partage), et remplissent la page d'album « Les légendes ».
+- **Six visiteurs rarissimes** : les **cigognes** (déterministes : « le même jour » chaque printemps, d'abord sur le clocher
+  du village quand la vallée les nourrit — étape 7, étang et prairie restaurés —, puis sur une roue offerte par Joseph, sur
+  la maison), les **grues** (halte d'automne dans la prairie), le **cerf** (lisière de la vieille futaie), le **loriot** (verger
+  conservatoire), le **castor** (ruisseau et vieux saules), les **vers luisants** (soirs d'été, le long des haies de la ferme).
+  Comme les habitants, ils viennent puis **attendent qu'on les touche** ; ensuite ils reviennent en décor, dans la vue et sur
+  la ferme. Page d'album « Les visiteurs rares ».
+- **Étape 8 « Les cigognes »** : les cigognes vues sur le clocher (aucun palier de signes ; 100 écus, la roue, le chapitre
+  8). Aucun chantier du clocher : pas de bâtiment public restauré contre de l'argent.
+- **L'épilogue de Joseph** (« La vallée retrouvée », trois pages) quand les six lieux sont restaurés et que les cigognes
+  nichent sur la maison (vers l'an 18) : il donne la **boîte en fer** au joueur, puis s'assoit sur le banc du belvédère avec
+  Hélène. **Générique doux** : la vue de la vallée au soir, la musique s'éteint, seule la vallée s'entend. **Pas de fin de
+  partie** : la carrière continue.
+- **Le livre de la vallée** : la chronique de toute la carrière (une page par année, avant / après, graines, habitants,
+  lieux, calendrier de la vallée, récits, phrases d'Hélène), relisible à toute étape, partageable en image locale.
+- **Paysage complet** : la forêt de la carte en 4 états jusqu'à la « vieille forêt mêlée » ; nid de cigognes, vols de
+  grues, vers luisants, arc-en-ciel après la pluie ; dans la vue, castor, cerf, village éclairé le soir, « S'asseoir sur le
+  banc » (contemplation).
+- **Paysage sonore** (synthèse procédurale Web Audio, aucun fichier, aucune licence) : la couche d'oiseaux existante suit
+  l'étape (la vallée « s'est tue » à l'étape 0) ; chaque habitant installé ou visiteur vu a **son chant** (rouge-gorge,
+  merle, chouettes, alouette, huppe, pic, cigognes, grues, loriot…) ; ruisseau, moulin, vent dans les feuilles, grillons,
+  grenouilles, par lieu, saison, météo et moment du jour ; sons placés dans la vue de la vallée ; bus « Ambiance » et
+  réglages existants respectés ; nouveau réglage « Sons de la vallée : Complets · Légers · Coupés ». Ce sont les ambiances
+  promises aux étapes 1, 5 et 6, jamais faites jusqu'ici.
+- **Après l'an 18** (sans peur de rater, sans corvée) : visiteurs étalés jusqu'à l'an 22, retour des cigognes chaque
+  printemps et leurs petits, légendes à ressemer, **8 cartes de vallées voisines** (on leur envoie un sachet de la boîte, une
+  carte revient la saison suivante), une page du livre par an, Joseph et Hélène sur le banc.
+- **Aléatoire** : un flux nouveau `valley4` (5 nombres par aube pour les visiteurs tirés) ; tout le reste déterministe ;
+  aucun flux existant ne tire un nombre de plus. Niveaux et Classique strictement inchangés.
+- **Équilibre** (cibles `--compare-valley4`, V3 → V4, 60 carrières × 24 ans) : revenu et argent en caisse **± 0,5 %**
+  (attendu : identiques, vérifié par une empreinte économique jour par jour), aucune faillite, rangs identiques ; melon vers
+  l'an 13, cigognes vers l'an 16-17, épilogue vers l'an 18, six visiteurs vers l'an 21-22 ; `automator` sans étape 8.
+  Album : 2 pages (10 cases), 9 succès (210 écus), 3 décors.
+- **À trancher** (`docs/VALLEE.md` § 18.16) : où poussent les légendes, venue des cigognes (sans chantier ou chantier du
+  clocher), sons synthétisés ou enregistrés, couche d'oiseaux qui suit l'étape, forme de la fin douce, contenu de l'après-an
+  18, prénom de la mère de Joseph.
