@@ -48,6 +48,8 @@ const viewOpen = (ctx) => placesOn(ctx) && !!VS(ctx).view?.open;
 const storksOn = (ctx) => placesOn(ctx) && (VS(ctx).v || 1) >= 4 && parts(ctx).storks !== false;
 const sum = (o) => Object.values(o || {}).reduce((a, n) => a + (Number(n) || 0), 0);
 const stats = (ctx) => VS(ctx)?.stats || {};
+/** (V4) Une légende est réveillée (entrée dans `legends`). */
+const legendAwake = (ctx) => Object.values(VS(ctx)?.legends || {}).some((e) => e && e.awokeAt !== null && e.awokeAt !== undefined);
 
 /** Signal d'interface courant (`ctx.signal`) : nom et, si donné, identifiant (`data.id`). */
 const isSignal = (ctx, name, id) => ctx?.signal?.name === name && (id === undefined || ctx.signal.data?.id === id);
@@ -1194,7 +1196,8 @@ export const LESSONS = [
     modes: CAREER,
     tier: 'E',
     priority: 70,
-    trigger: { on: ['legendAwoken'], when: (ctx) => storksOn(ctx) },
+    // (Aussi à l'aube : une légende réveillée pendant une fenêtre ou un cours n'est pas perdue.)
+    trigger: { on: ['legendAwoken', 'dawn'], when: (ctx) => storksOn(ctx) && (ctx.ev?.type === 'legendAwoken' || legendAwake(ctx)) },
     acquired: (ctx) => Object.values(VS(ctx)?.legends || {}).some((l) => (l?.harvests || 0) > 0),
     reminders: ['legend'],
     steps: [
@@ -1268,8 +1271,11 @@ export const LESSONS = [
     title: 'Les sons de la vallée',
     modes: CAREER,
     tier: 'U',
-    priority: 20,
-    trigger: { on: ['speciesInstalled', 'visitorSeen'], when: (ctx) => storksOn(ctx) && ctx?.settings?.natureSound !== 'off' },
+    // Ordre des leçons du V4 : légende (70) et visiteur (70) d'abord, puis le livre (20), puis les sons (15, la plus
+    // douce) ; les sons attendent aussi que la leçon d'une légende réveillée soit passée (jamais avant elle la même aube).
+    priority: 15,
+    trigger: { on: ['speciesInstalled', 'visitorSeen'], when: (ctx) => storksOn(ctx) && ctx?.settings?.natureSound !== 'off' && !(legendAwake(ctx) && !ctx.seen?.('valley.legend')) },
+    stillRelevant: (ctx) => ctx?.settings?.natureSound !== 'off',
     acquired: () => false,
     steps: [
       {

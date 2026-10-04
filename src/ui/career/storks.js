@@ -127,7 +127,7 @@ export function createStorks(app) {
   const morning = (text) => text && app.todo?.morningNote?.(text);
   const tone = (name, opts) => app.audio.tone?.(name, opts);
   const reduced = () => !!app.reducedMotion?.();
-  const busy = () => app.dialogs.isOpen() || app.sheets.isOpen() || !!(app.coach ? app.coach.blocking : app.hints?.active) || !!app.cozy?.feteMode || !!app.heritage?.pairing || !!app.valley?.placing || !!app.decor?.active || !!app.places?.wilding || !!app.valleyView?.crediting || !!app.valleyBook?.isOpen;
+  const busy = () => app.dialogs.isOpen() || app.sheets.isOpen() || !!app.coach?.blocking || !!app.cozy?.feteMode || !!app.heritage?.pairing || !!app.valley?.placing || !!app.decor?.active || !!app.places?.wilding || !!app.valleyView?.crediting || !!app.valleyBook?.isOpen;
 
   // ── Feuilles « vivantes » ──────────────────────────────────────────────────────
   function openLive(id, { title, icon: ico, build, sig, tall = false, pauses, outsideClose, onClose }) {

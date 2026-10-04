@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GUIDE_SECTIONS, GLOSSARY } from '../src/ui/guide.js';
-import { HINTS } from '../src/ui/hints.js';
+import { LESSONS } from '../src/ui/coach/lessons/index.js';
 
 const words = (s) => s.split(/\s+/).filter(Boolean).length;
 
@@ -29,11 +29,13 @@ test('glossaire : les mots difficiles de l\'analyse sont expliqués', () => {
   for (const g of GLOSSARY) for (const sentence of g.text.split(/(?<=[.!?])\s+/)) assert.ok(words(sentence) <= 25, `${g.word} : « ${sentence} »`);
 });
 
-test('conseils : « Tout ramasser » existe, l\'embauche et la forêt ne se montrent que s\'ils servent encore', () => {
-  assert.ok(HINTS['career.collectAll']);
-  const app = (career) => ({ game: { state: { career } } });
-  assert.equal(HINTS['career.hire'].relevant(app({ staff: [] })), true);
-  assert.equal(HINTS['career.hire'].relevant(app({ staff: [{ id: 1 }] })), false);
-  assert.equal(HINTS['career.lotForSale'].relevant(app({ lotsBought: 0 })), true);
-  assert.equal(HINTS['career.lotForSale'].relevant(app({ lotsBought: 1 })), false);
+test('leçons de Joseph : « Tout ramasser » existe, l\'embauche et la forêt ne se montrent que si elles servent encore', () => {
+  // Les anciens conseils (table HINTS de src/ui/hints.js, retirée) sont des leçons du catalogue, du même identifiant.
+  const lesson = (id) => LESSONS.find((l) => l.id === id);
+  assert.ok(lesson('career.collectAll'));
+  const ctx = (career) => ({ state: { career }, career, mode: 'career', safe: (fn, fb) => { try { const v = fn(); return v === undefined ? fb : v; } catch { return fb; } } });
+  assert.equal(lesson('career.hire').stillRelevant(ctx({ staff: [] })), true);
+  assert.equal(lesson('career.hire').stillRelevant(ctx({ staff: [{ id: 1 }] })), false);
+  assert.equal(lesson('career.lotForSale').stillRelevant(ctx({ lotsBought: 0 })), true);
+  assert.equal(lesson('career.lotForSale').stillRelevant(ctx({ lotsBought: 1 })), false);
 });

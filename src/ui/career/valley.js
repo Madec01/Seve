@@ -819,7 +819,6 @@ export function createValley(app) {
     signal(SIGNALS.placing, { kind });
     app.sheets.close('silent');
     app.input?.cancel?.();
-    app.hints?.clear?.();
     app.pushPause('valley');
     document.body.classList.add('in-valley-place');
     app.scene?.setValleyPlacing?.(kind);
@@ -1358,7 +1357,7 @@ export function createValley(app) {
       app.scene?.setValleyStage?.(n);
     }
     // Fenêtres en attente (boîte de Joseph) : seulement quand rien d'autre n'est affiché.
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !(app.coach ? app.coach.blocking : app.hints?.active || app.tutorial?.active) && !app.cozy?.feteMode && !placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.coach?.blocking && !app.cozy?.feteMode && !placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'box') openBox(w.data);
     }

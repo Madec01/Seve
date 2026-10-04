@@ -134,7 +134,7 @@ export function carnetContent(app, { lessonId = null, tab = 'lessons' } = {}) {
   function lessonList() {
     if (!coach) return [el('p.sheet-empty', 'Le carnet arrive bientôt.')];
     const career = app.game?.mode === 'career';
-    const all = coach.lessons().filter((l) => !l.hidden && !l.legacy);
+    const all = coach.lessons().filter((l) => !l.hidden);
     const out = [];
     let locked = 0;
     for (const ch of CHAPTERS) {

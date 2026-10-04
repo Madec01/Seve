@@ -662,7 +662,6 @@ export function createPlaces(app) {
     signal(SIGNALS.wildPlacing, { on: true });
     app.sheets.close('silent');
     app.input?.cancel?.();
-    app.hints?.clear?.();
     app.pushPause('valley-wild');
     document.body.classList.add('in-valley-place', 'in-valley-wild');
     app.scene?.setWildPlacing?.(true);
@@ -872,7 +871,7 @@ export function createPlaces(app) {
       let tries = 0;
       const tryOpen = () => {
         if (viewActive() || !placesOpen()) return;
-        if (!app.sheets.isOpen() && !app.dialogs.isOpen() && !(app.coach ? app.coach.blocking : app.hints?.active)) goView({ first: true });
+        if (!app.sheets.isOpen() && !app.dialogs.isOpen() && !app.coach?.blocking) goView({ first: true });
         else if (++tries < 20) setTimeout(tryOpen, 300);
       };
       setTimeout(tryOpen, 250);

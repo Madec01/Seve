@@ -1091,7 +1091,7 @@ export function createVariety(app) {
         if (!isCareer(g)) app.tabbar?.setBadge('stats', on);
       }
     }
-    if (careerSeason && isCareer(g) && now >= careerSeason.at && !app.dialogs.isOpen() && !app.tutorial?.active && g.state.status === 'playing') {
+    if (careerSeason && isCareer(g) && now >= careerSeason.at && !app.dialogs.isOpen() && !app.coach?.blocking && g.state.status === 'playing') {
       const title = careerSeason.title;
       careerSeason = null;
       openCareerSeason(title);

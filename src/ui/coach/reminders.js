@@ -55,6 +55,12 @@ export function createReminders(app, { bubble, store, safe }) {
     quietReminders(memo, abs + 1);
   }
 
+  /** Fin d'un cours : Joseph vient de beaucoup parler ; pas de pastille de rappel avant le surlendemain. */
+  function quietAfterCourse() {
+    const abs = game ? absDay(game.state) : 0;
+    quietReminders(memo, abs + 2);
+  }
+
   function remCtx(ctx) {
     return { ...ctx, off: store.remindersOff ? Object.fromEntries(Object.entries(store.remindersOff()).map(([k, v]) => [k, !!v?.off])) : {}, level: store.level() };
   }
@@ -146,7 +152,7 @@ export function createReminders(app, { bubble, store, safe }) {
     if (ev.type === 'dawn') lastDawnAbs = null; // l'aube est traitée à l'image suivante (contexte à jour)
   }
 
-  function frame(now, ctx, { busy = false } = {}) {
+  function frame(now, ctx, { busy = false, courseQuiet = false } = {}) {
     if (!game || !ctx?.day || app.inMenu) {
       if (pill) closePill(false);
       return;
@@ -178,7 +184,7 @@ export function createReminders(app, { bubble, store, safe }) {
         showPill(rem, due, rc);
         return;
       }
-      if (level !== 'full' || blocked) continue;
+      if (level !== 'full' || blocked || courseQuiet) continue; // pendant un cours : rien d'autre que la sécurité
       showPill(rem, due, rc);
       return;
     }
@@ -191,6 +197,7 @@ export function createReminders(app, { bubble, store, safe }) {
     notify,
     frame,
     quietAfterResume,
+    quietAfterCourse,
     stats: () => ({ ...Object.fromEntries(Object.entries(memo.sorts).map(([k, v]) => [k, { shown: v.shown, ignored: v.ignored, off: !!store.reminderOff(k), silent: v.silentSeason !== null }])), _day: memo.dayCount, _season: memo.seasonCount }),
     get pillShown() {
       return !!pill;

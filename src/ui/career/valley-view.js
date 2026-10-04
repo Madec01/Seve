@@ -303,6 +303,9 @@ export function createValleyView(app) {
     const still = !!app.reducedMotion?.();
     credits = { info, cards: creditCards(info), t: 0, idx: -1, onEnd, still, paused: false, endT: 0 };
     document.body.classList.add('in-valley-credits');
+    // « Seule la vallée s'entend » : les messages encore à l'écran (« Joseph vous attend sur la colline ») s'effacent
+    // (ils restent dans l'historique).
+    app.toasts?.clearAll?.();
     creditsNode.hidden = false;
     root.querySelector('#vv-still-hint').hidden = !still;
     app.pushPause('credits');
@@ -456,6 +459,39 @@ export function createValleyView(app) {
     renderer.scrollTo(id, { animate: !app.reducedMotion?.() });
   }
 
+  /** Partie de la vue que rien ne couvre (sous le ruban, au-dessus de la barre) : rectangle de la page, ou null. */
+  function visibleRect() {
+    if (!active) return null;
+    const i = insets();
+    const vh = root.clientHeight || window.innerHeight;
+    return { top: i.top, bottom: vh - i.bottom };
+  }
+  /**
+   * (Accompagnement) Fait défiler la vue pour montrer une cible hors de la partie visible (sous la barre, sous la bulle de
+   * Joseph : `opts.avoid` = { top, bottom } de la bulle, px de la page). Renvoie vrai si la vue a bougé.
+   */
+  function focusTarget(hit, opts = {}) {
+    if (!active || !renderer || credits) return false;
+    const pr = targetPageRect(hit);
+    const vis = visibleRect();
+    if (!pr || !vis) return false;
+    let lo = vis.top + 8;
+    let hi = vis.bottom - 8;
+    const av = opts.avoid;
+    if (av && av.bottom > av.top) {
+      // La bulle occupe le haut ou le bas : la cible va dans la plus grande partie libre.
+      if (av.top - lo >= hi - av.bottom) hi = Math.min(hi, av.top - 8);
+      else lo = Math.max(lo, av.bottom + 8);
+    }
+    if (pr.top >= lo && pr.bottom <= hi) return false;
+    const r = hit?.type === 'place' ? renderer.placeRect(hit.id) : renderer.targetRect(hit);
+    if (!r) return false;
+    const L = renderer.layout;
+    const k = L.zoom / L.dpr;
+    renderer.scrollTo({ x: 0, y: (r.y + renderer.scroll - L.top) / k, w: r.w / k, h: r.h / k }, { animate: !app.reducedMotion?.() });
+    return true;
+  }
+
   function targetPageRect(hit) {
     if (!active || !renderer) return null;
     const r = hit?.type === 'place' ? renderer.placeRect(hit.id) : renderer.targetRect(hit);
@@ -549,6 +585,8 @@ export function createValleyView(app) {
     keepVisible,
     focusPlace,
     targetPageRect,
+    visibleRect,
+    focusTarget,
     get renderer() {
       return renderer;
     },

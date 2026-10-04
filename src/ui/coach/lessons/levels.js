@@ -91,6 +91,7 @@ export const LESSONS = mouseWords([
     modes: ['levels'],
     tier: 'E',
     priority: 90,
+    urgent: true, // danger réel : passe même pendant l'attente d'un cours (allowedDuringCourse)
     trigger: { on: ['dialogClose'], when: (ctx) => ctx.signal?.data?.id === 'neighbour-loan' },
     steps: [
       {
@@ -432,7 +433,8 @@ export const LESSONS = mouseWords([
     tier: 'U',
     priority: 20,
     where: 'menu',
-    trigger: { on: ['menu'], when: (ctx) => onMainMenu(ctx) && (ctx.progress?.ecus || 0) >= 10 },
+    // Une seule leçon du menu à la fois : les écus attendent que celle des étoiles soit vue (ancienne règle de main.js).
+    trigger: { on: ['menu'], when: (ctx) => onMainMenu(ctx) && (ctx.progress?.ecus || 0) >= 10 && (ctx.seen?.('grange') || !safe(ctx, () => perkList(ctx.progress).some((p) => p.canBuy), false)) },
     steps: [
       {
         id: 'ecus',

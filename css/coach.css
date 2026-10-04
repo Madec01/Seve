@@ -151,6 +151,12 @@ body.is-rotated #coach { visibility: hidden; }
   animation: coach-target 1.1s ease-in-out infinite;
 }
 @keyframes coach-target { 50% { outline-color: var(--gold); } }
+/* Onglets du bas (Menu au bord droit, barre collée au bas de l'écran) : liseré DANS le bouton, sinon il sort de l'écran
+   et l'anneau ne tombe pas pile sur l'onglet visé (leçons valley.sounds, cozy.album, basics.carnet…). */
+.tabbar-btn.coach-target {
+  outline-offset: calc(var(--u) * -2.5);
+  box-shadow: inset 0 0 0 calc(var(--u) * 4) var(--outline), inset 0 0 calc(var(--u) * 6) rgba(253, 220, 0, 0.9) !important;
+}
 html.high-contrast .coach-ring { border-width: calc(var(--u) * 2.5); }
 html.high-contrast .coach-bubble { filter: none; }
 .reduced-motion .coach-ring, .reduced-motion .coach-target { animation: none; }

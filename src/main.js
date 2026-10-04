@@ -9,8 +9,8 @@
 // feuilles « Acheter » et « Bilan » rangées à droite.
 //
 // Contenu v3 : progression permanente (src/ui/progress.js → src/core/progression.js), grange aux
-// souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), conseils « première fois »
-// (src/ui/hints.js → pont vers l'accompagnement src/ui/coach/), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
+// souvenirs (src/ui/grange.js), mode décoration (src/ui/decor.js), leçons « première fois » de Joseph
+// (accompagnement, src/ui/coach/), ateliers (src/ui/buildings.js). Les modules du cœur v3 sont chargés au
 // démarrage (src/ui/v3.js) et tout est vérifié avant usage : sans eux, le jeu reste le jeu v2.
 //
 // Mode Carrière (docs/CARRIERE.md, src/ui/career/*) : « Ma ferme » au menu principal, création
@@ -54,11 +54,9 @@ import { loadV3, v3 } from './ui/v3.js';
 import { createProgress } from './ui/progress.js';
 import { createGrange } from './ui/grange.js';
 import { createDecor } from './ui/decor.js';
-import { createHints } from './ui/hints.js';
 import { createCoach } from './ui/coach/engine.js';
 import { LESSONS as COACH_LESSONS, REMINDERS as COACH_REMINDERS } from './ui/coach/lessons/index.js';
 import { SIGNALS } from './ui/coach/signals.js';
-import { isProcessing } from './ui/buildings.js';
 import { productIcon } from './ui/icons.js';
 import { productName } from './ui/panel.js';
 import { createCareerUI } from './ui/career/index.js';
@@ -133,20 +131,10 @@ app.zoomUI = createZoomControls(app); // zoom de la scène (boutons + / −, pr�
 app.progression = createProgress(app, storage);
 app.grange = createGrange(app);
 app.decor = createDecor(app);
-app.hints = createHints(app); // pont : app.hints.maybe(id, target) → app.coach.request(id, { target })
 // Accompagnement « Joseph vous montre » (docs/ACCOMPAGNEMENT.md, src/ui/coach/) : leçons, cours (tutoriel du niveau 1,
 // début de carrière), rappels, carnet de Joseph. Remplace l'ancien tutoriel (src/ui/tutorial.js) et les conseils.
 app.coach = createCoach(app);
 app.coach.register(COACH_LESSONS, COACH_REMINDERS);
-// Ancien nom (modules pas encore migrés : app.tutorial?.active) : une bulle de Joseph couvre l'écran.
-app.tutorial = {
-  get active() {
-    return !!app.coach?.blocking;
-  },
-  get stepId() {
-    return app.coach?.current?.stepId || null;
-  },
-};
 app.careerUI = createCareerUI(app);
 app.careerMenuButtons = (btn) => careerMenuButtons(app, btn);
 app.newFarm = () => openNewFarm(app, {});
@@ -340,13 +328,9 @@ app.openGrangeFromEnd = (tab = 'bonus') => {
   app.grange.open(tab);
 };
 
-/** Menu principal affiché : conseils de la grange et du décor (une fois pour toutes). */
+/** Menu principal affiché : les leçons du menu (grange, décor, carrière : src/ui/coach/lessons/levels.js) s'y déclenchent. */
 app.onMainMenu = () => {
   app.coach?.signal(SIGNALS.menu, { screen: 'main-menu' });
-  const P = app.progression;
-  if (!P.available()) return;
-  if (P.canSpendStars()) app.hints.maybe('grange', { selector: '#menu-grange' });
-  else if (P.ecus() >= 10) app.hints.maybe('decor', { selector: '#menu-grange' });
 };
 app.onProgressChange = () => {
   app.grange?.refresh();
@@ -1085,10 +1069,6 @@ function onGameEvent(ev, game) {
         if (!career) pending.loan = ev;
         break;
       case 'purchased':
-        if (!career && isProcessing(game.query.investments().find((i) => i.id === ev.investmentId)) && ev.owned === 1 && app.hints.maybe('processingBought', { selector: '#bld-switch' })) {
-          // Premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur.
-          app.field.openBuilding(ev.investmentId);
-        }
         queueAchievementCheck(game);
         break;
       case 'harvested':
@@ -1382,7 +1362,6 @@ function processPending() {
     queuedBanner = null;
     app.sheets.close('silent');
     app.tooltip.hide();
-    app.hints.clear();
     if (app.decor.active) app.decor.exit();
     pauseReasons.clear();
     updateWakeLock();
@@ -1658,14 +1637,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
 
   // Accompagnement : cours du niveau 1 (levels.firstYear, reprise à l'étape retenue), leçons des niveaux.
   app.coach.bind(game, { mode: 'levels', resumed, created });
-
-  // Conseils « première fois » (pont : leçons du catalogue, ou anciens conseils tant que leur leçon n'existe pas).
-  const offered = new Set(lvl.availableInvestments || []);
-  const invs = game.query.investments();
-  if (invs.some(isProcessing)) app.hints.maybe('processing', { selector: '#tab-shop' });
-  if (offered.has('goat')) app.hints.maybe('goat', { selector: '#tab-shop' });
-  if (lvl.modifiers?.pollination) app.hints.maybe('pollination', { selector: '#tab-shop' });
-  if (lvl.contest) app.hints.maybe('contest', { selector: '#tab-stats' });
+  // Leçons « première fois » des niveaux (ateliers, chèvres, abeilles, concours…) : déclenchées par le catalogue
+  // (src/ui/coach/lessons/levels.js, signal `start` et aube).
 
   save();
   scheduleRefresh();
@@ -2287,7 +2260,6 @@ if (DEBUG) {
       let guard = 0;
       while (g.state.status === 'playing' && g.state.time.year < target && guard++ < 400) {
         while (app.dialogs.isOpen()) app.dialogs.closeTop() || app.dialogs.closeAll();
-        app.hints.clear();
         if (!window.__debug.skipDays(1)) {
           processPending();
         }

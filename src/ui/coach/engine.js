@@ -2,7 +2,7 @@
 // docs/ARCHITECTURE.md, « Accompagnement — contrats »).
 //
 // createCoach(app) → app.coach : file de leçons, contexte, étapes, pause (raison « coach »), réglage Complet / Discret /
-// Aucun, cours (tutoriel du niveau 1, début de carrière), rejeu depuis le carnet, pont des anciens conseils, rappels.
+// Aucun, cours (tutoriel du niveau 1, début de carrière), rejeu depuis le carnet, rappels.
 // Purement de l'interface : lit game.state / game.query / les événements, n'appelle AUCUNE action de jeu (seulement
 // app.pushPause / app.popPause), n'écrit rien dans l'état de partie.
 //
@@ -14,7 +14,6 @@ import { el } from '../dom.js';
 import { DAY_SECONDS } from '../../data/balance.js';
 import { absDay as coreAbsDay } from '../../core/surprises.js';
 import * as storage from '../../storage.js';
-import { HINTS } from '../hints.js';
 import { createBubble } from './bubble.js';
 import { createCoachStore } from './store.js';
 import { resolveTarget, focusTarget, needsTouchZoom } from './targets.js';
@@ -23,11 +22,12 @@ import { createReminders } from './reminders.js';
 import { openCarnet as openCarnetSheet } from './carnet.js';
 import { SIGNALS } from './signals.js';
 import { setSectionOpen } from '../career/util.js';
-import { asList, canShow, displayMode, pickNext, priorityOf, sayOf, PATIENCE_MIN_MS, PATIENCE_REPLAY_MS } from './scheduler.js';
+import { allowedDuringCourse, asList, canShow, displayMode, pickNext, priorityOf, sayOf, COURSE_RELEASE_DAYS, PATIENCE_MIN_MS, PATIENCE_REPLAY_MS } from './scheduler.js';
 
 const STATE_EVAL_MS = 500; // déclencheurs d'état et réussites d'état : au plus 2 fois par seconde
 const PILL_QUIET_MS = 15000; // Discret : la pastille d'une leçon essentielle reste 15 s (30 s en grand texte)
 const SCROLL_SETTLE_MS = 700;
+const STALE_DAYS = 2; // une leçon utile (U) restée 2 jours de jeu dans la file va au carnet (« à lire »)
 const DEV = typeof location !== 'undefined' && /[?&](debug|dev)\b/.test(location.search || '');
 
 /** Question unique aux anciens joueurs (§ 10.2) : leçon interne, jamais dans le carnet. */
@@ -41,39 +41,6 @@ const ASK_LESSON = {
   priority: 95,
   steps: [{ id: 'ask', say: 'Je peux vous montrer les nouveautés en chemin.', target: null, pause: false, choice: true }],
 };
-
-/** Ancien conseil (table HINTS de src/ui/hints.js) sans leçon au catalogue : leçon d'une étape « Compris ». */
-function legacyLesson(id, def, target, app) {
-  let t = null;
-  let sheet = null;
-  if (target?.selector) {
-    t = { ui: target.selector, label: def.title };
-    // La cible est-elle dans la feuille ouverte (graines, fiche d'un bâtiment…) ? Jugé à chaque image : la feuille peut
-    // s'ouvrir juste après la demande (premier atelier : sa fiche s'ouvre, le conseil vise son interrupteur).
-    if (target.sheet) sheet = target.sheet;
-    else {
-      sheet = () => {
-        const n = document.querySelector(target.selector);
-        return n && app.sheets?.box?.contains(n) ? app.sheets.current : null;
-      };
-    }
-    if (typeof sheet === 'string') t.sheet = sheet;
-  } else if (Number.isInteger(target?.plot)) t = { plot: target.plot, label: def.title };
-  else if (target?.investment) t = { rect: () => app.investmentPageRect?.(target.investment), label: def.title };
-  else if (typeof target?.rect === 'function') t = { rect: target.rect, label: def.title };
-  const chapter = id.startsWith('career.') ? 'career' : id.startsWith('valley.') ? 'valley' : id.startsWith('variety.') ? 'village' : id.startsWith('cozy.') ? 'cozy' : 'levels';
-  return {
-    id,
-    chapter,
-    title: def.title || 'Joseph',
-    tier: 'E',
-    priority: 40,
-    legacy: true,
-    where: def.where === 'menu' ? 'menu' : typeof sheet === 'string' ? `sheet:${sheet}` : 'farm',
-    stillRelevant: typeof def.relevant === 'function' ? () => def.relevant(app) : undefined,
-    steps: [{ id: 'read', say: def.text, target: t, gesture: 'look', done: { button: 'Compris' }, sheet }],
-  };
-}
 
 export function createCoach(app) {
   const layer = el('div', { id: 'coach', 'aria-live': 'off' });
@@ -327,12 +294,14 @@ export function createCoach(app) {
       if (opts.forced) q.forced = true;
       return true;
     }
-    queue.push({ id: lesson.id, lesson, at: performance.now(), chained: !!opts.chained, forced: !!opts.forced, target: opts.target || null, replay: !!opts.replay, from: opts.from || null });
+    queue.push({ id: lesson.id, lesson, at: performance.now(), day: frameCtx?.day?.abs ?? null, chained: !!opts.chained, forced: !!opts.forced, target: opts.target || null, replay: !!opts.replay, from: opts.from || null });
     return true;
   }
 
   function modeOk(l) {
     if (!Array.isArray(l.modes) || !l.modes.length) return true;
+    // Au menu principal, aucune partie n'est liée : une leçon du menu (grange, décor, carrière) vaut pour tous les modes.
+    if (!mode && l.where === 'menu') return true;
     return !!mode && l.modes.includes(mode);
   }
 
@@ -376,8 +345,17 @@ export function createCoach(app) {
     const ctx = ctxWith();
     for (const l of stateLessons) triggered(l, ctx);
     // Sujet réglé avant d'être montré : vue sans être montrée.
+    const today = ctx.day?.abs ?? null;
     for (let i = queue.length - 1; i >= 0; i--) {
       const e = queue[i];
+      // Leçon utile (U) qui attend depuis STALE_DAYS jours de jeu (un cours, des journées chargées) : hors de propos,
+      // elle va au carnet (« à lire ») au lieu d'arriver à contretemps — Joseph ne rattrape pas son retard d'un coup.
+      if (!e.forced && !e.replay && !e.chained && e.lesson.tier === 'U' && !course && today !== null && e.day !== null && e.day !== undefined && today - e.day >= STALE_DAYS) {
+        store.mark(e.lesson.id);
+        if (!e.lesson.hidden) store.addUnread(e.lesson.id);
+        queue.splice(i, 1);
+        continue;
+      }
       if (e.forced || e.replay || typeof e.lesson.stillRelevant !== 'function') continue;
       if (!safe(() => !!e.lesson.stillRelevant(ctx), true)) {
         store.mark(e.lesson.id);
@@ -464,6 +442,7 @@ export function createCoach(app) {
     if (k >= run.steps.length) return finish(run, 'done');
     run.index = k;
     run.stepAt = performance.now();
+    run.stepDay = frameCtx?.day?.abs ?? null; // jour de jeu du début de l'étape (attente d'un cours : § 4.3)
     run.nudgedAt = 0;
     run.released = false;
     run.minimized = false;
@@ -517,6 +496,7 @@ export function createCoach(app) {
       if (how === 'skip' || how === 'later-done') store.addPassed(l.id);
       if (how === 'quiet') store.addUnread(l.id);
       if (l.course) {
+        reminders.quietAfterCourse?.();
         for (const id of l.lessons || []) store.mark(id);
         for (const s of l.steps) if (s.lesson) store.mark(s.lesson);
         store.saveCourse(l.id, { done: true, key: run.key });
@@ -635,7 +615,6 @@ export function createCoach(app) {
   function stepTarget(run, ctx) {
     const s = stepOf(run);
     if (!s) return null;
-    if (run.target && run.index === 0 && run.lesson.legacy) return run.target;
     const t = typeof s.target === 'function' ? safe(() => s.target(ctx), null) : s.target || null;
     return t || null;
   }
@@ -649,7 +628,12 @@ export function createCoach(app) {
     }
     if (run.how === 'offer' && run.index === 0) {
       out.push({ id: 'coach-know', label: 'Je connais', onClick: () => finish(run, 'skip') });
-      out.push({ id: 'coach-yes', label: 'Oui', primary: true, onClick: () => { run.how = 'full'; render(run, true); } });
+      out.push({ id: 'coach-yes', label: 'Oui', primary: true, onClick: () => {
+        run.how = 'full';
+        // « Oui » répond déjà à la bulle d'accueil (« Je vous montre ? ») : on ne repose pas la question.
+        if (!s.target && !s.gesture && s.done?.button) advance(run);
+        else render(run, true);
+      } });
       return out;
     }
     if (s.choice) {
@@ -703,7 +687,10 @@ export function createCoach(app) {
       bubble.clearPoint();
     }
     run.dirty = true;
-    if (fresh) run.focused = -1;
+    if (fresh) {
+      run.focused = -1;
+      run.viewFocused = -1;
+    }
     paint(run, ctx, true);
   }
 
@@ -731,6 +718,12 @@ export function createCoach(app) {
     // Pastille : Discret (1ʳᵉ étape), étape passive, bulle réduite.
     if (passive || run.how === 'pill' || run.minimized) {
       if (bubble.visible) bubble.hide();
+      if (passive && run === course && !lessonRun && reminders.pillShown) {
+        // Un rappel de sécurité parle (fermage en danger) : la pastille d'attente du cours lui laisse la place.
+        bubble.clearPoint();
+        releasePause();
+        return;
+      }
       const waitSay = passive && s.wait && !s.pill ? safe(() => (typeof s.wait.say === 'function' ? s.wait.say(ctx) : s.wait.say), '') : sayOf(s, ctx);
       bubble.showPill({
         title: run.lesson.title,
@@ -755,9 +748,15 @@ export function createCoach(app) {
       if (!run.replay && run.index > 0) app.audio?.play?.('warning', { volume: 0.4 });
     }
     // Montrer la cible : la scène défile (au-dessus de la bulle), zoom tactile si elle est trop petite.
-    if (t && run.focused !== run.index && (resolved || t.scene || Number.isInteger(t.plot) || t.plots)) {
+    if (t && !t.view && run.focused !== run.index && (resolved || t.scene || Number.isInteger(t.plot) || t.plots)) {
       run.focused = run.index;
       focusTarget(t, app, { bottom: bubble.height + 16 });
+    }
+    // Vue de la vallée : la bulle est placée ; la vue défile pour que la cible ne soit ni sous la barre ni sous la bulle.
+    if (t?.view && resolved && run.viewFocused !== run.index && bubble.visible) {
+      run.viewFocused = run.index;
+      const br = bubble.el.getBoundingClientRect();
+      focusTarget(t, app, { avoid: { top: br.top, bottom: br.bottom } });
     }
     if (resolved && needsTouchZoom(resolved) && !zoomForced && app.scene?.ensureTouchZoom && !app.scene.zoomInfo?.().forced) {
       zoomForced = true;
@@ -782,6 +781,18 @@ export function createCoach(app) {
     holdPause(s.pause !== false && !run.released && !ui.menu);
   }
 
+  /**
+   * Le cours en cours, pour l'ordonnanceur : null (pas de cours) | { passive, waitedDays } (étape d'attente depuis
+   * combien de jours de jeu). Voir allowedDuringCourse (scheduler.js).
+   */
+  function courseGate() {
+    if (!course) return null;
+    const passive = isPassive(course);
+    const abs = frameCtx?.day?.abs ?? null;
+    const waitedDays = passive && abs !== null && course.stepDay !== null && course.stepDay !== undefined ? abs - course.stepDay : 0;
+    return { passive, waitedDays };
+  }
+
   /** Étape passive d'un cours : visible partout en partie, sauf fenêtre, fête, vue, visée, décor, menu. */
   function canShowPassive(ui) {
     return ui.playing && !ui.dialog && !ui.fete && !ui.view && !ui.placing && !ui.decor && !ui.rotated && !ui.resume && !ui.menu && !ui.sheet;
@@ -790,6 +801,12 @@ export function createCoach(app) {
   /** Les cibles de la scène cachées par la feuille ou la barre du haut ne reçoivent ni anneau ni doigt. */
   function coveredFn(resolved) {
     if (!resolved || resolved.kind !== 'scene') return null;
+    if (resolved.view) {
+      // Vue de la vallée : couverte par son ruban (haut) ou sa barre (bas), pas par la barre d'onglets de la ferme.
+      const vis = app.valleyView?.visibleRect?.();
+      if (!vis) return null;
+      return (r) => r.top + r.height / 2 > vis.bottom + 1 || r.top + r.height / 2 < vis.top - 1;
+    }
     const top = app.safeTop?.() ?? 0;
     const bottom = app.safeBottom?.() ?? innerHeight;
     return (r) => r.top + r.height / 2 > bottom + 1 || r.top + r.height / 2 < top - 1;
@@ -874,33 +891,20 @@ export function createCoach(app) {
     if (name === SIGNALS.resumeClose) reminders.quietAfterResume();
   }
 
-  /** Demande explicite d'une leçon (pont : app.hints.maybe). Renvoie vrai si elle sera montrée. */
+  /** Demande explicite d'une leçon du catalogue (ex. les lanternes, cozy.js). Renvoie vrai si elle sera montrée. */
   function request(id, opts = {}) {
-    let l = lessons.get(id);
-    if (!l && HINTS[id]) l = legacyLesson(id, HINTS[id], opts.target || null, app);
+    const l = lessons.get(id);
     if (!l) {
       if (DEV) console.warn(`Accompagnement : « ${id} » n'est pas au catalogue.`);
       return false;
     }
     if (store.seen(id) && !opts.force) return false;
-    if (!modeOk(l) && !l.legacy) return false;
-    if (l.legacy && l.where === 'menu' && !app.inMenu) return false;
+    if (!modeOk(l)) return false;
     const how = opts.force ? 'full' : displayMode(l, store.level());
     if (how === 'carnet') {
       store.mark(id);
       store.addUnread(id);
       return false;
-    }
-    if (l.legacy) {
-      // La cible d'un ancien conseil peut changer d'un appel à l'autre (même identifiant).
-      const fresh = legacyLesson(id, HINTS[id], opts.target || null, app);
-      const q = queue.find((e) => e.id === id);
-      if (q) {
-        q.lesson = fresh;
-        return true;
-      }
-      if (lessonRun?.lesson.id === id) return true;
-      return enqueue(fresh, { target: null, forced: !!opts.force });
     }
     return enqueue(l, { target: opts.target || null, forced: !!opts.force });
   }
@@ -984,16 +988,18 @@ export function createCoach(app) {
     }
     // Discret : la pastille d'une leçon essentielle part d'elle-même (la leçon reste « à lire » dans le carnet).
     if (lessonRun && lessonRun.how === 'pill' && lessonRun.pillUntil && now > lessonRun.pillUntil) finish(lessonRun, 'quiet');
-    // Choisir la prochaine leçon : jamais par-dessus une étape active d'un cours.
+    // Choisir la prochaine leçon : pendant un cours (même une étape d'attente), aucune autre leçon ne s'intercale, sauf
+    // un danger réel (`urgent`) quand le cours attend (allowedDuringCourse) ; les autres attendent la fin du cours.
     if (!lessonRun) {
-      const blocking = course && !isPassive(course);
-      if (!blocking || queue.some((e) => e.lesson.always)) {
+      const gate = courseGate();
+      const candidates = queue.filter((x) => !whereIsMenu(x.lesson) && (x.at <= now || !x.later) && (x.forced || !ownedByCourse(x.id)) && allowedDuringCourse(x.lesson, gate));
+      if (candidates.length) {
         const c0 = ctxWith();
-        for (const e of queue) {
+        for (const e of candidates) {
           const first = e.lesson.steps[e.from ? Math.max(0, e.lesson.steps.findIndex((x) => x.id === e.from)) : 0];
           e.step = first ? { ...first, sheet: sheetOfStep(first, c0) } : null;
         }
-        const e = pickNext(blocking ? queue.filter((x) => x.lesson.always) : queue.filter((x) => !whereIsMenu(x.lesson) && (x.at <= now || !x.later) && (x.forced || !ownedByCourse(x.id))), ui, now, {
+        const e = pickNext(candidates, ui, now, {
           lastEndAt,
           perDay,
           dayAbs: frameCtx.day?.abs,
@@ -1022,7 +1028,11 @@ export function createCoach(app) {
       if (!reminders.pillShown) bubble.hidePill();
       releasePause();
     }
-    reminders.frame(now, frameCtx, { busy: !!run });
+    // Rappels : jamais sur une bulle ; pendant un cours, seul le rappel de sécurité (fermage / charges en danger) parle,
+    // et seulement quand le cours attend (sa pastille d'attente s'efface le temps du rappel).
+    const cg = courseGate();
+    const courseQuiet = !!cg && !(cg.passive && cg.waitedDays >= COURSE_RELEASE_DAYS);
+    reminders.frame(now, frameCtx, { busy: !!lessonRun || (!!cg && !cg.passive), courseQuiet });
   }
 
   const whereIsMenu = (l) => l?.where === 'menu';
@@ -1075,7 +1085,7 @@ export function createCoach(app) {
     get active() {
       return !!displayed() && bubble.visible;
     },
-    /** La bulle d'une leçon couvre l'écran (pas une pastille) : remplace app.hints.active || app.tutorial.active. */
+    /** La bulle d'une leçon couvre l'écran (pas une pastille) : (zoom, mini-carte, ligne « À faire », fenêtres de la Vallée attendent). */
     get blocking() {
       return !!displayed() && bubble.visible;
     },

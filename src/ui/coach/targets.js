@@ -49,7 +49,7 @@ export function resolveTarget(desc, app) {
     }
     if (desc.view) {
       const r = app.valleyView?.targetPageRect?.(desc.view);
-      return r ? { rects: [rectOf(r)], label, kind: 'scene' } : null;
+      return r ? { rects: [rectOf(r)], label, kind: 'scene', view: true } : null;
     }
     if (sceneHidden(app)) return null;
     if (Number.isInteger(desc.plot)) {
@@ -129,6 +129,14 @@ function worldRectOf(desc, app) {
  */
 export function focusTarget(desc, app, opts = {}) {
   if (!desc || desc.focus === false) return false;
+  // Vue de la vallée : elle défile elle-même (sous le ruban, au-dessus de sa barre et de la bulle).
+  if (desc.view) {
+    try {
+      return !!app.valleyView?.focusTarget?.(desc.view, { avoid: opts.avoid || null });
+    } catch {
+      return false;
+    }
+  }
   if (desc.ui !== undefined) {
     const n = targetElement(desc, app);
     if (n && app.sheets?.box?.contains(n)) {

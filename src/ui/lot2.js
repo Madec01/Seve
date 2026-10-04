@@ -55,7 +55,7 @@ export function createLot2(app) {
   const findsQueue = [];
   let shownWishDay = null;
 
-  const dialogsBusy = () => app.dialogs.isOpen() || app.tutorial?.active || app.inMenu || !app.game;
+  const dialogsBusy = () => app.dialogs.isOpen() || app.coach?.blocking || app.inMenu || !app.game;
   // (Vallée V3) Les fenêtres attendent aussi la fin des écrans et modes où l'on vise : vue de la vallée, terres
   // sauvages, aménagement, paire, décoration, chasse de la fête (elles les masqueraient, ou les feraient quitter).
   const screenBusy = () =>

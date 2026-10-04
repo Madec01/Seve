@@ -136,7 +136,7 @@ export function createSheets(layer, app) {
   let closeTimer = null;
   let paused = false; // raison de pause « sheet » posée par cette feuille
   let released = false; // le joueur a relancé le temps, feuille ouverte
-  let openCount = 0; // (Vallée V3) nombre d'ouvertures : une seule bulle de conseil par ouverture (src/ui/hints.js)
+  let openCount = 0; // (Vallée V3) nombre d'ouvertures : une seule bulle de Joseph par ouverture (src/ui/coach/scheduler.js)
 
   function syncPause() {
     const want = !!current && !released && current.opts.pauses !== false && pauseOnSheetActive(app) && !(current.opts.kind === 'panel' && document.body.classList.contains('layout-wide'));

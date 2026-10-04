@@ -361,6 +361,7 @@ const basicsLessons = [
     title: 'Le gel',
     tier: 'E',
     priority: 90,
+    urgent: true, // danger réel : passe même pendant l'attente d'un cours (allowedDuringCourse)
     trigger: { on: ['seasonWarning'], when: (ctx) => !!ctx.ev?.frost },
     acquired: (actx) => veteran(actx),
     steps: [

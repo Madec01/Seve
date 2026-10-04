@@ -113,6 +113,24 @@ export function pickNext(queue, ui, now, opts = {}) {
   return null;
 }
 
+/**
+ * Pendant un cours (tutoriel du niveau 1, premiers pas de la carrière), y compris pendant ses étapes d'attente
+ * (« Demain : les œufs », « Arrosez chaque matin »), AUCUNE autre leçon ne s'intercale : elles attendent la fin du cours
+ * dans la file, puis sortent espacées (respiration, quota du jour). Exceptions : un danger réel (`urgent: true` : gel,
+ * dépannage de Joseph, coup dur), seulement quand le cours attend (étape passive) ; et une étape d'attente qui dure
+ * depuis `COURSE_RELEASE_DAYS` jours de jeu « libère la place » (§ 4.3, patience : le joueur peut ne jamais atteindre le
+ * but de l'étape, par exemple l'argent du poulailler).
+ * course : null | { passive, waitedDays }.
+ */
+export const COURSE_RELEASE_DAYS = 3;
+export function allowedDuringCourse(lesson, course) {
+  if (!course) return true;
+  if (!lesson || lesson.course) return false;
+  if (!course.passive) return false;
+  if (lesson.urgent) return true;
+  return (course.waitedDays ?? 0) >= COURSE_RELEASE_DAYS;
+}
+
 // ── Rappels ───────────────────────────────────────────────────────────────────────────────────
 
 export function createReminderMemo() {
@@ -167,8 +185,9 @@ export function reminderDue(rem, ctx, memo, opts = {}) {
   const out = { id: rem.id, text: cond.text, target: cond.target || null, safety: !!rem.safety };
   if (opts.ignoreQuota) return out;
   if (s.silentSeason !== null && s.silentSeason === seasonKey) return null;
-  if (abs < memo.quietUntil) return null;
   if (!rem.safety) {
+    // Silence après « Où en étais-je ? » ou la fin d'un cours ; jamais pour la sécurité (fermage / charges en danger).
+    if (abs < memo.quietUntil) return null;
     if (memo.day === abs && memo.dayCount >= REMINDERS_PER_DAY) return null;
     if (memo.season === seasonKey && memo.seasonCount >= REMINDERS_PER_SEASON) return null;
     if (memo.lastSort === rem.id && memo.lastSortDay !== null && abs - memo.lastSortDay <= 1) return null;

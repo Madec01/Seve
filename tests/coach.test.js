@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BREATH_MS, PER_DAY, canShow, displayMode, pickNext, priorityOf, reminderDue, createReminderMemo, noteReminderShown,
+  BREATH_MS, PER_DAY, COURSE_RELEASE_DAYS, allowedDuringCourse, canShow, displayMode, pickNext, priorityOf, reminderDue, createReminderMemo, noteReminderShown,
   noteReminderIgnored, noteReminderSeason, quietReminders, sayOf,
 } from '../src/ui/coach/scheduler.js';
 import { acquiredAtLoad, experienced, veteran, careerKnown } from '../src/ui/coach/acquired.js';
@@ -150,4 +150,63 @@ test('sayOf : texte ou fonction, jamais d\'exception', () => {
   assert.equal(sayOf({ say: 'Bonjour.' }, {}), 'Bonjour.');
   assert.equal(sayOf({ say: (c) => `${c.n} !` }, { n: 3 }), '3 !');
   assert.equal(sayOf({ say: () => { throw new Error('x'); } }, {}), '');
+});
+
+// ── Pendant un cours : aucune autre leçon (QA finale de l'accompagnement, 2026-10-04) ──────────────────────────────
+test('cours : aucune leçon ne s\'intercale, même pendant une étape d\'attente ; seul un danger réel passe quand le cours attend', () => {
+  const plain = L('variety.board');
+  const urgent = L('basics.frost', { urgent: true, priority: 90 });
+  const ask = L('coach.ask', { always: true, where: 'game' });
+  assert.equal(allowedDuringCourse(plain, null), true, 'sans cours : tout passe');
+  assert.equal(allowedDuringCourse(plain, { passive: false, waitedDays: 0 }), false, 'étape active');
+  assert.equal(allowedDuringCourse(plain, { passive: true, waitedDays: 0 }), false, '« Demain : les œufs »');
+  assert.equal(allowedDuringCourse(plain, { passive: true, waitedDays: 1 }), false, 'la nuit d\'attente des œufs');
+  assert.equal(allowedDuringCourse(ask, { passive: true, waitedDays: 0 }), false, 'la question unique attend aussi');
+  assert.equal(allowedDuringCourse(urgent, { passive: false, waitedDays: 0 }), false, 'danger : jamais sur une étape active');
+  assert.equal(allowedDuringCourse(urgent, { passive: true, waitedDays: 0 }), true, 'danger réel pendant l\'attente');
+  assert.equal(allowedDuringCourse(L('x', { course: true }), { passive: true, waitedDays: 9 }), false);
+  // Une attente très longue (l'argent du poulailler au niveau 1) libère la place (§ 4.3, patience).
+  assert.equal(allowedDuringCourse(plain, { passive: true, waitedDays: COURSE_RELEASE_DAYS }), true);
+  assert.equal(allowedDuringCourse(plain, { passive: false, waitedDays: COURSE_RELEASE_DAYS }), false);
+});
+
+test('cours : les leçons du catalogue marquées « danger réel » sont bien le gel, les dépannages, le coup dur, les corbeaux', () => {
+  const urgent = LESSONS.filter((l) => l.urgent).map((l) => l.id).sort();
+  assert.deepEqual(urgent, ['basics.frost', 'career.crows', 'career.hardship', 'career.loan', 'levels.loan']);
+  for (const id of ['career.charges', 'variety.board', 'career.start', 'basics.todo']) assert.ok(!LESSONS.find((l) => l.id === id)?.urgent, id);
+});
+
+test('après le cours : les leçons en attente sortent espacées (20 s, 3 par jour)', () => {
+  const q = [{ id: 'a', lesson: L('a'), at: 1 }, { id: 'b', lesson: L('b'), at: 2 }];
+  const end = 100000; // fin du cours
+  assert.equal(pickNext(q, UI, end + 1000, { lastEndAt: end }), null, 'respiration après le cours');
+  assert.equal(pickNext(q, UI, end + BREATH_MS + 1, { lastEndAt: end })?.id, 'a');
+  assert.equal(pickNext(q, UI, end + BREATH_MS + 1, { lastEndAt: end, perDay: PER_DAY, dayAbs: 2, shownDay: 2 }), null, 'quota du jour');
+});
+
+test('V4 : la légende passe avant les sons (même aube), le livre entre les deux', () => {
+  const V = (id) => LESSONS.find((l) => l.id === id);
+  assert.ok(priorityOf(V('valley.legend')) > priorityOf(V('valley.book')));
+  assert.ok(priorityOf(V('valley.book')) > priorityOf(V('valley.sounds')));
+  const q = [{ id: 'valley.sounds', lesson: V('valley.sounds'), at: 1 }, { id: 'valley.legend', lesson: V('valley.legend'), at: 2 }];
+  assert.equal(pickNext(q, UI, 1e6, { lastEndAt: -Infinity })?.id, 'valley.legend');
+  // Les sons ne se déclenchent pas tant qu'une légende réveillée attend sa leçon.
+  const state = { career: { valley: { v: 4, started: true, parts: {}, legends: { motherMelon: { awokeAt: 40 } } } } };
+  const base = { mode: 'career', state, career: state.career, settings: {}, safe: (f, fb) => { try { const v = f(); return v === undefined ? fb : v; } catch { return fb; } } };
+  const when = V('valley.sounds').trigger.when;
+  const on = V('valley.legend').trigger.when({ ...base, ev: { type: 'legendAwoken' }, seen: () => false });
+  assert.equal(on, true);
+  assert.equal(when({ ...base, seen: () => false }), false, 'légende pas encore montrée');
+  assert.equal(when({ ...base, seen: (id) => id === 'valley.legend' }), true, 'légende montrée : les sons peuvent venir');
+});
+
+test('rappels : le silence (reprise, fin d\'un cours) ne fait jamais taire la sécurité (fermage en danger)', () => {
+  const memo = createReminderMemo();
+  quietReminders(memo, 12);
+  const ctx = { day: { abs: 10, seasonKey: '1-0' }, mode: 'career', off: {} };
+  const plain = { id: 'sow', when: () => ({ text: 'On sème ?' }), wait: 0 };
+  const safety = { id: 'money.low', when: () => ({ text: 'Récoltez vite.' }), wait: 0, safety: true, oncePerSeason: true };
+  assert.equal(reminderDue(plain, ctx, memo), null);
+  assert.equal(reminderDue(safety, ctx, memo)?.id, 'money.low');
+  assert.equal(reminderDue(plain, { ...ctx, day: { abs: 12, seasonKey: '1-0' } }, memo)?.id, 'sow');
 });

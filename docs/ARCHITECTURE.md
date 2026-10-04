@@ -6268,3 +6268,23 @@ tools/simulate.js` et `node tools/simulate-career.js` identiques, `node tools/bu
   `HINTS` de `hints.js` (lue par le pont et par `tests/guidance.test.js`) et les appels `app.hints.maybe` de `main.js`
   (`processing`, `goat`, `pollination`, `contest`, `grange`, `decor`), sans effet double si la leçon a aussi son
   déclencheur (la file ne garde qu'une entrée par leçon).
+- **Intégration et QA finale (2026-10-04)** :
+  - **Pont retiré** : `src/ui/hints.js` (table `HINTS`, `app.hints`), la leçon « legacy » du moteur et l'alias `app.tutorial`
+    n'existent plus ; `coach.request(id, { target, force })` ne sert que les leçons du catalogue (ex. `cozy.lanterns`). Tous
+    les modules lisent `app.coach?.blocking`. Les leçons du menu (`where: 'menu'`) valent pour tous les modes au menu
+    principal (aucune partie liée).
+  - **Cours sans interruption** : `allowedDuringCourse(lesson, { passive, waitedDays })` (scheduler, pur) : pendant un cours,
+    même sur une étape passive, aucune leçon ne s'intercale, sauf `urgent: true` (danger réel : `basics.frost`,
+    `levels.loan`, `career.loan`, `career.hardship`, `career.crows`) quand l'étape est passive, ou après
+    `COURSE_RELEASE_DAYS` (3) jours de jeu d'attente sur la même étape passive. Les rappels se taisent pendant un cours sauf
+    `safety` (sur une étape passive : la pastille d'attente du cours s'efface le temps du rappel). Fin d'un cours :
+    `reminders.quietAfterCourse()` (aucune pastille avant le surlendemain) ; le silence (`quietUntil`) ne vaut jamais pour
+    un rappel `safety`.
+  - **File** : une leçon `tier: 'U'` restée `STALE_DAYS` (2) jours de jeu dans la file (hors cours, hors `forced` /
+    `chained` / rejeu) va au carnet (vue, « à lire ») au lieu d'arriver à contretemps.
+  - **Discret** : « Oui » à l'offre d'un cours passe la 1ʳᵉ étape si c'est une simple lecture (pas de double question).
+  - **Cibles** : `.tabbar-btn.coach-target` a son liseré à l'intérieur (onglets au bord de l'écran) ; une cible `{ view }`
+    est marquée `view: true` : sa couverture se juge sur `app.valleyView.visibleRect()` (sous le ruban, au-dessus de la barre
+    de la vue) et elle est amenée à l'écran par `app.valleyView.focusTarget(hit, { avoid })` (hors de la bulle).
+  - **V4** : priorités `valley.legend` 70, `valley.visitor` 70, `valley.book` 20, `valley.sounds` 15 ; `valley.sounds`
+    attend la leçon d'une légende réveillée ; `valley.legend` se déclenche aussi à l'aube (légende réveillée non montrée).

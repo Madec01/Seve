@@ -567,6 +567,7 @@ export const LESSONS = mouseWords([
     modes: ['career'],
     tier: 'E',
     priority: 85,
+    urgent: true, // danger réel : passe même pendant l'attente d'un cours (allowedDuringCourse)
     trigger: { on: ['crow'] },
     stillRelevant: (ctx) => plots(ctx).some((p) => p.crow),
     steps: [
@@ -611,6 +612,7 @@ export const LESSONS = mouseWords([
     modes: ['career'],
     tier: 'E',
     priority: 90,
+    urgent: true, // danger réel : passe même pendant l'attente d'un cours (allowedDuringCourse)
     trigger: { on: ['dialogClose'], when: (ctx) => ctx.signal?.data?.id === 'career-loan' },
     steps: [
       {
@@ -630,6 +632,7 @@ export const LESSONS = mouseWords([
     modes: ['career'],
     tier: 'E',
     priority: 90,
+    urgent: true, // danger réel : passe même pendant l'attente d'un cours (allowedDuringCourse)
     trigger: { on: ['dialogClose'], when: (ctx) => ctx.signal?.data?.id === 'career-hardship' },
     steps: [
       {

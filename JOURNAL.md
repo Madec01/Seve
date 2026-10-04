@@ -41,6 +41,8 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-03 | `backup/vallee-v3-2026-10-03` | Vallée V3 « Le ruisseau » terminé, intégré et vérifié (dernier commit du lot) ; pull request n° 10 |
 | 2026-10-04 | `backup/avant-vallee-v4-2026-10-04` | Avant le lot V4 « Les cigognes » (variétés légendaires, visiteurs rarissimes, paysage et sons), commit `ae003c1` |
 | 2026-10-04 | `backup/avant-accompagnement-2026-10-04` | Avant l'accompagnement (Joseph vous montre) et le code du V4, après le déplacement des boutons de zoom |
+| 2026-10-04 | `backup/accompagnement-v4-2026-10-04` | Accompagnement « Joseph vous montre » et Vallée V4 « Les cigognes » terminés, intégrés et vérifiés ; pull request n° 11 |
+| 2026-10-04 | `backup/avant-qa-coach-v4-2026-10-04` | Avant l'intégration et la QA finale de l'accompagnement et du V4, commit `c449436` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-vallee1-2026-10-03` | Avant l'intégration et la vérification au doigt du lot V1 de la Vallée, commit `a958bb2` (branche et tag créés en local) |
@@ -1092,6 +1094,13 @@ Idées étudiées pendant la conception du mode Carrière (2026-09-30) et **éca
 | 2026-10-03 | Vallée V3 : mini-carte — le trait « en reprise » ne se voyait pas sur la prairie sauvage (clair sur clair) | Corrigé (`scene.js`) |
 | 2026-10-03 | Vallée V3 : la case du « Carnet d'Hélène » n'arrive dans l'album qu'à l'aube suivante, alors que l'observation dit « ✓ Le carnet d'Hélène » | Noté (règle du lot 4 : l'album se remplit à l'aube) |
 | 2026-10-03 | Vallée V3 : au zoom minimal sur 360 px (× 2), un poteau « Terre sauvage ? » et le panneau du terrain voisin se partagent leurs zones de 48 px (le plus proche du doigt gagne) ; parcelles à 24–37 px (décision 5a : les modes de visée posent le zoom tactile) | Noté (conforme au contrat) |
+| 2026-10-04 | Accompagnement : pendant l'étape d'attente d'un cours (« Demain : les œufs », « Arrosez chaque matin »), d'autres leçons s'intercalaient (tableau, charrette, album…) | Corrigé (`allowedDuringCourse`, `scheduler.js` ; tests) |
+| 2026-10-04 | Accompagnement : l'anneau de `valley.sounds` (et de toute leçon visant un onglet du bas, dont l'onglet Menu au bord droit) débordait de l'écran : le liseré ne tombait pas pile sur l'onglet | Corrigé (liseré à l'intérieur des onglets, `css/coach.css`) |
+| 2026-10-04 | Accompagnement : au menu principal, les leçons « grange », « décor » et « menu.career » ne pouvaient jamais se déclencher (aucun mode lié à la partie) | Corrigé (`modeOk`, `engine.js`) |
+| 2026-10-04 | Accompagnement : en Discret, « Oui » à « Je vous montre les premiers pas ? » reposait la même question (« Je vous montre ? ») au niveau 1 | Corrigé (`engine.js`) |
+| 2026-10-04 | Accompagnement : dans la vue de la vallée, la cible d'une leçon (visiteur rare près de la barre, petit écran) n'avait ni anneau ni doigt (masquée par la règle de la barre d'onglets de la ferme) et la vue ne défilait pas vers elle | Corrigé (`valleyView.visibleRect` / `focusTarget`, `targets.js`, `engine.js`) |
+| 2026-10-04 | Vallée V4 : un message (« Joseph vous attend sur la colline ») pouvait rester à l'écran pendant le générique | Corrigé (`valley-view.js` : messages effacés au début du générique) |
+| 2026-10-04 | Accompagnement : une pastille de rappel arrivait 15 s après la fin du tutoriel de carrière | Corrigé (silence des rappels jusqu'au surlendemain après un cours, sauf sécurité) |
 
 ### 2026-10-03 — Zoom de la scène (pincer, boutons + / −), Niveaux et Carrière
 
@@ -2020,4 +2029,48 @@ CORE V4) » (rédigés au début du travail pour ART, AUDIO et UI/RENDER). Non c
   l'écran : le ruisseau et le bocage sont plus bas que la ferme où s'arrête le défilement). Sur 412 × 915 sans ruban ni
   barre, la vue tient presque entière à l'écran pendant le générique (défilement court). Idée : un vrai « effet de
   page » dans le livre ; une carte postale visible au perron le jour où elle arrive.
+
+### 2026-10-04 — Accompagnement et V4 : intégration et QA finale
+
+- **Sauvegarde** : `backup/avant-qa-coach-v4-2026-10-04` (branche + tag, commit `c449436`).
+- **Cours sans interruption** : pendant un cours (tutoriel de carrière ou du niveau 1), y compris ses étapes d'attente,
+  aucune autre leçon ne s'intercale (`allowedDuringCourse`, `src/ui/coach/scheduler.js`) ; elles attendent la fin du cours
+  dans la file et sortent ensuite espacées (20 s, 3 par jour). Exceptions : un danger réel (`urgent: true` : gel,
+  dépannages de Joseph, coup dur, corbeaux) quand le cours attend ; une attente de 3 jours de jeu « libère la place »
+  (ex. l'argent du poulailler au niveau 1, que le joueur peut ne jamais atteindre). Les rappels se taisent pendant le cours,
+  sauf la sécurité (fermage / charges en danger : la pastille d'attente du cours lui laisse la place).
+- **Pont des anciens conseils retiré** : `src/ui/hints.js` supprimé (`app.hints`, la table `HINTS`, la leçon « legacy »
+  du moteur) ainsi que l'alias `app.tutorial` ; les derniers appels de `main.js` (ateliers, chèvre, ruche, concours, grange,
+  décor) sont des leçons du catalogue, déclenchées par leurs propres déclencheurs (le premier atelier n'ouvre plus sa fiche
+  tout seul : Joseph montre où toucher). `valley.js`, `heritage.js`, `places.js`, `storks.js`, `variety.js`, `lot2.js` lisent
+  `app.coach.blocking`. `tests/guidance.test.js` vérifie les leçons du catalogue au lieu de la table.
+- **Leçons du menu principal** (grange, décor, carrière) : elles se déclenchent enfin (mode non lié au menu) ; les écus
+  attendent la leçon des étoiles (une seule leçon du menu à la fois).
+- **Ordre du V4** : légende 70, visiteur 70, livre 20, sons 15 ; `valley.sounds` attend que la leçon d'une légende réveillée
+  soit passée (jamais avant elle la même aube) ; `valley.legend` se déclenche aussi à l'aube si une légende est réveillée.
+- **Cibles** : liseré des onglets du bas dessiné à l'intérieur du bouton (l'onglet Menu au bord droit, la barre collée au
+  bas : l'anneau tombe pile) ; vue de la vallée : la cible est montrée au-dessus de la barre de la vue et hors de la bulle
+  (la vue défile vers elle).
+- **Relecture « joueur cosy »** : une leçon utile (U) restée 2 jours de jeu dans la file va au carnet (« à lire ») au lieu
+  d'arriver à contretemps (après le tutoriel : l'album, l'étal, les messages… ne tombent plus d'un coup) ; aucune pastille de
+  rappel avant le surlendemain d'un cours ; en Discret, « Oui » ne repose plus la question d'accueil ; le générique efface les
+  messages.
+- **Vérifié au doigt** (Playwright, Chromium, Pixel 7 et 360 × 740, toucher seulement, `index.html?debug=1&nosw`,
+  Complet / Discret / Aucun) : nouvelle carrière (premier glissé en ≈ 1,2 s, tutoriel jusqu'à la poule sans aucune autre
+  bulle, puis tableau, charges, fête espacés de ≥ 20 s, une leçon par jour au plus à ×2) ; niveau 1 jusqu'à la victoire, avec
+  reprise après rechargement ; ancien joueur (sauvegarde fabriquée avec le jeu du commit `ae003c1` : progression + carrière
+  an 3) : question unique (Discret présélectionné), rudiments non rejoués, carnet rempli (31 leçons déduites) ; carnet
+  (relire, « Me montrer », couper un rappel) ; réglage dans les Options et la fenêtre « Bienvenue ! » ; les 27 rappels
+  (pastille ≥ 48 px, toucher → leur action) ; leçons des lots 2 à 4 et de la Vallée (géant, hiver, boîte, fiche, visée
+  « aménager », fête, vue) ; V4 de bout en bout (légende réveillée, semée, récoltée par la cloche ; cigognes au clocher puis
+  nid ; grues ; épilogue, générique, livre et partage ; sons Complets / Légers / Coupés ; les 4 leçons) ; mouvement réduit et
+  texte 150 % sur 360 × 740 ; `aria-live` ; cibles ≥ 48 px, textes ≥ 14 px, rien ne déborde ; aucune erreur console. Captures
+  `screens/final-*.png` du bloc-notes.
+- **Parité et simulations** : `node tools/capture-parity.js --check` 400 / 400 ; `node tools/simulate.js` identique à HEAD
+  (octet pour octet) ; `node tools/simulate-career.js --compare-valley4 --runs 60` : argent identique chaque jour pour les 7
+  robots (40 320 jours chacun, 0 différent ; revenu + 0,0 %). Aucun fichier de `src/core` ni `src/data` touché.
+- **Reste noté** : la cible de `valley.view` (le ruisseau) est plus haute que l'écran : la bulle en couvre forcément une
+  partie (l'anneau reste visible) ; les tables `*_HINTS` des données de la Vallée (`VALLEY_HINTS`, `HERITAGE_HINTS`,
+  `PLACES_HINTS`, `STORKS_HINTS`) ne servent plus qu'aux tests des données (à retirer avec eux) ; le quota de 3 leçons par
+  jour peut faire attendre une leçon propre à un écran (vue, fête) jusqu'au lendemain.
 

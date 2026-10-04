@@ -583,7 +583,6 @@ export function createHeritage(app) {
     signal(SIGNALS.placing, { kind: 'pair', cropId });
     app.sheets.close('silent');
     app.input?.cancel?.();
-    app.hints?.clear?.();
     app.pushPause('valley-pair');
     document.body.classList.add('in-valley-place', 'in-valley-pair');
     app.scene?.setPairPlacing?.(cropId);
@@ -996,7 +995,7 @@ export function createHeritage(app) {
       else if (bar) paintBar();
     }
     if (!g || app.inMenu || !enabled(g)) return;
-    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !(app.coach ? app.coach.blocking : app.hints?.active || app.tutorial?.active) && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
+    if (windows.length && g.state.status === 'playing' && !app.dialogs.isOpen() && !app.sheets.isOpen() && !app.coach?.blocking && !app.cozy?.feteMode && !pairing && !app.valley?.placing && !app.decor?.active && !app.valleyView?.active && !app.places?.wilding) {
       const w = windows.shift();
       if (w.kind === 'cross') {
         showCross(w.data);
