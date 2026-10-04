@@ -12,6 +12,11 @@
 //   targetPageRect(hit)      rectangle de la page d'une cible de la vue (conseils, vérification au doigt)
 //   renderer                 la vue dessinée (src/render/valley-view.js) ; stats()
 // }
+// (Lot V4 « Les cigognes ») open({ visitorId?, bench? }) ; startCredits(credits, { onEnd }) : le générique doux (vue au soir,
+//   ruban et barre cachés, « Passer » ≥ 48 px, cartes 16 px, musique coupée en 3 s, seule la vallée s'entend, temps en
+//   pause ; mouvements réduits : une carte par toucher) ; startContemplate() : « S'asseoir sur le banc » (défilement lent,
+//   sans texte, à quitter d'un toucher) ; crediting, contemplating ; bouton « S'asseoir » dans la barre (après l'épilogue) ;
+//   écoute du paysage sonore au défilement (audio.setNatureListener) ; musique × 0,6 dans la vue (audio.setMusicScale).
 // Gestes : glisser vertical = défiler (élan léger, pas de pincement), toucher = cible (src/render/valley-view.js, hitTest).
 // Lecteurs d'écran : le canevas a role=img et un résumé ; la liste des lieux (bouton « Liste ») est la vraie navigation.
 
@@ -40,6 +45,15 @@ export function createValleyView(app) {
   let historyPushed = false;
   let ignorePops = 0; // retours d'historique lancés par close() lui-même (asynchrones)
   let summaryKey = '';
+  // (V4) Générique et contemplation.
+  let credits = null; // { info, t, idx, shown, onEnd, still, end }
+  let contemplating = false;
+  let creditsNode = null;
+  let cardNode = null;
+  let skipBtn = null;
+  let benchBtn = null;
+  let listenKey = '';
+  let listenT = 0;
 
   const enabled = (g = app.game) => !!app.places?.placesOpen?.(g);
   function safe(fn, fallback = null) {
@@ -64,8 +78,12 @@ export function createValleyView(app) {
     countNode = el('span.vv-count', { id: 'vv-count', 'aria-live': 'polite' });
     const back = el('button.vv-btn.vv-back', { type: 'button', id: 'vv-back', 'aria-label': 'Retour à la ferme', onclick: () => { app.vibrate?.(8); close(); } }, el('span.vv-back-arrow', { 'aria-hidden': 'true' }, '‹'), el('span', 'La ferme'));
     const list = el('button.vv-btn.vv-list', { type: 'button', id: 'vv-list', onclick: () => { app.vibrate?.(8); app.places?.openList?.(); } }, icon('menu', 'sm'), el('span', 'Liste'));
-    const barNode = el('nav.vv-bar', { id: 'vv-bar', 'aria-label': 'La vallée' }, back, countNode, list);
-    root = el('section.valley-view', { id: 'valley-view', 'aria-label': 'La vallée', hidden: true }, canvas, ribbon, barNode);
+    benchBtn = el('button.vv-btn.vv-bench', { type: 'button', id: 'vv-bench', hidden: true, 'aria-label': 'S\'asseoir sur le banc', onclick: () => { app.vibrate?.(8); startContemplate(); } }, el('span.vv-bench-ico', { 'aria-hidden': 'true' }, '🪑'), el('span', 'S\'asseoir'));
+    const barNode = el('nav.vv-bar', { id: 'vv-bar', 'aria-label': 'La vallée' }, back, countNode, benchBtn, list);
+    cardNode = el('p.vv-card', { id: 'vv-card', 'aria-live': 'polite', hidden: true });
+    skipBtn = el('button.vv-btn.vv-skip', { type: 'button', id: 'vv-skip', onclick: (e) => { e.stopPropagation(); app.vibrate?.(8); endCredits({ skipped: true }); } }, 'Passer');
+    creditsNode = el('div.vv-credits', { id: 'vv-credits', hidden: true }, cardNode, skipBtn, el('p.vv-still-hint', { id: 'vv-still-hint', hidden: true }, 'Touchez pour la suite'));
+    root = el('section.valley-view', { id: 'valley-view', 'aria-label': 'La vallée', hidden: true }, canvas, ribbon, barNode, creditsNode);
     document.body.append(root);
     canvas.addEventListener('pointerdown', onDown);
     canvas.addEventListener('pointermove', onMove);
@@ -135,7 +153,7 @@ export function createValleyView(app) {
     if (!press || e.pointerId !== press.id) return;
     const p = local(e);
     if (!press.moved && Math.hypot(p.x - press.x, p.y - press.y) > TAP_SLOP) press.moved = true;
-    if (!press.moved) return;
+    if (!press.moved || credits || contemplating) return;
     const now = performance.now();
     const dy = p.y - press.lastY;
     renderer?.scrollBy(-dy);
@@ -151,6 +169,16 @@ export function createValleyView(app) {
     press = null;
     if (was.moved) {
       if (performance.now() - was.lastT < 90 && Math.abs(was.v) > 80) renderer?.fling(was.v);
+      return;
+    }
+    // (V4) Contemplation : un toucher quitte le banc. Générique : un toucher met en pause / reprend (mouvements réduits :
+    // carte suivante).
+    if (contemplating) {
+      stopContemplate();
+      return;
+    }
+    if (credits) {
+      creditsTap();
       return;
     }
     const hit = renderer?.hitTest(p.x, p.y);
@@ -209,17 +237,29 @@ export function createValleyView(app) {
     else if (opts.speciesId) {
       const t = renderer.targetRect?.({ type: 'viewAnimal', id: opts.speciesId });
       if (t) renderer.scrollTo({ x: 0, y: (t.y + renderer.scroll - renderer.layout.top) / (renderer.layout.zoom / renderer.layout.dpr), w: 16, h: 16 }, { animate: false });
-    } else if (opts.mushrooms) renderer.scrollTo('combe', { animate: false });
+    } else if (opts.visitorId) {
+      const t = renderer.targetRect?.({ type: 'visitor', id: opts.visitorId });
+      if (t) renderer.scrollTo({ x: 0, y: (t.y + renderer.scroll - renderer.layout.top) / (renderer.layout.zoom / renderer.layout.dpr), w: 16, h: 16 }, { animate: false });
+    } else if (opts.bench) renderer.scrollTo({ x: 144, y: 138, w: 32, h: 16 }, { animate: false });
+    else if (opts.mushrooms) renderer.scrollTo('combe', { animate: false });
     else if (!was) renderer.scrollTo('farm', { animate: false });
     if (opts.placeId) requestAnimationFrame(() => app.places?.openPlace?.(opts.placeId));
     // Joseph montre la vue (leçons valley.view, valley.valleyAnimal… : src/ui/coach/lessons/valley.js).
     if (!was) app.coach?.signal?.(SIGNALS.viewOpen);
+    // (V4) La vallée passe devant : musique × 0,6, paysage sonore de la vue.
+    if (!was) {
+      app.audio.setMusicScale?.(0.6);
+      listenKey = '';
+      app.updateAmbience?.();
+    }
     if (app.keyboardMode) requestAnimationFrame(() => root.querySelector('#vv-list')?.focus());
     return true;
   }
 
   function close({ silent = false, fromHistory = false } = {}) {
     if (!active) return;
+    if (credits) endCredits({ skipped: true, closing: true });
+    if (contemplating) stopContemplate({ closing: true });
     active = false;
     keep = null;
     press = null;
@@ -231,6 +271,8 @@ export function createValleyView(app) {
     app.popPause('valleyView');
     if (!silent) app.audio.play('close', { volume: 0.6 });
     app.coach?.signal?.(SIGNALS.viewClose);
+    app.audio.setMusicScale?.(1);
+    app.updateAmbience?.();
     if (historyPushed && !fromHistory) {
       historyPushed = false;
       try {
@@ -243,6 +285,143 @@ export function createValleyView(app) {
       }
     }
     app.tabbar?.refresh?.();
+  }
+
+  // ── (V4) Le générique doux ──────────────────────────────────────────────────────
+  const CREDIT_DUR = 70;
+  function creditCards(info) {
+    const out = (info.cards || []).map((c) => ({ title: c.name, text: c.text, placeId: c.placeId }));
+    if (info.total) out.push({ title: info.title || '', text: info.total });
+    for (const line of info.end || []) out.push({ title: '', text: line, end: true });
+    return out;
+  }
+  /** Démarre le générique : la vue au soir, du ciel jusqu'à la ferme ; musique coupée, seule la vallée s'entend. */
+  function startCredits(info = {}, { onEnd } = {}) {
+    if (!active && !open({ credits: true })) return false;
+    if (app.sheets.isOpen()) app.sheets.close('silent');
+    contemplating && stopContemplate({ closing: true });
+    const still = !!app.reducedMotion?.();
+    credits = { info, cards: creditCards(info), t: 0, idx: -1, onEnd, still, paused: false, endT: 0 };
+    document.body.classList.add('in-valley-credits');
+    creditsNode.hidden = false;
+    root.querySelector('#vv-still-hint').hidden = !still;
+    app.pushPause('credits');
+    app.audio.playMusic?.(null, { fade: 3 });
+    renderer.setTint?.(0.25);
+    renderer.setOverlay(0);
+    keep = null;
+    if (still) {
+      renderer.stopAuto?.();
+      showCard(0);
+    } else renderer.setAuto?.({ mode: 'credits', duration: CREDIT_DUR });
+    canvas.setAttribute('aria-label', `${info.title || 'La vallée'} : la vallée au soir. Touchez pour mettre en pause ; « Passer » pour revenir à la ferme.`);
+    app.updateAmbience?.();
+    requestAnimationFrame(() => skipBtn?.focus?.({ preventScroll: true }));
+    return true;
+  }
+  function showCard(i) {
+    if (!credits) return;
+    credits.idx = i;
+    const c = credits.cards[i];
+    if (!c) {
+      cardNode.hidden = true;
+      return;
+    }
+    cardNode.hidden = false;
+    cardNode.classList.toggle('is-end', !!c.end);
+    cardNode.replaceChildren(c.title ? el('b.vv-card-title', c.title) : '', c.text ? el('span.vv-card-text', c.text) : '');
+    if (credits.still && c.placeId) renderer.scrollTo(c.placeId, { animate: false });
+    if (credits.still && !c.placeId) renderer.scrollTo('farm', { animate: false });
+  }
+  function stepCredits(dt) {
+    const c = credits;
+    if (!c || c.still) return;
+    if (c.paused) return;
+    c.t += dt;
+    // Les cartes des lieux au fil du défilement (du ciel à la ferme), puis le total et les deux lignes de la fin.
+    const nPlaces = c.cards.filter((x) => x.placeId).length;
+    const step = (CREDIT_DUR * 0.75) / Math.max(1, nPlaces);
+    let want = -1;
+    if (c.t >= 4) {
+      const i = Math.floor((c.t - 4) / step);
+      if (i < nPlaces) want = (c.t - 4) % step < step * 0.85 ? i : -1;
+      else {
+        const rest = c.t - 4 - nPlaces * step;
+        const j = nPlaces + Math.floor(rest / 5);
+        want = j < c.cards.length ? j : -1;
+        if (j >= c.cards.length && rest > (c.cards.length - nPlaces) * 5 + 2) {
+          endCredits({ skipped: false });
+          return;
+        }
+      }
+    }
+    if (want !== c.idx) showCard(want);
+  }
+  function creditsTap() {
+    const c = credits;
+    if (!c) return;
+    if (c.still) {
+      // Mouvements réduits : une carte par toucher, puis la fin.
+      if (c.idx + 1 >= c.cards.length) endCredits({ skipped: false });
+      else showCard(c.idx + 1);
+      return;
+    }
+    c.paused = !c.paused;
+    renderer.autoPaused = c.paused;
+    root.classList.toggle('is-paused', c.paused);
+    app.toasts.show({ kind: 'info', text: c.paused ? 'En pause : touchez pour reprendre.' : 'La vallée reprend.', duration: 1400, log: false, key: 'vv-credits' });
+  }
+  function endCredits({ skipped = false, closing = false } = {}) {
+    const c = credits;
+    if (!c) return;
+    credits = null;
+    document.body.classList.remove('in-valley-credits');
+    root.classList.remove('is-paused');
+    creditsNode.hidden = true;
+    cardNode.hidden = true;
+    renderer?.stopAuto?.();
+    renderer?.setTint?.(0);
+    app.popPause('credits');
+    try {
+      c.onEnd?.({ skipped });
+    } catch (err) {
+      console.warn('Générique :', err);
+    }
+    // La musique de saison revient (fondu 2 s).
+    const season = (() => {
+      try {
+        return app.game?.query?.calendar?.().seasonId || null;
+      } catch {
+        return null;
+      }
+    })();
+    if (season) app.audio.playMusic?.(season, { fade: 2 });
+    if (!closing) close({ silent: true });
+  }
+
+  // ── (V4) S'asseoir sur le banc ─────────────────────────────────────────────────
+  function startContemplate() {
+    if (!active || credits) return false;
+    if (!view?.canContemplate) return false;
+    if (app.sheets.isOpen()) app.sheets.close('silent');
+    contemplating = true;
+    keep = null;
+    document.body.classList.add('in-valley-contemplate');
+    renderer.setOverlay(0);
+    renderer.setTint?.(view?.villageLights ? 0.18 : 0);
+    if (!app.reducedMotion?.()) renderer.setAuto?.({ mode: 'contemplate' });
+    canvas.setAttribute('aria-label', 'Assis sur le banc : la vallée défile lentement. Touchez pour vous lever.');
+    app.toasts.show({ kind: 'info', text: 'Touchez l\'écran pour vous lever.', duration: 2200, log: false, key: 'vv-sit' });
+    return true;
+  }
+  function stopContemplate({ closing = false } = {}) {
+    if (!contemplating) return;
+    contemplating = false;
+    document.body.classList.remove('in-valley-contemplate');
+    renderer?.stopAuto?.();
+    renderer?.setTint?.(0);
+    summaryKey = '';
+    if (!closing) app.audio.play('close', { volume: 0.4 });
   }
 
   // ── Garder une cible au-dessus de la feuille ────────────────────────────────────
@@ -295,6 +474,7 @@ export function createValleyView(app) {
     const done = list.reduce((a, p) => a + (p.step || 0), 0);
     const total = list.reduce((a, p) => a + (p.max || 0), 0) || 19;
     setText(countNode, `${done} / ${total} étapes · ${plural(st.signs || 0, 'signe de vie', 'signes de vie')}`);
+    if (benchBtn) benchBtn.hidden = !view?.canContemplate;
     const key = list.map((p) => `${p.id}:${p.step}:${p.works ? p.works.daysLeft : '-'}`).join(',');
     if (key !== summaryKey) {
       summaryKey = key;
@@ -323,7 +503,19 @@ export function createValleyView(app) {
       paintTexts();
     }
     resize();
+    if (credits) stepCredits(dt);
     applyKeep();
+    // (V4) Écoute du paysage sonore : le centre de la partie visible (≤ 10 fois par seconde, s'il a bougé).
+    listenT += dt;
+    if (listenT >= 0.1) {
+      listenT = 0;
+      const l = renderer.listener?.();
+      const k = l ? `${l.y}|${l.h}` : '';
+      if (l && k !== listenKey) {
+        listenKey = k;
+        app.audio.setNatureListener?.({ y: l.y, h: l.h });
+      }
+    }
     if (!app.sheets.isOpen() && lastOverlay > 0) {
       lastOverlay = 0;
       renderer.setOverlay(0);
@@ -333,10 +525,12 @@ export function createValleyView(app) {
 
   function onEvent(ev) {
     if (!active) return;
-    if (['placeRecovered', 'worksStarted', 'mushroomsGrew', 'mushroomPicked', 'riverFished', 'speciesVisible', 'speciesInstalled', 'storyRead', 'valleyStage'].includes(ev.type)) viewT = -1;
+    if (['placeRecovered', 'worksStarted', 'mushroomsGrew', 'mushroomPicked', 'riverFished', 'speciesVisible', 'speciesInstalled', 'storyRead', 'valleyStage', 'visitorVisible', 'visitorSeen', 'visitorHint', 'storksArrived', 'epilogueAvailable', 'epilogueRead'].includes(ev.type)) viewT = -1;
   }
 
   function reset() {
+    if (credits) endCredits({ skipped: true, closing: true });
+    if (contemplating) stopContemplate({ closing: true });
     if (active) close({ silent: true });
     renderer?.reset?.();
     view = null;
@@ -358,6 +552,17 @@ export function createValleyView(app) {
     get renderer() {
       return renderer;
     },
+    startCredits,
+    endCredits: (o) => endCredits(o || { skipped: true }),
+    startContemplate,
+    stopContemplate,
+    get crediting() {
+      return !!credits;
+    },
+    get contemplating() {
+      return contemplating;
+    },
+    creditsState: () => (credits ? { t: Math.round(credits.t * 10) / 10, idx: credits.idx, cards: credits.cards.length, still: credits.still, paused: !!credits.paused } : null),
     stats: () => ({ active, view: view ? { places: (view.places || []).map((p) => [p.id, p.step, !!p.works]), animals: (view.animals || []).length, mushrooms: (view.mushrooms || []).length, river: view.river || null } : null, renderer: renderer?.stats?.() || null }),
   };
 }

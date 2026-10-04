@@ -76,6 +76,8 @@ import { createValley } from './ui/career/valley.js';
 import { createHeritage } from './ui/career/heritage.js';
 import { createPlaces } from './ui/career/places.js';
 import { createValleyView } from './ui/career/valley-view.js';
+import { createStorks } from './ui/career/storks.js';
+import { createValleyBook } from './ui/career/valley-book.js';
 import { nextFloat } from './core/rng.js';
 import * as surprisesCore from './core/surprises.js';
 import { SPECIAL_WEATHERS_BY_ID, FINDS_BY_ID } from './data/surprises.js';
@@ -178,6 +180,10 @@ app.heritage = createHeritage(app); // (Vallée V2) Grainothèque, troc, croisem
 // (Vallée V3) Lieux de la vallée, terres sauvages, pêche, champignons (appelé par app.valley) ; l'écran « La vallée ».
 app.places = createPlaces(app);
 app.valleyView = createValleyView(app);
+// (Vallée V4) Légendes, visiteurs rares, cigognes, épilogue, générique, banc ; le livre de la vallée ; paysage sonore.
+app.storks = createStorks(app);
+app.valleyBook = createValleyBook(app);
+app.updateAmbience = () => updateAmbience(app.game);
 app.images = () => images;
 
 applyDisplaySettings();
@@ -200,6 +206,7 @@ app.updateSettings = (patch) => {
   if ('keepAwake' in patch) updateWakeLock();
   if ('messages' in patch) app.toasts.setMode(settings.messages);
   if ('textScale' in patch) app.coach?.relayout();
+  if ('natureSound' in patch) updateAmbience(app.game); // (V4) « Sons de la vallée » : le paysage se recalcule
 };
 
 app.reducedMotion = () => document.documentElement.classList.contains('reduced-motion');
@@ -905,7 +912,7 @@ app.onSceneHover = (hit, e) => {
     if (app.decor.active) pointer = !!hit && ['decorSlot', 'sign', 'farmer'].includes(hit.type);
     else if (hit?.type === 'plot') pointer = !!app.game?.query.plot(hit.index)?.action;
     else if (hit?.type === 'investment') pointer = true;
-    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot', 'valleyView', 'wildLand', 'wildCell'].includes(hit?.type)) pointer = true;
+    else if (['villageBoard', 'cart', 'merchant', 'feteItem', 'winterFind', 'feeder', 'storyWindow', 'lanternRack', 'feteStall', 'wildlife', 'hedgeFind', 'valleyBox', 'natureSpot', 'valleyView', 'wildLand', 'wildCell', 'storkNest', 'visitor', 'seedLibrary'].includes(hit?.type)) pointer = true;
     canvas.style.cursor = pointer ? 'pointer' : '';
   }
   updateHoverTip();
@@ -947,6 +954,9 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (app.sheets.isOpen()) return app.sheets.close('escape');
+    if (app.valleyBook?.isOpen) return app.valleyBook.close(); // (Vallée V4) le livre de la vallée
+    if (app.valleyView?.crediting) return app.valleyView.endCredits({ skipped: true }); // (V4) « Passer »
+    if (app.valleyView?.contemplating) return app.valleyView.stopContemplate(); // (V4) se lever du banc
     if (app.valleyView?.active) return app.valleyView.close(); // (Vallée V3) « ‹ La ferme »
     if (app.places?.wilding) return app.places.leaveWild(); // (Vallée V3) fin du mode terres sauvages
     if (app.heritage?.pairing) return app.heritage.leavePair(); // (Vallée V2) fin du mode paire
@@ -1190,6 +1200,7 @@ function reactAudio(ev, game) {
       break;
     case 'dawn':
       audio.play('rooster', { pitch: 0.03 });
+      if (game.mode === 'career') updateAmbience(game); // (V4) le paysage sonore change avec le jour
       if (ev.incomes?.some((i) => i.amount > 0)) audio.play('coin', { delay: 0.4, volume: 0.6 });
       break;
     case 'seasonStart':
@@ -1476,11 +1487,24 @@ function recordAbandon(game) {
 function updateAmbience(game) {
   if (!game || app.inMenu) {
     audio.setAmbience({});
+    audio.setNature?.(null);
     return;
   }
   const c = game.query.calendar();
   const owned = game.state.investments;
-  audio.setAmbience(ambienceFor({ season: c.seasonId, weather: game.state.weather.today, owned }));
+  const levels = ambienceFor({ season: c.seasonId, weather: game.state.weather.today, owned });
+  // (Vallée V4) Paysage sonore de la vallée (carrière, Vallée commencée, V4) : la couche « birds » suit l'étape
+  // (× scape.birdsFactor, une seule multiplication, ici) et les sons synthétisés passent par audio.setNature. Hors V4
+  // (niveaux, carrière sans Vallée) : scape = null, rien ne change.
+  let scape = null;
+  try {
+    scape = app.storks?.scape?.(game) || null;
+  } catch (err) {
+    console.warn('Paysage sonore :', err);
+  }
+  if (scape) levels.birds *= scape.birdsFactor ?? 1;
+  audio.setAmbience(levels);
+  audio.setNature?.(scape && scape.on ? scape : null);
   audio.setWorld({ active: true, owned, season: c.seasonId, weather: game.state.weather.today });
 }
 
@@ -1578,6 +1602,8 @@ function startRun(game, { resumed = false, created = false } = {}) {
   app.heritage.reset(game);
   app.places.reset(game);
   app.valleyView.reset();
+  app.storks.reset(game);
+  app.valleyBook.reset();
   app.album.reset();
   app.inMenu = false;
   if (DEBUG) window.__game = game;
@@ -1734,6 +1760,8 @@ app.quitToMenu = ({ ended = false } = {}) => {
   app.heritage.reset(null);
   app.places.reset(null);
   app.valleyView.reset();
+  app.storks.reset(null);
+  app.valleyBook.reset();
   app.toasts.clearAll();
   app.sheets.close('silent');
   app.input.cancel();
@@ -1967,6 +1995,7 @@ function frame(t) {
   app.heritage.frame();
   app.places.frame();
   app.valleyView.frame(dt); // (Vallée V3) l'écran « La vallée » (dessin, défilement, textes)
+  app.storks.frame(dt); // (Vallée V4) fenêtres en file, paysage sonore qui suit la phase du jour
   // Garde-fou : une feuille ouverte puis fermée dans la même image (une fenêtre s'est intercalée) ne doit pas rester
   // affichée vide (la classe is-visible arrivait après la fermeture : bug [42]).
   if (!app.sheets.current && app.sheets.box.classList.contains('is-visible')) app.sheets.box.classList.remove('is-visible');
@@ -1977,7 +2006,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg', 'valley4']);
 async function loadSheets() {
   const required = {};
   const optional = [];
@@ -2718,6 +2747,67 @@ if (DEBUG) {
     stats: () => ({ scene: app.scene?.placesStats?.() || null, view: app.valleyView.stats() }),
   };
   for (const [k, f] of Object.entries(window.__debug.valley3)) if (!window.__debug.valley[k]) window.__debug.valley[k] = f;
+  /**
+   * (Vallée vivante, lot V4) Aides de vérification : situations posées par l'action de débogage du cœur (triggerValley
+   * 'legend' | 'legendRipe' | 'marvel' | 'visitor' | 'storks' | 'complete' | 'epilogue' | 'postcard' | 'stage'), écrans
+   * ouverts par l'interface (fiches, épilogue, générique, livre), paysage sonore (sound(id) → audio.playNature).
+   */
+  const sceneTouch = () => app.scene?.storksTouch?.();
+  window.__debug.valley4 = {
+    on: () => !!app.storks?.on?.(),
+    state: () => {
+      const v = app.game?.query?.career?.valley?.();
+      return v ? { storks4: v.storks4, legends: v.legends, visitors: v.visitors, stork: v.stork, epilogue: v.epilogue, postcards: v.postcards, stage: v.stage?.n } : null;
+    },
+    legend: (id = 'motherMelon') => (vlTrigger('legend', id), sceneTouch()),
+    ripe: (id = 'motherMelon') => (vlTrigger('legendRipe', id), sceneTouch()),
+    marvel: (n = 1) => vlTrigger('marvel', n),
+    /** Un visiteur : 'visible' (halte, « ? ») ou 'seen' (vu, comme touché). */
+    visitor: (id = 'crane', st = 'visible') => (vlTrigger('visitor', id, st), sceneTouch()),
+    /** Les cigognes : 'steeple' | 'farm' | 'chicks' | 'leave'. */
+    storks: (kind = 'steeple') => (vlTrigger('storks', kind), sceneTouch()),
+    complete: () => (vlTrigger('complete'), sceneTouch()),
+    epilogue: () => vlTrigger('epilogue'),
+    postcard: () => vlTrigger('postcard'),
+    stage: (n) => vlTrigger('stage', n),
+    /** Écrans : fiche d'une légende, segment Légendes, épilogue, générique, banc, livre (page). */
+    legendUI: (id) => app.storks.openLegend(id),
+    legendsTab: () => app.heritage.openLibrary('legends'),
+    epilogueUI: () => app.storks.openEpilogue(),
+    credits: () => app.storks.playCredits(),
+    bench: () => app.storks.openBench(),
+    sit: () => app.storks.contemplate(),
+    view: (opts = {}) => (vlTrigger('view'), app.valleyView.open(opts)),
+    book: (page) => app.valleyBook.open(page),
+    share: () => app.valleyBook.share(),
+    /** La forêt de la carte dans un état imposé (0..3) ; null : celui du jeu. */
+    forest: (n = null) => app.scene?.storksForceForest?.(n),
+    scenery: () => app.game?.query?.career?.valleyScenery?.() ?? null,
+    facts: () => app.game?.query?.career?.valleySounds?.() ?? null,
+    /** Joue un son de la vallée tout de suite (chant ou couche) : audio.playNature. */
+    sound: (id = 'robin', opts) => audio.playNature?.(id, opts),
+    scape: () => app.storks.scape(app.game),
+    voices: () => ({ voices: audio.natureVoices, engine: audio.natureStats?.() || null }),
+    detail: (mode = 'full') => (app.updateSettings({ natureSound: mode }), audio.natureStats?.() || null),
+    /** Point (px de la page) d'une cible de la scène : 'cloche' (legendId) | 'cloches' | 'storkNest' | 'visitor'. */
+    point(kind, id) {
+      const r = app.scene?.storksItemRect?.(kind, id);
+      return r ? worldToPage(r.x + r.w / 2, r.y + r.h / 2) : null;
+    },
+    /** Rectangle (page) d'une cible de la vue : { type: 'visitor', id } | { type: 'bench' }. */
+    viewPoint(hit) {
+      const r = app.valleyView.targetPageRect(hit);
+      return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height } : null;
+    },
+    todo: () => app.todo.rawItems().filter((x) => /^vl-/.test(x.id)).map((x) => ({ id: x.id, text: x.text })),
+    ui: () => ({ storks: app.storks.debugState(), book: app.valleyBook.debugState(), credits: app.valleyView.creditsState?.() || null, contemplating: !!app.valleyView.contemplating }),
+    stats: () => {
+      const t0 = performance.now();
+      const st = app.scene?.storksStats?.() || null;
+      return { scene: st, view: app.valleyView.stats(), audio: { voices: audio.natureVoices, engine: audio.natureStats?.() || null }, ms: Math.round((performance.now() - t0) * 1000) / 1000 };
+    },
+  };
+  for (const [k, f] of Object.entries(window.__debug.valley4)) if (!window.__debug.valley[k]) window.__debug.valley[k] = f;
   window.__debug.lot3 = window.__debug.variety;
 }
 if (DEBUG) window.__debug.lot4 = window.__debug.cozy;

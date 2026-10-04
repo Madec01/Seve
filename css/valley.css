@@ -723,5 +723,178 @@ body.in-valley-view .sheet-backdrop { top: 0; }
 /* (QA du V3) Dans l'écran « La vallée », rien d'autre à l'écran (§ 17.3) : seuls les messages de la vallée (clés vl3-*)
    et les refus restent ; ceux de la ferme (poulailler, demandes, pastille « +N messages ») attendent dans l'historique —
    le temps est en pause. */
-body.in-valley-view #toasts > .toast:not([data-key^="vl3-"]):not(.toast--error),
+body.in-valley-view #toasts > .toast:not([data-key^="vl3-"]):not([data-key^="vl4-"]):not([data-key^="vv-"]):not(.toast--error),
 body.in-valley-view #toasts > #toast-more { display: none; }
+
+/* ═══ Vallée vivante, lot V4 « Les cigognes » (src/ui/career/storks.js, valley-book.js, valley-view.js) ═══ */
+
+/* ─── Segment « Légendes » de la Grainothèque, groupes repliés, fiche d'une légende ─── */
+.vl4-legends { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.vl4-legend { min-height: 72px; align-items: center; }
+.vl4-leg-pic { display: grid; place-items: center; flex: none; width: 56px; min-height: 64px; padding: 0; font: inherit; background: #e6f0f4; border: 0; box-shadow: inset 0 0 0 var(--u) #9cc0d0; cursor: pointer; }
+.vl4-leg-pic:focus-visible { outline: calc(var(--u) * 1.5) solid var(--gold); outline-offset: var(--u); }
+.vl4-cloche-ico.sprite--md { --sk: 4; }
+.vl4-silhouette { display: grid; place-items: center; width: 40px; height: 48px; font-size: 1.5rem; font-weight: 700; color: var(--text-soft); filter: grayscale(1) brightness(0.7); }
+.vl4-legend.is-asleep .vl-row-name { color: var(--text-soft); }
+.vl4-legend.is-ripe { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--gold, #e8b83a); }
+.vl4-legend .vl-row-main { gap: 3px; }
+.vl4-bar { display: block; width: min(100%, 220px); }
+.vl4-gens { margin: 2px 0; }
+.vl4-hint { font-size: 0.75rem; }
+.vl4-shelf .vl4-jar.is-fixed { box-shadow: inset 0 0 0 calc(var(--u) * 2) #d8a838; }
+.vl4-leggroup-body { display: grid; gap: 8px; }
+.vl4-leg-lib { min-height: 48px; }
+.vl4-legend-sheet { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; justify-items: center; text-align: center; }
+.vl4-legend-sheet > * { max-width: 100%; }
+.vl4-legend-sheet .btn { width: 100%; }
+.vl4-sub { margin: 0; font-size: 0.9375rem; color: var(--text-soft); }
+.vl4-facts, .vl4-state { margin: 0; font-size: 0.9375rem; }
+.vl4-state { font-weight: 700; }
+.vl4-gensline { display: flex; align-items: center; gap: 8px; font-size: 0.9375rem; }
+.vl4-wake-name { margin: 0; font-size: 1rem; font-weight: 700; }
+.vl4-wake .sheet-actions, .vl4-epi-after { display: flex; flex-wrap: wrap; gap: 8px; }
+.vl4-wake .sheet-actions > .btn { flex: 1 1 8rem; min-height: 48px; }
+.vl4-epi-after { flex-direction: column; }
+.vl4-epi-after .vl4-watch { min-height: 56px; }
+.vl4-epi-after .vl4-later { min-height: 48px; }
+.vl4-page { font-size: 0.875rem; font-weight: 400; color: var(--text-soft); }
+.vl4-observe .vl-go, .vl4-first .vl-go { min-height: 56px; }
+.vl4-nest-line { margin: 0; font-size: 1rem; font-weight: 700; }
+.vl4-bench-pics { display: flex; justify-content: center; gap: 8px; }
+.vl4-bench .btn { min-height: 48px; }
+.vl4-bench .btn--big { min-height: 56px; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.reduced-motion) .vl4-jar-pop .sprite { animation: vl4-pop 0.6s steps(6) 1; }
+}
+@keyframes vl4-pop { 0% { transform: scale(0.6); } 70% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+/* ─── En-tête de « La Vallée » : bouton « Le livre » ─── */
+.vl-stage-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.vl-stage-row .vl-stage { margin: 0; }
+.vl4-book-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 12px; }
+
+/* ─── Bilan annuel : avant / après (× 1,5 côte à côte, tient sur 360 px) ─── */
+.sprite--vl-ba { --sk: 1.5; }
+.vl4-ba { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 0; }
+.vl4-ba-fig { display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0; min-width: 0; }
+.vl4-ba-fig figcaption { font-size: 0.75rem; color: var(--text-soft); }
+.vl4-ba-pic { display: grid; place-items: center; padding: 3px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vl4-ba-arrow { font-size: 1.25rem; font-weight: 700; color: var(--text-soft); }
+@media (max-width: 379px) { .sprite--vl-ba { --sk: 1.25; } }
+
+/* ─── Options › Son : « Sons de la vallée » ─── */
+.opt-nature { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.opt-nature .seg-btn { min-height: 48px; font-size: 1rem; }
+.opt-nature .seg-btn.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); background: #eef6dc; }
+.opt-nature .seg-btn.is-on span::after { content: ' ✓'; }
+.opt-nature-note { margin: 4px 0 0; font-size: 0.75rem; }
+
+/* ─── Vue de la vallée : banc, générique, contemplation ─── */
+.vv-bench .vv-bench-ico { font-size: 1.25rem; line-height: 1; }
+.vv-bar:has(.vv-bench:not([hidden])) { flex-wrap: wrap; row-gap: 4px; }
+.vv-bar:has(.vv-bench:not([hidden])) .vv-count { order: -1; flex: 1 0 100%; }
+.vv-bar:has(.vv-bench:not([hidden])) .vv-btn { flex: 1 1 0; }
+.vv-credits { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.vv-credits[hidden] { display: none; }
+.vv-card {
+  position: absolute;
+  left: calc(var(--safe-l) + 16px);
+  right: calc(var(--safe-r) + 16px);
+  bottom: calc(var(--safe-b) + 96px);
+  margin: 0 auto;
+  max-width: 26rem;
+  padding: 10px 14px;
+  font-size: 1rem;
+  line-height: 1.35;
+  text-align: center;
+  color: #fff8e6;
+  background: rgba(40, 24, 34, 0.62);
+  box-shadow: inset 0 0 0 var(--u) rgba(255, 232, 180, 0.5);
+}
+.vv-card[hidden] { display: none; }
+.vv-card-title { display: block; font-size: 1rem; }
+.vv-card-text { display: block; font-size: 1rem; }
+.vv-card.is-end { font-size: 1.125rem; }
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.reduced-motion) .vv-card:not([hidden]) { animation: vv-card-in 1.2s ease-out 1; }
+}
+@keyframes vv-card-in { from { opacity: 0; } to { opacity: 1; } }
+.vv-skip { position: absolute; right: calc(var(--safe-r) + 12px); bottom: calc(var(--safe-b) + 16px); min-width: 96px; min-height: 52px; pointer-events: auto; }
+.vv-still-hint { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-b) + 76px); margin: 0; font-size: 0.875rem; text-align: center; color: #fff8e6; text-shadow: 0 1px 0 #000; }
+.vv-still-hint[hidden] { display: none; }
+.valley-view.is-paused .vv-card::after { content: ' ❚❚'; font-size: 0.875rem; }
+body.in-valley-credits .vv-ribbon, body.in-valley-credits .vv-bar,
+body.in-valley-contemplate .vv-ribbon, body.in-valley-contemplate .vv-bar { display: none; }
+body.in-valley-credits #toasts, body.in-valley-contemplate #toasts { bottom: calc(var(--safe-b) + 80px); }
+
+/* ─── Le livre de la vallée (feuille plein écran) ─── */
+.sprite--vlb-big { --sk: 3; max-width: 100%; height: auto; }
+.sprite--vlb-ba { --sk: 1.5; }
+.sprite--vlb-cover { --sk: 2; }
+.sprite--vlb-card { --sk: 2; }
+@media (max-width: 379px) { .sprite--vlb-big { --sk: 2.5; } }
+.vl-book {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #f4ead2;
+  color: var(--text);
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+}
+.vl-book[hidden] { display: none; }
+.vlb-head { display: flex; align-items: center; gap: 8px; padding: calc(var(--safe-t) + 6px) calc(var(--safe-r) + 10px) 6px calc(var(--safe-l) + 10px); background: #2f5a34; color: #fff1d2; border-bottom: var(--u) solid var(--outline); }
+.vlb-ribbon { flex: none; }
+.vlb-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 1.0625rem; }
+.vlb-toc-btn { min-height: 48px; padding: 0 12px; }
+.vlb-close { flex: none; width: 48px; height: 48px; font: inherit; font-size: 1.25rem; font-weight: 700; color: #fff1d2; background: none; border: 0; cursor: pointer; }
+.vlb-body { overflow-x: hidden; overflow-y: auto; padding: 12px calc(var(--safe-r) + 16px) 16px calc(var(--safe-l) + 16px); outline: none; -webkit-overflow-scrolling: touch; }
+html:not(.reduced-motion) .vlb-body.is-turn .vlb-page { animation: vlb-turn 0.28s ease-out 1; }
+@keyframes vlb-turn { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.vlb-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; max-width: 34rem; margin: 0 auto; }
+.vlb-ptitle { margin: 0; font-size: 1.25rem; text-align: center; }
+.vlb-stage { margin: 0; font-size: 1rem; text-align: center; color: var(--text-soft); }
+.vlb-vignette { display: grid; place-items: center; padding: 6px; background: #3a2a2f; box-shadow: inset 0 0 0 var(--u) var(--outline); }
+.vlb-cover { position: relative; display: grid; place-items: center; }
+.vlb-cover-title { position: absolute; left: 50%; top: 18%; width: 112px; margin: 0; transform: translateX(-50%); font-size: 0.875rem; font-weight: 700; line-height: 1.15; text-align: center; color: #f2d23a; }
+.vlb-since, .vlb-signs { margin: 0; font-size: 1rem; text-align: center; }
+.vlb-share, .vlb-send, .vlb-credits { min-height: 52px; }
+.vlb-ba { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.vlb-ba-fig { display: flex; flex-direction: column; align-items: center; gap: 4px; margin: 0; }
+.vlb-ba-fig figcaption { font-size: 0.875rem; }
+.vlb-ba-arrow { font-size: 1.5rem; font-weight: 700; }
+.vlb-big-line { margin: 0; font-size: 1.125rem; font-weight: 700; text-align: center; }
+.vlb-lines { display: grid; gap: 6px; margin: 0; padding: 0 0 0 1.1em; font-size: 0.9375rem; line-height: 1.35; }
+.vlb-cal { list-style: none; padding: 0; }
+.vlb-cal li { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.vlb-quiet { margin: 0; font-size: 0.9375rem; color: var(--text-soft); text-align: center; }
+.vlb-helene { margin: 4px 0 0; font-size: 0.9375rem; font-style: italic; line-height: 1.4; }
+.vlb-helene small { font-style: normal; color: var(--text-soft); }
+.vlb-sub { margin: 4px 0 0; font-size: 1rem; }
+.vlb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin: 0; padding: 0; list-style: none; }
+.vlb-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 72px; padding: 4px; text-align: center; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-cell.is-unknown { opacity: 0.7; }
+.vlb-cell-name { font-size: 0.8125rem; font-weight: 700; line-height: 1.15; overflow-wrap: anywhere; }
+.vlb-cell small { font-size: 0.75rem; color: var(--text-soft); }
+.vlb-q { display: grid; place-items: center; width: 32px; height: 32px; font-weight: 700; color: var(--text-soft); }
+.vlb-places, .vlb-cards { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.vlb-place { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 4px 8px; background: var(--parch-2); box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-place-main { display: flex; flex-direction: column; min-width: 0; }
+.vlb-place-main small { font-size: 0.8125rem; color: var(--text-soft); }
+.vlb-stories { display: grid; gap: 6px; }
+.vlb-story { min-height: 48px; text-align: left; }
+.vlb-card { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px; background: #fffaf0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); }
+.vlb-card.is-new { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--gold, #e8b83a); }
+.vlb-card-main { flex: 1 1 12rem; min-width: 0; }
+.vlb-card-main .cz-say { margin: 4px 0; }
+.vlb-card-main small { font-size: 0.8125rem; color: var(--text-soft); }
+.vlb-toc { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.vlb-toc-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 48px; padding: 0 12px; font: inherit; font-size: 1rem; text-align: left; color: var(--text); background: var(--parch-2); border: 0; box-shadow: inset 0 0 0 var(--u) var(--parch-3); cursor: pointer; }
+.vlb-toc-item.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); }
+.vlb-foot { display: flex; align-items: center; gap: 8px; padding: 8px calc(var(--safe-r) + 12px) calc(var(--safe-b) + 8px) calc(var(--safe-l) + 12px); background: var(--wood-dark); border-top: var(--u) solid var(--outline); }
+.vlb-nav { min-width: 72px; min-height: 56px; font-size: 1.5rem; }
+.vlb-nav:disabled { opacity: 0.45; }
+.vlb-pageno { flex: 1 1 auto; font-size: 0.9375rem; font-weight: 700; text-align: center; color: var(--parch, #fff1d2); }
+body.in-valley-book #toasts { bottom: calc(var(--safe-b) + 84px); }

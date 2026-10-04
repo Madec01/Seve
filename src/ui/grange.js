@@ -261,7 +261,7 @@ export function createGrange(app) {
     const list = P().achievementList(null);
     const careerAll = P().careerAchievementList ? P().careerAchievementList(careerContext()) : [];
     // (Vallée vivante) Les succès de la Vallée (7 du V1, 6 du V2 « Le troc et les croisements »), sous leur propre titre.
-    const valleyIds = new Set([...(v3.achievements?.VALLEY_ACHIEVEMENTS || []), ...(v3.achievements?.HERITAGE_ACHIEVEMENTS || []), ...(v3.achievements?.PLACES_ACHIEVEMENTS || [])].map((a) => a.id)); // (V3) les 8 succès du ruisseau aussi
+    const valleyIds = new Set([...(v3.achievements?.VALLEY_ACHIEVEMENTS || []), ...(v3.achievements?.HERITAGE_ACHIEVEMENTS || []), ...(v3.achievements?.PLACES_ACHIEVEMENTS || []), ...(v3.achievements?.STORKS_ACHIEVEMENTS || [])].map((a) => a.id)); // (V3) les 8 succès du ruisseau aussi ; (V4) les 9 des cigognes
     const career = careerAll.filter((a) => !valleyIds.has(a.id));
     const valley = careerAll.filter((a) => valleyIds.has(a.id));
     const vdone = valley.filter((a) => a.done).length;

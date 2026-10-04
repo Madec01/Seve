@@ -23,6 +23,10 @@
 // (Lot V3) Délègue à app.places (src/ui/career/places.js) : le segment « Lieux », les habitants de la vallée (groupe
 // « De la vallée »), le prochain indice (valleyAnimal, place, placeNeed, wild), les gestes de la scène (poteau, terres
 // sauvages), les lignes « À faire » vl-view-animal / vl-mushrooms ; chapitres 6 et 7 ; repaint().
+// (Lot V4) Délègue à app.storks (src/ui/career/storks.js) : le bouton « Le livre » de l'en-tête, le groupe « Légendes »
+// (Graines), « Visiteurs rares » (Habitants), le prochain indice (visitor, legendRipe, legendSow, storkNeed, epilogue,
+// postcard), les touchers de la scène (nid, vers luisants), les lignes « À faire » vl-visitor, vl-storks, vl-legend,
+// vl-epilogue, vl-postcard, le bilan (avant / après) ; chapitre 8.
 //
 // Règles : carrière seulement (rien sans state.career.valley) ; rien ne presse, rien ne culpabilise (une bête attend
 // sans limite de temps, un bocal attend qu'on l'ouvre) ; cibles ≥ 48 px, textes ≥ 14 px, peu de texte ; traits en
@@ -272,8 +276,8 @@ export function createValley(app) {
     const next = st.next;
     return el(
       'div.vl-head',
-      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶', '💧', '🌳'][st.n] || '🌿')),
-      el('p.vl-stage', el('b', `Étape ${st.n}`), ` · ${st.name}`),
+      el('div.vl-vignette', vIcon([st.vignette, `valley.stage.${st.n}`], 'sprite--vl-vignette', ['🌫', '🐦', '🌸', '🐝', '🦔', '🎶', '💧', '🌳', '🕊'][st.n] || '🌿')),
+      el('div.vl-stage-row', el('p.vl-stage', el('b', `Étape ${st.n}`), ` · ${st.name}`), app.storks?.bookButton?.() || null), // (V4) « Le livre »
       el(
         'div.vl-signs-line',
         signsRow(st.signs, next ? next.signs : st.total || 24),
@@ -289,6 +293,8 @@ export function createValley(app) {
     if (v2) return v2;
     const v3 = app.places?.hintAction?.(h); // (V3) bête de la vallée, lieu prêt, ce qui manque, terre sauvage
     if (v3) return v3;
+    const v4 = app.storks?.hintAction?.(h); // (V4) visiteur rare, légende, cigognes, épilogue, carte postale
+    if (v4) return v4;
     switch (h.kind) {
       case 'observe':
         return { label: 'Aller voir', go: () => showInScene('wildlife', t?.id) };
@@ -408,6 +414,8 @@ export function createValley(app) {
       parts.push(el('div.vl-rows', [...list].sort((a, b) => (rank[a.state] ?? 2) - (rank[b.state] ?? 2)).map(varietyRow)));
     }
     parts.push(el('p.sheet-hint', `Récoltez une variété ancienne à la main : + ${v.library?.level >= 2 ? 3 : SEED_RULES.handSeeds} graines. Après ${v.library?.level >= 3 ? 5 : SEED_RULES.fixHand} récoltes à la main, elle est sauvée.`));
+    // (V4) Groupe replié « Légendes » (2 / 4) et les cloches de la Grainothèque.
+    if (app.storks?.on?.()) parts.push(app.storks.legendsGroup(v));
     // (V2) « Revoir la boîte en fer » (§ 16.10).
     if (app.heritage) parts.push(app.heritage.boxButton());
     return el('div.vl-seeds', parts);
@@ -611,6 +619,7 @@ export function createValley(app) {
       el('p.vl-count', `${n} / ${list.length} habitants installés`),
       el('div.vl-rows', sorted.map((s) => speciesRow(s))),
       app.places?.speciesGroup?.(all.filter(isValley), speciesRow) || null,
+      app.storks?.on?.() ? app.storks.visitorsGroup(v) : null, // (V4) « Visiteurs rares »
       services.length ? el('section.vl-services', el('h3.stats-title', 'Ce que la vallée vous rend'), el('ul', services.map((s) => el('li', s.text)))) : null,
       el('p.sheet-hint', 'Une bête venue vous attend, sans limite de temps : touchez-la pour qu\'elle s\'installe.'),
     );
@@ -676,7 +685,7 @@ export function createValley(app) {
     if (!c) return el('p.sheet-empty', 'Chapitre inconnu.');
     return el(
       'div.vl-chapter.cz-veillee',
-      el('div.cz-vignette.vl-vignette', vIcon(n === 0 ? [JOSEPH_BOX.vignette, 'story.box'] : [`valley.stage.${n}`], 'sprite--vl-vignette', '🔥')),
+      el('div.cz-vignette.vl-vignette', vIcon(n === 0 ? [JOSEPH_BOX.vignette, 'story.box'] : n === 8 ? ['story.storks', 'valley.stage.8'] : [`valley.stage.${n}`], 'sprite--vl-vignette', '🔥')),
       el('h3.cz-story-title', c.title),
       el('div.cz-story', c.lines.map((l, i) => el('p.cz-story-line', { style: { '--cz-delay': `${i}` } }, `« ${l} »`))),
       n > 0 && STAGES[n]?.reward?.boon ? el('p.vl-ok', BOON_TEXTS[STAGES[n].reward.boon]) : null,
@@ -894,6 +903,7 @@ export function createValley(app) {
     if (!hit || !enabled()) return false;
     if (app.heritage?.onHit?.(hit)) return true; // (V2) Grainothèque, parcelle du mode paire
     if (app.places?.onHit?.(hit)) return true; // (V3) poteau « Vers la vallée », terres sauvages
+    if (app.storks?.onHit?.(hit)) return true; // (V4) nid de cigognes, vers luisants
     switch (hit.type) {
       case 'wildlife':
         return observe(hit.id) || true;
@@ -907,6 +917,11 @@ export function createValley(app) {
       }
       case 'valleyBox': {
         const v = V();
+        // (V4) Après l'épilogue, la boîte en fer (au ruban doré) ouvre le livre de la vallée.
+        if (v?.epilogue?.read && app.valleyBook && !v.chapters?.some((c) => c.available && !c.read)) {
+          app.valleyBook.open();
+          return true;
+        }
         if (v?.chapters?.some((c) => c.available && !c.read)) openChapter(firstUnread(v));
         else if (v?.jars?.pending > 0) openJar();
         else open();
@@ -942,6 +957,7 @@ export function createValley(app) {
     }
     for (const it of app.heritage?.todoItems?.(g) || []) out.push(it); // (V2) vl-troc, vl-story
     for (const it of app.places?.todoItems?.(g) || []) out.push(it); // (V3) vl-view-animal, vl-mushrooms
+    for (const it of app.storks?.todoItems?.(g) || []) out.push(it); // (V4) vl-storks, vl-visitor, vl-epilogue, vl-legend, vl-postcard
     const finds = v.finds || [];
     if (finds.length) out.push({ id: 'vl-finds', prio: 66, icon: () => vIcon([finds[0].icon], 'sprite--sm', FIND_EMOJI[finds[0].kind] || '🫐'), text: finds.length > 1 ? `${finds.length} cueillettes dans les haies` : `${finds[0].name} dans une haie`, short: `${plural(finds.length, 'cueillette')} dans les haies`, go: () => showInScene('hedgeFind', finds[0].id) });
     return out;
@@ -1132,10 +1148,12 @@ export function createValley(app) {
     if (y.finds) bits.push(`${plural(y.finds, 'cueillette', 'cueillettes')} dans les haies`);
     for (const t of app.heritage?.yearLines?.(report) || []) bits.push(t); // (V2) trocs, croisements, Grainothèque
     for (const t of app.places?.yearLines?.(report) || []) bits.push(t); // (V3) chantiers, étapes de lieux, terres sauvages
+    for (const t of app.storks?.yearLines?.(report) || []) bits.push(t); // (V4) visiteurs, légendes, cigogneaux, cartes
     const names = [...(r.installed || []).map((id) => SPECIES_BY_ID[id]?.name), ...(r.fixed || []).map((id) => VARIETIES_BY_ID[id]?.name)].filter(Boolean);
     return el(
       'section.vl-year',
       el('h3.sum-title', vIcon(['icon.valley'], 'sprite--sm', '🌿'), 'La vallée cette année'),
+      app.storks?.yearBlock?.(report) || null, // (V4) avant / après
       el('p.vl-year-line', bits.length ? `${capitalize(bits.join(', '))}.` : 'Une année tranquille pour la vallée.'),
       names.length ? el('p.stats-note', names.join(' · ')) : null,
       el('p.stats-note', `Étape ${r.stage} · ${r.stageName} · ${plural(r.signs || 0, 'signe de vie', 'signes de vie')}${r.natureTotal ? ` · ${plural(r.natureTotal, 'aménagement', 'aménagements')} en tout` : ''}.`),
@@ -1152,7 +1170,7 @@ export function createValley(app) {
       if (!raw?.startsAtRank) return null;
       return el('section.c-sec.vl-jcard.is-soon', el('p.stats-note', vIcon(['icon.valley'], 'sprite--xs', '🌿'), ` La Vallée commence au rang ${raw.startsAtRank}.`));
     }
-    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0 || !!app.heritage?.pending?.(v) || !!app.places?.pending?.(v);
+    const pending = (v.species || []).some((s) => s.state === 'visible') || (v.chapters || []).some((c) => c.available && !c.read) || v.jars?.pending > 0 || !!app.heritage?.pending?.(v) || !!app.places?.pending?.(v) || !!app.storks?.pending?.(v);
     return el(
       'button.vl-jcard',
       { type: 'button', id: 'c-j-valley', onclick: () => open(), 'aria-label': `La Vallée : étape ${v.stage.n}, ${v.stage.name}, ${v.stage.signs} signes de vie${pending ? ', quelque chose vous attend' : ''}` },
@@ -1180,6 +1198,7 @@ export function createValley(app) {
       line('Aménagements posés', fmt(v.nature?.placed || 0)),
       ...(app.heritage?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
       ...(app.places?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
+      ...(app.storks?.reportLines?.(v) || []).map(([a, b]) => line(a, b)),
       line('Dépensé pour la vallée', `${fmt(v.spent || 0)} pièces`),
       el('p.stats-note', 'Ces dépenses comptent entièrement dans le patrimoine.'),
     );
@@ -1222,6 +1241,11 @@ export function createValley(app) {
       app.valleyView?.onEvent?.(ev, g);
     } catch (err) {
       console.warn('Lieux de la vallée (événement) :', err);
+    }
+    try {
+      app.storks?.onEvent?.(ev, g); // (V4) légendes, visiteurs rares, cigognes, épilogue, cartes
+    } catch (err) {
+      console.warn('Cigognes (événement) :', err);
     }
     // (V3) Les bêtes de la vallée attendent dans la vue : leurs messages et leur fenêtre sont ceux de app.places.
     if ((ev.type === 'speciesVisible' || ev.type === 'speciesInstalled') && isValleySp(ev.id)) {

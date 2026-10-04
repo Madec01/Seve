@@ -742,12 +742,13 @@ export function createPlaces(app) {
       case 'river':
         return openRiver();
       case 'joseph': {
-        const st = (V()?.stories || []).find((s) => s.available && !s.read);
+        const st = (V()?.stories || []).find((s) => s.available && !s.read && s.id !== 'epilogue');
         if (st) return app.heritage?.openStory?.(st.id) || false;
         return false;
       }
       default:
-        return false;
+        // (V4) Visiteurs rares, banc de Joseph et d'Hélène : src/ui/career/storks.js.
+        return app.storks?.onViewHit?.(hit) || false;
     }
   }
 

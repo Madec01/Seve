@@ -1960,3 +1960,64 @@ Deux planches générées, CC0, création originale (palette et style Kenney). N
   la dernière bulle.
 - **Idées** : lecture à voix haute (`coach.onSay`) ; anneau du poulailler plus serré (la zone de l'abri entier est grande).
 
+
+### 2026-10-04 — Vallée V4 « Les cigognes » : paquet CORE (logique, simulation, équilibrage)
+
+Contrat : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot V4 » ; écarts : « Écarts et précisions (livraison
+CORE V4) » (rédigés au début du travail pour ART, AUDIO et UI/RENDER). Non commité (intégration par le chef de projet).
+
+- **Données** : `src/data/career/storks.js` (nouveau, n'importe rien) — 4 légendes, 6 visiteurs (5 tirés), règles,
+  étape 8 « Les cigognes » (100 écus, aucun palier de signes), 5 récits, épilogue en 3 pages et générique, 8 cartes des
+  vallées voisines, 16 phrases du banc, 12 phrases d'Hélène, forêt en 4 états, textes. `src/data/career/valley.js` :
+  version 4, partie `storks`, 9 étapes (`MAX_STAGE_ALL` 8, `MAX_STAGE_V3` 7), `stageSigns(8)` → null.
+- **Logique** : `src/core/career/storks.js` (nouveau, lectures pures) ; extension `valley` : légendes sous cloche (réveil
+  à l'étape 6, au moulin, après 3 étés de sélection de la Tomate croisée, à l'étape 8 ; semis gratuit toute saison, pousse
+  en jours de culture, mûre sans limite, récolte à la main, jamais vendue) ; visiteurs rares (flux `valley4` : 5 nombres
+  par aube, vue ouverte ; 6 % puis 50 %, au plus tard la 3ᵉ aube ; une venue annoncée par aube toutes espèces confondues ;
+  ils attendent qu'on les touche puis reviennent en décor) ; cigognes déterministes (jour des cigognes par hachage, clocher,
+  étape 8 à l'aube qui suit leur visite, roue offerte, nid au printemps suivant, cigogneaux, départ) ; vallée complète et
+  épilogue (jamais le matin d'un autre récit) ; générique ; cartes (un sachet à la fois, la carte à la saison suivante) ;
+  livre de la vallée (une page par année, reconstruite depuis les jours gardés ; `stageAt` reconstruit pour les anciennes
+  carrières) ; décor de la ferme (forêt, nid, passages, lueurs, cerf, loriot, arc-en-ciel) ; extras de la vue ; faits
+  sonores `valleySounds()` (forme figée pour AUDIO) ; prochain indice (visiteur, épilogue, carte, légende mûre, légende à
+  semer une fois, ce qui manque aux cigognes) ; Merveille par `valleyHarvest(…, { quality })` (une ligne dans
+  `runtime.js`). **Au plus une légende ou un récit par aube**, toutes parties confondues.
+- **Progression** : 2 pages d'album (« Les légendes », « Les visiteurs rares » : 20 pages, 201 cases), 9 succès (210 écus ;
+  47 succès de carrière), 3 décors trouvés (`melon.cloche`, `stork.vane`, `iron.box`), `recordValleyEpilogue`.
+- **Décoratif strict, vérifié** : aucune action du V4 ne gagne ni ne dépense ; empreinte économique (argent de chaque jour,
+  24 ans, robots compris) **identique** avec et sans le V4 (test sur une carrière ; simulation : 40 320 jours × 7 robots,
+  0 jour différent). `{ storks: false }` = le V3 exactement (empreinte de l'état d'une carrière de 24 ans relevée avant le
+  lot, inchangée ; empreintes du V2 et du V3 inchangées) ; `node tools/simulate.js` identique octet pour octet ; parité
+  400 / 400 ; aucun autre flux ne tire un nombre de plus.
+- **Simulation** : `--compare-valley4` (24 ans, `--jobs`), robots `STORKS_STYLES` (`me.storksRnd`), `trackMoney`,
+  `moneyFingerprint`. Mesuré en route : le tranquille qui ressemait ses 4 légendes chaque saison ajoutait 1,1 geste par
+  jour ; il ne regarde plus ses cloches que « quand il veut » (0,15 par saison) et envoie un sachet une saison sur deux.
+- **Résultats** (60 carrières × 24 ans, `docs/VALLEE.md` § 18.12.6) : revenu + 0,0 % ; melon an 13, Merveille an 13,
+  engrain et pois an 17 ; cigognes au clocher an 17 (97 % à l'an 20) ; nid an 18 ; épilogue an 18 (97 % à l'an 20 et à
+  l'an 22) ; visiteurs 4 / 5 / 6 aux ans 18 / 20 / 22 ; nouveautés dans 64 % des saisons des ans 19-24 ; + 0,24 geste par
+  jour ; `automator` ne touche à rien ; débutant : jamais le V4. Aucun chiffre de jeu changé.
+- **Tests** : `tests/valley4.test.js`, `valley4-legends`, `valley4-visitors`, `valley4-storks`, `valley4-book`,
+  `valley4-migration` (+ `tests/valley4-helpers.js`) ; tests du V1 au V3, de l'album, des succès et du rendu du lot 2 mis
+  aux nombres du V4.
+- **Idée** : 2 à 3 % des carrières tranquilles n'ont pas l'étape 8 à l'an 22 (leur étape 7 du V3 arrive tard) ; à voir
+  avec l'équilibrage du V3 si cela gêne.
+
+### 2026-10-04 — Vallée V4 « Les cigognes » : rendu et interface (paquet UI/RENDER)
+
+- **Nouveaux fichiers** : `src/render/storks-actors.js` (cloches, roue et nid, passages, vers luisants, cerf, loriot,
+  arc-en-ciel, forêt en 4 états), `src/ui/career/storks.js` (légendes, visiteurs, cigognes, épilogue, générique, banc,
+  contemplation, paysage sonore), `src/ui/career/valley-book.js` (le livre de la vallée et le partage en image locale),
+  `tests/valley4-ui.test.js` (12 tests purs).
+- **Modifiés** : `layout-career.js` (cloches, pied du nid), `scene.js` (acteurs, couche fixe, mini-carte, touchers, cibles),
+  `valley-view.js` (visiteurs, clocher, barrage, fenêtres, banc, teinte, défilement automatique, écoute), `valley-actors.js`
+  (vers luisants laissés au V4, boîte au ruban doré), `atlas.js` (3 décors), UI `valley`, `heritage` (segment et étagère
+  Légendes), `places`, `valley-view` (générique, contemplation), `dialogs` (« Sons de la vallée »), `grange`, `album`,
+  `storage` (`natureSound`), `main.js` (câblage, paysage sonore, débogage `__debug.valley4`), leçons V4 (cibles réelles),
+  `css/valley.css`.
+- **Vérifié au doigt** (Playwright, Pixel 7 et 360 × 740, mouvements réduits) : tout le parcours du V4 et les 4 leçons ;
+  aucune erreur console ; captures `valley4-ui-*.png` du bloc-notes. `node --test tests/` : 808 / 808.
+- **Remarques** : les cartes du générique passent au fil du temps (pas exactement quand le lieu croise le milieu de
+  l'écran : le ruisseau et le bocage sont plus bas que la ferme où s'arrête le défilement). Sur 412 × 915 sans ruban ni
+  barre, la vue tient presque entière à l'écran pendant le générique (défilement court). Idée : un vrai « effet de
+  page » dans le livre ; une carte postale visible au perron le jour où elle arrive.
+

@@ -5899,6 +5899,77 @@ pour ART, AUDIO et UI/RENDER, complétée à la fin). Aucun nom ni forme du cont
   sachet **une saison sur deux** (les 8 cartes s'étalent sur ≈ 4 ans) ; il va voir un visiteur qui attend 70 % des jours (1
   geste, + 1 pour ouvrir la vue). `automator` et les fermes laissées seules : rien.
 
+
+## Vallée V4 — rendu et interface (UI/RENDER, 2026-10-04)
+
+Code contre « Vallée vivante — contrats du lot V4 » et ses « Écarts et précisions (livraison CORE V4) ». Carrière
+seulement, gardé par `state.career.valley` commencée, `v ≥ 4`, `parts.storks` / `places` / `heritage` (`app.storks.on()`,
+`storksOnState` du rendu) ; `{ storks: false }` et les niveaux : rien de nouveau à l'écran ni à l'oreille (le paysage
+sonore vaut `null`). Planche `valley4` facultative (`OPTIONAL_SHEETS`) : replis dessinés. Styles ajoutés à `css/valley.css`.
+
+```
+src/render/storks-actors.js   (nouveau) cloches, roue / nid (claquement), passages, vers luisants (indice, « ? », lueurs),
+                              cerf, loriot, biche de la vieille forêt, arc-en-ciel (drawSky), forêt en 4 états
+                              (drawForestTile, couche fixe) ; purs : clocheRects, CLOCHE_DX, nestAnchor, NEST_ANCHORS,
+                              clocheStage, clocheSpriteName, nestSpriteName, glowSpots, flyoverPath, rainbowBands, forestTileName
+src/render/layout-career.js   layout.valley.cloches (4 × 8 × 12 dans le rectangle de la Grainothèque, décalages 0 / 7 / 17 / 24 :
+                              la porte reste visible), layout.valley.nest (pied sur la cheminée, NEST_ANCHORS par niveau)
+src/render/scene.js           acteurs `storks` ; clé de la couche fixe + `f<forestState>` ; mini-carte plus claire par état ;
+                              hitTest (vers luisants, cloche → { type: 'seedLibrary', tab: 'legends', legendId }, storkNest) ;
+                              targetRect (cloche, cloches, storkNest, visitor) ; pas de fumée quand la cheminée porte le nid ;
+                              storksItemRect, storksTouch, storksStats, storksForceForest
+src/render/valley-view.js     VIEW_ANCHORS_V4, BEAVER_DAM_RECT, VILLAGE_LIGHTS, visitorRect, visitorSpriteName, viewSoundSpots ;
+                              visiteurs (indice, halte « ? », décor), clocher (stork.steeple), barrage, fenêtres du village,
+                              Joseph et Hélène assis, teinte du soir (setTint), setAuto / stopAuto / autoPaused (générique,
+                              contemplation), listener(), worldCenterY() ; cibles { type: 'visitor', id }, { type: 'bench' }
+src/render/valley-actors.js   les entrées `visitor: true` de valleyAnimals() sont laissées à storks-actors ; boîte au ruban doré
+src/ui/career/storks.js       (nouveau) createStorks(app) → app.storks (voir l'en-tête du fichier) ; purs : creditsCardAt, placeCenterY
+src/ui/career/valley-book.js  (nouveau) createValleyBook(app) → app.valleyBook ; purs : bookPages, bookFigures
+src/ui/career/valley-view.js  open({ visitorId, bench }), startCredits / endCredits, startContemplate / stopContemplate,
+                              crediting, contemplating, bouton « S'asseoir », écoute du paysage, musique × 0,6 dans la vue
+src/ui/career/{valley,heritage,places}.js, src/ui/{dialogs,grange,album}.js, src/storage.js, src/main.js, css/valley.css
+```
+
+- **Cloches** : un toucher sur une cloche mûre ou à semer ouvre la Grainothèque sur le segment **Légendes** (sinon le hit du
+  V2) ; segment Légendes (4 lignes ≥ 72 px, cloche ou silhouette, « Mûr ! · Récolter à la main », « En fleur · encore 2
+  jours » + barre lue, « Endormie · 2 / 3 générations »), 4ᵉ étagère, groupe replié « Légendes » (La Vallée › Graines),
+  fiche d'une légende. Réveil : message important « Voir », puis en file le récit (`heritage.openStory`) et la popup
+  « Une légende se réveille ! » (Semer / Plus tard). Première récolte : fenêtre courte ; ensuite un message info.
+- **Cigognes** : le couple du clocher est un visiteur `whiteStork` (toucher → fenêtre, `tone('clatter')`) ; chapitre 8 :
+  vignette `story.storks` ; la roue n'apparaît qu'une fois le chapitre 8 lu (message « La roue à cigognes » à ce
+  moment) ; nid (paire, petits, neige) ; toucher le nid → petite fiche (« Revenues le 3ᵉ jour du printemps · 3
+  cigogneaux »). Passages : une traversée par jour (≤ 20 s), aucune en mouvements réduits.
+- **Visiteurs** : vue (halte « ? », cible ≥ 48 px, avant les lieux) et ferme (vers luisants au pied de la haie) ; fenêtre
+  d'observation « Quelle chance ! » (≥ 56 px) ; groupe replié « Visiteurs rares » (Habitants) ; lignes « À faire »
+  `vl-storks`, `vl-visitor` (la vue s'ouvre défilée jusqu'à lui, ou la ferme recentrée sur la haie).
+- **Épilogue** (3 pages, « Suivant › » puis « Merci, Joseph », ne se ferme pas d'un toucher dehors) → décor `iron.box`
+  (`recordValleyEpilogue`) → feuille « Regarder la vallée » / « Plus tard (dans le livre) ». **Générique** : la vue,
+  teinte du soir, ruban et barre cachés, défilement de 70 s du ciel à la ferme, cartes des 6 lieux au fil du temps puis le
+  total et les deux lignes de la fin ; toucher = pause / reprise ; « Passer » (96 × 52) ; mouvements réduits : une carte
+  par toucher (la vue saute au lieu) ; temps en pause (`credits`), musique coupée en 3 s puis de retour (2 s),
+  `seeCredits()` à la fin. **Banc** : Joseph et Hélène assis (phrase de saison, « S'asseoir sur le banc ») ;
+  **contemplation** : défilement lent aller-retour, sans texte, un toucher pour se lever.
+- **Livre** (`#vl-book`, plein écran, pause `book`) : couverture (Partager), avant / après, une page par année (phrase
+  d'Hélène), graines, habitants et visiteurs, lieux, calendrier, récits (« Regarder la vallée »), plus loin (envoyer un
+  sachet, cartes reçues, marquées lues à l'ouverture de la page) ; glisser ≥ 40 px, « ‹ » / « › » (72 × 56), Sommaire,
+  Échap. Partage : canevas 1080 × 1350 (vignettes × 8, police du jeu) → `navigator.share({ files })`, sinon
+  téléchargement local `la-vallee.png`. Ouvert aussi par la boîte en fer après l'épilogue.
+- **Paysage sonore** (`main.js` `updateAmbience`) : `scape = app.storks.scape(game)` (faits `valleySounds`, saison, météo,
+  phase, `natureSound`, `afterRain` = `rainedAt` de la veille, `spots` = `viewSoundSpots()`) ; `birds × birdsFactor` ;
+  `audio.setNature(scape)`. Recalculé à l'aube, à la météo, à chaque changement de phase (vérifié une fois par seconde
+  dans `app.storks.frame`), à l'ouverture / fermeture de la vue et au réglage. Vue : `setNatureListener` au défilement
+  (≤ 10 / s), `setMusicScale(0.6)`. Options › Volumes : « Sons de la vallée : Complets · Légers · Coupés » (3 × 48 px).
+- **Leçons** (`src/ui/coach/lessons/valley.js`) : `valley.legend` vise `{ scene: { type: 'cloches' } }`, `valley.book`
+  `#vl-book-open`, `valley.visitor` `{ view: { type: 'visitor', id } }`.
+- **Débogage** (`?debug=1`) : `__debug.valley4.{ on, state, legend(id), ripe(id), marvel(n), visitor(id, st), storks(kind),
+  complete, epilogue, postcard, stage(n), legendUI(id), legendsTab, epilogueUI, credits, bench, sit, view(opts), book(page),
+  share, forest(n), scenery, facts, sound(id) (→ audio.playNature), scape, voices, detail(mode), point(kind, id),
+  viewPoint(hit), todo, ui, stats }` (aussi sous `__debug.valley` quand le nom est libre).
+- Vérifié au doigt (Pixel 7 et 360 × 740, mouvements réduits) : légende réveillée, semée, mûre, récoltée par la cloche ;
+  cigognes au clocher → étape 8 → chapitre 8 → roue → nid et petits ; grues dans la vue, vers luisants sur la ferme ;
+  épilogue, générique (pause, passer, mouvements réduits), livre (pages, sommaire, carte envoyée, partage) ; réglage des
+  sons (le moteur s'arrête sur « Coupés », 4 voix sur « Légers ») ; les 4 leçons ; aucune erreur console.
+
 ---
 
 ## Accompagnement — contrats (MOTEUR · LEÇONS · ART, conception 2026-10-04)

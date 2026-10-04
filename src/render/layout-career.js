@@ -1220,7 +1220,12 @@ export function createCareerLayout(level, opts = {}) {
     conveyors,
     machineParking,
     collectors,
-    valley: { spots: valley.spots, box: valley.box, library: valley.library, animalAnchors: valley.animalAnchors, reserved: !!career.valley, signpost: career.valley ? { ...signpost } : null },
+    valley: {
+      spots: valley.spots, box: valley.box, library: valley.library, animalAnchors: valley.animalAnchors, reserved: !!career.valley, signpost: career.valley ? { ...signpost } : null,
+      // (V4) Les 4 cloches des légendes (8 × 12, px, le long du bas de la Grainothèque) et le pied du nid (haut de la cheminée).
+      cloches: clocheRects(valley.library),
+      nest: career.valley ? nestPoint(house) : null,
+    },
     // (Vallée V3) Terres sauvages : [{ cellId, col, row, name, rect (px), kind, stage, sign (tuiles) }] ; forêts à confier :
     // [{ cellId, col, row, name, rect, price, sign }] ; cellule (px) de chaque parcelle pour le doigt.
     wildBands,
@@ -1237,6 +1242,42 @@ export function createCareerLayout(level, opts = {}) {
       return l ? { ...l.rect } : null;
     },
   };
+}
+
+// ── (Vallée vivante, lot V4 « Les cigognes ») Cloches des légendes et nid sur la maison ─────────────────────────
+
+/**
+ * Décalages (px) des 4 cloches de verre dans le rectangle de la Grainothèque (2 × 2 tuiles) : deux à gauche de la porte,
+ * deux à droite (la porte, au milieu du bas, reste visible ; les cloches se touchent à peine).
+ */
+export const CLOCHE_DX = Object.freeze([0, 7, 17, 24]);
+export const CLOCHE_W = 8;
+export const CLOCHE_H = 12;
+
+/** Les 4 cloches (ordre des légendes, de gauche à droite) : rectangles (px) posés sur le bas de la Grainothèque. */
+export function clocheRects(library) {
+  if (!library) return [];
+  const y = library.y + library.h - CLOCHE_H;
+  return CLOCHE_DX.map((dx) => ({ x: library.x + Math.min(dx, library.w - CLOCHE_W), y, w: CLOCHE_W, h: CLOCHE_H }));
+}
+
+/**
+ * Pied du nid (bas du poteau de la roue, px du sprite de la maison) pour chaque niveau de maison (1 à 5) : le haut de la
+ * cheminée (planche career, mesuré sur les dessins ; la roue et les nids de la planche valley4 ont leur pied en x = 12).
+ */
+export const NEST_ANCHORS = Object.freeze({ 1: { x: 24, y: 5 }, 2: { x: 40, y: 5 }, 3: { x: 24, y: 5 }, 4: { x: 24, y: 5 }, 5: { x: 72, y: 20 } });
+
+/** Pied du nid pour un niveau de maison (px du sprite de la maison). */
+export function nestAnchor(houseLevel) {
+  const n = Math.max(1, Math.min(5, Math.floor(Number(houseLevel) || 1)));
+  return { ...NEST_ANCHORS[n] };
+}
+
+/** Pied du nid dans le monde (px) pour la maison de la disposition ({ x, y (tuiles), w, h, level }). */
+export function nestPoint(house) {
+  if (!house) return null;
+  const a = nestAnchor(house.level);
+  return { x: house.x * T + a.x, y: house.y * T + a.y, level: Math.max(1, Math.min(5, house.level || 1)), roofY: house.y * T, houseRect: { x: house.x * T, y: house.y * T, w: house.w * T, h: house.h * T } };
 }
 
 /**

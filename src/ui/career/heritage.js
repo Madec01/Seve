@@ -21,6 +21,9 @@
 //   yearLines(report), reportLines(v), pending(v)   bilan annuel, Carnet › Bilan, pastille du Carnet
 //   frame(), reset(game|null), on(game), debugState()
 // }
+// (Lot V4 « Les cigognes ») 4ᵉ segment « Légendes » et 4ᵉ étagère (délégués à app.storks : src/ui/career/storks.js) ;
+// openLibrary('legends') ; toucher une cloche mûre ou à semer → le segment Légendes ; l'épilogue passe par
+// app.storks.openEpilogue (3 pages) ; repaint().
 //
 // Règles : carrière seulement (state.career.valley et parts.heritage) ; rien ne presse (un troc attend sans limite, une
 // rencontre ne se perd jamais), aucune envie fabriquée (pas de ligne « À faire » pour acheter un niveau) ; cibles ≥ 48 px,
@@ -34,6 +37,7 @@ import { SIGNALS } from '../coach/signals.js';
 import * as VD from '../../data/career/valley.js';
 import * as HD from '../../data/career/heritage.js';
 import { STORIES_V3_BY_ID } from '../../data/career/places.js';
+import { STORIES_V4_BY_ID } from '../../data/career/storks.js';
 import { traitChip, fixBar, vIcon } from './valley.js';
 
 // ── Textes ──────────────────────────────────────────────────────────────────────────
@@ -247,8 +251,9 @@ export function createHeritage(app) {
       { id: 'cross', label: 'Croisements' },
       { id: 'troc', label: 'Troc' },
     ];
+    if (app.storks?.on?.()) T.push({ id: 'legends', label: 'Légendes' }); // (V4) 4ᵉ segment
     return el(
-      'div.seg.vl-seg',
+      `div.seg.vl-seg${T.length >= 4 ? '.is-four' : ''}`,
       { role: 'tablist', 'aria-label': 'La Grainothèque' },
       T.map((t) => el(
         `button.seg-btn${t.id === tab ? '.is-active' : ''}`,
@@ -280,6 +285,7 @@ export function createHeritage(app) {
           el('div.vl-jars-grid', items.map(jarTile)),
         );
       }),
+      app.storks?.on?.() ? app.storks.legendShelf(v) : null, // (V4) 4ᵉ étagère « Les légendes »
       el('p.sheet-hint', 'Touchez un bocal pour voir la variété.'),
     );
   }
@@ -382,12 +388,13 @@ export function createHeritage(app) {
   function libraryContent() {
     const v = V();
     if (!v) return el('p.cz-lead', 'La Grainothèque arrive avec la Vallée.');
-    const body = tab === 'cross' ? crossTab(v) : tab === 'troc' ? trocTab(v) : shelfTab(v);
+    if (tab === 'legends' && !app.storks?.on?.()) tab = 'shelf';
+    const body = tab === 'cross' ? crossTab(v) : tab === 'troc' ? trocTab(v) : tab === 'legends' ? app.storks.legendsTab(v) : shelfTab(v);
     return el('div.vl-library', libHead(v), buildButton(v.library), libTabs(), el('div.vl-panel', { role: 'tabpanel' }, body));
   }
   function openLibrary(t = null) {
     if (!on()) return false;
-    if (t && ['shelf', 'cross', 'troc'].includes(t)) tab = t;
+    if (t && ['shelf', 'cross', 'troc', 'legends'].includes(t)) tab = t;
     if (pairing) leavePair({ silent: true });
     if (app.valley?.placing) app.valley.leavePlacing({ silent: true });
     return openLive('vl-library', { title: 'La Grainothèque', icon: vIcon(['icon.library', 'library.1'], 'sprite--md', '🏡'), build: libraryContent, sig: () => JSON.stringify([V(), tab, Math.floor((app.game?.state.money || 0) / 10)]) });
@@ -640,10 +647,11 @@ export function createHeritage(app) {
     return v?.stories || [];
   }
   function firstUnreadStory(v = V()) {
-    return stories(v).find((s) => s.available && !s.read)?.id || null;
+    // (V4) L'épilogue n'est pas un récit à « écouter » d'une ligne « À faire » : Joseph l'attend sur le banc.
+    return stories(v).find((s) => s.available && !s.read && !s.epilogue && s.id !== 'epilogue')?.id || null;
   }
   function storyContent(id) {
-    const s = stories().find((x) => x.id === id) || (HD.STORIES || []).find((x) => x.id === id) || STORIES_V3_BY_ID?.[id]; // (V3) récits du ruisseau
+    const s = stories().find((x) => x.id === id) || (HD.STORIES || []).find((x) => x.id === id) || STORIES_V3_BY_ID?.[id] || STORIES_V4_BY_ID?.[id]; // (V3) récits du ruisseau ; (V4) des cigognes
     if (!s) return el('p.sheet-empty', 'Récit inconnu.');
     return el(
       'div.vl-chapter.cz-veillee',
@@ -665,6 +673,7 @@ export function createHeritage(app) {
   }
   function openStory(id = firstUnreadStory()) {
     if (!on() || !id) return false;
+    if (id === 'epilogue') return app.storks?.openEpilogue?.() || false; // (V4) 3 pages
     tone('magic', { volume: 0.6 });
     return openLive('vl-story', { title: 'Joseph raconte', icon: vIcon(['portrait.joseph'], 'sprite--md', '💬'), build: () => storyContent(id), sig: () => '', outsideClose: false });
   }
@@ -803,6 +812,7 @@ export function createHeritage(app) {
     switch (hit.type) {
       case 'seedLibrary': {
         app.audio.play('page', { volume: 0.7 });
+        if (hit.tab === 'legends' && app.storks?.on?.()) return openLibrary('legends') || true; // (V4) cloche mûre ou à semer
         const v = V();
         const s = stories(v).find((x) => x.id === 'heritage0' && x.available && !x.read);
         if (s && !v?.library?.level) openStory('heritage0');
@@ -917,6 +927,9 @@ export function createHeritage(app) {
     switch (ev.type) {
       case 'storyAvailable':
         if (ev.id === 'heritage0') morning('Joseph a une idée, derrière la maison…');
+        // (V4) Un récit d'une légende arrive avec son message « Une légende se réveille ! » (app.storks) ; l'épilogue
+        // avec « Joseph vous attend sur la colline ».
+        if (ev.id === 'epilogue' || (ev.v4 && ev.id !== 'storkNest')) break;
         app.toasts.show({ prio: 'important', kind: 'info', key: `vl-story-${ev.id}`, sprite: vIcon(['portrait.joseph'], 'sprite--sm', '💬'), text: 'Joseph a quelque chose à vous dire.', actionLabel: 'Écouter', onClick: () => openStory(ev.id), duration: 5600 });
         break;
       case 'seedLibraryBuilt':
@@ -1008,6 +1021,7 @@ export function createHeritage(app) {
 
   return {
     openLibrary,
+    repaint,
     openTroc,
     openCross,
     enterPair,

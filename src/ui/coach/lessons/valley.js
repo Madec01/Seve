@@ -121,6 +121,8 @@ const placeShort = (id) => {
 // Cibles réutilisées.
 const BOX = { scene: { type: 'valleyBox' }, label: 'la boîte en fer de Joseph, sur le perron' };
 const LIBRARY = { scene: { type: 'seedLibrary' }, label: 'la Grainothèque' };
+/** (V4) Les 4 cloches de verre devant la Grainothèque (src/render/storks-actors.js, itemRect('cloches')). */
+const CLOCHES = { scene: { type: 'cloches' }, label: 'les cloches de la Grainothèque' };
 const BROOK = { view: { type: 'place', id: 'brook' }, label: 'le ruisseau, dans la vue de la vallée' };
 
 // ── Règles de déduction pour les anciennes carrières (§ 10.3) ─────────────────────────────────────────────────
@@ -1200,14 +1202,14 @@ export const LESSONS = [
         id: 'keep',
         say: 'Une légende s\'est réveillée ! Elle ne se vend pas : elle se garde.',
         face: 'proud',
-        target: () => ({ ...LIBRARY, label: 'les cloches de la Grainothèque' }),
+        target: () => CLOCHES,
         gesture: 'look',
         done: { button: 'Suivant' },
       },
       {
         id: 'sow',
         say: 'Semez-la sous une cloche de la Grainothèque. Touchez-la !',
-        target: () => ({ ...LIBRARY, label: 'les cloches de la Grainothèque' }),
+        target: () => CLOCHES,
         gesture: 'tap',
         done: { on: 'sheetOpen', when: (ctx) => sheetOpened(ctx, 'vl-library'), button: 'Compris' },
       },
@@ -1253,7 +1255,7 @@ export const LESSONS = [
       {
         id: 'book',
         say: 'Tout ce que vous avez fait revivre est écrit dans le livre.',
-        target: () => ({ ui: '#vl-book, #vl-book-open, .vl-book-btn, .vl-sheet--vl-valley .vl-stage', sheet: 'vl-valley', label: 'le bouton « Le livre »' }),
+        target: () => ({ ui: '#vl-book-open', sheet: 'vl-valley', label: 'le bouton « Le livre »' }),
         gesture: 'look',
         sheet: 'vl-valley',
         done: { button: 'Compris' },

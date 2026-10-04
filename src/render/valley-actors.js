@@ -522,7 +522,7 @@ export function createValleyActors(effects) {
     info.stageN = v.stage || 0;
     info.nature = Object.entries(v.nature || {}).map(([spotId, n]) => ({ spotId, kind: n.kind, oak: n.kind === 'loneTree' ? oakStage(st, n) : null }));
     info.finds = (v.finds || []).map((f) => ({ id: f.id, kind: f.kind, spotId: f.spotId }));
-    info.animals = (typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || [];
+    info.animals = ((typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || []).filter((a) => !a.visitor); // (V4) les vers luisants : src/render/storks-actors.js
     info.fallow = [];
     info.trials = [];
     (st.plots || []).forEach((p, i) => {
@@ -533,6 +533,7 @@ export function createValleyActors(effects) {
     const pendingJars = Math.max(0, (st.career.heirlooms || []).length - (v.jars?.opened || 0));
     const unread = Array.from({ length: (v.stage || 0) + 1 }, (_, n) => n).some((n) => !(v.chapters?.read || []).includes(n));
     info.boxPending = pendingJars > 0 || unread;
+    info.gift = !!v.epilogue?.readAt; // (V4) boîte au ruban doré
     info.placingSpots = placing && typeof game.query.career?.valleySpots === 'function' ? (safe(() => game.query.career.valleySpots(placing), []) || []).filter((s) => s.free) : [];
     // (V2) La Grainothèque, le troc en attente, les paires qui poussent, le mode paire.
     const heritage = v.parts?.heritage !== false && (v.v || 1) >= 2;
@@ -989,7 +990,8 @@ export function createValleyActors(effects) {
     }
     // Boîte en fer du perron.
     const b = lastLayout.valley?.box;
-    if (b && info.started) P(info.boxPending ? 'valley.box.open' : 'valley.box', () => fallback('box', info.boxPending ? 1 : 0), b.x, b.y, b.y + T - 1);
+    // (V4) Après l'épilogue de Joseph : la boîte porte un ruban doré (elle ouvre le livre de la vallée).
+    if (b && info.started) P(info.boxPending ? 'valley.box.open' : info.gift && has('valley.box.gift') ? 'valley.box.gift' : 'valley.box', () => fallback('box', info.boxPending ? 1 : 0), b.x, b.y, b.y + T - 1);
     // Bêtes : qui attendent (étincelle « ? »), habitants du jour en promenade douce.
     const list = info.animals.filter((a) => a.state !== 'hint');
     list.forEach((a, k) => {

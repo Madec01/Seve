@@ -40,7 +40,12 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // ── Accompagnement « Joseph vous montre » (src/ui/coach/, docs/ACCOMPAGNEMENT.md § 4.7, § 10) ──
   guidance: 'full', // 'full' (Complet) · 'quiet' (Discret) · 'off' (Aucun)
   guidanceAsked: false, // le réglage a été choisi (fenêtre « Bienvenue ! », question unique, options)
+  // ── (Vallée vivante, lot V4) Sons de la vallée : paysage sonore synthétisé (src/audio/nature.js) ──
+  natureSound: 'full', // 'full' (Complets) · 'light' (Légers : couches et 4 voix, sans écho) · 'off' (Coupés)
 });
+
+/** Valeurs permises du réglage « Sons de la vallée ». */
+export const NATURE_SOUNDS = Object.freeze(['full', 'light', 'off']);
 
 export const TEXT_SCALES = Object.freeze([1, 1.15, 1.3, 1.5]);
 export const SPEED_SETTINGS = Object.freeze([0.5, 1, 2, 4]);
@@ -243,6 +248,7 @@ export function loadSettings() {
   if (!['auto', 'on', 'off'].includes(out.pauseOnSheet)) out.pauseOnSheet = DEFAULT_SETTINGS.pauseOnSheet;
   if (!['all', 'important', 'none'].includes(out.messages)) out.messages = DEFAULT_SETTINGS.messages;
   if (!['full', 'quiet', 'off'].includes(out.guidance)) out.guidance = DEFAULT_SETTINGS.guidance;
+  if (!NATURE_SOUNDS.includes(out.natureSound)) out.natureSound = DEFAULT_SETTINGS.natureSound;
   return out;
 }
 

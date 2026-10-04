@@ -264,6 +264,47 @@ export function createDialogs(layer, app) {
   }
 
   /** Taille du texte : quatre boutons (groupe radio) 100 · 115 · 130 · 150 %. */
+  /**
+   * (Vallée vivante, lot V4) « Sons de la vallée : Complets · Légers · Coupés » (settings.natureSound) : trois boutons
+   * ≥ 48 px ; le moteur du paysage sonore démarre ou s'arrête aussitôt (audio.setNatureDetail, main.js updateAmbience).
+   */
+  function natureSoundPicker() {
+    const CHOICES = [['full', 'Complets'], ['light', 'Légers'], ['off', 'Coupés']];
+    const group = el('div.seg.opt-nature', { role: 'radiogroup', 'aria-label': 'Sons de la vallée', id: 'opt-natureSound' });
+    const items = CHOICES.map(([id, label]) => el(
+      'button.seg-btn',
+      {
+        type: 'button',
+        role: 'radio',
+        id: `opt-nature-${id}`,
+        'data-mode': id,
+        onclick: () => {
+          if (app.settings.natureSound === id) return;
+          app.audio.play('toggle');
+          app.updateSettings({ natureSound: id });
+          sync();
+        },
+      },
+      el('span', label),
+    ));
+    group.append(...items);
+    const sync = () => {
+      for (const b of items) {
+        const on = b.dataset.mode === (app.settings.natureSound || 'full');
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      }
+    };
+    sync();
+    return el(
+      'div.opt-block.opt-nature-block',
+      el('span.opt-label', el('b', 'Sons de la vallée')),
+      group,
+      el('p.opt-note.opt-nature-note', 'Ma ferme, avec la Vallée : ruisseau, chants des habitants. « Légers » pour les petits téléphones.'),
+    );
+  }
+
   function textSizePicker() {
     const group = el('div.seg', { role: 'radiogroup', 'aria-label': 'Taille du texte', id: 'opt-textScale' });
     const items = TEXT_SCALES.map((k) => {
@@ -582,6 +623,7 @@ export function createDialogs(layer, app) {
       slider('musicVolume', 'Musique'),
       slider('sfxVolume', 'Sons'),
       slider('ambienceVolume', 'Ambiance'),
+      natureSoundPicker(),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),
       el('h3.opt-section', { id: 'opt-msg' }, 'Messages'),
       app.messages?.modePicker?.() || null,
