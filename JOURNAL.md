@@ -42,6 +42,7 @@ Méthode : le proxy git de l'environnement n'autorise l'envoi que de la branche 
 | 2026-10-04 | `backup/avant-vallee-v4-2026-10-04` | Avant le lot V4 « Les cigognes » (variétés légendaires, visiteurs rarissimes, paysage et sons), commit `ae003c1` |
 | 2026-10-04 | `backup/avant-accompagnement-2026-10-04` | Avant l'accompagnement (Joseph vous montre) et le code du V4, après le déplacement des boutons de zoom |
 | 2026-10-04 | `backup/accompagnement-v4-2026-10-04` | Accompagnement « Joseph vous montre » et Vallée V4 « Les cigognes » terminés, intégrés et vérifiés ; pull request n° 11 |
+| 2026-10-04 | `backup/avant-intro-mg-studios-2026-10-04` | Avant l'intégration de l'intro animée MG studios au démarrage du jeu |
 | 2026-10-04 | `backup/avant-qa-coach-v4-2026-10-04` | Avant l'intégration et la QA finale de l'accompagnement et du V4, commit `c449436` (branche et tag créés en local) |
 | 2026-10-03 | `backup/avant-qa-lot4-2026-10-03` | Avant l'intégration et la vérification au doigt du lot 4, commit `0ff8cf0` (branche et tag créés en local) |
 | 2026-10-03 | `backup/rythme-messages-2026-10-03` | Avant le rythme posé (jour de 36 s à ×1), les personnages au pas et le tri des messages (retours joueur sur téléphone), commit `f170bf5` (branche et tag créés en local) |
