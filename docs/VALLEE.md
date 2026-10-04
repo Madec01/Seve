@@ -2856,6 +2856,40 @@ existant.
   arrière-plan ou le réglage « Coupés ». Cible : aucun craquement sur le Pixel 7 ; `audio.natureVoices` ≤ 16 nœuds-sources
   actifs en moyenne.
 
+#### 18.12.6 Résultats et réglages (livraison CORE V4, 2026-10-04)
+
+Mesure : `node tools/simulate-career.js --compare-valley4 --runs 60 --jobs 4` (Détente, saisons de 7 jours, 60 carrières ×
+24 ans par robot, V1 + V2 + V3 exactement → + V4, mêmes graines). Médianes du tranquille sauf mention.
+
+| Mesure | Cible | Mesuré |
+|---|---|---|
+| Revenu sur 18 et 24 ans | ± 0,5 % (attendu 0,0 %) | **+ 0,0 %** (tous les robots) |
+| Argent de chaque jour (empreinte) | identique | **identique** : 40 320 jours × 7 robots, 0 jour différent |
+| Argent en caisse ans 14 / 18 / 24 ; rangs ; Domaine ; faillites | identiques | identiques (33 358 / 55 640 / 321 106) ; Domaine an 7 ; 0 % |
+| Melon / Merveille / engrain / pois | an 12-14 / 13-16 / 16-18 / 16-18 | an **13** / **13** / **17** / **17** |
+| Cigognes au clocher (étape 8) | an 16-18 ; ≥ 85 % à l'an 20 | an **17** ; **97 %** |
+| Nid sur la maison | an 17-19 | an **18** |
+| Épilogue | an 17-19 ; ≥ 80 % à l'an 20 ; ≥ 95 % à l'an 22 | an **18** ; **97 %** ; **97 %** |
+| Visiteurs vus | ≥ 3 à l'an 18, ≥ 5 à l'an 20, 6 vers l'an 21-22 | **4** ; **5** ; 6 / 6 à l'an **21** |
+| Nouveautés après l'an 18 | ≥ 1 par saison dans ≥ 60 % des saisons des ans 19-24 | **64 %** des saisons (V4 seul) ; 79 % avec toute la Vallée |
+| Gestes par jour (ans 13-24) | + 0,05 à + 0,3 | **+ 0,24** (V4 seul : 0,19) |
+| `automator` | rien | aucun visiteur, aucune légende, pas d'étape 8 ni d'épilogue |
+| `handsOff`, `handsOffLate` | bénéfice ± 0,5 % | + 0,0 % (rien du V4 après leur dernière année) |
+| Appliqué | épilogue an 13-15, 6 / 6 vers l'an 17 | épilogue an **12**, 6 / 6 an **16** (plus tôt : son étape 7 arrive vers l'an 11) |
+| Débutant | n'atteint pas le V4 en 24 ans | jamais (aucune carrière) |
+| Carrière Classique (`--difficulty classique`, 12 carrières × 24 ans) | faillites inchangées | **inchangées** (tranquille et appliqué 0 % ; débutant 58 % → 58 %, comme avant le V4) ; argent identique chaque jour ; tranquille : cigognes an 20, épilogue an 21 |
+
+Réglages : **aucun chiffre de jeu n'a changé** (6 % / 50 % / 3 aubes, 4 saisons pour le cerf et le loriot, 3 générations,
+conditions des cigognes, 2ᵉ à 4ᵉ jour, 1 à 4 cigogneaux : valeurs de départ gardées). Seul le **robot** tranquille a été
+précisé sur la mesure : il regardait ses cloches chaque saison et ressemait les 4 légendes (+ 1,1 geste par jour, hors de la
+cible) ; il ne les regarde plus qu'avec une chance de 0,15 par saison (« quand on veut ») et envoie un sachet une saison sur
+deux (les 8 cartes s'étalent sur ≈ 4 ans et nourrissent les saisons d'après l'an 18). Les robots du V4 tirent leurs
+décisions sur `me.storksRnd` et passent après ceux du V1 au V3 : l'empreinte économique le prouve.
+
+Reste à surveiller : 2 à 3 % des carrières tranquilles n'ont pas l'étape 8 à l'an 22, parce que leur **étape 7** (V3) arrive
+tard ; aucun levier du V4 ne l'avance (les cigognes demandent l'étape 7). L'appliqué boucle le V4 vers l'an 12-16 (contenu
+de l'après-an 18 : cigognes chaque printemps, cartes, livre).
+
 ### 18.13 Liens avec l'existant (sans doublon)
 
 | Existant | Ce que le V4 en fait | Pourquoi pas un doublon |

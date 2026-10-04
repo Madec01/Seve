@@ -24,6 +24,16 @@
 //   targetRect(hit) (px CSS), setImages(images), setReducedMotion(on), layout, scroll, stats()
 // }
 // Mouvements réduits : rien ne bouge (eau fixe, bêtes posées, pas d'oiseaux ni de brume qui passe), changements directs.
+//
+// (Lot V4 « Les cigognes », docs/VALLEE.md § 18.3, § 18.5, § 18.7) VIEW_ANCHORS_V4 (px du monde, pied des dessins) :
+// steeple (sommet du clocher, en bas à droite), crane (prairie), redDeer (lisière du bois), oriole (verger), beaver (près
+// du ruisseau), glowView (prairie) ; visiteurs (indice du matin, halte avec « ? », visiteurs déjà vus en décor), couple
+// de cigognes sur le clocher, barrage du castor, fenêtres du village le soir, Joseph et Hélène assis sur le banc, teinte
+// du soir (aplat doré) ; hitTest + { type: 'visitor', id } et { type: 'bench' } ; défilement automatique :
+// setAuto({ mode: 'credits' | 'contemplate', from?, to?, duration?, speed? }) / stopAuto(), autoPaused, setTint(alpha),
+// listener() → { y, h } (centre de la partie visible, px du monde : écoute du paysage sonore), worldCenterY().
+//   Purs : VIEW_ANCHORS_V4, BEAVER_DAM_RECT, VILLAGE_LIGHTS, visitorRect(id, anchor), visitorSpriteName(id, frame),
+//   viewSoundSpots(), autoTarget(layout, mode).
 // Sprites de la planche `valley3` (facultative) ; sans elle, repli dessiné par le code (aplats et petits motifs).
 
 import { TILE, SPRITES, drawSprite } from './atlas.js';
@@ -78,6 +88,46 @@ const WILD_COLORS = {
   blackWoodpecker: ['#202020', '#d8282a'], roeDeer: ['#b8683a', '#f0d8b8'], salamander: ['#202020', '#f2c81a'], skylark: ['#8a6a4a', '#e8d8b0'],
   hoopoe: ['#e09a6a', '#202020'], littleOwl: ['#8a6a4a', '#f2d23a'],
 };
+// ── (V4) Les visiteurs rares, le clocher, le banc ───────────────────────────────────
+
+/** Pied (centre bas) de chaque visiteur dans la vue, px du monde (le clocher : pied du dessin `stork.steeple`). */
+export const VIEW_ANCHORS_V4 = Object.freeze({
+  steeple: { x: 172, y: 410 },
+  crane: { x: 150, y: 216 },
+  redDeer: { x: 16, y: 156 },
+  oriole: { x: 170, y: 82 },
+  beaver: { x: 70, y: 308 },
+  glowView: { x: 132, y: 228 },
+});
+/** Le barrage du castor (32 × 16) en travers du ruisseau, près du castor. */
+export const BEAVER_DAM_RECT = Object.freeze({ x: 38, y: 294, w: 32, h: 16 });
+/** Fenêtres du village (16 × 16), posées sur les maisons près du clocher (le soir). */
+export const VILLAGE_LIGHTS = Object.freeze([{ x: 139, y: 406 }, { x: 176, y: 410 }]);
+/** Taille des dessins des visiteurs (le clocher et le cerf sont plus grands). */
+const VISITOR_SIZE = { whiteStork: [16, 24], crane: [16, 16], redDeer: [32, 32], oriole: [16, 16], beaver: [16, 16], glowworms: [16, 16] };
+const VISITOR_ANCHOR = { whiteStork: 'steeple', crane: 'crane', redDeer: 'redDeer', oriole: 'oriole', beaver: 'beaver', glowworms: 'glowView' };
+
+/** Rectangle (monde) d'un visiteur posé sur son ancre (le clocher : le dessin du sommet du clocher, avec le couple). */
+export function visitorRect(id, anchor = null) {
+  const a = VIEW_ANCHORS_V4[anchor || VISITOR_ANCHOR[id]] || VIEW_ANCHORS_V4.crane;
+  const [w, h] = VISITOR_SIZE[id] || [16, 16];
+  return { x: Math.round(a.x - w / 2), y: Math.round(a.y - h), w, h };
+}
+
+/** Sprite d'un visiteur (2 images ; les cigognes du clocher : le dessin du sommet du clocher). */
+export function visitorSpriteName(id, frame = 0) {
+  if (id === 'whiteStork') return 'stork.steeple';
+  if (id === 'glowworms') return 'visitor.glowworms';
+  return frame ? `visitor.${id}.1` : `visitor.${id}`;
+}
+
+/** Places des sons des visiteurs dans la vue (ctx.spots de natureScape, src/audio/soundscape.js). */
+export function viewSoundSpots() {
+  const out = {};
+  for (const [k, a] of Object.entries(VIEW_ANCHORS_V4)) out[k] = { x: a.x, y: a.y - 8 };
+  return out;
+}
+
 const MUSH_COLORS = { cep: ['#7a4a2a', '#e8d8b8'], chanterelle: ['#f0b030', '#f6d070'], hedgehogMushroom: ['#e8d8b0', '#c8b890'] };
 
 // ── Purs ─────────────────────────────────────────────────────────────────────────────
@@ -153,7 +203,14 @@ export function viewTargets(layout, view) {
     out.push({ rect: grow({ x: s.x, y: s.y, w: 16, h: 16 }), hit: { type: 'mushroom', id: m.id }, group: 0 });
   }
   if (view.river && (view.river.step ?? 0) >= 2) out.push({ rect: grow(PONTOON_RECT), hit: { type: 'river' }, group: 0 });
-  if (view.joseph) out.push({ rect: grow(BENCH_RECT), hit: { type: 'joseph' }, group: 0 });
+  // (V4) Visiteurs rares qui font halte (le couple du clocher compris) ; le banc habité.
+  for (const x of view.visitors || []) {
+    if (x.state !== 'visible') continue;
+    out.push({ rect: grow(visitorRect(x.id, x.anchor)), hit: { type: 'visitor', id: x.id }, group: 0 });
+  }
+  const bench = view.bench || null;
+  if (bench && (bench.joseph || bench.helene)) out.push({ rect: grow(BENCH_RECT), hit: { type: 'bench' }, group: 0 });
+  else if (view.joseph) out.push({ rect: grow(BENCH_RECT), hit: { type: 'joseph' }, group: 0 });
   HIT_ORDER.forEach((id, order) => {
     if (id === 'mill') out.push({ rect: { ...MILL_RECT }, hit: { type: 'place', id: 'brook' }, group: 1, order });
     else if (id === 'farm') out.push({ rect: { ...FARM_RECT }, hit: { type: 'farm' }, group: 1, order });
@@ -517,6 +574,10 @@ export function createValleyView(canvas, images, opts = {}) {
   const fades = []; // { id, from, to, t }
   const sparks = []; // { x, y, t }
   let drawn = 0;
+  // (V4) Teinte du soir, défilement automatique (générique, contemplation).
+  let tint = 0;
+  let auto = null; // { mode, from, to, dur, t, speed, dir }
+  let autoPaused = false;
 
   const has = (name) => canDraw(imgs, name);
   let seasonSets = null;
@@ -598,7 +659,7 @@ export function createValleyView(canvas, images, opts = {}) {
 
   function staticKeyOf(v) {
     const pl = (v.places || []).map((p) => `${p.id}:${p.step}:${p.works ? sproutCount(p.progress) : '-'}`).join(',');
-    return `${seasonOf(v)}|${pl}|${v.farmTier || 1}|${v.river?.step ?? 0}|${!!imgs}`;
+    return `${seasonOf(v)}|${pl}|${v.farmTier || 1}|${v.river?.step ?? 0}|${!!imgs}|${v.beaverDam ? 'D' : ''}`;
   }
 
   function buildStatic(v) {
@@ -623,6 +684,15 @@ export function createValleyView(canvas, images, opts = {}) {
     }
     if (has('view.bench')) drawSprite(c, imgs, 'view.bench', BENCH_RECT.x, BENCH_RECT.y);
     else drawBenchFallback(c, BENCH_RECT);
+    // (V4) Le barrage du castor, toute l'année une fois le castor vu.
+    if (v.beaverDam) {
+      if (has('view.beaverDam')) drawSprite(c, seasonSet(season), 'view.beaverDam', BEAVER_DAM_RECT.x, BEAVER_DAM_RECT.y);
+      else {
+        px(c, OUTLINE, BEAVER_DAM_RECT.x + 2, BEAVER_DAM_RECT.y + 6, 28, 6);
+        px(c, '#8a5a32', BEAVER_DAM_RECT.x + 3, BEAVER_DAM_RECT.y + 7, 26, 4);
+        blob(c, '#6a4a32', BEAVER_DAM_RECT.x + 26, BEAVER_DAM_RECT.y + 6, 5);
+      }
+    }
     // Chantiers en cours : panneau et pousses (nombre de pousses = progression).
     for (const p of v.places || []) {
       if (!p.works) continue;
@@ -730,8 +800,30 @@ export function createValleyView(canvas, images, opts = {}) {
         px(c, OUTLINE, r.x + 8, r.y - 6 + up, 1, 1);
       }
     });
+    // (V4) Joseph et Hélène assis sur le banc (après l'épilogue, ou Joseph qui attend pour l'épilogue / un récit).
+    const bench = v.bench || null;
+    const seated = !!(bench && (bench.joseph || bench.helene));
+    if (seated) {
+      const jx = BENCH_RECT.x + 4;
+      const hx = BENCH_RECT.x + 14;
+      const sy = BENCH_RECT.y - 7;
+      if (bench.helene) {
+        if (has('view.helene.seated')) drawSprite(c, imgs, 'view.helene.seated', hx, sy);
+        else drawPersonFallback(c, hx, sy, '#3a7a4a', 0);
+      }
+      if (bench.joseph) {
+        if (has('view.joseph.seated')) drawSprite(c, imgs, 'view.joseph.seated', jx, sy);
+        else drawPersonFallback(c, jx, sy, '#4a6a9a', 0);
+        if (bench.joseph === 'epilogue' || bench.joseph === 'story') {
+          const up = reduced ? 0 : Math.round(Math.sin(time * 3) * 1.5);
+          px(c, OUTLINE, jx + 4, sy - 11 + up, 9, 8);
+          px(c, '#ffffff', jx + 5, sy - 10 + up, 7, 6);
+          px(c, OUTLINE, jx + 6, sy - 8 + up, 1, 1), px(c, OUTLINE, jx + 8, sy - 8 + up, 1, 1), px(c, OUTLINE, jx + 10, sy - 8 + up, 1, 1);
+        }
+      }
+    }
     // Joseph sur le banc du belvédère (un récit l'attend).
-    if (v.joseph) {
+    if (v.joseph && !seated) {
       const jx = BENCH_RECT.x + 8;
       const jy = BENCH_RECT.y - 6;
       if (has('npc.joseph')) drawSprite(c, imgs, 'npc.joseph', jx, jy);
@@ -742,7 +834,7 @@ export function createValleyView(canvas, images, opts = {}) {
       px(c, OUTLINE, jx + 6, jy - 8 + up, 1, 1), px(c, OUTLINE, jx + 8, jy - 8 + up, 1, 1), px(c, OUTLINE, jx + 10, jy - 8 + up, 1, 1);
     }
     // Hélène se promène (décor ; mouvements réduits : jumelles levées, immobile).
-    if (v.helene) {
+    if (v.helene && !(bench && bench.helene)) {
       const P = HELENE_PATH;
       const t = reduced ? 0.5 : (Math.sin(time * 0.25) + 1) / 2;
       const seg = Math.min(P.length - 2, Math.floor(t * (P.length - 1)));
@@ -753,6 +845,7 @@ export function createValleyView(canvas, images, opts = {}) {
       if (has(name)) drawSprite(c, imgs, name, hx, hy - 16);
       else drawPersonFallback(c, hx, hy - 16, '#3a7a4a', frame);
     }
+    drawV4(c, v, frame);
     // Brume du matin et vols d'oiseaux (étape ≥ 6).
     if ((v.stage || 0) >= 6) {
       if (reduced) {
@@ -791,7 +884,113 @@ export function createValleyView(canvas, images, opts = {}) {
     }
   }
 
+  /** (V4) Visiteurs, clocher, fenêtres du village, teinte du soir. */
+  function drawV4(c, v, frame) {
+    const list = v.visitors || [];
+    const steeple = v.steeple || null;
+    // Le couple sur le clocher (qui attend d'être vu, ou chaque printemps-été une fois vu).
+    const atSteeple = list.find((x) => x.id === 'whiteStork');
+    if ((steeple && steeple.storks > 0) || atSteeple) {
+      const r = visitorRect('whiteStork', 'steeple');
+      if (has('stork.steeple')) drawSprite(c, imgs, 'stork.steeple', r.x, r.y);
+      else {
+        px(c, '#6a6a7a', r.x + 5, r.y + 8, 6, 16);
+        px(c, OUTLINE, r.x + 2, r.y + 6, 12, 3);
+        px(c, '#8a6a42', r.x + 3, r.y + 6, 10, 2);
+        px(c, '#f4f4f0', r.x + 4, r.y, 2, 6), px(c, '#f4f4f0', r.x + 10, r.y + 1, 2, 5);
+        px(c, '#d8382a', r.x + 3, r.y + 1, 1, 1), px(c, '#d8382a', r.x + 12, r.y + 2, 1, 1);
+      }
+      if (atSteeple?.state === 'visible') drawQuestion(c, r.x + 4, r.y - 12);
+    }
+    let residents = 0;
+    for (const x of list) {
+      if (x.id === 'whiteStork') continue;
+      const r = visitorRect(x.id, x.anchor);
+      if (x.state === 'hint') {
+        const hint = x.hintIcon || 'visitor.hint.trumpet';
+        if (has(hint)) drawSprite(c, imgs, hint, r.x + Math.round((r.w - 16) / 2), r.y + r.h - 16);
+        else px(c, '#5a4030', r.x + r.w / 2 - 1, r.y + r.h - 4, 2, 2);
+        continue;
+      }
+      if (x.state === 'resident') {
+        if (residents >= 3) continue;
+        residents += 1;
+        // Les vers luisants ne se voient que le soir (lueurs vertes dans la prairie).
+        if (x.id === 'glowworms') {
+          if ((tint > 0 || v.villageLights) && !reduced) drawGlowField(c, r);
+          else if (tint > 0 || v.villageLights) drawGlowField(c, r, true);
+          continue;
+        }
+      }
+      if (x.id === 'glowworms') {
+        drawGlowField(c, r, reduced);
+        if (x.state === 'visible') drawQuestion(c, r.x + 4, r.y - 12);
+        continue;
+      }
+      const name = visitorSpriteName(x.id, frame);
+      const sway = x.state === 'resident' && !reduced && x.id !== 'redDeer' ? Math.round(Math.sin(time * 0.9 + r.x) * 3) : 0;
+      if (has(name)) drawSprite(c, imgs, name, r.x + sway, r.y);
+      else if (has(visitorSpriteName(x.id, 0))) drawSprite(c, imgs, visitorSpriteName(x.id, 0), r.x + sway, r.y);
+      else drawAnimalFallback(c, x.id === 'crane' ? 'heron' : x.id === 'redDeer' ? 'roeDeer' : x.id === 'oriole' ? 'hoopoe' : 'otter', r.x + sway + Math.round((r.w - 16) / 2), r.y + r.h - 16, frame);
+      if (x.state === 'visible') drawQuestion(c, r.x + Math.round(r.w / 2) - 4, r.y - 12);
+    }
+    // Fenêtres du village qui s'allument le soir (et pendant le générique, au soir).
+    if (v.villageLights || tint > 0) {
+      for (const p of VILLAGE_LIGHTS) {
+        if (has('view.village.lights')) drawSprite(c, imgs, 'view.village.lights', p.x, p.y);
+        else px(c, '#f2d23a', p.x + 5, p.y + 8, 2, 2), px(c, '#f2d23a', p.x + 10, p.y + 8, 2, 2);
+      }
+    }
+    if (tint > 0) {
+      c.fillStyle = `rgba(255,168,72,${Math.min(0.5, tint)})`;
+      c.fillRect(0, 0, VIEW_W, VIEW_H);
+      c.fillStyle = `rgba(80,40,90,${Math.min(0.2, tint * 0.4)})`;
+      c.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+  }
+  function drawQuestion(c, x, y) {
+    const up = reduced ? 0 : Math.round(Math.sin(time * 4) * 1.5);
+    px(c, OUTLINE, x, y + up, 9, 9);
+    px(c, '#fffbe8', x + 1, y + 1 + up, 7, 7);
+    px(c, OUTLINE, x + 3, y + 9 + up, 3, 2);
+    for (const [dx, dy] of [[3, 2], [4, 2], [5, 2], [5, 3], [4, 4], [4, 6]]) px(c, OUTLINE, x + dx, y + dy + up, 1, 1);
+  }
+  function drawGlowField(c, r, still = false) {
+    for (let k = 0; k < 7; k++) {
+      const gx = r.x - 10 + Math.round(hash(k, 71) * (r.w + 20));
+      const gy = r.y + 2 + Math.round(hash(k, 73) * (r.h + 4));
+      const on = still || Math.sin(time * 2.1 + k * 1.3) > -0.2;
+      if (!on) continue;
+      c.fillStyle = 'rgba(200,255,120,0.35)';
+      c.fillRect(gx - 1, gy - 1, 3, 3);
+      px(c, '#d8ff8a', gx, gy, 1, 1);
+    }
+  }
+
+  function stepAuto(dt) {
+    if (!auto || autoPaused || reduced) return;
+    const a = auto;
+    a.t += dt;
+    if (a.mode === 'credits') {
+      const k = Math.min(1, a.t / a.dur);
+      scroll = a.from + (a.to - a.from) * (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+      if (k >= 1) a.done = true;
+    } else {
+      // Contemplation : descend lentement, puis remonte, sans fin.
+      scroll += a.dir * a.speed * dt;
+      const m = maxScroll();
+      if (scroll >= m) {
+        scroll = m;
+        a.dir = -1;
+      } else if (scroll <= 0) {
+        scroll = 0;
+        a.dir = 1;
+      }
+    }
+  }
+
   function stepScroll(dt) {
+    stepAuto(dt);
     if (scrollAnim) {
       const a = scrollAnim;
       a.t = Math.min(a.dur, a.t + dt);
@@ -926,6 +1125,57 @@ export function createValleyView(canvas, images, opts = {}) {
       seasonSets = null;
       tintCache.clear();
       staticKey = '';
+    },
+    /** (V4) Teinte du soir (aplat doré), 0 = aucune. */
+    setTint(a) {
+      tint = Math.max(0, Math.min(0.5, Number(a) || 0));
+    },
+    /**
+     * (V4) Défilement automatique : 'credits' (du ciel jusqu'à la ferme en `duration` s) ou 'contemplate' (descente et
+     * remontée lentes, `speed` px CSS / s). Sans effet en mouvements réduits (l'interface saute d'un lieu à l'autre).
+     */
+    setAuto(opts = null) {
+      if (!opts) {
+        auto = null;
+        autoPaused = false;
+        return;
+      }
+      const L = layout;
+      const k = L.zoom / L.dpr;
+      const visH = L.dev.avail / L.dpr - Math.max(0, overlay);
+      const farmTo = Math.max(0, Math.min(maxScroll(), (FARM_RECT.y + FARM_RECT.h / 2) * k - visH / 2));
+      scrollAnim = null;
+      flingV = 0;
+      autoPaused = false;
+      if (opts.mode === 'credits') {
+        auto = { mode: 'credits', from: opts.from ?? 0, to: opts.to ?? farmTo, dur: Math.max(1, opts.duration || 70), t: 0, done: false };
+        scroll = auto.from;
+      } else auto = { mode: 'contemplate', speed: Math.max(1, opts.speed || 6 * k), dir: 1, t: 0 };
+    },
+    stopAuto() {
+      auto = null;
+      autoPaused = false;
+    },
+    set autoPaused(on) {
+      autoPaused = !!on;
+    },
+    get autoPaused() {
+      return autoPaused;
+    },
+    get auto() {
+      return auto ? { mode: auto.mode, t: auto.t, dur: auto.dur || 0, done: !!auto.done, paused: autoPaused } : null;
+    },
+    /** (V4) Centre de la partie visible et sa hauteur (px du monde) : l'écoute du paysage sonore. */
+    listener() {
+      const L = layout;
+      const k = L.zoom / L.dpr;
+      const visH = L.dev.avail / L.dpr - Math.max(0, overlay);
+      return { y: Math.round(scroll / k + visH / 2 / k), h: Math.round(visH / k), top: Math.round(scroll / k) };
+    },
+    worldCenterY() {
+      const L = layout;
+      const k = L.zoom / L.dpr;
+      return (scroll + (L.dev.avail / L.dpr - Math.max(0, overlay)) / 2) / k;
     },
     setReducedMotion(on) {
       reduced = !!on;

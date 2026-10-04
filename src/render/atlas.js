@@ -589,6 +589,11 @@ export const DECOR_SPRITES = Object.freeze({
   'heron.vane': 'decor.heron.vane',
   'mill.wheel': 'decor.mill.wheel',
   'valley.bench': 'decor.valley.bench',
+  // (Vallée vivante, lot V4) Décors trouvés : pages « Les légendes » et « Les visiteurs rares », l'épilogue de Joseph
+  // (planche valley4).
+  'melon.cloche': 'decor.melon.cloche',
+  'stork.vane': 'decor.stork.vane',
+  'iron.box': 'decor.iron.box',
 });
 
 /** Sprite d'une décoration (accepte aussi « decor.<id> » ou un nom de sprite « deco.* »), ou null. */

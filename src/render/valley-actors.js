@@ -522,7 +522,7 @@ export function createValleyActors(effects) {
     info.stageN = v.stage || 0;
     info.nature = Object.entries(v.nature || {}).map(([spotId, n]) => ({ spotId, kind: n.kind, oak: n.kind === 'loneTree' ? oakStage(st, n) : null }));
     info.finds = (v.finds || []).map((f) => ({ id: f.id, kind: f.kind, spotId: f.spotId }));
-    info.animals = (typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || [];
+    info.animals = ((typeof game.query.career?.valleyAnimals === 'function' ? safe(() => game.query.career.valleyAnimals(), []) : []) || []).filter((a) => !a.visitor); // (V4) les vers luisants : src/render/storks-actors.js
     info.fallow = [];
     info.trials = [];
     (st.plots || []).forEach((p, i) => {

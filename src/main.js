@@ -1977,7 +1977,7 @@ function frame(t) {
  * Planches de l'atlas. Celles d'un lot en cours de dessin (OPTIONAL_SHEETS : lot 3) peuvent manquer sans
  * empêcher le jeu de démarrer : le rendu et l'interface dessinent alors un repli (canDraw, spriteAny).
  */
-const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg']);
+const OPTIONAL_SHEETS = new Set(['lot3', 'lot4', 'valley1', 'valley2', 'valley3', 'valley3bg', 'valley4']);
 async function loadSheets() {
   const required = {};
   const optional = [];
