@@ -1,0 +1,99 @@
+/* Intro « MG studios » (src/intro/, docs/ARCHITECTURE.md « Intro MG studios »).
+   Écran-titre « Touchez pour commencer » puis animation, par-dessus l'écran de chargement (même fond vert
+   rayé : aucune différence de fond quand l'intro s'efface). Affichée seulement quand le portillon
+   (src/intro/gate.js) a mis la classe « intro-on » sur <html> ; l'opacité de #intro (fondu enchaîné vers
+   l'écran suivant) est pilotée image par image par src/intro/player.js, pas par une transition CSS
+   (qui serait coupée par la classe .reduced-motion). */
+.intro { display: none; }
+html.intro-on .intro {
+  position: fixed;
+  z-index: 150; /* au-dessus de l'écran de chargement (100), sous l'invitation à tourner le téléphone (200) */
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(255, 241, 210, 0.08), transparent 60%),
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.05) 0 calc(var(--u) * 4), transparent calc(var(--u) * 4) calc(var(--u) * 8)),
+    var(--forest);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  outline: none;
+}
+html.intro-on .intro[hidden] { display: none; }
+.intro:focus-visible .intro-sign { outline: 3px solid var(--gold); outline-offset: 3px; }
+.intro-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* Écran-titre : même mise en page que l'écran de chargement (ruban au centre), puis le panneau en bois */
+.intro-title {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 16px);
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+.intro-box { display: flex; flex-direction: column; align-items: center; gap: 16px; min-width: 0; max-width: 100%; }
+.intro-sign {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  min-width: min(15rem, 80vw);
+  padding: 0 1rem 0.1rem;
+  border-style: solid;
+  border-width: calc(var(--u) * 5);
+  border-image: var(--img-slot-wood) 5 fill / calc(var(--u) * 5) stretch;
+  image-rendering: pixelated;
+  color: var(--parch);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-shadow: 0 var(--u) 0 var(--outline), 0 calc(var(--u) * -1) 0 var(--outline), var(--u) 0 0 var(--outline), calc(var(--u) * -1) 0 0 var(--outline);
+  animation: intro-breathe 1.8s ease-in-out infinite;
+}
+.intro-sign::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  margin-right: 0.5rem;
+  flex: none;
+  background: var(--gold);
+  /* petit doigt pixel (main qui touche) */
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 8 8%27 shape-rendering=%27crispEdges%27%3E%3Cpath d=%27M3 0h1v3h1v1h1v1h1v3H2V6H1V4h2z%27/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 8 8%27 shape-rendering=%27crispEdges%27%3E%3Cpath d=%27M3 0h1v3h1v1h1v1h1v3H2V6H1V4h2z%27/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.intro-note { margin: 0; color: var(--parch); font-size: 0.875rem; opacity: 0.85; text-shadow: 0 var(--px1) 0 var(--outline); }
+@keyframes intro-breathe { 50% { filter: brightness(1.2); transform: translateY(calc(var(--u) * -1)); } }
+html.intro-reduced .intro-sign { animation: none; }
+.intro.is-tapped .intro-title { opacity: 0; }
+.intro.is-tapped .intro-sign { animation: none; }
+
+/* « Touchez pour passer » (discret, en bas) pendant l'animation */
+.intro-skip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--safe-b) + 14px);
+  margin: 0;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--parch);
+  opacity: 0;
+  pointer-events: none;
+  text-shadow: 0 var(--px1) 0 var(--outline), 0 calc(var(--px1) * -1) 0 var(--outline), var(--px1) 0 0 var(--outline), calc(var(--px1) * -1) 0 0 var(--outline);
+  transition: opacity 300ms ease 700ms;
+}
+.intro.is-playing .intro-skip { opacity: 0.85; }

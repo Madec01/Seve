@@ -2131,16 +2131,21 @@ async function boot() {
   warmNext();
 
   text.textContent = 'Prêt !';
-  startBtn.hidden = false;
   window.__bootOk?.(); // le jeu a démarré : le garde-fou de index.html s'arrête
-  if (!app.isTouch) startBtn.focus();
-  const go = () => {
+  // Intro « MG studios » (src/intro/gate.js) : le joueur a touché (ou touchera) l'écran-titre, qui tient lieu de
+  // « Commencer » (le son est déjà débloqué) ; l'intro appelle go() au début de son fondu final (le menu apparaît
+  // dessous : fondu enchaîné), ou tout de suite si elle est déjà finie (l'écran de chargement avait pris le relais).
+  const intro = window.__fermeIntro?.active ? window.__fermeIntro : null;
+  let started = false;
+  const go = ({ fromIntro = false } = {}) => {
+    if (started) return;
+    started = true;
     audio.unlock();
-    audio.play('confirm');
+    if (!fromIntro) audio.play('confirm'); // (après l'intro : son accord final suffit)
     loading.classList.add('is-done');
     document.body.classList.remove('is-loading');
     setTimeout(() => loading.remove(), 500);
-    audio.playMusic('menu', { fade: 1 });
+    audio.playMusic('menu', { fade: fromIntro ? 2 : 1 });
     app.dialogs.mainMenu();
     maybeDetenteNotice();
     app.album.boot(); // (lot 4) « N cases de l'album retrouvées dans vos anciennes parties »
@@ -2150,7 +2155,12 @@ async function boot() {
     }
     if (DEBUG && params.get('level')) app.startLevel(Number(params.get('level')), { skipConfirm: true });
   };
-  startBtn.addEventListener('click', go, { once: true });
+  if (intro) intro.onGameReady(() => go({ fromIntro: true }));
+  else {
+    startBtn.hidden = false;
+    if (!app.isTouch) startBtn.focus();
+    startBtn.addEventListener('click', () => go(), { once: true });
+  }
   if (DEBUG && params.has('autostart')) go();
 }
 

@@ -7,13 +7,17 @@ HTML + CSS + JavaScript (modules ES natifs), **sans dépendance à l'exécution*
 ```
 index.html                 page publiée (GÉNÉRÉE par tools/build.js depuis src/index.template.html)
 dev.html                   même page, modules de src/ non empaquetés (GÉNÉRÉE, pour déboguer)
-dist/                      GÉNÉRÉ : game.<empreinte>.js (+ .map), game.<empreinte>.css, build.json
+dist/                      GÉNÉRÉ : game.<empreinte>.js (+ .map), game.<empreinte>.css, intro.<empreinte>.js (+ .map), build.json
 sw.js                      service worker (bloc PRECACHE généré par tools/build.js)
 css/fonts.css, style.css   police « Ferme » et styles de l'interface (bordures Kenney en border-image)
+css/intro.css              écran-titre et couche de l'intro « MG studios »
 package.json               dépendance de développement : esbuild (construction seulement)
 src/
   index.template.html      modèle de la page (marqueurs {{PRELOAD}}, {{BOOT}}, {{STYLES}})
   loader.js                chargeur + garde-fou de démarrage (script classique recopié dans la page)
+  intro/                   intro « MG studios » à chaque ouverture (voir « Intro MG studios ») : gate.js (portillon,
+                           script classique recopié dans la page), player.js (paquet dist/intro.*.js), mg-studios.js,
+                           voice.js, timeline.js (pur, testé), sheet.js (généré)
   version.js               assetUrl(chemin) → « chemin?v=<empreinte> » (table écrite dans le paquet)
   main.js                  point d'entrée : chargement des ressources, boucle, câblage core ↔ rendu ↔ UI ↔ audio
   data/                    données pures (aucune logique d'état)
@@ -84,7 +88,8 @@ GitHub Pages sert chaque fichier avec `Cache-Control: max-age=600` et n'a pas d'
   1. empreinte SHA-256 de chaque ressource de `assets/` (sauf captures, scripts, licences, police source) ;
   2. `src/main.js` et tous ses modules → **un seul fichier** `dist/game.<empreinte>.js` (esbuild, IIFE, Chrome 90+, minifié, carte des sources renvoyant vers `src/`). La table `{ chemin: empreinte }` des ressources y est écrite (`globalThis.__FERME_ASSETS__`) : `assetUrl()` (`src/version.js`) ajoute `?v=<empreinte>` aux images (`loadImage`) et aux sons (`audio.js`) ;
   3. `css/fonts.css` + `css/style.css` → **un seul fichier** `dist/game.<empreinte>.css`, `url()` réécrites en `../assets/…?v=<empreinte>` ;
-  4. `src/index.template.html` → `index.html` (config `window.__FERME_BUILD__ = { id, js: { src, sha, size }, css }`, chargeur `src/loader.js` recopié dans la page, préchargement des polices versionnées) et `dev.html` ;
+  4. `src/index.template.html` → `index.html` (config `window.__FERME_BUILD__ = { id, js: { src, sha, size }, css, intro: { src } }`, portillon de l'intro `src/intro/gate.js` puis chargeur `src/loader.js` recopiés dans la page, préchargement des polices versionnées) et `dev.html` (`intro: { module: 'src/intro/player.js' }`) ;
+  4 bis. `src/intro/player.js` et ses modules → `dist/intro.<empreinte>.js` (IIFE, même table des empreintes), précaché « core » comme la planche et les cris de l'intro (`assets/audio/intro/`, seuls sons « core ») ;
   5. bloc `PRECACHE` de `sw.js` : `[chemin, empreinte, taille, 'core'|'lazy']`, `VERSION` = identifiant de la version ;
   6. `dist/build.json` : identifiant, fichiers, empreintes des sources (lues par `tests/build.test.js`, qui échoue si la version publiée est périmée), et les 5 dernières versions : leurs paquets restent dans `dist/`, pour qu'une page encore en cache (navigateur, CDN) trouve toujours SES fichiers.
 - **Garantie** : une page `index.html`, quelle que soit sa version, ne désigne que des fichiers de sa version (noms ou `?v=` à empreinte). Un mélange est impossible, même avec un cache HTTP ou un CDN en retard.
@@ -6288,3 +6293,56 @@ tools/simulate.js` et `node tools/simulate-career.js` identiques, `node tools/bu
     de la vue) et elle est amenée à l'écran par `app.valleyView.focusTarget(hit, { avoid })` (hors de la bulle).
   - **V4** : priorités `valley.legend` 70, `valley.visitor` 70, `valley.book` 20, `valley.sounds` 15 ; `valley.sounds`
     attend la leçon d'une légende réveillée ; `valley.legend` se déclenche aussi à l'aube (légende réveillée non montrée).
+
+## Intro MG studios (2026-10-04)
+
+Animation de démarrage « MG studios » (variante « Le panneau de la ferme », validée par l'utilisateur), jouée **à chaque
+ouverture du jeu** avant le menu, pendant que le jeu se charge dessous. Demande : « il faut que ça finisse bien, sans que
+ça coupe d'un coup ».
+
+### Fichiers
+
+| Fichier | Rôle |
+|---|---|
+| `src/intro/gate.js` | **Portillon** : script classique recopié dans `index.html`/`dev.html` par `tools/build.js`, AVANT le chargeur (même prudence ES5). Décide, affiche l'écran-titre, débloque l'audio au toucher, télécharge le lecteur, fait le relais avec le jeu. `window.__fermeIntro`. |
+| `src/intro/player.js` | **Lecteur** (point d'entrée de `dist/intro.<empreinte>.js` ; en dev, `import()`). `window.__fermeIntroPlayer = { load(), play(opts) }` ; prévient le portillon par l'événement `ferme-intro-player`. |
+| `src/intro/mg-studios.js` | L'image : moteur pixel art (canevas « art » basse résolution agrandi d'un facteur entier en pixels physiques, `device-pixel-content-box`), scène (ciel, soleil, panneau et MG, coq, poule, vache, mouton, cultures, feuilles, oiseaux). `createMgStudios(canvas, sheet) → { build, draw(t, { reduced, alpha }), destroy }`. |
+| `src/intro/voice.js` | Le son (Web Audio) : vrais cris (`A.sample`), marimba / clochette / nappe / choc / souffle synthétisés ; chaîne sources → bus (volume) → compresseur → **fader** (fondus) → sortie. `createVoice(ctx, samples, volume) → { schedule, applyGain, release }`, `decodeSamples`. |
+| `src/intro/timeline.js` | **Pur, testé** (`tests/intro.test.js`) : temps forts `T`, `RM` (mouvement réduit), `FADE_OUT` = 1,0 s, `SKIP_FADE` = 0,35 s, `introPlan`, `overlayAlpha`, `artAlpha`, `endTime`, `henAt`, `soundProgram(reduced)` (chaque son avec l'instant où il s'est éteint de lui-même), `gainCurve(plan, skipFrom)` (automation du fader), enveloppes `SND_INFO` des cris (20 ms, 0..9 : bec, têtes, traits « voix »). |
+| `src/intro/sheet.js` | Table de la planche (générée par `assets/sprites/generate-intro.py`). |
+| `css/intro.css` | `#intro` (z-index 150 : au-dessus de `#loading`, sous `#rotate`), même fond vert rayé que `.loading` ; affiché seulement sous `html.intro-on`. |
+| `assets/sprites/intro.png` | Planche de 2,7 Ko : tuiles extraites des planches du jeu et le coq (4 poses dont `rooster.puff`). |
+| `assets/audio/intro/*.mp3` | Cris préparés pour l'intro (coq, vache, mouton, poule, ailes ; Freesound CC0, `CREDITS.md`). |
+
+### Déroulé
+
+1. **Décision** (dans `<head>`, avant le premier affichage) : intro sauf `?nointro` (ou `?intro=0`), réglage
+   `settings.intro === false` (« Intro au démarrage », Options › Téléphone et affichage, défaut `true` dans
+   `DEFAULT_SETTINGS`), `?debug=1` ou `navigator.webdriver` (robots de test : les outils existants ne voient pas
+   l'intro) ; `?intro=1` force ces deux derniers cas. Oui → `html.intro-on` (+ `intro-reduced`), lecteur téléchargé en
+   parallèle du paquet du jeu (`<script data-intro>` : le chargeur ne compte pas son échec).
+2. **Écran-titre** « Touchez pour commencer » (ruban du jeu, panneau en bois, fond de l'écran de chargement ; tout l'écran
+   se touche : `pointerup` / `touchend` / `click`, Entrée ou Espace). Le toucher crée l'AudioContext
+   (`window.__fermeIntro.ctx`, tampon silencieux pour les anciens Safari), que `src/audio/audio.js` **reprend** à son
+   `unlock()` (un seul contexte). Lecteur absent au bout de 4 s → pas d'intro.
+3. **Animation** : volume = `sfxVolume²` (courbe du jeu), aucun son si `muted` ou volume nul ; mouvement réduit si
+   `settings.reducedMotion` ou `prefers-reduced-motion`. Le lecteur attend au plus 1,2 s les cris et 0,8 s leur décodage
+   (sinon l'image part sans eux). Toucher (après 0,5 s), touche du clavier ou page cachée → passage (fondu rapide).
+4. **Fin douce** : la poule s'installe (4,75 s), un oiseau traverse (4,85 s), accord final (5,15 s), le coq gonfle le
+   poitrail (5,2–5,75 s) ; fondu enchaîné 5,8 → 6,8 s : opacité de `#intro` pilotée image par image (pas de transition
+   CSS, que `.reduced-motion` couperait), fader du son en rampe linéaire 1 → 0 sur le même intervalle. Chaque cri est
+   fini avant le fondu ; l'accord s'éteint de lui-même (−65 dB à 6,8 s sans fader). Passage : rampe de la valeur
+   courante à 0 en 0,35 s, image idem. Mouvement réduit : image fixe en fondu 0,5 s, cocorico à 0,25 s puis accord,
+   fondu 2,8 → 3,7 s.
+5. **Relais avec le jeu** (`src/main.js`) : prêt, le jeu appelle `__fermeIntro.onGameReady(go)` au lieu d'afficher
+   « Commencer » ; `go({ fromIntro: true })` est appelé au **début du fondu** (le menu, ou la fenêtre « Bienvenue ! »,
+   apparaît sous l'intro ; pas de son « confirm », musique du menu en fondu de 2 s), ou tout de suite si l'intro est déjà
+   finie (l'écran de chargement avait pris le relais sans saut : même fond, puis menu sans nouveau toucher). Sans intro,
+   rien ne change (bouton « Commencer »). Les tutoriels démarrent avec le menu, donc après la fin de l'intro.
+6. **Garde-fou** : `src/loader.js` appelle `__fermeIntro.abort()` quand il affiche son aide (« Réparer le jeu »,
+   « Détails ») ; toute erreur du lecteur termine l'intro (jamais d'erreur globale vue par le chargeur).
+
+État `window.__fermeIntro` : `{ active, state: 'off'|'title'|'starting'|'playing'|'fading'|'done', reason, ctx, volume,
+reduced, times: { tap, fading, done }, onGameReady(go), skip(), abort() }` ; `__fermeIntroPlayer.lastPlay` (son, cris
+décodés, mouvement réduit, durée) sert aux vérifications.
+

@@ -635,6 +635,8 @@ export function createDialogs(layer, app) {
       textSizePicker(),
       ...a11yToggles(),
       el('h3.opt-section', 'Téléphone et affichage'),
+      // Intro « MG studios » à chaque ouverture (src/intro/gate.js), activée par défaut
+      optToggle('intro', 'Intro au démarrage', (v) => app.updateSettings({ intro: v }), { sub: 'L\'animation « MG studios » à chaque ouverture du jeu.' }),
       app.wakeLockSupported() ? toggle('keepAwake', 'Garder l\'écran allumé pendant la partie', (v) => app.updateSettings({ keepAwake: v })) : null,
       document.fullscreenEnabled && !app.isStandalone() ? toggle('fullscreen', 'Plein écran', () => app.toggleFullscreen(), () => !!document.fullscreenElement) : null,
       app.canInstall() ? btn([icon('star', 'sm'), 'Installer le jeu sur l\'appareil'], () => app.installApp(), 'btn--wide', { id: 'opt-install' }) : null,
@@ -708,6 +710,7 @@ export function createDialogs(layer, app) {
         el('h3', sprite('crop.carrot.icon', 'sprite--xs'), 'Graphismes'),
         el('p', el('strong', 'Kenney'), ' (', link('https://www.kenney.nl', 'kenney.nl'), ') — Tiny Farm, Tiny Town et UI Pack Pixel Adventure, domaine public (CC0).'),
         el('p.credit-small', 'Quelques tuiles (plants en pousse, tournesol, panneau solaire, arroseur, icônes de météo et de l\'interface) ont été dessinées pour le jeu dans le même style, elles aussi en CC0.'),
+        el('p.credit-small', 'Intro « MG studios » : le coq, le panneau et le décor ont été dessinés pour le jeu (CC0).'),
       ),
       el(
         'section.credit-block',
@@ -726,6 +729,7 @@ export function createDialogs(layer, app) {
             ['jmbphilmes', 'pluie'],
             ['derjuli', 'arrosoir'],
             ['magnuswaker', 'vent'],
+            ['_stubb', 'battement d\'ailes de l\'intro'],
           ].map(([who, what], i, arr) => [el('strong', who), ` (${what})`, i < arr.length - 1 ? ', ' : '.']),
         ),
       ),

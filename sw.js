@@ -34,13 +34,14 @@
 // un sous-dossier (GitHub Pages : https://madec01.github.io/Seve/).
 
 // <precache> — bloc généré par tools/build.js : ne pas modifier à la main
-const VERSION = '0e09b1e481ce';
-// 155 fichiers, 27.9 Mo ; installés d'emblée (core) : 73 fichiers, 2.78 Mo
+const VERSION = 'ec8893570872';
+// 162 fichiers, 28.0 Mo ; installés d'emblée (core) : 80 fichiers, 2.89 Mo
 const PRECACHE = [
-  ["index.html", 'dcd0cfc338bb1a47', 26017, 'core'],
+  ["index.html", '1aa66c7b75e1ac70', 38104, 'core'],
   ["manifest.webmanifest", 'c406b9280302ded5', 1562, 'core'],
-  ["dist/game.c823a8702e.js", '684a03b5d9c56ddf', 2093659, 'core'],
-  ["dist/game.098d785949.css", '098d785949fea7d5', 216929, 'core'],
+  ["dist/game.054f0938f4.js", 'f844421d3fbe9116', 2094476, 'core'],
+  ["dist/game.2d53449a2a.css", '2d53449a2a4998cb', 219803, 'core'],
+  ["dist/intro.3c2664a598.js", 'a3fc96e8b3eba547', 32014, 'core'],
   ["assets/audio/ambience/bees.mp3", 'a0fd6a9f8b4f57e0', 536786, 'lazy'],
   ["assets/audio/ambience/bees.ogg", '0391e2b371b08a96', 400705, 'lazy'],
   ["assets/audio/ambience/birds.mp3", 'b142bbde6b7d5d29', 2776602, 'lazy'],
@@ -49,6 +50,11 @@ const PRECACHE = [
   ["assets/audio/ambience/rain.ogg", '57aa4718f38cd7f9', 642105, 'lazy'],
   ["assets/audio/ambience/wind.mp3", '082ac9200562e5fb', 126260, 'lazy'],
   ["assets/audio/ambience/wind.ogg", 'f93f4aceae8c122a', 91783, 'lazy'],
+  ["assets/audio/intro/ailes.mp3", '1171bfcf9efac2ae', 5956, 'core'],
+  ["assets/audio/intro/coq.mp3", 'f5cd5260c61a1eb2', 21316, 'core'],
+  ["assets/audio/intro/mouton.mp3", 'e9b033f642f6b277', 10345, 'core'],
+  ["assets/audio/intro/poule.mp3", '2e2663d261e0071a', 13479, 'core'],
+  ["assets/audio/intro/vache.mp3", 'f239f9711e2fb879', 14733, 'core'],
   ["assets/audio/music/autumn.mp3", '64c89a4fe6cd440d', 894958, 'lazy'],
   ["assets/audio/music/autumn.ogg", '512acf4f44d97497', 847422, 'lazy'],
   ["assets/audio/music/festival-intro.mp3", '27cfcaf9790f62a4', 163570, 'lazy'],
@@ -138,6 +144,7 @@ const PRECACHE = [
   ["assets/sprites/career.png", '5a56f900f27067c2', 90000, 'core'],
   ["assets/sprites/coach.png", 'f7635ae6471261e0', 1417, 'core'],
   ["assets/sprites/extra.png", '098e40185d5f7f51', 1950, 'core'],
+  ["assets/sprites/intro.png", '1a1d3012acad9391', 2724, 'core'],
   ["assets/sprites/lot2.png", '5655cb48e14ec3cd', 13147, 'core'],
   ["assets/sprites/lot3.png", '3420c4cb1bb93369', 28369, 'core'],
   ["assets/sprites/lot4.png", '595227c2e6a9df92', 24086, 'core'],

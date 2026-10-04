@@ -26,7 +26,240 @@
   <!-- Chargeur et garde-fou de démarrage (script classique, recopié depuis src/loader.js par
        tools/build.js) : télécharge le jeu en montrant la progression, réessaie en cas d'échec,
        affiche la vraie erreur (« Détails ») et le bouton « Réparer le jeu ». -->
-  <script>window.__FERME_BUILD__ = {"id":"dev","dev":true,"module":"src/main.js"};</script>
+  <script>window.__FERME_BUILD__ = {"id":"dev","dev":true,"module":"src/main.js","intro":{"module":"src/intro/player.js"}};</script>
+  <script>
+/* Portillon de l'intro « MG studios » de « Une année à la ferme ».
+ *
+ * Script CLASSIQUE (pas un module), recopié tel quel dans index.html et dev.html par tools/build.js, juste
+ * avant le chargeur (src/loader.js). Même prudence que le chargeur (var, pas de fonctions fléchées) : il
+ * s'exécute dans <head>, avant que la page soit lue, et ne doit JAMAIS empêcher le jeu de démarrer.
+ *
+ * Rôle :
+ *  1. Décide si l'intro se joue : oui à chaque ouverture du jeu, sauf « ?nointro », réglage « Intro au
+ *     démarrage » désactivé (Options), « ?debug=1 » ou navigateur piloté par un robot de test
+ *     (navigator.webdriver) — « ?intro=1 » la force malgré ces deux derniers cas.
+ *     Oui → classe « intro-on » sur <html> AVANT le premier affichage : l'écran-titre « Touchez pour
+ *     commencer » (#intro, css/intro.css) recouvre l'écran de chargement, qui continue dessous.
+ *  2. Télécharge le lecteur de l'intro EN PARALLÈLE du jeu (index.html : dist/intro.<empreinte>.js ;
+ *     dev.html : import() de src/intro/player.js) : il ne retarde jamais le chargement du jeu.
+ *  3. Au toucher (tout l'écran ; Entrée ou Espace au clavier) : crée et débloque l'AudioContext DU JEU
+ *     (window.__fermeIntro.ctx, repris par src/audio/audio.js), puis lance l'animation avec le son
+ *     (volume des effets du joueur ; sans son si le son est coupé ; image fixe si mouvement réduit).
+ *     Toucher pendant l'animation la passe (fondu rapide). Lecteur absent au bout de 4 s : pas d'intro.
+ *  4. Relais avec le jeu (src/main.js) : window.__fermeIntro.onGameReady(go) — le jeu, une fois prêt,
+ *     confie son passage au menu. Il est appelé au début du fondu final (le menu apparaît sous l'intro :
+ *     fondu enchaîné), ou tout de suite si l'intro est déjà finie (l'écran de chargement avait pris le
+ *     relais, sans saut : même fond).
+ *  5. window.__fermeIntro.abort() : le chargeur l'appelle s'il affiche son aide (« Réparer le jeu ») :
+ *     l'intro s'efface pour ne rien cacher.
+ *
+ * État (window.__fermeIntro.state) : 'off' | 'title' | 'starting' | 'playing' | 'fading' | 'done'.
+ */
+(function () {
+  'use strict';
+  var BUILD = window.__FERME_BUILD__ || {};
+  var SETTINGS_KEY = 'une-annee-a-la-ferme.settings';
+  var PLAYER_WAIT = 4000;
+  var root = document.documentElement;
+
+  var api = {
+    active: false,
+    state: 'off',
+    reason: '',
+    ctx: null,
+    reduced: false,
+    volume: 0,
+    onGameReady: function (go) { run(go); },
+    abort: function () {},
+    skip: function () {},
+    times: {}, // (vérifications) instants (performance.now) du toucher, du début du fondu, de la fin
+  };
+  window.__fermeIntro = api;
+
+  function stamp(k) { try { if (!api.times[k]) api.times[k] = performance.now(); } catch (e) { /* */ } }
+  function run(fn) { try { fn(); } catch (e) { setTimeout(function () { throw e; }, 0); } }
+
+  // ── Décision ────────────────────────────────────────────────────────────────────────
+  var settings = {};
+  try { settings = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { settings = {}; }
+  var params;
+  try { params = new URLSearchParams(location.search); } catch (e) { params = null; }
+  var has = function (k) { return !!(params && params.has(k)); };
+  var get = function (k) { return params ? params.get(k) : null; };
+  var forced = get('intro') === '1';
+  var reason = '';
+  if (!BUILD.intro) reason = 'pas de lecteur';
+  else if (has('nointro') || get('intro') === '0') reason = '?nointro';
+  else if (settings.intro === false && !forced) reason = 'réglage';
+  else if (!forced && get('debug') === '1') reason = '?debug=1';
+  else if (!forced && navigator.webdriver) reason = 'robot de test';
+  api.reason = reason;
+  if (reason) return;
+
+  api.active = true;
+  api.state = 'title';
+  var mq = false;
+  try { mq = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { mq = false; }
+  api.reduced = settings.reducedMotion === true || mq;
+  var num = function (v, d) { v = Number(v); return isFinite(v) ? Math.max(0, Math.min(1, v)) : d; };
+  var sfx = num(settings.sfxVolume, 0.8);
+  api.volume = settings.muted === true ? 0 : sfx * sfx; // même courbe que le jeu (src/audio/audio.js)
+  root.className += (root.className ? ' ' : '') + 'intro-on' + (api.reduced ? ' intro-reduced' : '');
+
+  // ── Lecteur (en parallèle du jeu) ─────────────────────────────────────────────────────
+  var playerWaiters = [];
+  function playerReady() {
+    if (!window.__fermeIntroPlayer) return;
+    var list = playerWaiters;
+    playerWaiters = [];
+    for (var i = 0; i < list.length; i++) list[i]();
+  }
+  window.addEventListener('ferme-intro-player', playerReady);
+  function loadPlayer() {
+    try {
+      if (BUILD.intro.module) {
+        var dynImport = new Function('u', 'return import(u)');
+        dynImport(new URL(BUILD.intro.module, location.href).href).then(playerReady, function (err) {
+          try { console.warn('[intro] lecteur introuvable : ' + (err && err.message ? err.message : err)); } catch (e) { /* */ }
+        });
+      } else {
+        var s = document.createElement('script');
+        s.src = BUILD.intro.src;
+        s.async = true;
+        s.setAttribute('data-intro', '1'); // (src/loader.js ne compte pas son échec comme un échec du jeu)
+        s.onerror = function () { try { console.warn('[intro] lecteur introuvable : ' + BUILD.intro.src); } catch (e) { /* */ } };
+        (document.head || root).appendChild(s);
+      }
+    } catch (e) { /* sans lecteur : pas d'intro, le jeu démarre normalement */ }
+  }
+  loadPlayer();
+
+  // ── Relais avec le jeu ────────────────────────────────────────────────────────────────
+  var gameGo = null;
+  function callGo() {
+    if (!gameGo) return;
+    var go = gameGo;
+    gameGo = null;
+    run(go);
+  }
+  api.onGameReady = function (go) {
+    gameGo = go;
+    if (api.state === 'fading' || api.state === 'done') callGo();
+  };
+
+  // ── Écran-titre, toucher, animation ──────────────────────────────────────────────────
+  var el = null;
+  var controller = null;
+  function fadeStarted() {
+    if (api.state === 'done') return;
+    api.state = 'fading';
+    stamp('fading');
+    callGo();
+  }
+  function finish() {
+    if (api.state === 'done') return;
+    fadeStarted();
+    api.state = 'done';
+    stamp('done');
+    root.className = root.className.replace(/\s*\bintro-(on|reduced)\b/g, '');
+    if (el) {
+      el.setAttribute('hidden', '');
+      el.style.opacity = '';
+      if (document.activeElement === el) { try { el.blur(); } catch (e) { /* */ } }
+    }
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('visibilitychange', onVisibility);
+  }
+
+  function unlockAudio() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    var ctx = api.ctx;
+    try {
+      if (!ctx) { ctx = new AC(); api.ctx = ctx; }
+      if (ctx.state !== 'running' && ctx.resume) ctx.resume().catch(function () {});
+      // petit tampon silencieux : débloque aussi les anciens Safari
+      var b = ctx.createBuffer(1, 1, 22050);
+      var src = ctx.createBufferSource();
+      src.buffer = b;
+      src.connect(ctx.destination);
+      src.start(0);
+    } catch (e) { /* sans son */ }
+    return ctx;
+  }
+
+  function startPlayer() {
+    var P = window.__fermeIntroPlayer;
+    if (!P || api.state !== 'starting') { if (!P) finish(); return; }
+    var canvas = el.querySelector('.intro-canvas');
+    try {
+      controller = P.play({
+        root: el,
+        canvas: canvas,
+        ctx: api.volume > 0 ? api.ctx : null,
+        volume: api.volume,
+        reduced: api.reduced,
+        onFadeStart: fadeStarted,
+        onDone: finish,
+      });
+      api.state = 'playing';
+    } catch (e) {
+      try { console.warn('[intro] ' + (e && e.message ? e.message : e)); } catch (e2) { /* */ }
+      finish();
+    }
+  }
+
+  var startedAt = 0;
+  function start() {
+    if (api.state !== 'title') return;
+    api.state = 'starting';
+    startedAt = Date.now();
+    stamp('tap');
+    unlockAudio();
+    if (el) el.className += ' is-tapped';
+    if (window.__fermeIntroPlayer) { startPlayer(); return; }
+    var timer = setTimeout(function () { if (api.state === 'starting') finish(); }, PLAYER_WAIT);
+    playerWaiters.push(function () { clearTimeout(timer); startPlayer(); });
+  }
+
+  api.skip = function () {
+    if (api.state === 'playing' && controller) controller.skip();
+    else if (api.state === 'starting') finish();
+  };
+  api.abort = function () {
+    if (api.state === 'title' || api.state === 'starting') finish();
+    else if (api.state === 'playing') api.skip();
+  };
+
+  function onTap(e) {
+    if (api.state === 'title') {
+      if (e.type === 'pointerup' && e.pointerType === 'mouse' && e.button !== 0) return;
+      start();
+    } else if (api.state === 'playing' && Date.now() - startedAt > 500) api.skip(); // (pas le toucher qui l'a lancée)
+    if (e.cancelable && e.type !== 'pointerup') e.preventDefault();
+  }
+  function onKey(e) {
+    if (api.state === 'title' && (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar')) { e.preventDefault(); start(); }
+    else if (api.state === 'playing' && e.key !== 'Tab') { e.preventDefault(); api.skip(); }
+  }
+  function onVisibility() { if (document.hidden && api.state === 'playing') api.skip(); }
+
+  function bind() {
+    el = document.getElementById('intro');
+    if (!el) { finish(); return; }
+    el.removeAttribute('hidden');
+    // Chrome Android : seuls touchend / pointerup / click débloquent l'audio au doigt (pas pointerdown)
+    el.addEventListener('pointerup', onTap);
+    el.addEventListener('touchend', onTap, { passive: false });
+    el.addEventListener('click', onTap);
+    el.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('visibilitychange', onVisibility);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+  else bind();
+})();
+  </script>
   <script>
 /* Chargeur et garde-fou de démarrage de « Une année à la ferme ».
  *
@@ -55,6 +288,10 @@
  *     désigne en contournant le cache HTTP (fetch cache: 'reload'), puis recharge la page avec
  *     « ?r=<heure> » (retiré de l'adresse au chargement suivant). localStorage (progression,
  *     partie) n'est jamais touché.
+ *
+ * L'intro « MG studios » (portillon src/intro/gate.js, recopié juste avant ce script) se joue par-dessus
+ * l'écran de chargement pendant que ce chargeur continue : elle ne change rien à son travail ; s'il doit
+ * afficher son aide, il l'efface (window.__fermeIntro.abort()).
  *
  * Interface pour le jeu (src/main.js) : window.__bootProgress(0..1) (suite du chargement, après
  * le paquet), window.__bootOk() (écran « Prêt ! »), window.__bootFail(err).
@@ -173,6 +410,8 @@
 
   function showHelp(message) {
     if (ok) return;
+    // L'intro « MG studios » (src/intro/gate.js) s'efface : l'aide et « Réparer le jeu » doivent se voir.
+    try { if (window.__fermeIntro && window.__fermeIntro.active) window.__fermeIntro.abort(); } catch (e) { /* */ }
     whenDom(function () {
       if (ok) return;
       var box = $('#loading .loading-box') || document.body;
@@ -326,8 +565,9 @@
     if (ok) return;
     var t = e.target;
     if (e instanceof ErrorEvent || e.error) { fail(e.error && e.error.message ? e : (e.message || e.error), 'script'); return; }
-    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais.)
-    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry')) fail('script introuvable : ' + (t.src || ''), 'script');
+    // (Les balises de loadByTag gèrent elles-mêmes leurs nouveaux essais ; le lecteur de l'intro, data-intro,
+    // est facultatif : sans lui, le jeu démarre sans intro.)
+    if (t && t.tagName === 'SCRIPT' && !t.hasAttribute('data-boot-retry') && !t.hasAttribute('data-intro')) fail('script introuvable : ' + (t.src || ''), 'script');
   }, true);
   window.addEventListener('unhandledrejection', function (e) {
     if (ok) return;
@@ -535,6 +775,7 @@
   <link rel="stylesheet" href="css/cozy.css" data-boot-css="css/cozy.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
   <link rel="stylesheet" href="css/valley.css" data-boot-css="css/valley.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
   <link rel="stylesheet" href="css/coach.css" data-boot-css="css/coach.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
+  <link rel="stylesheet" href="css/intro.css" data-boot-css="css/intro.css" onload="__bootCss(this,true)" onerror="__bootCss(this,false)">
 </head>
 <body class="is-loading">
   <!-- Scène de la ferme (canvas pixel art), sous toute l'interface : plein écran -->
@@ -583,6 +824,20 @@
       <button type="button" class="btn btn--red btn--big loading-start" hidden>Commencer</button>
       <p class="loading-error" hidden></p>
     </div>
+  </div>
+
+  <!-- Intro « MG studios », à chaque ouverture du jeu (src/intro/gate.js décide et met « intro-on » sur
+       <html> ; css/intro.css) : écran-titre « Touchez pour commencer » (le toucher débloque le son), puis
+       l'animation, pendant que le jeu se charge dessous ; fondu enchaîné vers le menu ou l'écran de chargement. -->
+  <div id="intro" class="intro" role="button" tabindex="0" aria-label="Touchez pour commencer">
+    <canvas class="intro-canvas" aria-hidden="true"></canvas>
+    <div class="intro-title">
+      <div class="intro-box">
+        <div class="logo-ribbon"><p class="logo-title">Une année à la ferme</p></div>
+        <p class="intro-sign">Touchez pour commencer</p>
+      </div>
+    </div>
+    <p class="intro-skip" aria-hidden="true">Touchez pour passer</p>
   </div>
 
   <noscript>
