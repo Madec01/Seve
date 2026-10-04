@@ -967,3 +967,12 @@ employés. » → « Suivant » → 2ᵉ carte → 3ᵉ carte → « Compris ».
    - B : Complet sans demander (tout le monde pareil ; plus de bulles pour un joueur expérimenté, mais les rudiments ne
      sont pas rejoués grâce au § 10.3).
    - C : Discret sans demander.
+
+## Décisions de l'utilisateur (2026-10-04)
+
+1. Guide : **Joseph**, petite bulle avec portrait, doigt qui montre, textes courts.
+2. Présence : **montrer, puis rappeler** ; réglage Complet / Discret / Aucun.
+3. Tutoriel de début de carrière **en jouant**.
+4. Début de carrière : **6 carottes déjà mûres** (`createCareer({ starter: true })`, carrière seulement, sans tirage aléatoire).
+5. **Carnet de Joseph et Guide de la ferme fusionnés** en un seul carnet (Leçons · Mots de la ferme · Rappels).
+6. Joueurs ayant déjà une partie : **on leur demande une fois**, Discret présélectionné ; les rudiments déjà acquis ne sont jamais rejoués.
