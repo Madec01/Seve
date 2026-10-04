@@ -305,6 +305,48 @@ export function createDialogs(layer, app) {
     );
   }
 
+  /**
+   * « Sons de l'interface : Normaux · Doux · Coupés » (settings.uiSound, défaut « Doux ») : boutons, fiches, onglets,
+   * bascules, erreurs (src/audio/ui-sounds.js). Les sons du jeu (récolte, pièces, animaux…) n'en dépendent pas. Au
+   * choix, un « toc » d'essai dans le nouveau mode.
+   */
+  function uiSoundPicker() {
+    const CHOICES = [['normal', 'Normaux'], ['soft', 'Doux'], ['off', 'Coupés']];
+    const group = el('div.seg.opt-uisound', { role: 'radiogroup', 'aria-label': 'Sons de l\'interface', id: 'opt-uiSound' });
+    const items = CHOICES.map(([id, label]) => el(
+      'button.seg-btn',
+      {
+        type: 'button',
+        role: 'radio',
+        id: `opt-uisound-${id}`,
+        'data-mode': id,
+        onclick: () => {
+          if ((app.settings.uiSound || 'soft') === id) return;
+          app.updateSettings({ uiSound: id });
+          app.audio.play('toggle');
+          sync();
+        },
+      },
+      el('span', label),
+    ));
+    group.append(...items);
+    const sync = () => {
+      for (const b of items) {
+        const on = b.dataset.mode === (app.settings.uiSound || 'soft');
+        b.classList.toggle('is-on', on);
+        b.setAttribute('aria-checked', on ? 'true' : 'false');
+        b.tabIndex = on ? 0 : -1;
+      }
+    };
+    sync();
+    return el(
+      'div.opt-block.opt-uisound-block',
+      el('span.opt-label', el('b', 'Sons de l\'interface')),
+      group,
+      el('p.opt-note', 'Boutons, fiches et onglets. « Doux » : petits sons feutrés et discrets. Les sons du jeu ne changent pas.'),
+    );
+  }
+
   function textSizePicker() {
     const group = el('div.seg', { role: 'radiogroup', 'aria-label': 'Taille du texte', id: 'opt-textScale' });
     const items = TEXT_SCALES.map((k) => {
@@ -622,6 +664,7 @@ export function createDialogs(layer, app) {
       el('h3.opt-section', 'Volumes'),
       slider('musicVolume', 'Musique'),
       slider('sfxVolume', 'Sons'),
+      uiSoundPicker(),
       slider('ambienceVolume', 'Ambiance'),
       natureSoundPicker(),
       toggle('muted', 'Couper tout le son', (v) => app.updateSettings({ muted: v })),

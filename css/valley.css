@@ -782,12 +782,13 @@ body.in-valley-view #toasts > #toast-more { display: none; }
 .vl4-ba-arrow { font-size: 1.25rem; font-weight: 700; color: var(--text-soft); }
 @media (max-width: 379px) { .sprite--vl-ba { --sk: 1.25; } }
 
-/* ─── Options › Son : « Sons de la vallée » ─── */
-.opt-nature { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
-.opt-nature .seg-btn { min-height: 48px; font-size: 1rem; }
-.opt-nature .seg-btn.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); background: #eef6dc; }
-.opt-nature .seg-btn.is-on span::after { content: ' ✓'; }
-.opt-nature-note { margin: 4px 0 0; font-size: 0.75rem; }
+/* ─── Options › Son : « Sons de la vallée », « Sons de l'interface » ─── */
+/* (et « Sons de l'interface » : même sélecteur à trois boutons) */
+.opt-nature, .opt-uisound { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.opt-nature .seg-btn, .opt-uisound .seg-btn { min-height: 48px; font-size: 1rem; }
+.opt-nature .seg-btn.is-on, .opt-uisound .seg-btn.is-on { box-shadow: inset 0 0 0 calc(var(--u) * 2) var(--green-text, #2f6620); background: #eef6dc; }
+.opt-nature .seg-btn.is-on span::after, .opt-uisound .seg-btn.is-on span::after { content: ' ✓'; }
+.opt-nature-note, .opt-uisound-block .opt-note { margin: 4px 0 0; font-size: 0.75rem; }
 
 /* ─── Vue de la vallée : banc, générique, contemplation ─── */
 .vv-bench .vv-bench-ico { font-size: 1.25rem; line-height: 1; }

@@ -95,3 +95,15 @@ test('progression v1 : migrée au schéma 2, succès des anciennes parties débl
   assert.equal(storage.progressMigration(), null);
   store.clear();
 });
+
+test('réglage « Sons de l\'interface » : « Doux » par défaut, valeur inconnue ignorée', () => {
+  assert.equal(storage.DEFAULT_SETTINGS.uiSound, 'soft');
+  assert.deepEqual([...storage.UI_SOUNDS], ['normal', 'soft', 'off']);
+  for (const v of ['normal', 'soft', 'off']) {
+    store.set(KEY('settings'), JSON.stringify({ uiSound: v }));
+    assert.equal(storage.loadSettings().uiSound, v);
+  }
+  store.set(KEY('settings'), JSON.stringify({ uiSound: 'strident' }));
+  assert.equal(storage.loadSettings().uiSound, 'soft');
+  store.clear();
+});

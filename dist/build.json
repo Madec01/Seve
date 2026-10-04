@@ -1,8 +1,8 @@
 {
-  "id": "ec8893570872",
+  "id": "877a91c37aa5",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.054f0938f4.js",
-  "css": "dist/game.2d53449a2a.css",
+  "js": "dist/game.5bd7797ad9.js",
+  "css": "dist/game.ba9aa837a5.css",
   "intro": "dist/intro.3c2664a598.js",
   "esbuild": "0.28.2",
   "sources": {
@@ -170,15 +170,16 @@
     "css/intro.css": "b2fa4ae351ee85c1",
     "css/lot2.css": "76e1d7a60818095c",
     "css/style.css": "78ab38d6809648b4",
-    "css/valley.css": "b47dbee287e94157",
+    "css/valley.css": "2e4eefb8dc453483",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
     "package-lock.json": "0427b01786f008ef",
-    "src/audio/audio.js": "937500948e78cc6f",
+    "src/audio/audio.js": "8dac5737b8c893b3",
     "src/audio/manifest.js": "bcd255827929807c",
     "src/audio/nature.js": "07fb1bd2af3676cb",
     "src/audio/soundscape.js": "45ac70feb0952c1b",
     "src/audio/synth.js": "5813652dda9c6215",
+    "src/audio/ui-sounds.js": "d493ae37018c8456",
     "src/core/album.js": "a5f408de43286be7",
     "src/core/calendar.js": "b34f33abf62266cd",
     "src/core/career/animals.js": "d1a9e3ee6f678720",
@@ -290,7 +291,7 @@
     "src/render/valley-actors.js": "a4074725333c53ae",
     "src/render/valley-view.js": "bd9443d3a1822cbf",
     "src/render/variety-actors.js": "16e1e7c7da623a66",
-    "src/storage.js": "3e28f2eea153a745",
+    "src/storage.js": "8f584cc84474c731",
     "src/ui/a11y.js": "d5d561bd705da86f",
     "src/ui/album.js": "dde98a975b74852c",
     "src/ui/buildings.js": "3935e0120d094ec7",
@@ -328,7 +329,7 @@
     "src/ui/coach/targets.js": "813030561fd2deea",
     "src/ui/cozy.js": "3dc38c64e2620d0b",
     "src/ui/decor.js": "c295c12c0681e1c0",
-    "src/ui/dialogs.js": "0071ee0232b75130",
+    "src/ui/dialogs.js": "c13b7f34b6cd8921",
     "src/ui/dom.js": "4ce9149d5d52a48f",
     "src/ui/field.js": "915d34114bf39cf0",
     "src/ui/gestures.js": "1676adca98475022",
@@ -356,6 +357,16 @@
     "tools/build.js": "0e9d302d00a9cf50"
   },
   "history": [
+    {
+      "id": "877a91c37aa5",
+      "files": [
+        "dist/game.5bd7797ad9.js",
+        "dist/game.5bd7797ad9.js.map",
+        "dist/game.ba9aa837a5.css",
+        "dist/intro.3c2664a598.js",
+        "dist/intro.3c2664a598.js.map"
+      ]
+    },
     {
       "id": "ec8893570872",
       "files": [
@@ -389,14 +400,6 @@
       "files": [
         "dist/game.f2642e2b3b.js",
         "dist/game.f2642e2b3b.js.map",
-        "dist/game.098d785949.css"
-      ]
-    },
-    {
-      "id": "3ce3c8f0f730",
-      "files": [
-        "dist/game.2ed4ab143f.js",
-        "dist/game.2ed4ab143f.js.map",
         "dist/game.098d785949.css"
       ]
     }

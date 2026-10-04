@@ -68,6 +68,8 @@ src/
   audio/
     audio.js               musique (fondus), ambiances, effets sonores, volumes
     synth.js               (lot 2) sons synthétisés (marimba pentatonique, scintillements, fanfare…)
+    ui-sounds.js           sons DOUX de l'interface (logique pure, calculés une fois) : réglage settings.uiSound
+                           'normal' (Kenney) · 'soft' (défaut) · 'off' ; voir « Sons de l'interface » ci-dessous
   storage.js               localStorage (partie, carrière + copie de secours, progression, options) avec try/catch
 assets/
   sprites/                 packs Kenney (Tiny Farm, Tiny Town, UI Pack Pixel Adventure)
@@ -6345,4 +6347,21 @@ ouverture du jeu** avant le menu, pendant que le jeu se charge dessous. Demande 
 État `window.__fermeIntro` : `{ active, state: 'off'|'title'|'starting'|'playing'|'fading'|'done', reason, ctx, volume,
 reduced, times: { tap, fading, done }, onGameReady(go), skip(), abort() }` ; `__fermeIntroPlayer.lastPlay` (son, cris
 décodés, mouvement réduit, durée) sert aux vérifications.
+
+## Sons de l'interface (réglage « Normaux · Doux · Coupés »)
+
+- Sons d'interface = `UI_SOUND_NAMES` (`src/audio/ui-sounds.js`) : `click`, `hover`, `toggle`, `open`, `close`, `page`,
+  `confirm`, `error`, `warning`. Les appels ne changent pas (`app.audio.play('click', { volume })`) : `audio.play()`
+  les reconnaît et suit `settings.uiSound` (`src/storage.js`, `UI_SOUNDS`, défaut `'soft'`).
+- `'normal'` : fichiers Kenney du catalogue, comme avant (variation ±5 %), au plus une fois toutes les 80 ms.
+- `'soft'` : `renderUiSound(name, sampleRate)` calcule au déverrouillage un tampon mono par son (aucun fichier ; `hover`
+  → `null`, muet). Lecture : gain (`opts.volume` × répétition) → passe-bas 3 kHz → bus des effets ; ±3 % de hauteur ;
+  même son ≥ 80 ms ; silence si un autre son d'interface a joué depuis moins de 90 ms (160 ms pour `open` / `close`),
+  sauf `error`, `confirm`, `warning` ; série du même son en moins de 1,2 s : −15 % par répétition, plancher 40 %. Le
+  volume du catalogue (`AUDIO.sfx[name].volume`) ne s'applique pas : le niveau est celui de la recette (`SOFT_UI[name].level`,
+  RMS de la fenêtre de 50 ms la plus forte, −29 à −41 dBFS ; récolte ≈ −19 dB).
+- `'off'` : aucun son d'interface. Les sons du jeu (catalogue hors interface, `note()`, `tone()`, vallée) n'en dépendent pas.
+- `audio.uiStats()` : `{ played, skipped, last, lastVolume, mode }` (mesures, tests au doigt).
+- Options › Volumes : sélecteur `#opt-uiSound` (`#opt-uisound-normal|soft|off`, 3 boutons ≥ 48 px) sous « Sons ».
+- Tests : `tests/ui-sounds.test.js` (spectre, attaque, saturation, niveau).
 
