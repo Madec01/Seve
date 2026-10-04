@@ -3303,13 +3303,22 @@ src/ui/zoom.js       createZoomControls(app) → { frame(), changed(), root, sto
   zoom`, `minWorld = 48 × dpr / zoom`) ; tout ce qui se place sur la scène lit `worldToScreen` / `viewRect`
   (`app.plotPageRect`, anneaux, pièces volantes, tutoriel, mini-carte `getMinimap` → cadre de la vue).
 - **Boutons** `#zoom-controls` (`#zoom-in`, `#zoom-out`, `#zoom-reset` « 1:1 » seulement hors défaut), 48 × 48 px,
-  `z-index` 18 ; à droite au-dessus de `--inset-bottom + --todo-h` ; `[data-minimap=shown|collapsed]` : à gauche de la
-  mini-carte (et de son bouton « Cacher ») ; `html.left-handed` : à gauche ; grand écran : en bas à droite de la
-  scène, à gauche du panneau ouvert. Cachés sous une feuille (téléphone), une fenêtre, une bulle, au menu.
-- **Place des messages** : `frame()` publie la hauteur occupée depuis le bas de l'écran par la colonne de zoom (comptée
-  avec « 1:1 », 3 × 48 + 2 × 4 px) et la mini-carte (cadre, boutons, ou bouton « Carte ») : `--float-reserve` sur
-  `<html>` et `body.has-float-ui` ; `#toasts` se pose au-dessus (`css/guidance.css`), plafonné sous la barre du haut.
-  Les messages ne recouvrent ni les boutons, ni la mini-carte, ni la ligne « À faire » (droitier comme gaucher).
+  `z-index` 18, **collés au bord de l'écran** (`--safe-r` + 6 px, pastille au bord du cadre de la mini-carte ; + 4 px sur
+  petit écran) — retour joueur du 2026-10-04 : « au bord de l'écran, au-dessus de la mini-carte ». Placement en CSS
+  selon `[data-minimap=shown|collapsed|none]` : **carrière** juste au-dessus de la mini-carte (`--mm-bottom + --mm-h +
+  26 px` de boutons de coin `+ 6 px`), ou du bouton « Carte » repliée (`--mm-bottom + 52 + 6 px`) ; les variables
+  `--mm-bottom` / `--mm-h` / `--mm-right` (css/style.css, `body.has-todo` dans guidance.css) placent aussi la mini-carte,
+  une seule source. **Niveaux** : au même bord, au-dessus de la ligne « À faire » (`--inset-bottom + --todo-h + 8 px`).
+  **Gaucher** : la mini-carte reste à droite, la colonne aussi en carrière (au-dessus d'elle) ; en Niveaux, bord gauche.
+  Ancrée par le bas, « 1:1 » en haut : + et − ne bougent pas. Grand écran : en bas à droite (au-dessus de la mini-carte
+  en carrière), à gauche du panneau ouvert. Cachés sous une feuille (téléphone), une fenêtre, une bulle, au menu, dans la
+  vue de la vallée.
+- **Place des messages** : `frame()` publie sur `<html>` la hauteur occupée depuis le bas par la mini-carte (cadre et
+  boutons, ou bouton « Carte ») : `--float-reserve`, et la largeur occupée au bord par la colonne de zoom :
+  `--float-col-r` / `--float-col-l` ; `body.has-float-ui`. `#toasts` (`css/guidance.css`) se pose au-dessus de la
+  mini-carte et de la ligne « À faire », **à côté** de la colonne (`left` / `right` réservés, centré dans la place qui
+  reste, ≤ 30rem), plafonné sous la barre du haut ; rien n'est publié en grand écran ni dans la vue de la vallée. Les
+  messages ne recouvrent ni les boutons, ni la mini-carte, ni la ligne « À faire » (droitier comme gaucher).
 - **Mouvement réduit** (`reducedMotion` ou `html.reduced-motion`) : `setZoom` et la fin du pincement posent le zoom
   sans animation.
 - **Préférence** : `localStorage` `une-annee-a-la-ferme.zoom` = `{ levels?: r, career?: r }` (rapport au défaut ; absent =
@@ -3756,7 +3765,9 @@ et après le lot.
   panorama en couches, défilement vertical, cibles des lieux) ; cultures-arbres `VALLEY_TREES` (cerisier, poirier, reinette)
   **hors de `CROPS`** ; 10 habitants de la vallée ; étapes 6 et 7 ; thème `valley` (lot 3) ; pages `valleyWild`, `places` ;
   planche `valley3.png`.
-- **V4 « Les cigognes »** : légendes (`LEGENDS`, 3ᵉ génération, melon de la mère de Joseph), visiteurs rarissimes, étape
+- **V4 « Les cigognes »** — *contrats écrits : section « Vallée vivante — contrats du lot V4 » (plus bas), qui remplace cet
+  aperçu (légendes sous cloche, visiteurs rares, cigognes sans chantier, paysage sonore synthétisé, livre, épilogue, flux
+  `valley4`)* : légendes (`LEGENDS`, 3ᵉ génération, melon de la mère de Joseph), visiteurs rarissimes, étape
   8, forêt de la carte en 4 états (RENDER), ambiance sonore en couches (sons CC0), « avant / après » au bilan (vignettes
   composées par RENDER), page `legends` ; aucun effet sur le revenu ; planche `valley4.png`.
 
@@ -5247,3 +5258,780 @@ Corrections de l'intégration (interface seulement ; le cœur ne change pas, sau
   message) ; `wilds.total` = 18 ; `wildGrow` ; fruits du cerisier et du poirier jamais au grenier ; `PLACES_ACHIEVEMENTS`
   déjà rangés sous « La Vallée » (`src/ui/grange.js`, « La Vallée · n / 21 »). Terres sauvages : **aucune attente
   ajoutée** (évaluation chiffrée : `docs/VALLEE.md` § 17.12.8). Test : `tests/valley3-qa.test.js`.
+
+## Vallée vivante — contrats du lot V4 (CORE · ART · AUDIO · UI/RENDER, conception 2026-10-04)
+
+« Les cigognes » : **4 légendes** sous cloche (aucune vente), **6 visiteurs rares** (dont les cigognes, déterministes),
+**l'étape 8**, le nid sur la maison, **5 récits + l'épilogue** de Joseph, le **générique doux**, **le livre de la vallée**,
+les **cartes des vallées voisines**, la **forêt de la carte en 4 états**, le **paysage sonore** synthétisé, 2 pages d'album,
+9 succès, 3 décors. Règles chiffrées et contenus : **`docs/VALLEE.md` § 18** (résumé : `docs/GAME_DESIGN.md` § 18.3). Ce
+contrat **s'ajoute** aux contrats V1, V2, V3 et à leurs « Écarts et précisions » : rien n'y est retiré ni renommé. Tant que
+CORE n'a pas livré, UI/RENDER/AUDIO travaillent sur des objets factices de même forme ; tant qu'ART n'a pas livré, repli
+dessiné (`canDraw`, `spriteAny`, `vIcon`). **Le V4 ne change aucun nombre de l'économie** : c'est vérifié par une empreinte.
+
+### Règles communes (en plus de celles du V1, du V2 et du V3)
+
+- **Carrière seulement**, gardé par `state.career?.valley` **et** `parts.storks` (nouvelle partie, absente = vraie) **et**
+  `parts.places` **et** `parts.heritage` (le V4 n'existe pas sans le V3). Lecture unique : `storksOn(state)`
+  (`src/core/career/storks.js`). `{ storks: false }` = **le V1 + V2 + V3 exact** (état, tirages, empreinte sur 24 ans).
+  Partie de niveau : aucun code nouveau, aucun son nouveau ; `tests/parity.test.js`, `tools/capture-parity.js --check`
+  (400 / 400) et `node tools/simulate.js` (octet pour octet) inchangés ; **Classique des niveaux strictement inchangé**.
+- **Aléatoire** : un flux **nouveau, `state.rng.valley4`** (`hashSeed(seed, 'valley4')`), créé par l'extension `valley`
+  (`init` / `migrate`) seulement avec la partie `storks`. Tirages fixes : **à chaque aube** où la vue de la vallée est
+  ouverte (`view.open`) et `parts.wildlife` : **5 nombres**, un par visiteur de `VISITORS` **tiré** (ordre des données :
+  `crane`, `redDeer`, `oriole`, `beaver`, `glowworms` ; `whiteStork` n'est pas tiré), candidat ou non. **Rien d'autre** :
+  légendes, cloches, Merveille, cigognes (jour des cigognes, cigogneaux), cartes, phrases du banc et d'Hélène, passages
+  décoratifs, arc-en-ciel : **déterministes** (données, jours absolus, `hashSeed(seed, clé)` ou hachage pur `(absDay, id)`).
+  `valley`, `valley2`, `valley3`, `orders`, `variety`, `events`, `cozy`, `quality`, `surprise`, `sky`, `staff`, `career`,
+  météo et marché tirent **exactement** les mêmes nombres.
+- **Aucun effet économique** : aucune action du V4 n'appelle `api.earn` ni `api.spend` ; aucun fournisseur `effects`,
+  `incomes`, `patrimony` nouveau ; aucun champ de parcelle nouveau ; les légendes ne passent jamais par `plant`, `harvest`,
+  le grenier, les ateliers, les commandes. Test d'empreinte : l'argent de chaque jour sur 24 ans est identique avec et sans
+  `storks` (robots compris).
+- **Ordre des données = ordre des tirages** : `VISITORS` (filtré `drawn: true`) ne change jamais d'ordre ; les tables du
+  V1 au V3 ne changent pas ; les nouvelles données vivent dans `src/data/career/storks.js`.
+- **Pur** : `src/data/career/storks.js` (n'importe rien), `src/core/career/storks.js`, `src/audio/soundscape.js` : ni DOM,
+  ni horloge, ni `Math.random`. Le moteur sonore `src/audio/nature.js` peut utiliser `Math.random` (le son n'est pas la
+  logique du jeu et n'écrit rien dans l'état).
+- **Temps** : jours absolus (`absDay`) ; une durée « en saisons » = `n × state.career.seasonLength` jours ; la pousse sous
+  cloche est en **jours de culture** (`growDays` de la culture) ; le jour des cigognes est un jour de printemps (2 à 4).
+- Actions : `{ ok: true, … }` ou `{ ok: false, reason }` (français) ; identifiants en anglais ; accords `g` / `pl` / `the`.
+
+### Fichiers
+
+```
+src/data/career/storks.js     (nouveau, pur, n'importe rien)
+    LEGENDS (4, ordre fixe : motherMelon, millEinkorn, farmMarvel, storkPea) :
+      { id, cropId ('melon' | 'wheat' | 'tomato' | 'pea'), name, sub /* « Melon Petit Gris de Rennes » */, nameFarm?: true
+        (farmMarvel : « La Merveille {ofFarm} », calculé), g, the, icon 'legend.<id>.icon', growDays (6 | 4 | 5 | 3),
+        wake: { kind: 'stage', n: 6 } | { kind: 'place', id: 'brook', step: 4 } | { kind: 'generations' } | { kind: 'stage', n: 8 },
+        story /* id de STORIES_V4 */, anecdote, firstHarvest /* phrase */, label }
+    LEGEND_RULES { cloches: 4, needLibrary: 1, marvel: { crossId: 'crossTomato', gens: 3, season: 'summer',
+      qualities: ['fine', 'gold'] /* sans les surprises : toute récolte à la main */ }, onePerDawn: true }
+    VISITORS (6, ordre fixe : whiteStork, crane, redDeer, oriole, beaver, glowworms) :
+      { id, name, the, g, pl, icon 'visitor.<id>', seasons, drawn: bool (whiteStork : false), recipe: [need],
+        where: 'view' | 'farm', placeId? ('poppies' | 'combe' | 'oldOrchard' | 'brook'), spot? ('steeple' | 'hedge'),
+        hint, hintIcon, anecdote, title, welcome, decor: { view?, farm? } }
+      need = { kind: 'stage', n } | { kind: 'place', id, step, sinceSeasons? } | { kind: 'nature', id: 'hedge', n }
+    VISITOR_RULES { hintChance: 0.06, visibleChance: 0.5, maxWait: 3 }
+    STORK_RULES { dayMin: 2, dayMax: 4, chicksMin: 1, chicksMax: 4, needs: [{ kind: 'stage', n: 7 },
+      { kind: 'place', id: 'millpond', step: 2 }, { kind: 'place', id: 'poppies', step: 2 }] }
+    STAGE_V4 { n: 8, id: 'storks', name: 'Les cigognes', signs: null, needs: { storkSeen: true }, reward: { ecus: 100 },
+      vignette 'valley.stage.8', chapter: { title, lines[3] } }
+    STORIES_V4 (5 : melon, mill, marvel, peas, storkNest : { id, title, vignette, lines[3] /* {ofFarm} remplacé par le
+      cœur */, when: { legend: id } | 'storkNest' })
+    EPILOGUE { id: 'epilogue', title: 'La vallée retrouvée', pages: [3 × { vignette, lines[3] }], credits: { title, cards:
+      [{ placeId?, text }], end: [2 lignes] } }
+    POSTCARDS (8 : { id, valley, signer, text, vignette 'postcard.<n>' }) ; POSTCARD_RULES { travelSeasons: 1, inFlight: 1 }
+    BENCH_LINES { spring[4], summer[4], autumn[4], winter[4] } ; HELENE_NOTES (12)
+    FOREST_STATES (4 : { n, name, deciduous: 0 | 0.2 | 0.4 | 0.6, clearings: bool, old: bool })
+    STORKS_HINTS (valley.legend, valley.visitor, valley.book, valley.sounds), STORKS_TEXTS, BOOK_TEXTS
+src/data/career/valley.js     VALLEY_VERSION 4 ; VALLEY_PARTS + 'storks' ; STAGES_ALL + STAGE_V4 (9 entrées) ; MAX_STAGE_ALL 8 ;
+                              maxStageOf(parts) → 5 | 7 | 8 ; stageSigns(8) → null (l'étape 8 n'a pas de palier) ;
+                              SIGNS_ALL_V3 inchangé (99 : légendes et visiteurs ne sont pas des signes de vie)
+src/core/career/storks.js     (nouveau, pur, sans enregistrement)
+    storksOn(state), storkDay(state) (2 + hashSeed(seed,'storkDay') % 3, borné à la durée des saisons),
+    legendWakeOk(state, id), legendsInfo(state), clocheInfo(state, id), marvelInfo(state), legendName(state, id),
+    visitorNeedStatus(state, need), visitorRecipe(state, id), visitorsInfo(state), storkInfo(state), storkNeedsOk(state),
+    stage8Ok(state), valleyComplete(state) (6 lieux restaurés + nid sur la maison), epilogueInfo(state),
+    forestState(state) (0..3), sceneryOf(state) (ferme : nid, passages, lueurs, arc-en-ciel du jour), viewExtras(state),
+    chronicle(state) (le livre), reconstructStageAt(state), yearOfAbs(state, abs), postcardsInfo(state),
+    benchLine(state, absDay), heleneNote(state, year), soundFacts(state), unreadV4(state)
+src/core/career/valley.js     extension 'valley' (même id, même place) : V4 dans dawnEvents, dawn, actions, requêtes, check,
+                              migrate ; valleyHarvest(api, plotIndex, by, { quality } = {}) (Merveille)
+src/core/career/runtime.js    passe { quality: q?.quality } à valleyHarvest (une ligne ; aucun autre changement)
+src/core/career/habitat.js    stageTarget : étape 8 = stage8Ok (aucun palier) ; nextHint : + 'visitor', 'legendRipe',
+                              'legendSow', 'storkNeed', 'epilogue', 'postcard'
+src/core/career/heritage.js   storiesOf(state) : + STORIES_V4 puis l'épilogue (relisibles) ; savedVarieties inchangé
+src/core/game.js              achievementContext().career.valley + legends, visitors, storks, epilogue, postcards
+src/data/album.js             + pages `legends` « Les légendes » (4, check { type: 'legendHarvested', id }) et `visitors`
+                              « Les visiteurs rares » (6, check { type: 'visitorSeen', id }) — mode 'career'
+src/core/album.js             + faits `legendHarvested`, `visitorSeen`
+src/data/achievements.js      + STORKS_ACHIEVEMENTS (9, catégorie 'career', écus) ; ALL_ACHIEVEMENTS les inclut
+src/data/cosmetics.js         + 3 décors found: true, price 0 : melon.cloche (small), stork.vane (small), iron.box (small)
+src/core/progression.js       recordValleyStage jusqu'à 8 ; décor iron.box par recordValleyEpilogue(progress) (nouveau, pur)
+src/storage.js                DEFAULT_SETTINGS.natureSound 'full' ('full' | 'light' | 'off'), normalisé (UI)
+src/audio/soundscape.js       (nouveau, pur — AUDIO) NATURE_SOURCES, BIRDS_BY_STAGE, phaseOf(dayProgress), natureScape(facts, ctx),
+                              farmBirdsFactor(facts), spatial(source, listener)
+src/audio/nature.js           (nouveau — AUDIO) createNature(ctx, destination, { detail })
+src/audio/synth.js            + tons 'clatter' (cigognes) et 'legend' (réveil d'une légende) — AUDIO
+src/audio/audio.js            + setNature(scape | null), setNatureListener({ y, h }), setNatureDetail(mode), setMusicScale(k),
+                              natureVoices — AUDIO
+tools/simulate-career.js      robots V4 (STORKS_STYLES, me.storksRnd), --valley …,storks, --compare-valley4, --years 24
+tests/valley4.test.js, tests/valley4-legends.test.js, tests/valley4-visitors.test.js, tests/valley4-storks.test.js,
+tests/valley4-book.test.js, tests/valley4-migration.test.js (CORE) ; tests/soundscape.test.js (AUDIO) ;
+tests/valley4-ui.test.js (UI/RENDER : disposition des cloches, du nid, cibles)
+assets/sprites/generate-valley4.py → assets/sprites/valley4.png + bloc « // <valley4:auto> » d'atlas.js   (ART)
+src/render/storks-actors.js   (RENDER, nouveau) cloches, roue et nid, cigognes en vol, grues, lueurs, cerf et loriot de la
+                              ferme, arc-en-ciel ; purs : nestAnchor(houseLevel), glowSpots(hedges, absDay), flyoverPath(kind, absDay)
+src/render/layout-career.js   (RENDER) layout.valley.cloches (4 rect), layout.valley.nest (ancre par niveau de maison)
+src/render/scene.js           (RENDER) forêt en 4 états (couche fixe), hitTest, mini-carte et grande carte (teinte de forêt)
+src/render/valley-view.js     (RENDER) visiteurs, clocher, barrage, fenêtres du village, banc habité, teinte du soir,
+                              contemplate({ speed }) et credits(cards) (défilement automatique)
+src/ui/career/storks.js       (UI, nouveau) segment Légendes, fenêtres (légende, visiteur, cigognes), récits du V4, épilogue,
+                              générique, banc, conseils, débogage
+src/ui/career/valley-book.js  (UI, nouveau) le livre de la vallée (pages, sommaire, partage en image)
+src/ui/career/{valley,heritage,places,valley-view}.js, src/ui/dialogs.js (option « Sons de la vallée »), src/ui/grange.js,
+src/main.js (paysage sonore : updateAmbience), css/valley.css (règles V4 ajoutées, pas de fichier de plus)
+```
+
+### Activation et options
+
+```js
+createCareer({ …, valley })   // { seeds, wildlife, heritage, places, storks } → absentes = true
+                              // { storks: false } : V1 + V2 + V3 exactement (aucun tirage valley4, aucun champ V4)
+game.valley                   // inchangé
+```
+
+Le V4 est actif dès que `storksOn` (aucune « ouverture » de plus) : le livre est consultable à toute étape ; les légendes,
+visiteurs et cigognes viennent par leurs conditions (§ 18 de `docs/VALLEE.md`) ; les tirages `valley4` commencent avec
+`view.open` (étape 5).
+
+### État (`state.career.valley`, champs ajoutés ; `v: 4`)
+
+```js
+state.career.valley = {
+  v: 4,
+  parts: { seeds, wildlife, heritage, places, storks: true },
+  // … tous les champs du V1, du V2 et du V3 …
+  legends: { [legendId]: { awokeAt: abs, harvests: 0, firstAt: null | abs } },     // absent = endormie
+  cloches: { [legendId]: null | { sownAt: abs, readyAt: abs, ripe: bool } },       // sous cloche (4 places fixes)
+  marvel: { gens: 0, lastYear: 0 },                                                 // générations de la Merveille
+  visitors: { [visitorId]: { state: 'hint' | 'visible' | 'seen', since: abs, spotId: placeId | 'steeple' | spotId,
+              at?: abs /* vu */ } },
+  stork: { steepleAt: null | abs, seenAt: null | abs, wheelAt: null | abs, farmSince: null | abs,
+           years: { [year]: { arrived: abs, chicks: 0..4, left: null | abs } } },
+  epilogue: { availableAt: null | abs, readAt: null | abs, creditsAt: null | abs },
+  postcards: { sent: null | { id, at: abs, arrives: abs }, got: [{ id, at: abs, read: bool }] },
+  stageAt: { [n]: { abs, approx?: true } },                                         // jour de chaque étape (0..8)
+  // stories : + identifiants de STORIES_V4 et 'epilogue' (available / read) ; chapters.read : + 8 ; stage : 0..8
+  year: { …, legends: 0, legendHarvests: 0, visitorsSeen: 0, chicks: 0, postcards: 0 },
+  stats: { …, legendHarvests: 0, visitorsSeen: 0, storkYears: 0, postcards: 0, credits: 0, bookOpened: 0 },
+}
+```
+
+`check(state)` (V4) : `v` entier 1..4 ; `parts.storks` booléen ; identifiants de `LEGENDS`, `VISITORS`, `POSTCARDS` ;
+`cloches` seulement pour une légende réveillée, `sownAt ≤ readyAt` ; `marvel.gens` 0..3 ; un visiteur `seen` a `at` ;
+`stork` : jours entiers ou `null`, `seenAt` ≥ `steepleAt`, `farmSince` ⇒ `wheelAt`, cigogneaux 0..4 ; `epilogue.readAt` ⇒
+`availableAt` ; `postcards.got` sans doublon, dans l'ordre de `POSTCARDS`, au plus un `sent` ; `stage ≤ 8`, et `stage = 8`
+⇒ `stork.seenAt`. Une sauvegarde V1, V2 ou V3 reste valide.
+
+### Déroulé (extension `valley`)
+
+- **`dawnEvents`** — après les étapes du V1, du V2 et du V3, dans cet ordre (V4 actif) :
+  1. **cigognes** (jour absolu de printemps = `storkDay`) : `stage ≥ 8` et `wheelAt` → arrivée **sur la maison**
+     (`years[année] = { arrived }`, `farmSince` à la première) → `storksArrived { where: 'farm', first, day }` (+
+     `storyAvailable { id: 'storkNest' }` à la première) ; sinon, `steepleAt` nul et `storkNeedsOk` → `steepleAt`,
+     `visitors.whiteStork = { state: 'visible', spotId: 'steeple' }` → `storksArrived { where: 'steeple', first: true }` +
+     `visitorVisible { id: 'whiteStork', spotId: 'steeple' }`. **1ᵉʳ jour de l'été** (nid habité cette année) →
+     cigogneaux = `chicksMin + hashSeed(seed, 'storkChicks' + année) % 4` → `storkChicks { n }`. **Dernier jour de l'été**
+     → `left` → `storksLeft { returnDay }` ;
+  2. **légendes** : **une au plus par aube**, la première de `LEGENDS` dont `legendWakeOk` et qui dort → `legends[id] =
+     { awokeAt }` → `legendAwoken { id, name, story }` + `storyAvailable { id: story }` ;
+  3. **cloches** : chaque cloche `abs ≥ readyAt` et `!ripe` → `ripe = true` → `legendRipe { id }` ;
+  4. **cartes** : `sent` et `abs ≥ arrives` → `got.push`, `sent = null` → `postcardArrived { id, valley }` ;
+  5. **visiteurs tirés** (vue ouverte, `parts.wildlife` : 5 nombres `valley4`) : automate du V1 (`hint` → `visible` → on
+     touche) ; **une seule venue annoncée par aube toutes espèces confondues** (aucune si une espèce du V1, du V2 ou du V3
+     s'est annoncée ce matin) ; recette (`visitorRecipe`) **et** saison ; événements `visitorHint { id, spotId, text }`,
+     `visitorVisible { id, spotId, where }`.
+- **`dawn`** (fin de l'aube) : étape (`stageTarget` : 8 si `stage8Ok`) → `valleyStage { n: 8, … }` ; à l'étape 8 :
+  `stork.wheelAt = abs` → `storkWheelPlaced` ; `stageAt[n]` noté à chaque étape franchie (toutes étapes, V4 actif) ; puis
+  `valleyComplete(state)` et `availableAt` nul → `availableAt` → `epilogueAvailable`.
+- **`incomes`**, **fournisseurs** `effects` / `patrimony` / `unlocks` : **rien de nouveau**.
+- **`yearEnd`** : `report.valley` + `legends`, `legendHarvests`, `visitorsSeen`, `chicks`, `postcards`, `stageStart`
+  (étape au début de l'année de départ de la Vallée) et `stageNow` (avant / après) ; `year` remis à zéro.
+- **Récolte** : `valleyHarvest(api, i, by, { quality })` — `by === 'player'`, variété `crossTomato` sauvée, été, qualité
+  `fine` ou `gold` (toute qualité si `state.surprises` est nul), `marvel.lastYear < année`, `gens < 3` → `gens += 1`,
+  `lastYear = année` → `marvelGeneration { n, need: 3 }`. Rien d'autre ne change à la récolte.
+
+### Actions (`game.actions.career.*`, Vallée commencée, V4 actif)
+
+```js
+sowLegend(legendId)          → { ok, legendId, sownAt, readyAt, days }
+    // refus : 'Légende inconnue.' ; 'Cette graine dort encore.' ; 'Il faut d'abord la Grainothèque.' ;
+    //   'Elle pousse déjà sous sa cloche.' ; 'Elle est mûre : récoltez-la d'abord.'
+harvestLegend(legendId)      → { ok, legendId, first, line, harvests }        // aucune pièce ; la cloche se libère
+    // refus : 'Rien sous cette cloche.' ; 'Pas encore mûre : encore N jours.'
+observeVisitor(visitorId)    → { ok, visitorId, name, title, anecdote, first: true, where }
+    // refus : 'Rien à voir ici.' (pas visible) ; 'Déjà vu.' ; (observe(id) du V1 renvoie vers celle-ci pour un visiteur)
+readEpilogue()               → { ok, pages: [3], first }   // épilogue.readAt ; décor iron.box ; refus : 'Pas encore…'
+seeCredits()                 → { ok }                      // epilogue.creditsAt (livre, statistiques) ; aucun effet
+sendPostcardSeeds()          → { ok, id, valley, arrives, daysLeft }
+    // refus : 'Après l'épilogue de Joseph.' ; 'Un sachet est déjà en route.' ; 'Toutes les vallées voisines ont reçu
+    //   leurs graines.'
+readPostcard(id)             → { ok, card }
+openValleyBook()             → { ok }                      // stats.bookOpened (conseils, simulation) ; aucun effet
+triggerValley(kind, arg, arg2)  // + 'legend' (id : réveillée tout de suite, récit compris), 'legendRipe' (id), 'marvel' (n),
+                                //   'visitor' (id, 'visible' | 'seen'), 'storks' ('steeple' | 'farm' | 'chicks' | 'leave'),
+                                //   'complete' (pose les 6 lieux restaurés, l'étape 8 et le nid), 'epilogue' (disponible),
+                                //   'postcard' (la carte en route arrive à la prochaine aube) ; 'stage' va jusqu'à 8
+// Modifiées : readStory(id) accepte STORIES_V4 ; readChapter(8) ; observe(id) d'un identifiant de VISITORS → observeVisitor.
+```
+
+Aucune de ces actions ne dépense ni ne gagne de pièces.
+
+### Requêtes (`game.query.career.*`)
+
+```js
+valley() → V1 + V2 + V3 + {
+  storks4: bool,                                     // partie storks active
+  legends: [legendInfo],                             // 4, ordre de LEGENDS
+  visitors: [visitorInfo],                           // 6, ordre de VISITORS
+  stork: { day /* jour des cigognes */, state: 'waiting' | 'steeple' | 'seen' | 'nest', needs: [{ text, ok }],
+           thisYear: null | { arrived, chicks, left }, years: n },
+  epilogue: { available, read, credits },
+  postcards: { open, sent: null | { id, valley, daysLeft }, got: [{ id, valley, read }], left: n },
+  book: { open: true, years: n },
+  // stage : + max 8, next (étape 8 : needs texte « Les cigognes viendront quand… ») ; stories : + V4 ; chapters : + 8
+}
+legendInfo  = { id, name, sub, cropId, icon, state: 'asleep' | 'awake', wakeText /* endormie : ce qui la réveillera */,
+                gens?: { n, need } /* Merveille */, cloche: null | { state: 'free' | 'growing' | 'ripe', daysLeft, progress },
+                canSow, sowReason, harvests, anecdote /* réveillée */, needLibrary: bool }
+visitorInfo = { id, name, icon, seasons, state: 'unknown' | 'hint' | 'visible' | 'seen', inSeason, recipe: [{ text, ok }],
+                where /* « dans la prairie » */, whereKind: 'view' | 'farm', placeId?, hint, anecdote /* vu */, seenAt }
+valleyView() → V3 + { visitors: [{ id, state: 'hint' | 'visible' | 'resident', anchor /* id d'ancre de la vue */ }],
+                      steeple: { storks: 0 | 2, visible: bool }, beaverDam: bool, villageLights: bool /* soir */,
+                      bench: { joseph: 'story' | 'epilogue' | 'resident' | false, helene: bool }, complete: bool,
+                      canContemplate: bool /* épilogue lu */ }
+valleyAnimals() → V1 + { id: 'glowworms', spotId /* haie */, state: 'hint' | 'visible' | 'resident' }   // la ferme
+valleyScenery() → null | { forestState: 0..3, nest: null | { state: 'wheel' | 'pair' | 'chicks' | 'snow', chicks },
+                           flyover: null | 'storks' | 'cranes', glow: bool /* soir d'été, vers luisants vus */,
+                           deer: bool, oriole: bool, rainbow: bool }       // calculé une fois par jour (cache par absDay)
+valleyBook() → { title, farmName, since: year, cover: { vignette, signs, total }, beforeAfter: { from: { year, vignette },
+                 to: { year, vignette } }, years: [{ year, stage, stageName, vignette, approx, lines: [≤ 6], helene }],
+                 seeds: [...], beings: [...], places: [...], calendar: [{ when, what }], stories: [...],
+                 postcards: [...], epilogue: { read, credits } }
+valleySounds() → null | soundFacts   // § « Plan audio technique » ; calculé une fois par jour (cache)
+query.achievementContext().career.valley   // + legendsHarvested: [id], visitorsSeen: [id], storkNest: bool,
+                                           //   epilogueRead: bool, postcards: n, stage (0..8)
+query.career.yearReport().valley           // + legends, legendHarvests, visitorsSeen, chicks, postcards, stageStart, stageNow
+// (le segment Légendes et la 4e étagère de la Grainothèque lisent valley().legends)
+```
+
+### Événements (Vallée active, V4 actif)
+
+| Type | Données | Pour |
+|---|---|---|
+| `legendAwoken` | `{ id, name, story }` | récit à lire, puis popup « Une légende se réveille ! », son `legend` |
+| `legendSown` / `legendRipe` / `legendHarvested` | `{ id, readyAt }` / `{ id }` / `{ id, first, line, harvests }` | plante sous la cloche / ligne « À faire » douce / fenêtre courte (première), message info, album |
+| `marvelGeneration` | `{ n, need }` | texte flottant « Merveille : 2 / 3 générations » |
+| `visitorHint` / `visitorVisible` / `visitorSeen` | formes du V1 (`spotId` = lieu, `'steeple'` ou haie) / `{ id, name, first, where }` | indice dessiné, « ? », fenêtre d'observation, album, son de l'appel |
+| `storksArrived` | `{ where: 'steeple' \| 'farm', first, day }` | message important « Voir », vols, claquement |
+| `storkChicks` / `storksLeft` | `{ n }` / `{ returnDay }` | nid avec petits / message info « Elles reviendront le 3ᵉ jour du printemps » |
+| `storkWheelPlaced` | `{}` | la roue apparaît sur la cheminée (après la fenêtre du chapitre 8) |
+| `valleyStage` | forme du V1, `n` 8 | vignette, écus, chapitre 8 |
+| `storyAvailable` | formes du V2, identifiants de `STORIES_V4` | ligne « À faire » `vl-story` |
+| `epilogueAvailable` / `epilogueRead` | `{}` / `{ first }` | Joseph sur le banc, ligne `vl-epilogue` / boîte au ruban, décor, proposition du générique |
+| `postcardSent` / `postcardArrived` | `{ id, valley, arrives }` / `{ id, valley }` | message info / ligne `vl-postcard` |
+
+Ordre à l'aube : (V1) … (V2) … (V3) … puis `storksArrived` / `storkChicks` / `storksLeft`, `legendAwoken` +
+`storyAvailable`, `legendRipe`, `postcardArrived`, visiteurs (`visitorHint` / `visitorVisible`) ; en fin d'aube
+`valleyStage` (8), `storkWheelPlaced`, `epilogueAvailable`.
+
+### Progression (album et succès)
+
+- Pages `legends` « Les légendes » (30 écus + `melon.cloche`), `visitors` « Les visiteurs rares » (40 écus + `stork.vane`) ;
+  « L'album complet » reste les 11 pages du lot 4 ; `albumOverview().pages` = 20, `total` = 201.
+- `STORKS_ACHIEVEMENTS` (catégorie « Carrière », `careerValley { key, n }`) : `firstLegend` (10, `legendsAwake` 1),
+  `legendHarvest` (10, `legendHarvests` 1), `fourLegends` (40, `legendsHarvestedN` 4), `storksBack` (40, `stage` 8),
+  `storkNest` (20, `storkNest` 1), `rareVisitor` (10, `visitorsSeenNoStork` 1), `allVisitors` (40, `visitorsSeenN` 6),
+  `valleyBook` (30, `epilogue` 1), `furtherAway` (10, `postcards` 1) ; 210 écus. `careerAchievementList` : 38 + 9 = 47 ;
+  grange « La Vallée · n / 30 ».
+- Écus de l'étape 8 → `recordCareerEcus` ; `recordValleyStage(progress, 8)` (meilleure étape jusqu'à 8) ;
+  `recordValleyEpilogue(progress)` → décor `iron.box`. Pages et succès ajoutés par `normalizeProgress` (schéma inchangé).
+
+### Migration et sauvegardes
+
+- `migrate` : `state.career.valley` en `v` 1, 2 ou 3 → `completeValley` ajoute `legends: {}`, `cloches: {}`, `marvel: { gens:
+  0, lastYear: 0 }`, `visitors: {}`, `stork: { steepleAt: null, seenAt: null, wheelAt: null, farmSince: null, years: {} }`,
+  `epilogue: { availableAt: null, readAt: null, creditsAt: null }`, `postcards: { sent: null, got: [] }`, `stageAt` (**
+  reconstruit** par `reconstructStageAt` : pour chaque étape déjà atteinte, le premier jour où les signes de vie datés —
+  installations, variétés sauvées, étapes de lieux, terres reprises — atteignent le palier le plus bas, `approx: true`),
+  compteurs `year` / `stats` ; `parts.storks = true` si `parts.places` (sinon `false`) ; `v = 4` ; `state.rng.valley4`
+  créé (partie storks seulement). Rien n'est retiré ni réinterprété ; `stage` garde sa valeur.
+- Ancienne carrière avancée : rien de rétroactif d'un coup — **une** légende par aube, cigognes au **prochain** jour des
+  cigognes, Merveille comptée à partir de l'été suivant, épilogue après le nid.
+- `CAREER_VERSION` inchangée ; **aucun champ de parcelle** nouveau. `state.career.valley === null` : reste `null`.
+- Tests : aller-retour V3 → V4 → sauvegarde → chargement ; une carrière du V3 de l'intégration (vallée complète à l'an 18)
+  reprise ; `{ storks: false }` donne exactement l'état et les tirages du V3 sur 24 ans (empreinte) ; **empreinte économique
+  identique** avec `storks` (argent de chaque jour) ; `{ places: false }`, `{ heritage: false }` inchangés ; parité.
+
+### Simulation
+
+- `tools/simulate-career.js` : `--valley seeds,wildlife,heritage,places` (= V3), **`--compare-valley4`** (V3 → V4, même
+  graine, 24 ans par défaut, `--jobs N`) : revenu sur 18 et 24 ans, argent en caisse aux ans 14 / 18 / 24, rangs, faillites
+  (Détente et `--difficulty classique`), année de chaque légende, des cigognes (clocher, nid), de l'épilogue, de chaque
+  visiteur, visiteurs à l'an 18 / 20 / 22, nouveautés par saison (ans 19 à 24), gestes par jour, `automator`, `handsOff`,
+  `handsOffLate`, appliqué, débutant ; **contrôle d'empreinte** (argent jour par jour identique : écart affiché).
+- Nouveautés comptées : celles du V1 au V3 + `legendAwoken`, `legendHarvested` (première), `visitorVisible`, `visitorSeen`,
+  `storksArrived`, `storkChicks`, `postcardArrived`, `epilogueAvailable`, `valleyStage` 8.
+- Robots : `docs/VALLEE.md` § 18.12.3, par l'API publique et `me.storksRnd` ; les décisions du V1 au V3 tirent les mêmes
+  nombres et appellent les mêmes actions dans le même ordre avec ou sans le V4 (le V4 passe **après** eux dans la journée
+  du robot).
+- Après réglage : `VISITOR_RULES`, recettes des visiteurs, `LEGEND_RULES.marvel.gens`, `STORK_RULES.needs`, et le
+  § 18.12 de `docs/VALLEE.md` complété (« Résultats »).
+
+### Ce que RENDER et UI consomment
+
+**RENDER** (`src/render/*`) :
+- **Cloches** (`layout.valley.cloches`) : 4 rectangles 8 × 12 px monde le long du bas du rectangle de la Grainothèque
+  (ordre de `LEGENDS`, de gauche à droite), dessinés par-dessus le bâtiment ; affichées si la Grainothèque existe et le V4
+  actif ; état de chaque cloche : vide (`legend.cloche`), `legend.<id>.0` (semis), `.1` (en fleur, à mi-pousse), `.2`
+  (mûre, petite étincelle). Toucher une cloche ou la Grainothèque → `{ type: 'seedLibrary', tab: 'legends' }` (champ `tab` ajouté au hit du V2) quand une
+  légende est mûre ou à semer, sinon le hit existant. Test : les cloches ne sortent pas du rectangle réservé.
+- **Nid** (`layout.valley.nest`) : ancre (x, y) sur la cheminée de **chaque niveau de maison** (1 à 5) ; `stork.wheel`,
+  `stork.nest.pair`, `stork.nest.chicks`, `stork.nest.snow` selon `valleyScenery().nest` ; couple animé (2 images,
+  claquement) ; cible `{ type: 'storkNest' }` (≥ 48 px CSS, `expandHitCss`) → petite fiche (« Revenues le 3ᵉ jour du
+  printemps · 3 cigogneaux »). Test : l'ancre de chaque niveau tombe sur le toit, hors de la porte et du panneau.
+- **Passages** (`flyoverPath`, purs, hachage du jour) : 2 cigognes qui planent (printemps-été, nid habité), vol en V des
+  grues (quelques jours d'automne, grues vues) : trajectoire droite au-dessus du monde, ≤ 20 s, une fois par jour ;
+  mouvements réduits : aucun.
+- **Vers luisants** : visiteur `visible` = étincelle « ? » au pied de la haie (`spotId`) ; `resident` (soirs d'été,
+  `dayProgress ≥ 0,75`) : 24 lueurs au plus le long des haies (`glowSpots`, réserve de particules), halo dessiné par le code ;
+  cible `{ type: 'visitor', id: 'glowworms' }`.
+- **Cerf, loriot sur la ferme** (décor, `valleyScenery()`) : un au plus, dans un bloc sauvage « bois » ou un verger.
+- **Arc-en-ciel** : 5 arcs de couleur au-dessus du monde, alpha 0,35, le matin qui suit une pluie (`rainbow`) ; fixe.
+- **Forêt en 4 états** (`forestState`) : les tuiles de forêt au-delà des terrains — état 1 : `tileHash` remplace 1 tuile sur
+  5 par `forest.mixed.*` ; état 2 : 2 sur 5 + clairières (V3) ; état 3 : 3 sur 5 + `forest.old.*` et `forest.fern`, merisiers
+  `forest.mixed.cherry.bloom` au printemps ; recoloration de saison par le code (planches de saison) ; **tout dans la couche
+  fixe** (la clé de la couche inclut `forestState`). Mini-carte et grande carte : teinte de forêt un peu plus claire par
+  état (`MM_COLORS.forest1..3`).
+- **Vue de la vallée** (`src/render/valley-view.js`) : ancres nouvelles `VIEW_ANCHORS_V4` (px monde, tenues par RENDER) :
+  `steeple` (sommet du clocher, en bas à droite du fond), `crane` (prairie), `redDeer` (lisière du bois), `oriole` (verger),
+  `beaver` (près du pont du ruisseau), `glowView` (prairie) ; `view.beaverDam` posé sur le ruisseau quand `beaverDam` ;
+  `view.village.lights` le soir ; Joseph et Hélène assis (`view.joseph.seated`, `view.helene.seated`) sur le banc ;
+  **teinte du soir** (aplat doré, alpha 0,25) pendant le générique et la contemplation. `hitTest` : + `{ type: 'visitor',
+  id }` (cible ≥ 48 px, avant les lieux, comme `viewAnimal`), `{ type: 'bench' }` (banc habité). Nouveau :
+  `contemplate({ speed })` (défilement automatique lent, du haut vers le bas puis remontée, arrêté par un toucher) et
+  `credits(cards, { duration: 70 })` (défilement + cartes posées par l'UI aux passages des lieux, `onCard(i)`) ; mouvements
+  réduits : défilement remplacé par des sauts d'un lieu à l'autre au toucher.
+- `scene.hitTest` : + `{ type: 'storkNest' }`, `{ type: 'visitor', id }` (vers luisants), cloches (ci-dessus).
+- Planche `valley4` dans `SHEETS` et `assets.js` (facultative, `OPTIONAL_SHEETS`) ; `DECOR_SPRITES` : 3 décors.
+
+**UI** (`src/ui/career/storks.js`, `src/ui/career/valley-book.js`, `css/valley.css`) :
+- `createStorks(app) → app.storks = { on(), legendsTab(container), openLegend(id), onEvent, onHit(hit), todoItems(game),
+  morningLines(ev), yearLines(report), openEpilogue(), playCredits(), openBench(), frame(dt), reset() }` ;
+  `createValleyBook(app) → app.valleyBook = { open(page?), close(), share(), reset() }`. `app.valley` lui délègue le groupe
+  « Légendes » (Graines), « Visiteurs rares » (Habitants), le bouton « Le livre » (en-tête) et le prochain indice
+  (`hint.kind` + `'visitor'`, `'legendRipe'`, `'legendSow'`, `'storkNeed'`, `'epilogue'`, `'postcard'`) ; `app.heritage` le
+  4ᵉ segment **Légendes** et la 4ᵉ étagère ; `app.places` / `app.valleyView` les visiteurs de la vue, le banc, « S'asseoir
+  sur le banc », le générique.
+- Écrans : `docs/VALLEE.md` § 18.10 (segment Légendes, popup du réveil, fenêtre d'un visiteur, livre, bilan avant / après,
+  option « Sons de la vallée »). Épilogue : fenêtre des récits en 3 pages (`Suivant ›`, pas de fermeture d'un toucher
+  dehors), puis feuille « Regarder la vallée » / « Plus tard ». Générique : la vue de la vallée en mode `credits`, ruban et
+  barre cachés, « Passer » (≥ 48 px, en bas à droite), cartes 16 px (2 lignes au plus) ; **temps en pause** ; musique
+  coupée en 3 s (`audio.playMusic(null, { fade: 3 })`), paysage sonore « vue » complet ; à la fin ou « Passer » :
+  `seeCredits()`, retour à la ferme, la musique de saison revient (fondu 2 s).
+- Livre : feuille plein écran (`#vl-book`), pages glissées horizontalement (glisser ≥ 40 px ; défilement vertical interne
+  si une page dépasse), « ‹ » / « › » (≥ 48 px, tiers bas), « Sommaire » ; **Partager** : canevas 1080 × 1350 composé sur
+  place (vignettes de la planche, police du jeu) → `navigator.canShare({ files })` ? `navigator.share` : lien de
+  téléchargement ; aucun réseau.
+- Ligne « À faire » (famille « vallée ») : `vl-visitor`, `vl-storks`, `vl-legend`, `vl-epilogue`, `vl-postcard`,
+  `vl-story` ; jamais de ligne pour ressemer. Messages : importants — `visitorVisible`, `storksArrived`, `legendAwoken`,
+  `epilogueAvailable` (« Voir ») ; infos — `legendRipe`, `legendHarvested`, `storksLeft`, `storkChicks`, `postcardArrived`.
+- Conseils « première fois » : `STORKS_HINTS` (`valley.legend`, `valley.visitor`, `valley.book`, `valley.sounds`).
+- Sons : `tone('legend')` réveil, `tone('clatter')` cigognes (toucher, arrivée), `chirp` visiteur (repli), `pop` récolte de
+  légende, `magic` récit, `chime` étape 8 ; **paysage sonore** : voir le plan audio ci-dessous (câblage dans `main.js`).
+- Options › Son : « Sons de la vallée » (`settings.natureSound`, 3 boutons ≥ 48 px) → `audio.setNatureDetail(mode)`.
+- Débogage (`?debug=1`) : `__debug.valley4.{ on(), state(), legend(id), ripe(id), marvel(n), visitor(id, st), storks(kind),
+  complete(), epilogue(), credits(), book(page), postcard(), forest(n), scenery(), sound(id) /* joue un chant */, scape(),
+  voices(), detail(mode), stats() }` (passent par `triggerValley` et les actions publiques ; aussi sous `__debug.valley`
+  quand le nom est libre).
+
+### Plan audio technique (paquet AUDIO)
+
+**Chaîne.** `nature.js` crée, sous le bus **ambiance** existant : `natureOut (Gain)` → [écho `Delay 0,18 s` bouclé `Gain
+0,22` → `Lowpass 2,5 kHz`, réglage « complets » seulement] → `bus.ambience`. Chaque couche continue : source → filtres →
+`Gain` → `StereoPanner` (s'il existe ; sinon rien) → `natureOut`. Chaque voix ponctuelle : oscillateurs ou tampon de bruit
+→ enveloppe → `StereoPanner` → `natureOut`, déconnectée à `onended`. Un **seul** tampon de bruit (2 s, bruit rose
+pré-calculé avec un générateur à graine fixe, comme `synth.js`) partagé par toutes les couches. Aucun `ConvolverNode`,
+aucun `AudioWorklet`, aucun fichier.
+
+**Faits du jeu → paysage** (pur, testable sous Node) :
+
+```js
+// CORE : valleySounds() → soundFacts (une fois par jour)
+soundFacts = { on: true, stage: 0..8, installed: [speciesId] /* habitants installés, toutes parties */,
+               seen: [visitorId], places: { brook, combe, poppies, millpond, bocage, oldOrchard /* étape */ },
+               farm: { pond: bool, frogs: bool, wildGrass: n, fallows: n, strips: n, hives: n, nest: 'pair' | 'chicks' | null },
+               flyover: null | 'storks' | 'cranes', complete: bool }
+// AUDIO : src/audio/soundscape.js
+natureScape(facts, { where: 'farm' | 'view', season, weather, dayProgress, detail: 'full' | 'light' }) →
+  { layers: { brook, mill, leaves, crickets, frogs } /* 0..1 */, birds: [{ id, rate /* phrases/min */, x?, y? }],
+    birdsFactor /* × la couche 'birds' existante */, echo: bool, maxVoices: 12 | 4 }
+farmBirdsFactor(facts) → BIRDS_BY_STAGE[stage] = [0.25, 0.4, 0.55, 0.7, 0.85, 1, 1, 1, 1]
+phaseOf(dayProgress) → 'dawn' (< 0,25) | 'day' | 'dusk' (≥ 0,75)
+spatial({ x, y }, { y: centreVue, h }) → { gain: clamp(1 − |dy| / 220, 0.15, 1), pan: clamp((x − 96) / 96 × 0.6, −0.6, 0.6) }
+```
+
+`NATURE_SOURCES` (données d'AUDIO, `src/audio/soundscape.js`) — recettes de synthèse et règles (valeurs de départ,
+réglées à l'oreille) :
+
+| id | Type | Recette (Web Audio) | Condition (faits) | Position dans la vue (px monde) |
+|---|---|---|---|---|
+| `brook` | couche | bruit → passe-bande 900 Hz (Q 0,6), fréquence modulée ± 300 Hz par un LFO lent (0,13 Hz) ; « gouttes » : sinus 1,4–3 kHz, 25 ms, glissé + 30 %, 2 à 6 / s × niveau ; hiver : passe-bas 700 Hz, gouttes ÷ 3 | vue : Ru ≥ 1 (0,3 / 0,6 / 0,8) ; ferme : étape ≥ 6 (0,15, passe-bas 900 Hz) | (40, 120 → 420) : ruban, distance au point le plus proche |
+| `mill` | couche | grincement : dent de scie 85 Hz → passe-bande 420 Hz (Q 4), enveloppe 0,45 s toutes les 2,4 s ; 3 éclaboussures (bruit passe-bande 2,2 kHz, 80 ms) par tour | vue : Ru 4, hors hiver (0,4) | (96, 190) |
+| `leaves` | couche | bruit → passe-haut 1,2 kHz → passe-bas 5 kHz ; gain modulé par 2 LFO (0,07 et 0,19 Hz) : rafales | vue : bois ≥ 2 ; ferme : étape ≥ 5 ; hors hiver (0,25) | (48, 90) |
+| `crickets` | couche | 2 voix : sinus 4,2 kHz et 5,1 kHz, modulées en amplitude par un carré à 28 Hz, par trains de 0,3 s (silences aléatoires 0,2–1 s) | été, fin de printemps ; jour et soir ; vue : prairie ≥ 1 ; ferme : prairie sauvage reprise, jachère ou bande fleurie (0,2 à 0,35) | (152, 196) |
+| `frogs` | couche (programmée) | croassement : sinus 380 Hz + 760 Hz (× 0,3), 4 à 6 pulsations de 15 ms espacées de 30 ms ; 0,5 à 2 croassements / s × niveau | printemps, soirs d'été ; vue : étang ≥ 1 ; ferme : grenouille rousse installée ; × 1,5 le jour qui suit une pluie | (48, 192) |
+| `robin` | chant | 6 à 10 notes de 40–90 ms, 2,5–6 kHz, cascade descendante, glissés courts (sinus) | installé ; toute l'année ; aube, soir × 2 | ferme |
+| `blackbird` | chant | 5 à 7 notes flûtées 120–250 ms, 1,5–2,8 kHz, sinus + vibrato 6 Hz (± 20 Hz), fin en petit gazouillis | installé ; fin d'hiver → été ; soir × 2 | ferme |
+| `swallow` | chant | série de 6 à 12 chirps (3–6 kHz, 30 ms, glissés montants) | installées ; printemps, été ; jour | ferme ; vue (48, 192) |
+| `tawnyOwl` | chant | « hou » (sinus 420 → 380 Hz, 0,5 s) · silence 1,2 s · « hou-hou-houuu » (3 notes, vibrato 5 Hz, la dernière 1 s) | installée ; soir | ferme |
+| `littleOwl` | chant | « kiou » : sinus 1,6 → 1,1 kHz, 0,3 s, ×1 à 3 | installée ; soir | vue (96, 340) |
+| `blackWoodpecker` | chant | 15 à 20 clics (bruit passe-bande 800 Hz, 3 ms) à 18 / s, gain décroissant | installé ; fin d'hiver, printemps ; matin | vue (40, 80) |
+| `jay` | chant | cri rauque : bruit passe-bande 1,8 kHz (Q 3) modulé à 40 Hz, 0,3 s | installé ; automne | ferme |
+| `skylark` | chant | trille de 8 à 15 s : notes 30–60 ms, 3–5 kHz, hauteur qui monte lentement, gain qui baisse (elle s'éloigne) | installée ; printemps, été ; aube, jour | vue (152, 170) |
+| `hoopoe` | chant | « oup-oup-oup » : 3 sinus 500 Hz, 80 ms, espacés de 120 ms | installée ; été | vue (152, 196) |
+| `kingfisher` | chant | « tiii » : sinus 3,5 kHz, 0,15 s, × 2 | installé ; toute l'année | vue (40, 260) |
+| `heron` | chant | « fraank » : dent de scie 300 Hz → passe-bande 900 Hz, 0,4 s, rare | installé | vue (48, 192) |
+| `cuckoo` | chant | « cou-cou » : sinus 650 → 545 Hz (tierce mineure), 2 × 0,25 s | étape ≥ 5 ; printemps ; matin | ferme et vue (40, 60) |
+| `whiteStork` | chant | claquement : clics de bruit passe-bande 1,5 kHz (4 ms), 8 → 14 → 8 / s pendant 1,5 s | vues ; printemps, été ; jour | ferme (nid) ; vue `steeple` |
+| `crane` | chant | trompettes : 2 voix dent de scie 560 / 590 Hz → passe-bande 1,1 kHz, vibrato 7 Hz, 0,5 s, en chœur décalé | vues ; automne ; jours de passage (ferme) | vue `crane` |
+| `oriole` | chant | « dudeli-o » : 4 notes sinus 1,2–2 kHz, 90–180 ms, glissés doux | vu ; été ; matin | vue `oriole` ; ferme (verger) |
+| `redDeer` | chant | brame : dent de scie 110 Hz glissé 140 → 90 Hz, passe-bas 600 Hz, 1,2 s, lointain | vu ; automne ; soir | vue `redDeer` ; ferme (lisière) |
+| `beaver` | chant | « plouf » : bruit passe-bas 600 Hz + sinus 120 Hz, 0,2 s | vu ; printemps → automne ; soir | vue `beaver` |
+
+Fréquences de base (phrases par minute) : `docs/VALLEE.md` § 18.8 ; × phase (aube : × 2 pour robin, blackbird, skylark,
+cuckoo ; soir : × 2 pour les chouettes, frogs, blackbird, redDeer) ; météo : pluie et orage → chants × 0, frogs × 1 ;
+neige → seuls robin, chouettes, brook ; somme plafonnée à 12 / min (ferme) et 16 / min (vue), répartie au prorata ; un même
+chant jamais deux fois en moins de 4 s.
+
+**Moteur** (`createNature(ctx, destination, { detail })` → `{ set(scape), setListener({ y, h }), setDetail(mode),
+stop(), get voices }`) : programmateur `setInterval` de **250 ms** (pas d'animation par image) qui, pour chaque chant,
+tire `Math.random() < rate / 240` et programme la phrase à `ctx.currentTime + 0,05` ; couches continues démarrées une fois
+et réglées par `setTargetAtTime` (2 s) ; `setListener` (vue : ≤ 10 fois par seconde, au défilement) ne fait que changer des
+gains et des panoramiques ; `voices` = sources actives. `stop()` déconnecte tout et arrête la minuterie.
+
+**`audio.js`** : `setNature(scape | null)` crée le moteur paresseusement si `ctx` existe, `!muted`, `ambienceVolume > 0`
+et `natureSound !== 'off'` ; sinon `stop()` ; ré-appliqué dans `setVolumes` (passage à 0 ou retour) et `unlock` (demande
+mémorisée avant déverrouillage, comme la musique). La couche existante `birds` reçoit `levels.birds × scape.birdsFactor`.
+Visibilité : le contexte suspendu suffit (rien à faire de plus) ; la minuterie s'arrête quand `document.hidden`.
+
+**`main.js`** (UI/RENDER) : `updateAmbience(game)` → en carrière avec V4 : `facts = query.career.valleySounds()` (cache par
+jour) ; `scape = natureScape(facts, { where: valleyView.active ? 'view' : 'farm', season, weather, dayProgress, detail })` ;
+`audio.setAmbience({ …ambienceFor(…), birds: × scape.birdsFactor })` ; `audio.setNature(scape)`. Appelé sur : changement
+de météo (existant), **aube**, **changement de phase** (`phaseOf` vérifié une fois par seconde), ouverture / fermeture de la
+vue, réglage. Vue : `audio.setNatureListener({ y: centre, h })` au défilement ; `audio.setDuck`-like : musique × 0,6 dans la
+vue (un facteur à part, `setMusicScale(0.6)`, pour ne pas toucher au `duck` des menus). Générique : musique coupée,
+`where: 'view'`, détail courant.
+
+**Tests** (`tests/soundscape.test.js`, purs) : stade 0 → `birdsFactor` 0,25 et aucun chant ; rouge-gorge installé → chant
+présent l'hiver ; pluie → aucun chant ; Ru 2 dans la vue → `brook` 0,6 ; ferme à l'étape 6 → `brook` 0,15 ; plafond de
+fréquence respecté ; « légers » → `maxVoices` 4, `echo` faux ; `spatial` borné. Le moteur se vérifie au doigt
+(`__debug.valley4.sound(id)`, `voices()`).
+
+### Sprites (paquet ART : planche `assets/sprites/valley4.png`, `assets/sprites/generate-valley4.py`, bloc `// <valley4:auto>`)
+
+Même méthode que `generate-valley3.py` (palette Kenney, contour sombre (63, 38, 49), lumière en haut à gauche, tuiles de
+16 px ; contour de 1 px pour les icônes, bêtes et objets). **16 × 16** sauf mention. Réutilisés : `portrait.joseph`,
+`view.helene*`, `view.bench`, `valley.box`, les cultures melon, blé, tomate et petits pois (base des légendes), `fx.birds`,
+`forest.clearing.*`, `story.*` existants.
+
+| Nom(s) | Taille | Description |
+|---|---|---|
+| `legend.motherMelon.icon`, `legend.millEinkorn.icon`, `legend.farmMarvel.icon`, `legend.storkPea.icon` | 16 × 16 | petit melon gris-vert brodé de blanc ; trois épis fins d'engrain dorés aux longues barbes ; tomate ronde rayée d'or et de pourpre ; gousse de pois courbe comme une corne, vert tendre |
+| `legend.<id>.0`, `.1`, `.2` (les 4) | 8 × 12 | sous sa cloche de verre (reflet blanc en haut à gauche) : deux cotylédons ; en fleur (fleur jaune du melon / épi vert / fleur jaune de tomate / fleur blanche de pois) ; mûre (petit melon / épis dorés / tomate rayée / gousses) |
+| `legend.cloche` | 8 × 12 | cloche de verre vide posée sur la terre, petite étiquette de bois |
+| `legend.jar` | 16 × 16 | bocal de verre au couvercle doré et ruban rouge (graines de légende ; étagère, popup) |
+| `visitor.whiteStork`, `.1` | 16 × 24 | cigogne blanche debout, bec et pattes rouges, rémiges noires ; au repos / tête renversée qui claque du bec |
+| `visitor.whiteStork.fly`, `.fly.1` | 32 × 16 | cigogne en vol plané, ailes déployées noir et blanc, pattes tendues (2 images) |
+| `stork.wheel` | 24 × 12 | roue de charrette en bois posée à plat sur un poteau court, sur la cheminée |
+| `stork.nest.pair`, `stork.nest.chicks`, `stork.nest.snow` | 24 × 20 | gros nid de branches sur la roue : le couple debout ; 2 à 4 cigogneaux gris-blanc qui dépassent ; nid vide sous la neige |
+| `stork.steeple` | 16 × 24 | sommet du clocher du village (ardoises, croix) avec le nid et le couple (pour la vue) |
+| `visitor.crane`, `.1` | 16 × 16 | grue cendrée debout, gris perle, calotte rouge, « traîne » de plumes ; au repos / cou tendu qui trompette |
+| `visitor.crane.flock`, `.flock.1` | 48 × 16 | vol en V de 7 grues en silhouette (2 images) |
+| `visitor.redDeer`, `.1` | 32 × 32 | cerf élaphe roux aux grands bois ; tête haute / qui brame, souffle de buée |
+| `visitor.oriole`, `.1` | 16 × 16 | loriot jaune d'or aux ailes noires ; perché / bec ouvert qui chante |
+| `visitor.beaver`, `.1` | 16 × 16 | castor brun à queue plate ; assis qui ronge une branche / qui nage |
+| `view.beaverDam` | 32 × 16 | petit barrage de branches en travers du ruisseau et une hutte ronde |
+| `visitor.glowworms` | 16 × 16 | icône : brin d'herbe et ver luisant allumé (album, fiches) |
+| `fx.glow`, `fx.glow.1` | 8 × 8 | point lumineux vert-jaune, 2 intensités (le halo est dessiné par le code) |
+| `visitor.hint.trumpet`, `visitor.hint.antler`, `visitor.hint.gnawed`, `visitor.hint.flute`, `visitor.hint.glow` | 16 × 16 | indices : notes de trompette dans un ciel pâle ; bois de cerf tombé dans l'herbe ; branche de saule rongée en pointe ; plume jaune d'or ; petite lueur verte au pied d'une herbe |
+| `forest.mixed.oak`, `forest.mixed.beech`, `forest.mixed.birch`, `forest.mixed.cherry`, `forest.mixed.cherry.bloom` | 16 × 16 | tuiles de forêt feuillue qui se raccordent à la forêt de Tiny Town : chêne rond ; hêtre élancé ; bouleau au tronc blanc ; merisier ; merisier en fleurs blanches |
+| `forest.old.0`, `forest.old.1`, `forest.fern` | 16 × 16 | vieux arbres moussus au tronc large (2) ; sous-bois de fougères (état 3) |
+| `valley.stage.8` | 96 × 48 | la vallée des vignettes 0 à 7, au printemps, complète, deux cigognes au-dessus du clocher |
+| `view.village.lights` | 16 × 16 | façades du village aux fenêtres jaunes allumées (soir), à poser près du clocher |
+| `view.joseph.seated`, `view.helene.seated` | 16 × 16 | Joseph assis (casquette, canne) ; Hélène assise, jumelles sur les genoux (sur le banc du belvédère) |
+| `valley.box.gift` | 16 × 16 | la boîte en fer avec un ruban doré noué (après l'épilogue) |
+| `story.melon`, `story.mill`, `story.marvel`, `story.peas`, `story.storks`, `story.storkNest` | 48 × 32 | vignettes : la boîte ouverte, trois graines gonflées sur un linge ; Joseph devant le coffre à grain ouvert du moulin ; une tomate rayée d'or sur une assiette ; un sachet de toile, le clocher et deux cigognes au loin ; deux cigognes sur le clocher (chapitre 8) ; le nid sur la maison de la ferme |
+| `story.epilogue.1`, `.2`, `.3` | 48 × 32 | la colline au soir, Joseph et le fermier assis, la vallée verte ; Joseph tend la boîte en fer ; Joseph et Hélène sur le banc, le fermier qui redescend vers la ferme |
+| `postcard.1` … `postcard.8` | 48 × 32 | cartes postales (bord blanc, timbre au coin) : barrière, merle, pois à rames ; cloches dans un potager en pente ; haie neuve et hérisson ; source entre des pierres ; moulin et miche ; pré de coquelicots et silhouette aux jumelles ; chevreuil dans un verger au petit jour ; clocher et cigogne |
+| `book.cover` | 64 × 80 | couverture du livre : toile verte, coins de cuir, petite feuille de tilleul dorée (le titre est écrit par le code) |
+| `book.ribbon` | 8 × 24 | signet de ruban rouge |
+| `icon.legend`, `icon.visitor`, `icon.book`, `icon.postcard`, `icon.sound.nature` | 16 × 16 | bocal doré ; plume blanche et noire ; livre vert fermé ; carte et timbre ; oreille et feuille |
+| `album.page.legends`, `album.page.visitors` | 16 × 16 | onglets : cloche à melon ; silhouette de cigogne |
+| `decor.melon.cloche`, `decor.stork.vane`, `decor.iron.box` | 16 × 16 | cloche à melon en verre sur un melon ; girouette à la cigogne sur un poteau ; la boîte en fer sur un petit tabouret |
+| `icon.ach.<id>` (firstLegend, legendHarvest, fourLegends, storksBack, storkNest, rareVisitor, allVisitors, valleyBook, furtherAway) | 16 × 16 | icônes des 9 succès (médaillon de `career.png` ; versions grisées par le code) |
+
+`CREDITS.md` : planche dessinée pour le jeu, style Kenney (CC0), comme `valley3.png` ; et une ligne « Sons de la vallée :
+synthétisés par le jeu (Web Audio), aucune ressource extérieure ».
+
+### Découpage en 4 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **CORE** | `src/data/career/{storks,valley}.js`, `src/core/career/{storks,valley,habitat,heritage}.js`, `src/core/career/runtime.js` (une ligne : qualité passée à `valleyHarvest`), `src/core/{game,album,progression}.js` (ajouts gardés), `src/data/{album,achievements,cosmetics}.js`, `tools/{simulate-career,sim-career-staff}.js`, `tests/valley4*.test.js` (sauf `valley4-ui`) | état, actions, requêtes (dont `valleySounds`, `valleyScenery`, `valleyBook`), événements, progression, migration ; simulation, empreinte économique, réglage ; § 18.12 de `docs/VALLEE.md` rempli | rien (commence par `{ storks: false }` = V3 exact, empreinte sur 24 ans ; puis données → légendes → cloches → Merveille → cigognes → visiteurs → étape 8 → épilogue → cartes → livre → faits sonores) |
+| **ART** | `assets/sprites/generate-valley4.py`, `assets/sprites/valley4.png`, bloc `// <valley4:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau ; planche de contrôle × 6 ; aperçu de la forêt de la carte dans ses 4 états, du nid sur les 5 maisons et des cloches sur les 5 Grainothèques | rien |
+| **AUDIO** | `src/audio/{soundscape,nature}.js` (nouveaux), `src/audio/{synth,audio}.js` (ajouts), `tests/soundscape.test.js` | `NATURE_SOURCES`, `natureScape`, moteur, tons `clatter` / `legend`, API `setNature*` ; une page de débogage des sons (`__debug.valley4.sound(id)` câblée par UI) ; écoute sur téléphone (Pixel 7) et mesure des voix | CORE : forme de `soundFacts` (factices en attendant) |
+| **UI/RENDER** | `src/ui/*` (nouveaux `src/ui/career/{storks,valley-book}.js`), `css/valley.css`, `src/main.js`, `src/index.template.html`, `src/storage.js` (réglage `natureSound`), `src/render/*` (nouveau `src/render/storks-actors.js` ; hors bloc `valley4:auto`), `tests/valley4-ui.test.js` | cloches, nid, passages, lueurs, forêt en 4 états, visiteurs dans la vue, banc, générique, contemplation, segment Légendes, livre et partage, bilan avant / après, option « Sons de la vallée », câblage du paysage sonore, conseils, débogage ; vérification au doigt | CORE : API (factices) ; ART : sprites (repli) ; AUDIO : API `setNature*` (repli : rien ne joue) |
+
+Points de contact : (1) **CORE → UI/RENDER** : formes `legendInfo`, `visitorInfo`, `valley().stork / epilogue / postcards /
+book`, `valleyView()` (visiteurs, clocher, barrage, banc), `valleyAnimals()` (vers luisants), `valleyScenery()`,
+`valleyBook()`, l'ordre des événements de l'aube et les hits (`storkNest`, `visitor`, `bench`, cloches → `seedLibrary`
+onglet `legends`) — figés ici ; écarts notés par CORE dans « Écarts et précisions (livraison CORE V4) » ; (2) **CORE →
+AUDIO** : `soundFacts` (figé ici) ; (3) **AUDIO → UI** : `natureScape(facts, ctx)`, `audio.setNature`,
+`setNatureListener`, `setNatureDetail`, `setMusicScale`, tons `clatter` / `legend` ; (4) **ART → RENDER/UI** : noms du
+tableau des sprites, ancres des 5 maisons et de la vue (RENDER les tient, ART dessine à la taille dite) ; (5) **CORE ↔
+ART** : identifiants des légendes, visiteurs, cartes, récits, décors, succès (figés ici et au § 18 de `docs/VALLEE.md`) ;
+(6) intégration (chef de projet) : sauvegarde `backup/avant-vallee-v4-2026-10-04` (faite), `node --test tests/`, `node
+tools/simulate-career.js --compare-valley4` (et `--compare-valley3` inchangé), `node tools/simulate.js` (identique), `node
+tools/capture-parity.js --check`, `node tools/build.js`, vérification au doigt (Pixel 7 et 360 × 740 : une carrière du V3
+reprise vallée complète → une légende par aube, melon semé et récolté sous sa cloche ; cigognes au clocher touchées dans
+la vue → étape 8, chapitre, roue ; printemps suivant, nid sur la maison ; un visiteur sur la ferme (vers luisants, soir) et
+un dans la vue ; épilogue en 3 pages et générique (passer, pause, mouvements réduits) ; livre (pages, sommaire, partage) ;
+bilan avant / après ; « Sons de la vallée » complets / légers / coupés, volume « Ambiance » à 0, son coupé, application en
+arrière-plan ; cibles ≥ 48 px au zoom minimal, textes ≥ 14 px, 150 % ; une partie de niveau Classique identique, sans
+aucun son nouveau), `JOURNAL.md`, sauvegarde `backup/vallee-v4-…` à la fin.
+
+---
+
+## Accompagnement — contrats (MOTEUR · LEÇONS · ART, conception 2026-10-04)
+
+Conception : **`docs/ACCOMPAGNEMENT.md`** (vision, catalogue des leçons, rappels, tutoriels, carnet, réglages, cas
+limites, plan de test). Ce qui suit fixe les **noms, formes et comportements** que les paquets se promettent.
+
+### Règles communes
+
+- **Purement de l'interface** : le moteur lit `game.state`, `game.query.*` et les événements ; il n'appelle **aucune**
+  action de jeu (seule la pause, raison `coach`, par `app.pushPause` / `app.popPause`, comme `tutorial` et `hint`
+  aujourd'hui) et n'écrit **rien** dans l'état de partie. Parité Classique (`tests/parity.test.js`), `node
+  tools/simulate.js` et `node tools/simulate-career.js` identiques.
+- **Une exception, si le point 1 du § 15 de `docs/ACCOMPAGNEMENT.md` est tranché « A »** : `createCareer({ starter: true })`
+  (cœur, carrière seulement, désactivé par défaut) pose 6 carottes mûres (`stage` 4, arrosées) sur la 1ʳᵉ rangée ouverte
+  du champ de départ ; aucun tirage ; test dans `tests/career.test.js`.
+- Les **catalogues** (`src/ui/coach/lessons/*.js`) et l'**ordonnanceur** (`src/ui/coach/scheduler.js`,
+  `src/ui/coach/acquired.js`) sont **purs** : aucun import du DOM ni de `window`, testables sous Node. Seuls `engine.js`,
+  `bubble.js`, `targets.js`, `reminders.js`, `carnet.js` touchent au DOM.
+- Identifiants de leçons = identifiants des anciens conseils quand ils existent (liste au § 1 de `ACCOMPAGNEMENT.md`) :
+  « déjà vu » ne se perd pas.
+
+### Fichiers
+
+```
+src/ui/coach/engine.js        createCoach(app) → app.coach (file, contexte, étapes, pause, réglage, pont des conseils)
+src/ui/coach/scheduler.js     PUR : pickNext(queue, ctxUi, now, opts), canShow(lesson, ui), displayMode(lesson, level),
+                              quotas (respiration 20 s, ≤ 3 leçons par jour de jeu), reminderDue(rem, ctx, memo)
+src/ui/coach/acquired.js      PUR : acquiredAtLoad(lessons, ctx) → [id] (règles du § 10.3)
+src/ui/coach/bubble.js        bulle de Joseph, pastille, doigt (tap / swipe / press / pinch / look), anneau, placement
+                              (reprend positionPortrait / positionWide / placePill de l'ancien tutorial.js)
+src/ui/coach/targets.js       resolveTarget(desc, app) → { rects: [DOMRect], label } | null ; focusTarget(desc, app, { bottom })
+src/ui/coach/store.js         vues (app.progression.hintSeen / markHint), « à lire », rappels coupés, étapes des cours,
+                              réglage (settings.guidance)
+src/ui/coach/reminders.js     rappels : évaluation (≤ 2/s), pastille, todo.addProvider / todo.pointAt, ligne du matin
+src/ui/coach/carnet.js        feuille 'carnet' « Le carnet de Joseph » (Leçons · Mots de la ferme · Rappels) ;
+                              openCarnet(app, { lessonId?, tab? }) ; reprend GLOSSARY et GUIDE_SECTIONS de guide.js
+src/ui/coach/signals.js       SIGNALS (noms des signaux d'interface, ci-dessous)
+src/ui/coach/lessons/index.js LESSONS, REMINDERS, CHAPTERS (concaténation des fichiers suivants) ; PUR
+src/ui/coach/lessons/basics.js   rudiments (basics.*), cours levels.firstYear et career.firstSteps, rappels de base
+src/ui/coach/lessons/levels.js   mode Niveaux (levels.*, processing, tree, goat, pollination, contest, grange, decor, menu.*)
+src/ui/coach/lessons/career.js   carrière rangs 1 → 6 (career.*)
+src/ui/coach/lessons/lots.js     lots 2 à 4 (surprise.*, weather.*, variety.*, career.theme*, cozy.*, fete.*, winter.*)
+src/ui/coach/lessons/valley.js   Vallée V1 → V4 (valley.*)
+css/coach.css                 bulle, pastille, doigt, anneau, .coach-target, carnet (ajouté à CSS_FILES de tools/build.js)
+assets/sprites/coach.png      (ART) planche du doigt ; generate-coach.py ; bloc // <coach:auto> d'atlas.js
+tests/coach.test.js           ordonnanceur, quotas, réglages, rappels, déduction (PUR)
+tests/coach-lessons.test.js   catalogue : unicité, FALC (≤ 90 caractères, ≤ 12 mots par phrase), anciens conseils couverts,
+                              événements connus, chapitres, mots interdits (« oublié », « dépêchez », « dernière chance »)
+```
+
+**Retirés** : `src/ui/tutorial.js` (remplacé par le cours `levels.firstYear`) ; `src/ui/hints.js` (devient un pont de
+quelques lignes, puis disparaît quand plus aucun appel `app.hints.*` ne reste) ; `windows.intro()` (carrière) ;
+`maybeLowMoneyHint()` (`main.js`, devient le rappel `money.low`) ; les tables `DEFAULT_HINTS` (`variety.js`, `cozy.js`),
+`HINT_TITLES` / `HINT_TEXTS` (`valley.js`, `heritage.js`, `places.js`) et les exports `VARIETY_HINTS`, `COZY_HINTS`,
+`VALLEY_HINTS`, `HERITAGE_HINTS`, `PLACES_HINTS` des données (tests mis à jour) ; la section « Les conseils de Joseph » du
+guide. `openGuide(app, { topic })` reste un alias de `openCarnet(app, { tab: 'words' | 'rules' })`.
+
+### API du moteur (`app.coach`)
+
+```js
+const coach = createCoach(app);              // main.js, une fois (après app.todo, app.sheets, app.dialogs)
+coach.register(LESSONS, REMINDERS);          // idempotent ; les paquets LEÇONS ajoutent leurs fichiers à lessons/index.js
+coach.bind(game, { mode: 'levels' | 'career', resumed, created });   // début ou reprise d'une partie (après showResume)
+coach.unbind();                              // retour au menu : file vidée, bulle cachée, pause `coach` levée
+coach.notify(ev);                            // CHAQUE événement du jeu, { type, ...données } (main.js, après todo.onEvent)
+coach.signal(name, data?);                   // signal d'interface (SIGNALS)
+coach.request(id, { target?, force? });      // demande explicite d'une leçon (pont : app.hints.maybe(id, target))
+coach.frame(nowMs);                          // chaque image : contexte, déclencheurs d'état (≤ 2/s), placement
+coach.startCourse(id, { from? });            // 'levels.firstYear' | 'career.firstSteps' ; from = id d'étape (reprise)
+coach.replay(id) → { ok, reason? };          // carnet « Me montrer » ; reason : 'context' | 'missing' (texte FALC)
+coach.skip(scope = 'step');                  // 'step' | 'lesson' | 'course'
+coach.later();                               // « Plus tard » : la leçon revient une fois, au prochain bon moment
+coach.level;  coach.setLevel('full' | 'quiet' | 'off');
+coach.active;                                // une bulle de leçon est affichée
+coach.blocking;                              // la bulle couvre l'écran : remplace `app.hints.active || app.tutorial.active`
+                                             // dans zoom.js, minimap.js, todo.js, valley.js, heritage.js, places.js
+coach.current → { lessonId, stepId, index, total, course } | null;
+coach.seen(id) → bool;  coach.unread() → [id];  coach.markRead(id);
+coach.openCarnet({ lessonId?, tab? });
+coach.onSay(fn);                             // (plus tard) lecture à voix haute du texte de chaque étape
+coach.onSpeed(speed);                        // app.setSpeed : lève la pause `coach` si le joueur relance le temps
+coach.relayout();                            // redimensionnement, clavier, taille du texte
+coach.stats() → { shown: [id], queue: [id], perDay, lastAt, reminders: { [id]: { shown, ignored, off } } };  // tests
+```
+
+### Format d'une leçon
+
+```js
+{
+  id: 'career.collect',                 // unique ; = ancien identifiant de conseil s'il existe
+  chapter: 'career',                    // 'basics' | 'money' | 'levels' | 'career' | 'surprises' | 'village' | 'cozy' | 'valley'
+  title: 'Les œufs',                    // titre de la bulle et du carnet (≤ 30 caractères)
+  modes: ['career'],                    // 'levels' | 'career' (les deux par défaut)
+  tier: 'E',                            // 'E' essentielle (pastille en Discret) | 'U' utile (carnet seulement en Discret)
+  priority: 70,                         // 100 cours · 90 sécurité · 70 E · 40 U · 20 méta
+  trigger: {
+    on: ['collected', 'dawn'],          // types d'événements du jeu et/ou signaux d'interface (facultatif)
+    when: (ctx) => bool,                // condition d'état (facultative ; évaluée sur `on`, et ≤ 2/s si `on` est absent)
+  },
+  stillRelevant: (ctx) => bool,         // faux avant d'être montrée → comptée vue sans être montrée (ancien `relevant`)
+  acquired: (ctx) => bool,              // « déjà su » au chargement (§ 10.3) → vue, « à relire »
+  where: 'farm',                        // 'farm' (défaut) | 'sheet:<id>' | 'view' | 'fete' | 'placing' | 'menu' | 'dialog:<id>'
+  steps: [
+    {
+      id: 'tap',
+      say: (ctx) => 'Les poules ont pondu ! Touchez le poulailler.',   // ≤ 90 caractères (texte ou fonction)
+      face: 'happy',                    // expression de Joseph : 'content' | 'happy' | 'proud'
+      target: (ctx) => ({ scene: { type: 'shelter', buildingId: 'coop' }, label: 'le poulailler' }),
+      gesture: 'tap',                   // 'tap' | 'swipe' | 'press' | 'pinch' | 'look' | null
+      pause: true,                      // défaut true ; false = le temps coule (attendre une pousse, le jour suivant)
+      done: { on: 'collected', when: (ctx) => ctx.ev.by === 'player' },   // OU { button: 'Compris' } OU { state: (ctx) => bool }
+      skipIf: (ctx) => bool,            // but déjà atteint → étape sautée
+      back: 'tap',                      // étape d'ancrage si la cible disparaît (feuille fermée…)
+      buttons: ['later'],               // en plus : 'later' (« Plus tard »), 'know' (« Je connais », cours)
+      sheet: 'seeds',                   // l'étape n'existe que feuille ouverte (cible dans la feuille)
+    },
+  ],
+  next: 'career.charges',               // facultatif : leçon proposée juste après (respiration levée)
+  reminders: ['shelter'],               // rappels liés (affichés dans le carnet avec la leçon)
+}
+// Cours : { id, chapter: 'basics', course: true, lessons: ['basics.harvest', …] | steps: [...], resume: 'tutorial' | 'firstSteps' }
+//   (les étapes d'un cours peuvent citer `lesson: 'basics.sow'` : finir l'étape marque cette leçon vue)
+```
+
+**Contexte** passé aux fonctions (`ctx`, lecture seule, jamais modifié) :
+
+```js
+ctx = {
+  game, q: game.query, state: game.state, mode: 'levels' | 'career', difficulty, level /* niveaux */, career /* state.career | null */,
+  ev /* événement courant ou null */, signal /* { name, data } | null */,
+  day: { abs, day, seasonId, dayProgress, year },
+  ui: { sheet, dialog, fete, view, decor, placing, menu, rotated, resume, wide, touch, reducedMotion, textScale },
+  progress /* lecture : levels, lifetime, career, album */, seen: (id) => bool, settings,
+  safe: (fn, fallback) => valeur,       // garde-fou : une requête absente (lot non chargé) ne casse rien
+}
+```
+
+### Cibles (`targets.js`)
+
+```js
+{ ui: '#tab-buy' | (ctx) => Element, sheet?: 'shop' }   // élément visible ; `sheet` : seulement feuille ouverte
+{ plot: 12 }                                            // app.plotPageRect(i)
+{ plots: [3, 4, 5, 9] }                                 // chemin d'un glissé, dans l'ordre
+{ scene: hit }                                          // hit = forme de scene.hitTest : { type: 'shelter', buildingId },
+                                                        //   { type: 'lotForSale', lotId }, { type: 'valleyBox' }, { type: 'wildlife', id },
+                                                        //   { type: 'villageBoard' }, { type: 'cart' }, { type: 'merchant' }, { type: 'feeder' },
+                                                        //   { type: 'storyWindow' }, { type: 'valleyView' }, { type: 'crow', plotIndex }…
+{ world: { x, y, w, h } }                               // app.worldPageRect(r)
+{ view: hit }                                           // app.valleyView.targetPageRect(hit)
+{ rect: () => DOMRect }                                 // pont des anciens conseils
+// + label (lecteur d'écran, obligatoire), focus (défaut true : faire défiler / zoomer pour montrer la cible)
+```
+
+- **RENDER (petit ajout, paquet MOTEUR)** : `scene.targetRect(hit) → rect du monde | null`, façade sur
+  `layout.hitRect(hit)`, `actors.rectOf(hit)`, `cozyItemRect`, `valleyItemRect`, `placesItemRect` et les emplacements du lot 3
+  (`varietySpots`). Aucun autre changement de la scène. Défilement : `scene.focusRect(r, { bottom, animate })`,
+  `focusPlot`, `focusLot`, `focusBuilding` ; zoom : `scene.ensureTouchZoom()` / `scene.restoreZoom()` (existants).
+- Tous les rectangles sont recalculés **à chaque image** (zoom, pincement, défilement, feuille qui monte).
+
+### Signaux d'interface (`SIGNALS`)
+
+`sheetOpen` `{ id }` · `sheetClose` `{ id }` · `tab` `{ id }` · `dialogOpen` `{ id }` · `dialogClose` `{ id }` ·
+`todoGo` `{ id }` · `longPress` `{ hit }` · `sowAll` · `zoom` `{ ratio }` · `viewOpen` / `viewClose` · `feteMode`
+`{ on }` · `placing` `{ kind | null }` · `wildPlacing` `{ on }` · `decor` `{ on }` · `menu` `{ screen }` · `resumeClose` ·
+`rankClosed` `{ rank }` · `messagesOpen` · `carnetOpen` · `speed` `{ speed }` · `valleySheet` `{ tab }`.
+
+Émis par : `sheets.js` (open/close), `tabbar.js`, `dialogs.js` (open/close), `todo.js` (go, résumé fermé), `gestures.js`
+(appui long), `field.js` / `app.plantAll` (semer partout), `zoom.js` (`changed()`), `valley-view.js`, `cozy.js` (mode fête),
+`valley.js` (mode aménagement, onglets de la fiche), `places.js` (terres sauvages), `decor.js`, `main.js` (menu),
+`career/windows.js` (fenêtre du rang fermée), `messages.js`, `carnet.js`, `app.setSpeed`. Un seul appel par endroit :
+`app.coach?.signal(SIGNALS.x, data)`.
+
+### Rappels (format)
+
+```js
+{
+  id: 'troc', modes: ['career'], chapter: 'valley',
+  when: (ctx) => null | { since: absDay, text: 'Mme Rose attend votre troc, rien ne presse.', target? },
+  wait: 3,                               // jours de jeu d'attente avant d'en parler
+  todo: 'vl-troc' | (ctx) => ({ id, prio, text, short, icon, go }) | null,   // entrée « À faire » existante (id) ou fournie
+  go: (app) => void,                     // action au toucher de la pastille (sinon : celle de l'entrée « À faire »)
+  oncePerSeason: false,
+}
+```
+
+Quotas (ordonnanceur) : ≤ 1 pastille par jour de jeu, ≤ 4 par saison, jamais la même sorte deux jours de suite, silence
+jusqu'à la saison suivante après 3 pastilles ignorées, rien pendant 1 jour après « Où en étais-je ? ». Discret : jamais de
+pastille (ligne « À faire » et résumé du matin seulement). Aucun : aucun rappel.
+
+### Points d'accroche dans l'existant
+
+| Où | Ajout |
+|---|---|
+| `src/main.js` | `app.coach = createCoach(app)` ; `onEvent` → `app.coach.notify(ev)` ; `frame()` → `app.coach.frame(now)` (à la place de `tutorial.frame()` et `hints.frame()`) ; `startLevel` / `careerUI.bind` → `coach.bind(...)` ; `quitToMenu` → `coach.unbind()` ; `app.setSpeed` → `coach.onSpeed(speed)` (et `pauseReasons.delete('coach')` comme `tutorial`) ; `updateSettings` → `coach.setLevel(settings.guidance)` ; menu Pause : « Le carnet de Joseph » (remplace « Guide de la ferme ») ; retrait des appels `app.hints.maybe` de `main.js` (leurs déclencheurs passent dans les leçons) |
+| `src/storage.js` | `DEFAULT_SETTINGS.guidance = 'full'`, `guidanceAsked = false` ; `loadSettings` vérifie `['full', 'quiet', 'off']` ; `loadTutorial()` accepte `step` texte (identifiant) et convertit l'ancien index (§ 6 de `ACCOMPAGNEMENT.md`) |
+| `src/ui/guide-prefs.js` | `DEFAULTS` + `unread: []`, `reminders: {}`, `firstSteps: null` |
+| `src/ui/dialogs.js` | `a11yWelcome()` : section « Joseph vous accompagne » (3 choix) ; options : section « Accompagnement » (même choix + « Ouvrir le carnet ») ; « Nouvelle ferme » : case « Premiers pas avec Joseph » |
+| `src/ui/todo.js` | `addProvider(fn(game) → items[])`, `pointAt(id, ms = 6000)` (met l'entrée en tête et la fait briller), `morningNote(text)` (existe) pour la ligne « Joseph : … » ; la ligne « À faire » se cache sous une bulle de leçon (`coach.blocking`) mais **pas** sous une pastille de rappel |
+| `src/ui/career/index.js` | `bind(created)` → `app.coach.startCourse('career.firstSteps')` si la case est cochée (à la place de `windows.intro(g)`) ; retrait des `app.hints.maybe` (déclencheurs dans `lessons/career.js`) |
+| `src/ui/career/windows.js` | `intro()` retirée ; fenêtre du rang : `signal('rankClosed', { rank })` à sa fermeture ; les 3 nouveautés mises en avant viennent de `career.rankN` |
+| `src/ui/variety.js`, `cozy.js`, `album.js`, `field.js` | retrait des `hint(...)` et des tables de textes ; signaux de leurs feuilles (déjà couverts par `sheetOpen`) |
+| `src/ui/career/valley.js`, `heritage.js`, `places.js`, `valley-view.js` | idem ; `valley-view.js` publie `targetPageRect` (existe) ; signaux `viewOpen` / `viewClose`, `placing`, `wildPlacing` |
+| `src/ui/zoom.js`, `src/ui/career/minimap.js` | `app.hints?.active \|\| app.tutorial?.active` → `app.coach?.blocking` (une ligne chacun ; **`zoom.js` est en cours de modification par un autre agent** : faire ce changement après sa livraison) |
+| `src/render/scene.js` | `targetRect(hit)` (façade, ci-dessus) |
+| `src/core/career/career.js`, `land.js` | (si « A ») option `starter` de `createCareer` |
+| `tools/build.js` | `css/coach.css` dans `CSS_FILES` |
+
+### Sprites (paquet ART : `assets/sprites/coach.png`, `assets/sprites/generate-coach.py`, bloc `// <coach:auto>`)
+
+| Nom | Taille | Contenu |
+|---|---|---|
+| `coach.hand`, `coach.hand.1` | 16 × 16 | main gantée claire (contour sombre 1 px), index tendu vers le haut-gauche ; 2ᵉ image : index appuyé (doigt plus court, petite onde) |
+| `coach.hand.press` | 16 × 16 | index appuyé, cercle pointillé autour du bout du doigt (le remplissage du cercle est dessiné par le code) |
+| `coach.hand.pinch`, `coach.hand.pinch.1` | 24 × 16 | deux doigts (pouce et index) rapprochés / écartés |
+| `coach.arrow` | 8 × 8 | petite flèche (mouvement réduit : pointillés d'un glissé) |
+| `portrait.joseph.point` | 32 × 32 | Joseph de face, casquette, qui montre du doigt vers le bas (bulle des étapes à geste) ; facultatif : sinon `portrait.joseph` |
+
+Repli sans la planche : main dessinée en CSS (`css/coach.css`), portrait existant (`portrait.joseph`, `spriteAny`).
+`CREDITS.md` : planche dessinée pour le jeu (CC0), comme les autres planches générées.
+
+### Découpage en 4 paquets parallèles
+
+| Paquet | Possède (seul à modifier) | Livre | Attend |
+|---|---|---|---|
+| **MOTEUR + TUTORIELS** | `src/ui/coach/{engine,scheduler,acquired,bubble,targets,store,reminders,carnet,signals}.js`, `src/ui/coach/lessons/{index,basics}.js`, `css/coach.css`, `tools/build.js` (une ligne), `src/main.js`, `src/storage.js`, `src/ui/guide-prefs.js`, `src/ui/guide.js`, `src/ui/hints.js` (pont), `src/ui/tutorial.js` (retrait), `src/ui/dialogs.js`, `src/ui/todo.js`, `src/ui/sheets.js`, `src/ui/tabbar.js`, `src/ui/gestures.js`, `src/render/scene.js` (`targetRect` seulement), `src/core/career/{career,land}.js` (si « A »), `tests/coach.test.js`, `tests/coach-lessons.test.js`, `tests/guidance.test.js` (mise à jour) | moteur complet, bulle, doigt, cibles, carnet, réglages, déduction, rappels de base (`harvest`, `water`, `sow`, `money.low`, `order`), cours `levels.firstYear` et `career.firstSteps`, leçons `basics.*` ; le test de catalogue (que les paquets LEÇONS font passer) | sprites ART (repli CSS en attendant) |
+| **LEÇONS lots** | `src/ui/coach/lessons/{levels,career,lots}.js`, `src/ui/variety.js`, `src/ui/cozy.js`, `src/ui/album.js`, `src/ui/field.js`, `src/ui/lot2.js`, `src/ui/career/{index,windows,shop,lots,staff,buildings,journal,events}.js`, `src/data/{variety,cozy}.js` (retrait des `*_HINTS`) et leurs tests | leçons des §§ 7.2 à 7.6, rappels de la carrière et des lots (`shelter`, `waiting`, `leave`, `stock`, `quest`, `offer`, `cart`, `cards`, `challenges`, `merchant`, `fete`, `winter`, `veillee`, `album`), leçons de rang (3 nouveautés), retrait de `windows.intro()` et des `hint(...)`, signaux de leurs feuilles et fenêtres | format des leçons (figé ici) ; `coach.request` (pont) disponible dès le début |
+| **LEÇONS Vallée** | `src/ui/coach/lessons/valley.js`, `src/ui/career/{valley,heritage,places,valley-view}.js`, `src/data/career/{valley,heritage,places}.js` (retrait des `*_HINTS`) et leurs tests | leçons du § 7.7 (et modèle § 7.8 pour le V4), rappels `jar`, `species`, `troc`, `chapter`, `trial`, signaux de la vue et des modes de visée | idem ; **V4** : `STORKS_HINTS` du paquet UI du V4 repris en leçons (coordination avec l'agent du V4, `src/ui/career/storks.js`) |
+| **ART** | `assets/sprites/generate-coach.py`, `assets/sprites/coach.png`, bloc `// <coach:auto>` d'`atlas.js`, `CREDITS.md` | planche et noms du tableau ; planche de contrôle × 6 | — |
+
+Points de contact : (1) **MOTEUR → LEÇONS** : format d'une leçon, de `ctx`, des cibles, des rappels et `SIGNALS` (figés
+ici) ; un écart se note dans « Écarts et précisions (livraison MOTEUR) » ; tant que le moteur n'est pas livré, les
+paquets LEÇONS écrivent leurs catalogues purs et les valident avec `tests/coach-lessons.test.js` ; (2) **MOTEUR → tous** :
+`app.coach.blocking` remplace `app.hints.active` / `app.tutorial.active` ; le pont `app.hints.maybe` reste jusqu'à la fin
+des deux paquets LEÇONS, puis MOTEUR le retire ; (3) **ART → MOTEUR** : noms des sprites (repli CSS) ; (4) **LEÇONS lots
+↔ MOTEUR** : `src/ui/career/index.js` appelle `coach.startCourse('career.firstSteps')` (MOTEUR fournit le cours, LEÇONS
+lots l'appel) ; (5) **agents en cours** : boutons de zoom (`src/ui/zoom.js`, CSS) — le changement d'une ligne attend leur
+livraison ; Vallée V4 — ses conseils deviennent des leçons ; (6) **intégration** (chef de projet) : sauvegarde
+`backup/avant-accompagnement-<date>`, `node --test tests/`, parité (`tools/capture-parity.js --check`), `node
+tools/simulate.js` et `node tools/simulate-career.js` identiques, `node tools/build.js`, vérification au doigt du § 14 de
+`docs/ACCOMPAGNEMENT.md` (Pixel 7 et 360 × 740, texte 150 %, mouvement réduit), `JOURNAL.md`.

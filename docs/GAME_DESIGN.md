@@ -2307,13 +2307,13 @@ Conception complète, chiffrée et découpée en lots : **`docs/VALLEE.md`** ; c
   habitants à recette d'habitat lisible (rouge-gorge, hérisson, coccinelles, bourdons, paon-du-jour, hirondelles, chouette
   hulotte, grenouille, libellules, lièvre, écureuil, geai) qui viennent puis **attendent que le joueur les touche** pour
   s'installer, et rendent un service doux (qualité, pousse, corbeaux, pêche, hiver…).
-- **Étapes de la vallée** (0 à 5 au V1, 8 au V4), comptées en **signes de vie** (habitants + variétés fixées) : la lisière
+- **Étapes de la vallée** (0 à 5 au V1, 6 et 7 au V3, 8 au V4 — les cigognes, sans palier de signes), comptées en **signes de vie** (habitants + variétés fixées) : la lisière
   fleurit, les oiseaux reviennent, cueillette des haies, pollinisation, sol vivant, décor « Le tilleul de la vallée ».
 - **Lots** : **V1** « La boîte en fer » (graines et premiers habitants, structurant) ; **V2** « Le troc et les croisements »
   (Grainothèque à 5 niveaux, troc avec les villageois, variétés croisées au nom de la ferme) ; **V3** « Le ruisseau »
   (vue de la vallée, 6 lieux à restaurer par chantiers, conditions de vie et temps de reprise, terres sauvages après les
   16 terrains : le grand puits d'argent ; conception détaillée au § 18.2) ; **V4** « Les cigognes » (légendes, visiteurs
-  rarissimes, paysage et sons complets).
+  rarissimes, paysage et sons complets, épilogue de Joseph ; décoratif ; conception détaillée au § 18.3).
 - **Règles d'or** : carrière seulement (parité des niveaux intacte ; seules deux pages d'album se voient dans la grange),
   rien ne se perd, aucune monnaie nouvelle, gestes réservés au joueur (« aider sans remplacer »), un seul indice à la
   fois, aucune peur de rater, flux aléatoire unique `valley`.
@@ -2402,3 +2402,50 @@ complète vers l'an 18 ; terres sauvages au V3 après les 16 terrains ; dépense
   vers l'an 13, étape 7 vers l'an 16) ; ferme laissée seule ≤ + 3 % ; rangs à un an près ; aucune faillite.
 - **À trancher** (`docs/VALLEE.md` § 17.16) : taille du puits, moment d'ouverture de la vallée, chantiers en parallèle,
   terres sauvages sans production, parcelles au zoom minimal, temps dans la vue.
+
+### 18.3 Lot V4 « Les cigognes » (conception détaillée, 2026-10-04)
+
+Conception complète : **`docs/VALLEE.md` § 18** ; contrats : `docs/ARCHITECTURE.md`, « Vallée vivante — contrats du lot
+V4 ». Dernier lot de la Vallée, **décoratif** : aucun revenu, aucun service, aucun coût. En bref :
+
+- **Quatre légendes** — des graines qui « dormaient » et qu'un moment du récit réveille : le **melon de la boîte** (Melon
+  Petit Gris de Rennes, la promesse du V1) à l'étape 6 « L'eau revient » (« quand l'eau revient, tout revient ») ;
+  l'**engrain du moulin** quand le moulin tourne ; la **Merveille de la ferme**, née de trois étés de sélection à la main de
+  la Tomate croisée (la « 3ᵉ génération ») ; les **pois du jour des cigognes** de la grand-mère de Joseph. Elles poussent
+  sous **quatre cloches de verre** devant la Grainothèque (toute saison, sans eau), se récoltent à la main, **ne se vendent
+  jamais** (on les partage), et remplissent la page d'album « Les légendes ».
+- **Six visiteurs rarissimes** : les **cigognes** (déterministes : « le même jour » chaque printemps, d'abord sur le clocher
+  du village quand la vallée les nourrit — étape 7, étang et prairie restaurés —, puis sur une roue offerte par Joseph, sur
+  la maison), les **grues** (halte d'automne dans la prairie), le **cerf** (lisière de la vieille futaie), le **loriot** (verger
+  conservatoire), le **castor** (ruisseau et vieux saules), les **vers luisants** (soirs d'été, le long des haies de la ferme).
+  Comme les habitants, ils viennent puis **attendent qu'on les touche** ; ensuite ils reviennent en décor, dans la vue et sur
+  la ferme. Page d'album « Les visiteurs rares ».
+- **Étape 8 « Les cigognes »** : les cigognes vues sur le clocher (aucun palier de signes ; 100 écus, la roue, le chapitre
+  8). Aucun chantier du clocher : pas de bâtiment public restauré contre de l'argent.
+- **L'épilogue de Joseph** (« La vallée retrouvée », trois pages) quand les six lieux sont restaurés et que les cigognes
+  nichent sur la maison (vers l'an 18) : il donne la **boîte en fer** au joueur, puis s'assoit sur le banc du belvédère avec
+  Hélène. **Générique doux** : la vue de la vallée au soir, la musique s'éteint, seule la vallée s'entend. **Pas de fin de
+  partie** : la carrière continue.
+- **Le livre de la vallée** : la chronique de toute la carrière (une page par année, avant / après, graines, habitants,
+  lieux, calendrier de la vallée, récits, phrases d'Hélène), relisible à toute étape, partageable en image locale.
+- **Paysage complet** : la forêt de la carte en 4 états jusqu'à la « vieille forêt mêlée » ; nid de cigognes, vols de
+  grues, vers luisants, arc-en-ciel après la pluie ; dans la vue, castor, cerf, village éclairé le soir, « S'asseoir sur le
+  banc » (contemplation).
+- **Paysage sonore** (synthèse procédurale Web Audio, aucun fichier, aucune licence) : la couche d'oiseaux existante suit
+  l'étape (la vallée « s'est tue » à l'étape 0) ; chaque habitant installé ou visiteur vu a **son chant** (rouge-gorge,
+  merle, chouettes, alouette, huppe, pic, cigognes, grues, loriot…) ; ruisseau, moulin, vent dans les feuilles, grillons,
+  grenouilles, par lieu, saison, météo et moment du jour ; sons placés dans la vue de la vallée ; bus « Ambiance » et
+  réglages existants respectés ; nouveau réglage « Sons de la vallée : Complets · Légers · Coupés ». Ce sont les ambiances
+  promises aux étapes 1, 5 et 6, jamais faites jusqu'ici.
+- **Après l'an 18** (sans peur de rater, sans corvée) : visiteurs étalés jusqu'à l'an 22, retour des cigognes chaque
+  printemps et leurs petits, légendes à ressemer, **8 cartes de vallées voisines** (on leur envoie un sachet de la boîte, une
+  carte revient la saison suivante), une page du livre par an, Joseph et Hélène sur le banc.
+- **Aléatoire** : un flux nouveau `valley4` (5 nombres par aube pour les visiteurs tirés) ; tout le reste déterministe ;
+  aucun flux existant ne tire un nombre de plus. Niveaux et Classique strictement inchangés.
+- **Équilibre** (cibles `--compare-valley4`, V3 → V4, 60 carrières × 24 ans) : revenu et argent en caisse **± 0,5 %**
+  (attendu : identiques, vérifié par une empreinte économique jour par jour), aucune faillite, rangs identiques ; melon vers
+  l'an 13, cigognes vers l'an 16-17, épilogue vers l'an 18, six visiteurs vers l'an 21-22 ; `automator` sans étape 8.
+  Album : 2 pages (10 cases), 9 succès (210 écus), 3 décors.
+- **À trancher** (`docs/VALLEE.md` § 18.16) : où poussent les légendes, venue des cigognes (sans chantier ou chantier du
+  clocher), sons synthétisés ou enregistrés, couche d'oiseaux qui suit l'étape, forme de la fin douce, contenu de l'après-an
+  18, prénom de la mère de Joseph.

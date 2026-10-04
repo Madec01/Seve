@@ -1,8 +1,8 @@
 {
-  "id": "2f5814ff3255",
+  "id": "c491dff3a8a3",
   "note": "Généré par tools/build.js : ne pas modifier à la main.",
-  "js": "dist/game.a1a7c86fe6.js",
-  "css": "dist/game.d2477431f1.css",
+  "js": "dist/game.5235594606.js",
+  "css": "dist/game.f708908def.css",
   "esbuild": "0.28.2",
   "sources": {
     "assets/audio/ambience/bees.mp3": "a0fd6a9f8b4f57e0",
@@ -156,9 +156,9 @@
     "assets/sprites/valley3.png": "f387654c61f853c7",
     "css/cozy.css": "53756a793692ba6e",
     "css/fonts.css": "f6a60d8eb500f8f4",
-    "css/guidance.css": "40cbbd0be7f99e99",
+    "css/guidance.css": "2bd111cb4f8b252b",
     "css/lot2.css": "76e1d7a60818095c",
-    "css/style.css": "d20cbc85c73d6844",
+    "css/style.css": "78ab38d6809648b4",
     "css/valley.css": "dd62a77ae511e0ea",
     "css/variety.css": "4d552afd64d7eb87",
     "manifest.webmanifest": "c406b9280302ded5",
@@ -314,11 +314,19 @@
     "src/ui/tutorial.js": "b567fa8157c237dd",
     "src/ui/v3.js": "45edf2a4853e4468",
     "src/ui/variety.js": "6999641cfea88016",
-    "src/ui/zoom.js": "ffe8ad878d7bc7dd",
+    "src/ui/zoom.js": "067e2ef9b61638f9",
     "src/version.js": "f09dfa77b44b45cb",
     "tools/build.js": "6435a9537b392ecd"
   },
   "history": [
+    {
+      "id": "c491dff3a8a3",
+      "files": [
+        "dist/game.5235594606.js",
+        "dist/game.5235594606.js.map",
+        "dist/game.f708908def.css"
+      ]
+    },
     {
       "id": "2f5814ff3255",
       "files": [
@@ -348,14 +356,6 @@
       "files": [
         "dist/game.21f0fd2774.js",
         "dist/game.21f0fd2774.js.map",
-        "dist/game.3989980aad.css"
-      ]
-    },
-    {
-      "id": "d9c57c080073",
-      "files": [
-        "dist/game.a2d7e9bc92.js",
-        "dist/game.a2d7e9bc92.js.map",
         "dist/game.3989980aad.css"
       ]
     }

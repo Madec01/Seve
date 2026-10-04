@@ -866,6 +866,41 @@ Sauvegarde avant : `backup/avant-qa-lot4-2026-10-03` (branche + tag locaux, comm
 - **À trancher par l'utilisateur** : `docs/VALLEE.md` § 15 (contenu du V1, observation obligatoire, dépenses au
   patrimoine, équipe et variétés fixées, chantiers du V3, longueur de la traîne, terres sauvages, page des habitants du V2).
 
+### 2026-10-04 — Accompagnement (Joseph vous montre) : conception
+
+- **Conception écrite avant le code** (aucun fichier de `src/` ni de `tests/` modifié, rien de commité ; documents
+  seulement, donc pas de sauvegarde : à faire avant le code, `backup/avant-accompagnement-<date>`) :
+  **`docs/ACCOMPAGNEMENT.md`** (nouveau : inventaire du guidage existant, toutes les mécaniques et leur moment
+  d'apparition, règles d'or, moteur de leçons, tutoriel de début de carrière geste par geste, refonte du tutoriel du
+  niveau 1, catalogue complet des leçons, rappels, carnet de Joseph, réglage Complet / Discret / Aucun, anciennes parties,
+  accessibilité, maquettes, cas limites, plan de test, points à trancher) et `docs/ARCHITECTURE.md` « Accompagnement —
+  contrats » (fichiers `src/ui/coach/`, API `app.coach`, format d'une leçon, contexte, cibles, signaux, rappels, points
+  d'accroche, sprites du doigt, 4 paquets MOTEUR + TUTORIELS · LEÇONS lots · LEÇONS Vallée · ART).
+- **Décisions de l'utilisateur** : le guide est **Joseph** (bulle avec portrait, il montre du doigt, textes courts) ;
+  **montrer, puis rappeler** (chaque mécanique montrée une fois pas à pas au bon moment, puis rappels discrets ; réglage
+  « Accompagnement : Complet / Discret / Aucun ») ; **vrai tutoriel en jouant au début de la carrière** sur de vraies
+  parcelles mûres, passable.
+- **Choix** : un seul moteur remplace le tutoriel du niveau 1, la soixantaine de conseils « première fois » dispersés
+  dans six fichiers, l'accueil à trois bulles de la carrière et le conseil « fermage en danger » (mêmes identifiants : ce
+  qui a été vu reste vu) ; chaque étape a une **cible** (interface ou objet de la scène, compatible zoom) et un **geste
+  montré** (toucher, glisser, appui long, pincer), avance quand le joueur **fait** le geste, ≤ 2 lignes FALC, temps en
+  pause pendant les étapes de lecture ; une leçon à la fois, file, ≤ 3 par jour de jeu, jamais pendant une fenêtre, une
+  fête, la vue de la vallée ou un mode de visée (sauf si la leçon le concerne) ; rappels sans culpabilité (≤ 1 par jour,
+  ≤ 4 par saison, silence après 3 ignorés, coupables un par un) branchés sur la ligne « À faire » et le résumé du matin ;
+  **le carnet de Joseph** (leçons relisibles et rejouables, mots de la ferme, rappels) remplace le guide de la ferme ;
+  rudiments déduits des anciennes parties (jamais rejoués à un joueur expérimenté).
+- **Tutoriel de début de carrière** : 6 carottes mûres, premier glissé de récolte en 5 s, ≈ 75 mots en 10 étapes
+  (récolter en glissant, payé tout de suite, semer, arroser, le temps, les œufs, acheter une poule, le carnet).
+  **Niveau 1** : 12 étapes, ≈ 90 mots au lieu de 206, avec glissés, appui long, ligne « À faire ».
+- **Parité Classique intacte** : l'accompagnement est hors de l'état de partie (vues dans `progression.hintsSeen`, réglage
+  dans les options, préférences du guidage) ; seule exception à trancher : l'option de création `createCareer({ starter })`
+  pour les carottes mûres (carrière seulement, désactivée par défaut côté cœur).
+- **À trancher par l'utilisateur** : `docs/ACCOMPAGNEMENT.md` § 15 (carottes mûres du début de carrière ; carnet et guide
+  fusionnés ou non ; réglage par défaut des joueurs qui ont déjà joué).
+- Travail en parallèle d'autres agents (boutons de zoom, conception du V4) : leurs sections n'ont pas été touchées ; le
+  changement d'une ligne de `src/ui/zoom.js` (`app.coach.blocking`) attendra leur livraison ; les 4 conseils du V4
+  (`valley.legend`, `valley.visitor`, `valley.book`, `valley.sounds`) deviennent des leçons du même identifiant.
+
 ## Idées (à étudier plus tard)
 
 - Chèvres et fromagerie (pas de sprite de chèvre dans le pack : à dessiner à partir du mouton).
@@ -1662,3 +1697,74 @@ Sauvegarde : `backup/avant-qa-vallee3-2026-10-03` (branche + tag locaux, commit 
 - Idées : la case de l'album pourrait se cocher tout de suite pour les habitants de la vallée (aujourd'hui à l'aube, règle
   du lot 4) ; levier des chantiers pour l'argent de l'an 14 (à trancher).
 
+
+### 2026-10-04 — Boutons de zoom au bord de l'écran, au-dessus de la mini-carte (retour joueur)
+
+Retour de l'utilisateur, testé sur son téléphone : « Les boutons de zoom sont mal placés, ils devraient être au bord de
+l'écran, au-dessus de la mini-carte. » (Avant : en carrière, la colonne + / − / 1:1 flottait à 130 px du bord, à gauche
+de la mini-carte, au milieu de la ferme ; repliée, à 68 px du bord.)
+
+- **Placement** (`css/style.css`, `src/ui/zoom.js`) : colonne collée au bord (`--safe-r` + 6 px ; + 4 px sur petit écran,
+  pastilles alignées sur le cadre de la mini-carte). Carrière : juste au-dessus de la mini-carte et de ses boutons de
+  coin (6 px d'écart), ou du bouton « Carte » quand elle est repliée. Niveaux : même bord, au-dessus de la ligne
+  « À faire ». Gaucher : la mini-carte ne change pas de côté, la colonne reste au-dessus d'elle en carrière ; bord
+  gauche en Niveaux. Ancrée par le bas, « 1:1 » en haut : + et − ne bougent pas quand « 1:1 » apparaît. La mini-carte
+  et la colonne partagent les variables `--mm-bottom` / `--mm-h` / `--mm-right` (une seule source). Grand écran :
+  au-dessus de la mini-carte aussi (vérifié en 1280 × 800).
+- **Place des messages** (`src/ui/zoom.js`, `css/guidance.css`) : la hauteur réservée ne compte plus que la mini-carte
+  (`--float-reserve`) ; la colonne, au bord, réserve une largeur (`--float-col-r` / `--float-col-l`) et les messages se
+  rangent à côté d'elle, centrés dans la place restante. Ils restent ainsi près du bas en Niveaux au lieu de monter
+  au-dessus de la colonne. Rien n'est publié dans la vue de la vallée (la mini-carte y est seulement invisible).
+- **Vérification au doigt** (Playwright, touch seul, Pixel 7 et 360 × 740, texte 100 / 150 %, droitier / gaucher,
+  carrière mini-carte ouverte / repliée + Niveaux : 24 combinaisons) : rectangles mesurés, bord ≤ 8 px + safe-area,
+  aucun chevauchement avec la mini-carte, « À faire », onglets, barre du haut, vitesse ni messages (deux messages
+  forcés) ; « + » au doigt fait apparaître « 1:1 » sans déplacer la colonne, « 1:1 » au doigt revient au défaut ;
+  cachés sous une fiche et dans la vue de la vallée ; aucune erreur console. Captures `screens/zoompos-before-*.png`
+  et `screens/zoompos-after-*.png`.
+- Remarque : à 150 % sur 360 px, les messages (plus étroits de 62 px) coupent plus souvent leur texte sur deux lignes
+  (« … ») ; le texte complet reste dans l'historique (cloche).
+
+### 2026-10-04 — Vallée V4 : conception
+
+Conception complète du lot V4 « Les cigognes » (dernier lot de la Vallée, décoratif) et de ses contrats, sans code de jeu
+(rien de modifié dans `src/` ni `tests/` ; non commité). Sauvegarde déjà faite avant le lot :
+`backup/avant-vallee-v4-2026-10-04` (commit `ae003c1`).
+
+- **`docs/VALLEE.md` § 18** (nouveau, remplace l'aperçu du § 11.4 là où ils diffèrent ; § 2.1, § 6 et § 11.4 y renvoient) :
+  **4 légendes** (melon de la boîte — Petit Gris de Rennes — à l'étape 6 « quand l'eau revient, tout revient » ; engrain du
+  moulin au Ru 4 ; Merveille de la ferme par 3 étés de sélection à la main de la Tomate croisée ; pois du jour des cigognes)
+  sous **4 cloches** devant la Grainothèque, jamais vendues ; **6 visiteurs rares** (cigognes déterministes « le même jour »,
+  grues, cerf, loriot, castor, vers luisants) qui attendent qu'on les touche, puis reviennent en décor ; **étape 8** sans
+  chantier (les cigognes viennent quand la vallée les nourrit ; roue offerte par Joseph, nid sur la maison) ; 5 récits et
+  le chapitre 8 ; **épilogue** de Joseph en 3 pages + **générique doux** (la vallée au soir, sans musique) ; **livre de la
+  vallée** (chronique de la carrière, avant / après, partage en image locale) ; forêt de la carte en 4 états ; **plan
+  sonore** complet ; après l'an 18 (visiteurs étalés, cigognes et cigogneaux chaque printemps, 8 cartes de vallées
+  voisines, une page du livre par an, le banc) ; maquettes ; équilibrage (aucun effet économique, empreinte), robots,
+  leviers, performances ; cas limites ; écarts avec l'aperçu ; 7 points à trancher.
+- **`docs/ARCHITECTURE.md`**, « Vallée vivante — contrats du lot V4 » : fichiers (nouveaux `src/data/career/storks.js`,
+  `src/core/career/storks.js`, `src/audio/{soundscape,nature}.js`, `src/ui/career/{storks,valley-book}.js`,
+  `src/render/storks-actors.js`), état exact (`v: 4`), déroulé de l'aube, actions (`sowLegend`, `harvestLegend`,
+  `observeVisitor`, `readEpilogue`, `seeCredits`, `sendPostcardSeeds`…), requêtes (`valleyScenery`, `valleyBook`,
+  `valleySounds`…), événements, flux **`valley4`** (5 nombres par aube, rien d'autre), migration V3 → V4 sans perte
+  (`{ storks: false }` = V3 exact ; `stageAt` reconstruit), simulation `--compare-valley4` avec **empreinte économique**,
+  rendu (cloches, nid par niveau de maison, passages, lueurs, forêt dans la couche fixe, vue : visiteurs, générique,
+  contemplation), **plan audio technique** (chaîne Web Audio, 22 sources avec leurs recettes de synthèse, faits du jeu →
+  paysage pur et testé, budgets), planche `valley4.png` (noms, tailles, descriptions), découpage **CORE / ART / AUDIO /
+  UI-RENDER** et points de contact. L'aperçu V4 du contrat V1 renvoie à cette section.
+- **`docs/GAME_DESIGN.md` § 18.3** : résumé du V4 ; § 18 : étapes 6 à 8 et ligne du V4 mises à jour.
+- **Constat (bug de conception, sans effet de jeu)** : les ambiances promises par les étapes 1 (« le chant du matin »), 5
+  (« la vallée qui chante ») et 6 (« le ruisseau s'entend ») n'ont jamais été faites : `main.js` ne joue que `ambienceFor`
+  (fichier `birds` générique, le même de l'étape 0 à l'étape 7). Le V4 les réalise (§ 18.8).
+- **Choix principaux** : décoratif strict (aucune pièce gagnée ni dépensée, contrôlé par empreinte) ; pas de chantier du
+  clocher (règle « pas Stardew » : aucun bâtiment public restauré contre de l'argent) ; la « 3ᵉ génération croisée × croisée »
+  de l'aperçu remplacée par une sélection paysanne (il n'existe qu'une croisée par culture) ; sons en **synthèse
+  procédurale** (aucun fichier, aucune licence, hors ligne) ; légendes et visiteurs **hors** signes de vie (les 99 restent
+  « toute la vallée ») ; une légende ou un récit par aube au plus (pas de rafale à la mise à jour) ; Joseph ne part pas : il
+  se repose sur le banc avec Hélène.
+- **À trancher par l'utilisateur** (§ 18.16) : légendes sous cloche ou aussi aux champs ; cigognes sans chantier / chantier
+  du clocher / roue à acheter ; sons synthétisés / hybrides CC0 / enregistrés ; couche d'oiseaux qui suit l'étape ou non ;
+  fin douce (épilogue + générique / épilogue seul / fête jouable) ; après l'an 18 (avec ou sans cartes, nouveau puits) ;
+  prénom de la mère de Joseph.
+- **Idées** : un « carnet sonore » dans le livre (réécouter chaque chant découvert) ; Hélène qui commente les terres
+  sauvages ; confiture de cerises et jus de poire (idée du V3, toujours ouverte) ; la case d'album des habitants de la
+  vallée cochée tout de suite (idée du V3).
